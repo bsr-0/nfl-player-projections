@@ -48,6 +48,9 @@ CONTENT_PATTERNS = [
 ]
 CONTENT_REGEXES = [(re.compile(p), desc) for p, desc in CONTENT_PATTERNS]
 
+# Files to skip for content scanning (they define or document these patterns)
+CONTENT_SCAN_SKIP = ["scripts/scan_secrets.py", ".env.example"]
+
 # Placeholder values we allow (substring match in the captured value)
 ALLOWED_PLACEHOLDERS = [
     "<your-app-password>",
@@ -156,6 +159,8 @@ def main() -> int:
         all_violations.extend((rel, 0, msg, None) for msg in path_issues)
 
         if path_issues:
+            continue
+        if rel in CONTENT_SCAN_SKIP:
             continue
         if not full.is_file() or is_binary(full):
             continue
