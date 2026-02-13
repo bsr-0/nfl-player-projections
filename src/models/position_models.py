@@ -497,10 +497,16 @@ class MultiWeekModel:
             else:
                 unique_models[model_id]["weeks"].append(n_weeks)
         
+        from datetime import datetime
         save_data = {
             "position": self.position,
             "unique_models": unique_models,
             "horizon_groups": self.horizon_groups,
+            "version_metadata": {
+                "saved_at": datetime.now().isoformat(),
+                "n_models": len(unique_models),
+                "horizons": list(self.models.keys()),
+            },
         }
         
         joblib.dump(save_data, filepath)

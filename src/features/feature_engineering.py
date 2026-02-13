@@ -87,6 +87,9 @@ class FeatureEngineer:
         # Optional injury/rookie predictors for utilization (defaults when missing)
         df = self._ensure_injury_rookie_features(df)
         
+        # Outlier detection per requirements Section VI.C (>3 sigma flagged, not removed)
+        df = self._flag_outliers(df, sigma_threshold=3.0)
+        
         # Check missing rate per feature (requirement: max 5% acceptable); log exceedances
         self._check_missing_rate(df, threshold_pct=5.0)
         # Final imputation: no NaN/inf in numeric columns so pipelines are robust
@@ -279,6 +282,11 @@ class FeatureEngineer:
             # Medium-term trend (last 5 games slope)
             new_cols[f"{col}_trend5"] = df.groupby("player_id")[col].transform(
                 lambda x: self._calculate_trend(x, 5)
+            )
+            
+            # Long-term trend (last 8 games slope) per requirements III.A
+            new_cols[f"{col}_trend8"] = df.groupby("player_id")[col].transform(
+                lambda x: self._calculate_trend(x, 8)
             )
         
         # Week-over-week change (shift(1) to avoid leakage - use prior week's change only)
@@ -787,6 +795,54 @@ class FeatureEngineer:
             td_rate = safe_divide(df["total_tds"], df["opportunities"])
             df["opp_x_td_rate"] = df["opportunities"] * td_rate
         
+        # --- Matchup Quality Indicator (requirements III.B) ---
+        # Composite score combining opponent defense weakness, game script favorability,
+        # and pace environment. Higher = better matchup for fantasy production.
+        mqi_components = []
+        
+        # Component 1: Opponent points allowed (position-specific when available)
+        if "opp_fpts_allowed" in df.columns:
+            opp_std = max(df["opp_fpts_allowed"].std(), 0.1) if pd.notna(df["opp_fpts_allowed"].std()) else 0.1
+            opp_z = (df["opp_fpts_allowed"] - df["opp_fpts_allowed"].mean()) / opp_std
+            mqi_components.append(opp_z.fillna(0) * 0.35)
+        elif "matchup_difficulty" in df.columns:
+            # matchup_difficulty: higher = harder opponent, so invert
+            md_z = -(df["matchup_difficulty"] - 50.0) / 25.0
+            mqi_components.append(md_z.fillna(0) * 0.35)
+        
+        # Component 2: Game script favorability (implied team total or expected point diff)
+        if "implied_team_total" in df.columns:
+            itt_std = max(df["implied_team_total"].std(), 0.1) if pd.notna(df["implied_team_total"].std()) else 0.1
+            itt_z = (df["implied_team_total"] - df["implied_team_total"].mean()) / itt_std
+            mqi_components.append(itt_z.fillna(0) * 0.30)
+        elif "expected_point_diff" in df.columns:
+            epd_std = max(df["expected_point_diff"].std(), 0.1) if pd.notna(df["expected_point_diff"].std()) else 0.1
+            epd_z = (df["expected_point_diff"] - df["expected_point_diff"].mean()) / epd_std
+            mqi_components.append(epd_z.fillna(0) * 0.30)
+        
+        # Component 3: Pace environment (team plays per game)
+        if "team_a_plays_per_game" in df.columns and "team_b_plays_per_game" in df.columns:
+            combined_pace = df["team_a_plays_per_game"] + df["team_b_plays_per_game"]
+            pace_std = max(combined_pace.std(), 0.1) if pd.notna(combined_pace.std()) else 0.1
+            pace_z = (combined_pace - combined_pace.mean()) / pace_std
+            mqi_components.append(pace_z.fillna(0) * 0.20)
+        
+        # Component 4: Home field advantage
+        if "is_home" in df.columns:
+            mqi_components.append(df["is_home"].fillna(0) * 0.15)
+        
+        if mqi_components:
+            df["matchup_quality_indicator"] = sum(mqi_components)
+            # Normalize to 0-100 scale
+            mqi = df["matchup_quality_indicator"]
+            mqi_min, mqi_max = mqi.min(), mqi.max()
+            if mqi_max > mqi_min:
+                df["matchup_quality_indicator"] = ((mqi - mqi_min) / (mqi_max - mqi_min) * 100).clip(0, 100)
+            else:
+                df["matchup_quality_indicator"] = 50.0
+        else:
+            df["matchup_quality_indicator"] = 50.0
+        
         return df
     
     def _create_advanced_requirement_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1072,6 +1128,53 @@ class FeatureEngineer:
             df["is_rookie"] = (games_per_player <= 8).astype(int)
         return df
     
+    def _flag_outliers(self, df: pd.DataFrame, sigma_threshold: float = 3.0) -> pd.DataFrame:
+        """
+        Flag statistical outliers (>3 standard deviations) per requirements Section VI.C.
+        
+        Legitimate outliers (record-breaking performances) are kept but flagged.
+        Injury-impacted games get special handling via is_outlier_injury flag.
+        Creates 'is_statistical_outlier' column (0/1) for model awareness.
+        """
+        if df.empty:
+            return df
+        key_cols = ["fantasy_points", "total_yards", "total_touches", "utilization_score"]
+        key_cols = [c for c in key_cols if c in df.columns]
+        if not key_cols:
+            df["is_statistical_outlier"] = 0
+            return df
+        
+        outlier_mask = pd.Series(False, index=df.index)
+        for col in key_cols:
+            if col not in df.columns:
+                continue
+            mean_val = df[col].mean()
+            std_val = df[col].std()
+            if pd.isna(std_val) or std_val == 0:
+                continue
+            col_outlier = (df[col] - mean_val).abs() > sigma_threshold * std_val
+            outlier_mask = outlier_mask | col_outlier
+        
+        df["is_statistical_outlier"] = outlier_mask.astype(int)
+        n_outliers = outlier_mask.sum()
+        if n_outliers > 0:
+            print(f"  Outlier detection: {n_outliers} rows flagged (>{sigma_threshold}σ in {key_cols})")
+        
+        # Injury-impacted outlier flag: low performance + injured
+        if "injury_score" in df.columns and "fantasy_points" in df.columns:
+            fp_mean = df["fantasy_points"].mean()
+            fp_std = df["fantasy_points"].std()
+            if pd.notna(fp_std) and fp_std > 0:
+                low_perf = df["fantasy_points"] < (fp_mean - 2 * fp_std)
+                injured = df["injury_score"].fillna(1.0) < 0.7
+                df["is_outlier_injury"] = (low_perf & injured).astype(int)
+            else:
+                df["is_outlier_injury"] = 0
+        else:
+            df["is_outlier_injury"] = 0
+        
+        return df
+
     def _check_missing_rate(self, df: pd.DataFrame, threshold_pct: float = 5.0) -> None:
         """
         Log features with missing rate above threshold (requirement: max 5% per feature).

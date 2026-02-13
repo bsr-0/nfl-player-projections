@@ -22,6 +22,12 @@ try:
 except ImportError:
     HAS_SKLEARN = False
 
+try:
+    import xgboost as xgb
+    HAS_XGB = True
+except ImportError:
+    HAS_XGB = False
+
 
 # Efficiency features used for utilization -> FP conversion (per position)
 EFFICIENCY_FEATURES = {
@@ -69,8 +75,19 @@ class UtilizationToFPConverter:
         self.feature_names = cols
         self.scaler = StandardScaler()
         Xs = self.scaler.fit_transform(X)
-        self.model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
+        # Per requirements: tree-based models (RF/XGBoost) for bounded 0-100 -> FP conversion
+        self.model = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42)
         self.model.fit(Xs, y)
+        self.xgb_model = None
+        if HAS_XGB:
+            try:
+                self.xgb_model = xgb.XGBRegressor(
+                    n_estimators=200, max_depth=8, learning_rate=0.05,
+                    subsample=0.8, random_state=42,
+                )
+                self.xgb_model.fit(Xs, y)
+            except Exception:
+                self.xgb_model = None
         self.is_fitted = True
         return self
 
@@ -87,13 +104,19 @@ class UtilizationToFPConverter:
             X = np.column_stack([utilization, np.zeros((len(utilization), len(self.feature_names) - 1))]) if len(self.feature_names) > 1 else utilization.reshape(-1, 1)
         X = np.nan_to_num(X, nan=0.0)
         Xs = self.scaler.transform(X)
-        return self.model.predict(Xs)
+        rf_pred = self.model.predict(Xs)
+        # Ensemble RF (50%) + XGBoost (50%) when available for better conversion
+        if getattr(self, "xgb_model", None) is not None:
+            xgb_pred = self.xgb_model.predict(Xs)
+            return 0.5 * rf_pred + 0.5 * xgb_pred
+        return rf_pred
 
     def save(self, path: Path = None):
         path = path or MODELS_DIR / f"util_to_fp_{self.position.lower()}.joblib"
         joblib.dump({
             "position": self.position,
             "model": self.model,
+            "xgb_model": getattr(self, "xgb_model", None),
             "scaler": self.scaler,
             "feature_names": self.feature_names,
             "is_fitted": self.is_fitted,
@@ -106,6 +129,7 @@ class UtilizationToFPConverter:
         if path.exists():
             d = joblib.load(path)
             c.model = d.get("model")
+            c.xgb_model = d.get("xgb_model")
             c.scaler = d.get("scaler")
             c.feature_names = d.get("feature_names", [])
             c.is_fitted = d.get("is_fitted", False)

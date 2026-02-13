@@ -1,0 +1,88 @@
+# Environment and secrets – never commit
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+secrets.py
+*credentials*.json
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Data and databases – local/generated
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/raw/
+data/processed/
+data/models/
+*.parquet
+*.joblib
+*.pkl
+*.pickle
+
+# Keep data directory structure (optional placeholder)
+!data/.gitkeep
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# IDE and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs and temp
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Testing / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# Config bytecode (if present)
+config/__pycache__/

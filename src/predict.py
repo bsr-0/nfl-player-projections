@@ -302,22 +302,58 @@ class NFLPredictor:
             mask = results["position"] == pos
             results.loc[mask, "position_rank"] = range(1, mask.sum() + 1)
         
-        # Widen CIs for rookies / volatile players (requirement: wider for volatile, rookies, injury-prone)
+        # Widen CIs for rookies / volatile / injury-prone players (requirement: wider for volatile, rookies, injury-prone)
         if "games_count" in latest_data.columns and "prediction_std" in results.columns:
-            gc_merged = latest_data[["player_id", "games_count"]].drop_duplicates("player_id")
+            ci_merge_cols = ["player_id", "games_count"]
+            for extra in ["weekly_volatility", "rolling_volatility", "injury_score", "workload_injury_risk"]:
+                if extra in latest_data.columns:
+                    ci_merge_cols.append(extra)
+            gc_merged = latest_data[ci_merge_cols].drop_duplicates("player_id")
             results = results.merge(gc_merged, on="player_id", how="left", suffixes=("", "_ci"))
             gc_col = "games_count_ci" if "games_count_ci" in results.columns else "games_count"
+            z80, z95 = 1.28, 1.96
+
+            # Rookies: 1.5x wider CIs
             rookie_mask = results[gc_col].fillna(0) < MIN_GAMES_FOR_PREDICTION
             if rookie_mask.any() and "prediction_std" in results.columns:
                 results.loc[rookie_mask, "prediction_std"] = results.loc[rookie_mask, "prediction_std"].fillna(5.0) * 1.5
-                z80, z95 = 1.28, 1.96
                 pts = results.loc[rookie_mask, "predicted_points"]
                 std = results.loc[rookie_mask, "prediction_std"]
                 results.loc[rookie_mask, "prediction_ci80_lower"] = (pts - z80 * std).clip(lower=0)
                 results.loc[rookie_mask, "prediction_ci80_upper"] = pts + z80 * std
                 results.loc[rookie_mask, "prediction_ci95_lower"] = (pts - z95 * std).clip(lower=0)
                 results.loc[rookie_mask, "prediction_ci95_upper"] = pts + z95 * std
-            results = results.drop(columns=[c for c in [gc_col] if c in results.columns and c != "games_count"], errors="ignore")
+
+            # Volatile players: widen CIs for high-volatility players (top quartile)
+            vol_col = next((c for c in ["weekly_volatility_ci", "weekly_volatility", "rolling_volatility_ci", "rolling_volatility"] if c in results.columns), None)
+            if vol_col is not None and "prediction_std" in results.columns:
+                vol_75 = results[vol_col].quantile(0.75)
+                if pd.notna(vol_75) and vol_75 > 0:
+                    volatile_mask = (results[vol_col].fillna(0) > vol_75) & ~rookie_mask
+                    if volatile_mask.any():
+                        results.loc[volatile_mask, "prediction_std"] = results.loc[volatile_mask, "prediction_std"].fillna(5.0) * 1.25
+                        pts_v = results.loc[volatile_mask, "predicted_points"]
+                        std_v = results.loc[volatile_mask, "prediction_std"]
+                        results.loc[volatile_mask, "prediction_ci80_lower"] = (pts_v - z80 * std_v).clip(lower=0)
+                        results.loc[volatile_mask, "prediction_ci80_upper"] = pts_v + z80 * std_v
+                        results.loc[volatile_mask, "prediction_ci95_lower"] = (pts_v - z95 * std_v).clip(lower=0)
+                        results.loc[volatile_mask, "prediction_ci95_upper"] = pts_v + z95 * std_v
+
+            # Injury-prone players: widen CIs when injury_score < 0.7 (questionable/doubtful)
+            inj_col = next((c for c in ["injury_score_ci", "injury_score"] if c in results.columns), None)
+            if inj_col is not None and "prediction_std" in results.columns:
+                injury_mask = (results[inj_col].fillna(1.0) < 0.7) & ~rookie_mask
+                if injury_mask.any():
+                    results.loc[injury_mask, "prediction_std"] = results.loc[injury_mask, "prediction_std"].fillna(5.0) * 1.4
+                    pts_i = results.loc[injury_mask, "predicted_points"]
+                    std_i = results.loc[injury_mask, "prediction_std"]
+                    results.loc[injury_mask, "prediction_ci80_lower"] = (pts_i - z80 * std_i).clip(lower=0)
+                    results.loc[injury_mask, "prediction_ci80_upper"] = pts_i + z80 * std_i
+                    results.loc[injury_mask, "prediction_ci95_lower"] = (pts_i - z95 * std_i).clip(lower=0)
+                    results.loc[injury_mask, "prediction_ci95_upper"] = pts_i + z95 * std_i
+
+            drop_ci = [c for c in results.columns if c.endswith("_ci") and c != "games_count"]
+            results = results.drop(columns=drop_ci, errors="ignore")
 
         # Ensure CI lower bounds are non-negative
         for ci_col in ["prediction_ci80_lower", "prediction_ci95_lower"]:

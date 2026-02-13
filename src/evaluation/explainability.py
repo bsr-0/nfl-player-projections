@@ -119,3 +119,53 @@ def partial_dependence_1d(
         except Exception:
             preds.append(np.nan)
     return grid, np.array(preds)
+
+
+def partial_dependence_plots(
+    model: Any,
+    X: pd.DataFrame,
+    features: Optional[List[str]] = None,
+    top_n: int = 5,
+    grid_resolution: int = 20,
+    output_path: Optional[Path] = None,
+) -> Dict[str, Dict[str, list]]:
+    """
+    Generate partial dependence data for top-N features per requirements Section VI.B.
+    
+    If features is None, uses top_n most important features from model.
+    Returns dict feature -> {"grid": [...], "predictions": [...]}.
+    Optionally saves to JSON for frontend consumption.
+    """
+    if features is None:
+        # Try to get top features from model importance
+        try:
+            if hasattr(model, "get_feature_importance"):
+                imp = model.get_feature_importance()
+                if isinstance(imp, pd.DataFrame) and "feature" in imp.columns:
+                    features = imp.nlargest(top_n, "combined")["feature"].tolist()
+                elif isinstance(imp, pd.DataFrame):
+                    features = imp.nlargest(top_n, imp.columns[-1]).index.tolist()
+            if not features and hasattr(model, "feature_names"):
+                features = list(model.feature_names)[:top_n]
+        except Exception:
+            pass
+    if not features:
+        return {}
+    
+    results = {}
+    for feat in features:
+        pd_result = partial_dependence_1d(model, X, feat, grid_resolution)
+        if pd_result is not None:
+            grid, preds = pd_result
+            results[feat] = {
+                "grid": [float(v) for v in grid],
+                "predictions": [float(v) for v in preds],
+            }
+    
+    if output_path:
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(results, f, indent=2)
+    
+    return results

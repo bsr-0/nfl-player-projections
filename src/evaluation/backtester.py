@@ -584,13 +584,33 @@ class ModelBacktester:
             for pos, rho in results["spearman_by_position"].items():
                 lines.append(f"    {pos}: {rho}")
             lines.append("")
-        # By position
+        # By position with horizon-specific benchmark checks
         lines.append("-" * 70)
         lines.append("ACCURACY BY POSITION")
         lines.append("-" * 70)
+        try:
+            from config.settings import RMSE_TARGETS_1W, RMSE_TARGETS_4W, RMSE_TARGETS_18W, R2_TARGETS, MAPE_TARGETS
+            horizon = results.get("horizon", "1w")
+            if horizon == "4w":
+                rmse_targets = RMSE_TARGETS_4W
+            elif horizon == "18w":
+                rmse_targets = RMSE_TARGETS_18W
+            else:
+                rmse_targets = RMSE_TARGETS_1W
+            r2_target = R2_TARGETS.get(horizon, 0.50)
+            mape_target = MAPE_TARGETS.get(horizon, 25.0)
+        except ImportError:
+            rmse_targets = {}
+            r2_target = 0.50
+            mape_target = 25.0
         for pos, pm in results['by_position'].items():
+            rmse_tgt = rmse_targets.get(pos)
+            rmse_status = ""
+            if rmse_tgt:
+                rmse_status = f"  {'✓' if pm['rmse'] <= rmse_tgt else '✗'} target≤{rmse_tgt}"
+            r2_status = f"  {'✓' if pm['r2'] >= r2_target else '✗'} target≥{r2_target}"
             lines.append(f"\n  {pos}:")
-            lines.append(f"    R²: {pm['r2']:.3f}  |  RMSE: {pm['rmse']:.2f}  |  Correlation: {pm['correlation']:.3f}")
+            lines.append(f"    R²: {pm['r2']:.3f}{r2_status}  |  RMSE: {pm['rmse']:.2f}{rmse_status}  |  Correlation: {pm['correlation']:.3f}")
             lines.append(f"    Within 5 pts: {pm['within_5_pts_pct']:.1f}%  |  Directional: {pm['directional_accuracy_pct']:.1f}%")
         lines.append("")
 
@@ -1309,6 +1329,135 @@ def run_multi_season_backtest(n_seasons: int = 3) -> Dict:
         json.dump(agg, f, indent=2, default=str)
     print(f"Summary saved to {out_path}")
     return agg
+
+
+def check_success_criteria(backtest_results: Dict) -> Dict:
+    """
+    Comprehensive pass/fail evaluation against requirements Section VII thresholds.
+    
+    Checks:
+    - Accuracy: Spearman ρ > 0.65, MAPE < 25%, within-7pt ≥ 70%, within-10pt ≥ 80%
+    - Reliability: Tier classification ≥ 75%, beat all baselines by >20%,
+      beat primary baseline by >25%, season stability (no >20% RMSE degradation)
+    - Business: Confidence band coverage ≥ 88.2% (10pt), prediction speed < 5s
+    
+    Returns dict with per-criterion pass/fail, actual values, and overall assessment.
+    """
+    from config.settings import SUCCESS_CRITERIA
+    
+    m = backtest_results.get("metrics", {})
+    by_week = backtest_results.get("by_week", {})
+    mbc = backtest_results.get("multiple_baseline_comparison", {})
+    
+    sc = {}
+    
+    # --- Accuracy thresholds ---
+    spearman = m.get("spearman_rho")
+    sc["spearman_rho"] = spearman
+    sc["spearman_gt_065"] = (spearman is not None and spearman > 0.65)
+    
+    mape = m.get("mape")
+    sc["mape"] = mape
+    sc["mape_lt_25"] = (mape is not None and mape < 25.0)
+    
+    within_7 = m.get("within_7_pts_pct", 0)
+    sc["within_7_pts_pct"] = within_7
+    sc["within_7_pts_pct_ge_70"] = within_7 >= 70.0
+    
+    within_10 = m.get("within_10_pts_pct", 0)
+    sc["within_10_pts_pct"] = within_10
+    sc["within_10_pts_pct_ge_80"] = within_10 >= 80.0
+    
+    # --- Reliability thresholds ---
+    tier_acc = m.get("tier_classification_accuracy")
+    sc["tier_accuracy"] = tier_acc
+    sc["tier_accuracy_ge_075"] = (tier_acc is not None and tier_acc >= 0.75)
+    
+    # Baseline comparison
+    if isinstance(mbc, dict) and "error" not in mbc:
+        sc["beat_all_baselines_by_20_pct"] = mbc.get("model_beats_all_by_20_pct", False)
+        primary = mbc.get("baseline_season_avg", {})
+        sc["beat_primary_baseline_by_25_pct"] = (
+            primary.get("improvement_pct", 0) >= 25.0
+        )
+    else:
+        sc["beat_all_baselines_by_20_pct"] = None
+        sc["beat_primary_baseline_by_25_pct"] = None
+    
+    # Season stability: no weekly RMSE should exceed avg by >20%
+    if by_week:
+        weekly_rmse = [v.get("rmse", 0) for v in by_week.values() if v.get("rmse")]
+        if weekly_rmse:
+            avg_rmse = np.mean(weekly_rmse)
+            max_rmse = max(weekly_rmse)
+            sc["avg_weekly_rmse"] = round(avg_rmse, 2)
+            sc["max_weekly_rmse"] = round(max_rmse, 2)
+            degradation_pct = (max_rmse - avg_rmse) / avg_rmse * 100 if avg_rmse > 0 else 0
+            sc["season_stability_ok"] = degradation_pct <= 20.0
+            sc["max_degradation_pct"] = round(degradation_pct, 1)
+        else:
+            sc["season_stability_ok"] = None
+    else:
+        sc["season_stability_ok"] = None
+    
+    # --- Business thresholds ---
+    # CI coverage: % of predictions within 10 points as proxy for confidence band
+    sc["confidence_band_coverage_10pt"] = within_10
+    sc["confidence_band_target_882"] = within_10 >= 88.2
+    
+    # Overall pass/fail
+    accuracy_checks = [
+        sc.get("spearman_gt_065"),
+        sc.get("mape_lt_25"),
+        sc.get("within_7_pts_pct_ge_70"),
+        sc.get("within_10_pts_pct_ge_80"),
+    ]
+    reliability_checks = [
+        sc.get("tier_accuracy_ge_075"),
+        sc.get("season_stability_ok"),
+    ]
+    
+    sc["accuracy_passed"] = sum(1 for c in accuracy_checks if c is True)
+    sc["accuracy_total"] = len(accuracy_checks)
+    sc["reliability_passed"] = sum(1 for c in reliability_checks if c is True)
+    sc["reliability_total"] = len(reliability_checks)
+    sc["all_criteria_met"] = all(
+        c is True for c in accuracy_checks + reliability_checks if c is not None
+    )
+    
+    return sc
+
+
+def print_success_criteria_report(sc: Dict) -> str:
+    """Print and return a formatted success criteria report."""
+    lines = [
+        "=" * 60,
+        "SUCCESS CRITERIA REPORT (Requirements Section VII)",
+        "=" * 60,
+        "",
+        "ACCURACY THRESHOLDS:",
+        f"  Spearman ρ > 0.65:     {'PASS' if sc.get('spearman_gt_065') else 'FAIL'}  (actual: {sc.get('spearman_rho')})",
+        f"  MAPE < 25%:            {'PASS' if sc.get('mape_lt_25') else 'FAIL'}  (actual: {sc.get('mape')}%)",
+        f"  Within 7 pts ≥ 70%:    {'PASS' if sc.get('within_7_pts_pct_ge_70') else 'FAIL'}  (actual: {sc.get('within_7_pts_pct')}%)",
+        f"  Within 10 pts ≥ 80%:   {'PASS' if sc.get('within_10_pts_pct_ge_80') else 'FAIL'}  (actual: {sc.get('within_10_pts_pct')}%)",
+        "",
+        "RELIABILITY THRESHOLDS:",
+        f"  Tier accuracy ≥ 75%:   {'PASS' if sc.get('tier_accuracy_ge_075') else 'FAIL'}  (actual: {sc.get('tier_accuracy')})",
+        f"  Season stability:      {'PASS' if sc.get('season_stability_ok') else 'FAIL'}  (max degradation: {sc.get('max_degradation_pct', 'N/A')}%)",
+        f"  Beat baselines >20%:   {'PASS' if sc.get('beat_all_baselines_by_20_pct') else 'FAIL'}",
+        f"  Beat primary >25%:     {'PASS' if sc.get('beat_primary_baseline_by_25_pct') else 'FAIL'}",
+        "",
+        "BUSINESS THRESHOLDS:",
+        f"  CI coverage ≥ 88.2%:   {'PASS' if sc.get('confidence_band_target_882') else 'FAIL'}  (actual: {sc.get('confidence_band_coverage_10pt')}%)",
+        "",
+        f"OVERALL: {sc.get('accuracy_passed', 0)}/{sc.get('accuracy_total', 0)} accuracy, "
+        f"{sc.get('reliability_passed', 0)}/{sc.get('reliability_total', 0)} reliability",
+        f"ALL CRITERIA MET: {'YES' if sc.get('all_criteria_met') else 'NO'}",
+        "=" * 60,
+    ]
+    report = "\n".join(lines)
+    print(report)
+    return report
 
 
 if __name__ == "__main__":

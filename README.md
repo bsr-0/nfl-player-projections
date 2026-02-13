@@ -77,6 +77,13 @@ nfl-predictor/
 └── config/               # Configuration files
 ```
 
+## Publishing to GitHub / Security
+
+- **Secrets**: Never commit API keys, passwords, or `.env` files. Use environment variables and copy `.env.example` to `.env` for local config (`.env` is gitignored).
+- **Optional features** that need env vars: email alerts (`SMTP_*`), PostgreSQL migration (`DATABASE_URL`). See `.env.example`.
+- **Already tracked files**: If you previously committed `.env` or secrets, remove them with `git rm --cached .env` and rotate any exposed keys.
+- **Pre-push check**: Run `python scripts/scan_secrets.py` to scan staged files, or `python scripts/scan_secrets.py --all` to scan the repo. A GitHub Action runs the same scan on every push and pull request.
+
 ## Data and Mid-Season Updates
 
 - **Auto-refresh**: Running the pipeline (train or `scripts/generate_app_data.py`) triggers an auto-refresh so the current NFL season’s completed weeks are loaded when available (e.g. 2025 weeks before today).

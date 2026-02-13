@@ -21,12 +21,9 @@ class WeeklyEmailAlerts:
     def __init__(self, smtp_config: Dict = None):
         """
         Args:
-            smtp_config: {
-                'server': 'smtp.gmail.com',
-                'port': 587,
-                'username': 'your_email@gmail.com',
-                'password': 'your_app_password'
-            }
+            smtp_config: Optional dict with server, port, username, password.
+                Prefer env vars SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD
+                (see .env.example). Do not put real passwords in code.
         """
         self.smtp_config = smtp_config or self._get_default_config()
     
@@ -347,4 +344,4 @@ if __name__ == "__main__":
     print("\n📧 To send emails, configure SMTP:")
     print("   export SMTP_SERVER=smtp.gmail.com")
     print("   export SMTP_USERNAME=your_email@gmail.com")
-    print("   export SMTP_PASSWORD=your_app_password")
+    print("   export SMTP_PASSWORD=<your-app-password>")

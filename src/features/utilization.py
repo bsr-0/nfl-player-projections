@@ -295,7 +295,7 @@ def engineer_all_features(df: pd.DataFrame, percentile_bounds: Optional[Dict[Tup
     # Rolling averages for trend detection
     df = df.sort_values(['player_id', 'season', 'week'])
     
-    for window in [3, 5]:
+    for window in [3, 4, 5, 8]:
         # Rolling fantasy points
         df[f'fp_rolling_{window}'] = df.groupby('player_id')['fantasy_points'].transform(
             lambda x: x.shift(1).rolling(window, min_periods=1).mean()
@@ -312,12 +312,36 @@ def engineer_all_features(df: pd.DataFrame, percentile_bounds: Optional[Dict[Tup
             df[f'target_share_rolling_{window}'] = df.groupby('player_id')['target_share'].transform(
                 lambda x: x.shift(1).rolling(window, min_periods=1).mean()
             )
+        
+        # Rolling usage rate (touches, targets, snaps) per requirements III.A
+        if 'total_touches' in df.columns:
+            df[f'touches_rolling_{window}'] = df.groupby('player_id')['total_touches'].transform(
+                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            )
+        if 'targets' in df.columns:
+            df[f'targets_rolling_{window}'] = df.groupby('player_id')['targets'].transform(
+                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            )
+        
+        # Rolling efficiency metrics (yards per touch, catch rate) per requirements III.A
+        if 'yards_per_carry' in df.columns:
+            df[f'ypc_rolling_{window}'] = df.groupby('player_id')['yards_per_carry'].transform(
+                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            )
+        if 'catch_rate' in df.columns:
+            df[f'catch_rate_rolling_{window}'] = df.groupby('player_id')['catch_rate'].transform(
+                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            )
     
-    # Lag features (previous game stats)
-    for lag in [1, 2, 3]:
+    # Lag features (previous game stats) - requirements: LAG_WEEKS=[1,2,3,4]
+    for lag in [1, 2, 3, 4]:
         df[f'fp_lag_{lag}'] = df.groupby('player_id')['fantasy_points'].shift(lag)
         df[f'targets_lag_{lag}'] = df.groupby('player_id')['targets'].shift(lag)
         df[f'rush_att_lag_{lag}'] = df.groupby('player_id')['rushing_attempts'].shift(lag)
+        if 'utilization_score' in df.columns:
+            df[f'util_lag_{lag}'] = df.groupby('player_id')['utilization_score'].shift(lag)
+        if 'snap_share' in df.columns:
+            df[f'snap_share_lag_{lag}'] = df.groupby('player_id')['snap_share'].shift(lag)
     
     # Trend features
     df['fp_trend'] = df['fp_rolling_3'] - df['fp_rolling_5']  # Positive = improving

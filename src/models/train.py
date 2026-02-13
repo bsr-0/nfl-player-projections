@@ -208,9 +208,21 @@ def _load_qb_target_choice() -> str:
         return "util"
 
 
+def _safe_mape(y_true, y_pred):
+    """Calculate MAPE avoiding division by zero."""
+    mask = y_true != 0
+    if mask.sum() == 0:
+        return None
+    return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
+
+
 def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFrame):
-    """Report model performance on held-out test set. QB uses chosen target (util vs fp)."""
+    """Report model performance on held-out test set with full metrics per requirements.
+    
+    Reports RMSE, MAE, MAPE, R², within-7pt%, within-10pt%, and Spearman rho.
+    """
     from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+    from scipy.stats import spearmanr
     
     qb_target = _load_qb_target_choice()
     
@@ -225,6 +237,18 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
         if len(available) < len(model.feature_names) * 0.5:
             continue
         
+        def _print_metrics(pos, label, y_true, y_pred):
+            rmse = (mean_squared_error(y_true, y_pred)) ** 0.5
+            mae = mean_absolute_error(y_true, y_pred)
+            r2 = r2_score(y_true, y_pred)
+            mape = _safe_mape(y_true.values, y_pred)
+            within_7 = float((np.abs(y_true.values - y_pred) <= 7).mean() * 100)
+            within_10 = float((np.abs(y_true.values - y_pred) <= 10).mean() * 100)
+            rho, _ = spearmanr(y_true.values, y_pred) if len(y_true) >= 5 else (np.nan, np.nan)
+            mape_str = f", MAPE={mape:.1f}%" if mape is not None else ""
+            rho_str = f", ρ={rho:.3f}" if np.isfinite(rho) else ""
+            print(f"  {pos} (test {label}): RMSE={rmse:.2f}, MAE={mae:.2f}, R²={r2:.3f}{mape_str}, ≤7pt={within_7:.1f}%, ≤10pt={within_10:.1f}%{rho_str}")
+        
         # QB: compare to chosen target only
         if position == "QB":
             actual_col = "target_1w" if qb_target == "fp" else "target_util_1w"
@@ -235,11 +259,8 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
             if valid.sum() >= 5:
                 pos_subset = pos_test.loc[valid]
                 preds = multi_model.predict(pos_subset, n_weeks=1)
-                rmse = (mean_squared_error(y_act[valid], preds)) ** 0.5
-                mae = mean_absolute_error(y_act[valid], preds)
-                r2 = r2_score(y_act[valid], preds)
                 label = "FP (chosen)" if qb_target == "fp" else "util (chosen)"
-                print(f"  {position} (test {label}): RMSE={rmse:.2f}, MAE={mae:.2f}, R²={r2:.3f}")
+                _print_metrics(position, label, y_act[valid], preds)
             continue
         
         # RB/WR/TE: primary utilization, optional FP
@@ -250,20 +271,14 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
             if valid.sum() >= 5:
                 pos_subset = pos_test.loc[valid]
                 pred_util = multi_model.predict(pos_subset, n_weeks=1)
-                rmse_u = (mean_squared_error(y_util[valid], pred_util)) ** 0.5
-                mae_u = mean_absolute_error(y_util[valid], pred_util)
-                r2_u = r2_score(y_util[valid], pred_util)
-                print(f"  {position} (test util): RMSE={rmse_u:.2f}, MAE={mae_u:.2f}, R²={r2_u:.3f}")
+                _print_metrics(position, "util", y_util[valid], pred_util)
         if "target_1w" in pos_test.columns:
             y_test = pos_test["target_1w"]
             valid = ~y_test.isna()
             if valid.sum() >= 5:
                 pos_subset = pos_test.loc[valid]
                 preds = multi_model.predict(pos_subset, n_weeks=1)
-                rmse = (mean_squared_error(y_test[valid], preds)) ** 0.5
-                mae = mean_absolute_error(y_test[valid], preds)
-                r2 = r2_score(y_test[valid], preds)
-                print(f"  {position} (test FP): RMSE={rmse:.2f}, MAE={mae:.2f}, R²={r2:.3f}")
+                _print_metrics(position, "FP", y_test[valid], preds)
 
 
 def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
@@ -368,32 +383,10 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     if "error" not in multi_baseline:
         results["multiple_baseline_comparison"] = multi_baseline
     # --- Success criteria evaluation (per requirements Section VII) ---
-    metrics = results.get("metrics", {})
-    spearman_rho = metrics.get("spearman_rho")
-    within_10 = metrics.get("within_10_pts_pct")
-    within_7 = metrics.get("within_7_pts_pct")
-    mbc = multi_baseline if "error" not in multi_baseline else {}
-    beat_all_20 = mbc.get("model_beats_all_by_20_pct", False) if mbc else False
-    beat_primary_25 = False
-    if baseline_comp and "error" not in baseline_comp:
-        beat_primary_25 = baseline_comp.get("improvement", {}).get("rmse_pct", 0) >= 25.0
-
-    success_criteria = {
-        "spearman_rho": round(float(spearman_rho), 3) if spearman_rho and np.isfinite(spearman_rho) else None,
-        "spearman_gt_065": bool(spearman_rho and np.isfinite(spearman_rho) and spearman_rho > 0.65),
-        "within_10_pts_pct": round(float(within_10), 1) if within_10 else None,
-        "within_10_pts_pct_ge_80": bool(within_10 and within_10 >= 80.0),
-        "within_7_pts_pct": round(float(within_7), 1) if within_7 else None,
-        "within_7_pts_pct_ge_70": bool(within_7 and within_7 >= 70.0),
-        "beat_all_baselines_by_20_pct": beat_all_20,
-        "beat_primary_baseline_by_25_pct": beat_primary_25,
-    }
+    from src.evaluation.backtester import check_success_criteria, print_success_criteria_report
+    success_criteria = check_success_criteria(results)
     results["success_criteria"] = success_criteria
-
-    print("\n  --- Success Criteria (Requirements VII) ---")
-    for k, v in success_criteria.items():
-        status = "PASS" if v is True else ("FAIL" if v is False else str(v))
-        print(f"    {k}: {status}")
+    print_success_criteria_report(success_criteria)
 
     # --- Model drift detection: compare against previous backtest if available ---
     try:
@@ -403,7 +396,7 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
             with open(prev_path) as f:
                 prev_results = json.load(f)
             prev_rmse = prev_results.get("metrics", {}).get("rmse")
-            curr_rmse = metrics.get("rmse")
+            curr_rmse = results.get("metrics", {}).get("rmse")
             if prev_rmse and curr_rmse and prev_rmse > 0:
                 drift_pct = (curr_rmse - prev_rmse) / prev_rmse * 100
                 results["model_drift"] = {

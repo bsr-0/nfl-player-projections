@@ -56,7 +56,7 @@ class DatabaseMigration:
     def __init__(self, postgres_url: str = None):
         """
         Args:
-            postgres_url: postgresql://user:password@localhost:5432/nfl_predictor
+            postgres_url: Set via DATABASE_URL env var (e.g. postgresql://user:xxx@host:5432/dbname)
                          If None, uses SQLite for demo
         """
         if postgres_url:
@@ -128,5 +128,5 @@ if __name__ == "__main__":
     migrator.create_tables()
     
     print("\n📊 To migrate from PostgreSQL:")
-    print("  export DATABASE_URL='postgresql://user:pass@localhost/nfl_predictor'")
+    print("  export DATABASE_URL='postgresql://user:PASSWORD@host:5432/nfl_predictor'")
     print("  python database_migration.py")
