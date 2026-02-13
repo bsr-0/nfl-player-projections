@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-02-07T20:24:58.656069",
+  "train_seasons": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ],
+  "test_season": 2025,
+  "backtest_results": {
+    "QB": {
+      "rmse": 6.74,
+      "mae": 5.48,
+      "r2": 0.174,
+      "directional_accuracy_pct": 61.6,
+      "within_5_pts_pct": 50.3
+    },
+    "RB": {
+      "rmse": 9.42,
+      "mae": 7.53,
+      "r2": 0.405,
+      "directional_accuracy_pct": 68.8,
+      "within_5_pts_pct": 39.1
+    },
+    "WR": {
+      "rmse": 12.84,
+      "mae": 10.54,
+      "r2": 0.353,
+      "directional_accuracy_pct": 71.7,
+      "within_5_pts_pct": 26.6
+    }
+  }
+}

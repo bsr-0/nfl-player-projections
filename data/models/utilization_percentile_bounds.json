@@ -1,0 +1,90 @@
+{
+  "QB|dropback_rate_pct": [
+    0.0,
+    68.38859649122807
+  ],
+  "QB|rush_share_pct": [
+    0.0,
+    75.0
+  ],
+  "QB|redzone_opp_pct": [
+    0.0,
+    60.0
+  ],
+  "QB|play_volume_pct": [
+    2.0,
+    100.0
+  ],
+  "RB|snap_share_pct": [
+    0.0,
+    0.0
+  ],
+  "RB|rush_share_pct": [
+    0.0,
+    100.0
+  ],
+  "RB|target_share_pct": [
+    0.0,
+    28.57142857142857
+  ],
+  "RB|redzone_share_pct": [
+    0.0,
+    20.0
+  ],
+  "RB|touch_share_pct": [
+    0.0,
+    71.13650793650791
+  ],
+  "RB|high_value_touch_rate": [
+    0.0,
+    50.0
+  ],
+  "WR|target_share_pct": [
+    0.0,
+    41.66666666666667
+  ],
+  "WR|air_yards_share_pct": [
+    0.0,
+    100.0
+  ],
+  "WR|snap_share_pct": [
+    0.0,
+    0.0
+  ],
+  "WR|redzone_targets_pct": [
+    0.0,
+    30.0
+  ],
+  "WR|route_participation_pct": [
+    0.0,
+    0.0
+  ],
+  "WR|high_value_touch_rate": [
+    0.0,
+    100.0
+  ],
+  "TE|target_share_pct": [
+    1.9230769230769231,
+    26.247139588100694
+  ],
+  "TE|snap_share_pct": [
+    0.0,
+    0.0
+  ],
+  "TE|redzone_targets_pct": [
+    0.0,
+    40.0
+  ],
+  "TE|air_yards_share_pct": [
+    0.0,
+    100.0
+  ],
+  "TE|inline_rate_pct": [
+    100.0,
+    100.0
+  ],
+  "TE|high_value_touch_rate": [
+    0.0,
+    100.0
+  ]
+}

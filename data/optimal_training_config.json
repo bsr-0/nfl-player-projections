@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-01-31T18:00:18.995302",
+  "test_year": 2024,
+  "positions": {
+    "RB": {
+      "optimal_years": 4,
+      "test_correlation": 0.5914,
+      "train_correlation": 0.6629,
+      "overfit_ratio": 1.121
+    },
+    "WR": {
+      "optimal_years": 4,
+      "test_correlation": 0.5086,
+      "train_correlation": 0.6019,
+      "overfit_ratio": 1.183
+    },
+    "TE": {
+      "optimal_years": 4,
+      "test_correlation": 0.5012,
+      "train_correlation": 0.6599,
+      "overfit_ratio": 1.317
+    },
+    "QB": {
+      "optimal_years": 4,
+      "test_correlation": 0.5597,
+      "train_correlation": 0.7139,
+      "overfit_ratio": 1.275
+    }
+  },
+  "recommendation": "Use these training years for each position model"
+}

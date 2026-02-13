@@ -1,0 +1,146 @@
+{
+  "selected_features": [
+    "position_rank",
+    "projected_position_rank",
+    "fp_rolling_3",
+    "opp_pts_allowed",
+    "total_plays",
+    "team_points",
+    "estimated_adp_round",
+    "sos_rank_next_1",
+    "id",
+    "variance_1w",
+    "season_position_rank",
+    "sos_rank_next_18",
+    "sos_rank_next_5",
+    "fp_lag_2",
+    "fp_lag_1"
+  ],
+  "n_features_start": 140,
+  "n_features_final": 15,
+  "feature_reduction_pct": 89.28571428571429,
+  "best_model": "lgb",
+  "test_rmse": 2.0404538321346974,
+  "test_r2": 0.9391290558653326,
+  "train_rmse": 1.666186238765476,
+  "gap_ratio": 0.18342370088210588,
+  "is_overfitting": false,
+  "all_model_results": {
+    "ridge": {
+      "train_rmse": 3.9413105317509953,
+      "test_rmse": 3.752575642239679,
+      "train_r2": 0.7619200036966008,
+      "test_r2": 0.7941194105902771,
+      "gap_ratio": -0.05029475952113579,
+      "is_overfitting": false
+    },
+    "gbm": {
+      "train_rmse": 1.4882775961935606,
+      "test_rmse": 2.147596393247301,
+      "train_r2": 0.9660523678365895,
+      "test_r2": 0.9325686546987374,
+      "gap_ratio": 0.30700312178156014,
+      "is_overfitting": true
+    },
+    "xgb": {
+      "train_rmse": 1.4987047497925396,
+      "test_rmse": 2.0504707757330816,
+      "train_r2": 0.9655750144298997,
+      "test_r2": 0.9385299367218056,
+      "gap_ratio": 0.26909236282252075,
+      "is_overfitting": false
+    },
+    "lgb": {
+      "train_rmse": 1.666186238765476,
+      "test_rmse": 2.0404538321346974,
+      "train_r2": 0.9574510658007108,
+      "test_r2": 0.9391290558653326,
+      "gap_ratio": 0.18342370088210588,
+      "is_overfitting": false
+    }
+  },
+  "cv_results": [
+    {
+      "n_features": 15,
+      "cv_rmse": 3.897744200464576,
+      "cv_std": 0.19757350860997364
+    }
+  ],
+  "feature_importance": [
+    {
+      "feature": "position_rank",
+      "importance_mean": 1.6726745077077125,
+      "importance_std": 0.01828947528500559
+    },
+    {
+      "feature": "projected_position_rank",
+      "importance_mean": 0.13576735454838476,
+      "importance_std": 0.0011489656227943131
+    },
+    {
+      "feature": "fp_rolling_3",
+      "importance_mean": 0.10195156348199781,
+      "importance_std": 0.001149127567126749
+    },
+    {
+      "feature": "opp_pts_allowed",
+      "importance_mean": 0.030048721469002837,
+      "importance_std": 0.0004670812724525962
+    },
+    {
+      "feature": "total_plays",
+      "importance_mean": 0.0282380089256535,
+      "importance_std": 0.000482179412874534
+    },
+    {
+      "feature": "team_points",
+      "importance_mean": 0.02488916161832936,
+      "importance_std": 0.0004464150023502284
+    },
+    {
+      "feature": "estimated_adp_round",
+      "importance_mean": 0.013950550584318567,
+      "importance_std": 0.00033597434057978373
+    },
+    {
+      "feature": "sos_rank_next_1",
+      "importance_mean": 0.009240796520835703,
+      "importance_std": 0.00034313024273899175
+    },
+    {
+      "feature": "id",
+      "importance_mean": 0.007684820515098589,
+      "importance_std": 0.00020901148056567812
+    },
+    {
+      "feature": "variance_1w",
+      "importance_mean": 0.006963691388489545,
+      "importance_std": 0.0002566494715490004
+    },
+    {
+      "feature": "season_position_rank",
+      "importance_mean": 0.00426915920800861,
+      "importance_std": 0.0001325211253801603
+    },
+    {
+      "feature": "sos_rank_next_18",
+      "importance_mean": 0.002726653062051643,
+      "importance_std": 0.00015144483581313467
+    },
+    {
+      "feature": "sos_rank_next_5",
+      "importance_mean": 0.0024838051681826843,
+      "importance_std": 0.00014001487301118783
+    },
+    {
+      "feature": "fp_lag_2",
+      "importance_mean": 0.0017666907813718492,
+      "importance_std": 0.00013209406271157473
+    },
+    {
+      "feature": "fp_lag_1",
+      "importance_mean": 0.0011527127281849236,
+      "importance_std": 7.80077285495932e-05
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "weights": {
+    "RB": {
+      "opportunity_share": 0.3014,
+      "rushing_yards": 0.5,
+      "receiving_yards": 0.1986
+    },
+    "WR": {
+      "receiving_yards": 0.5,
+      "receptions": 0.5
+    },
+    "TE": {
+      "receiving_yards": 1.0
+    }
+  },
+  "stats": {
+    "RB": {
+      "n_train_samples": 5666,
+      "n_test_samples": 3172,
+      "horizon": 4,
+      "train_correlation": 0.7383406984161202,
+      "test_correlation": 0.7656946240242566,
+      "overfit_ratio": 0.9642756723765767,
+      "l2_lambda": 0.1,
+      "features_removed": [
+        "rush_share"
+      ],
+      "optimized_at": "2026-01-31T17:07:24.473719"
+    },
+    "WR": {
+      "n_train_samples": 8992,
+      "n_test_samples": 5801,
+      "horizon": 4,
+      "train_correlation": 0.7166354736548894,
+      "test_correlation": 0.7229121103261503,
+      "overfit_ratio": 0.991317566019984,
+      "l2_lambda": 0.1,
+      "features_removed": [
+        "opportunity_share"
+      ],
+      "optimized_at": "2026-01-31T17:07:24.615688"
+    },
+    "TE": {
+      "n_train_samples": 4445,
+      "n_test_samples": 1124,
+      "horizon": 4,
+      "train_correlation": 0.6504777277579781,
+      "test_correlation": 0.6636697246334389,
+      "overfit_ratio": 0.9801226477782348,
+      "l2_lambda": 0.1,
+      "features_removed": [
+        "opportunity_share",
+        "receptions"
+      ],
+      "optimized_at": "2026-01-31T17:07:24.673382"
+    }
+  },
+  "saved_at": "2026-01-31T17:07:24.675005"
+}

@@ -1,0 +1,301 @@
+/* App layout */
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2rem;
+}
+
+.app--predictions {
+  min-height: 100vh;
+}
+
+/* Header */
+.app-header {
+  text-align: center;
+  padding: 2rem 1rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.app-header__title {
+  font-family: var(--font-heading);
+  font-size: var(--text-h1);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.app-header__subtitle {
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* Filters */
+.filters {
+  margin-bottom: 1.5rem;
+}
+
+.filters__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.filters__label {
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.filters__select {
+  min-width: 120px;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  font-size: var(--text-body);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 8px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+}
+
+.filters__select:hover {
+  border-color: var(--color-accent-cyan);
+}
+
+.filters__select:focus-visible {
+  outline: 2px solid var(--color-accent-cyan);
+  outline-offset: 2px;
+}
+
+/* Chart section */
+.chart-section {
+  margin-top: 0;
+}
+
+/* Predictions chart */
+.predictions-chart {
+  margin-bottom: 1.5rem;
+}
+
+.predictions-chart__section {
+  margin-bottom: 1.25rem;
+}
+
+.predictions-chart__section-heading {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.5rem;
+  font-family: var(--font-body);
+}
+
+.predictions-chart__week {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+  margin: 0 0 0.5rem;
+  line-height: var(--line-height-body);
+}
+
+.predictions-chart__week--primary {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.predictions-chart__week--warning {
+  color: var(--color-status-warning);
+}
+
+.predictions-chart__schedule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.predictions-chart__details-btn {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+.predictions-chart__details-btn:hover {
+  color: var(--color-text-secondary);
+}
+
+.predictions-chart__details-btn:focus-visible {
+  outline: 2px solid var(--color-accent-cyan);
+  outline-offset: 2px;
+}
+
+.predictions-chart__help {
+  color: var(--color-accent-cyan);
+  cursor: help;
+}
+
+.predictions-chart__info {
+  margin-bottom: 1.25rem;
+}
+
+.predictions-chart__info-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.predictions-chart__info-summary::-webkit-details-marker {
+  display: none;
+}
+
+.predictions-chart__info-summary::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.25rem;
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.predictions-chart__info[open] .predictions-chart__info-summary::before {
+  transform: rotate(-135deg);
+}
+
+.predictions-chart__info-summary-text {
+  margin-right: 0.25rem;
+}
+
+.predictions-chart__title {
+  font-family: var(--font-heading);
+  font-size: var(--text-h2);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 0.5rem;
+}
+
+.predictions-chart__title-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.predictions-chart__title-link:hover {
+  color: var(--color-accent-cyan);
+}
+
+.predictions-chart__title-link:focus-visible {
+  outline: 2px solid var(--color-accent-cyan);
+  outline-offset: 4px;
+}
+
+.predictions-chart__top-preview {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+  margin: 0 0 1rem;
+  line-height: var(--line-height-body);
+}
+
+.predictions-chart__subtitle {
+  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+}
+
+.predictions-chart__chart {
+  min-height: 400px;
+  scroll-margin-top: 2rem;
+}
+
+.predictions-chart__skeleton {
+  height: 480px;
+}
+
+.predictions-chart__skeleton-line {
+  margin-bottom: 0.5rem;
+}
+
+.predictions-chart__skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+.predictions-chart__skeleton-pill {
+  margin-top: 0.25rem;
+}
+
+.predictions-chart--empty,
+.predictions-chart--error {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: 12px;
+}
+
+.predictions-chart--error {
+  color: var(--color-accent-amber);
+}
+
+.predictions-chart__tooltip {
+  padding: 0.25rem 0;
+}
+
+.predictions-chart__tooltip-name {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+/* Section spacing (legacy) */
+.section {
+  scroll-margin-top: 2rem;
+}
+
+.divider {
+  height: 1px;
+  background: var(--color-card-border);
+  margin: 2rem 0;
+}
+
+@media (max-width: 768px) {
+  .app-header__title {
+    font-size: var(--text-h2);
+  }
+
+  .filters__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filters__select {
+    min-width: 100%;
+  }
+
+  .predictions-chart__chart {
+    min-height: 360px;
+  }
+}

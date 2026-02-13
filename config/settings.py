@@ -1,0 +1,224 @@
+"""Configuration settings for NFL predictor."""
+import os
+from pathlib import Path
+
+# Project paths
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+RAW_DATA_DIR = DATA_DIR / "raw"
+PROCESSED_DATA_DIR = DATA_DIR / "processed"
+MODELS_DIR = DATA_DIR / "models"
+
+# Create directories if they don't exist
+for dir_path in [RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR]:
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+# Database
+DB_PATH = DATA_DIR / "nfl_data.db"
+
+# Scraping settings
+SCRAPER_DELAY = 2.0  # Seconds between requests
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+from datetime import datetime
+
+def _current_nfl_season():
+    """Current NFL season (Sept-Feb); single source from nfl_calendar."""
+    from src.utils.nfl_calendar import get_current_nfl_season
+    return get_current_nfl_season()
+
+# -----------------------------------------------------------------------------
+# YEAR PARAMETERS (single source of truth for workflow and plan criteria)
+# -----------------------------------------------------------------------------
+# Earliest season to load/scrape.
+# Requirements: 18-week model needs min 8, optimal 10+ seasons.
+# Set to 2014 to provide ~11 seasons of data through current season.
+MIN_HISTORICAL_YEAR = 2014
+# Earliest season nfl-data-py weekly data is considered complete (used for availability checks).
+AVAILABLE_SEASONS_START_YEAR = 2016
+# Current NFL season (Sept-Feb): Jan-Aug = previous year, Sept-Dec = current year.
+CURRENT_YEAR = datetime.now().year
+CURRENT_NFL_SEASON = _current_nfl_season()
+# Default range for scraping/loading: MIN_HISTORICAL_YEAR through current NFL season (inclusive).
+SEASONS_TO_SCRAPE = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
+
+# Positions
+POSITIONS = ["QB", "RB", "WR", "TE"]
+
+# Fantasy scoring (PPR - primary)
+SCORING = {
+    "passing_yards": 0.04,
+    "passing_tds": 4,
+    "interceptions": -2,
+    "rushing_yards": 0.1,
+    "rushing_tds": 6,
+    "receptions": 1,  # PPR
+    "receiving_yards": 0.1,
+    "receiving_tds": 6,
+    "fumbles_lost": -2,
+    "two_point_conversions": 2,
+}
+
+# Half-PPR scoring (per requirements: support PPR, Half-PPR, Standard)
+SCORING_HALF_PPR = {
+    **SCORING,
+    "receptions": 0.5,
+}
+
+# Standard (non-PPR) scoring
+SCORING_STANDARD = {
+    **SCORING,
+    "receptions": 0,
+}
+
+# All supported scoring formats
+SCORING_FORMATS = {
+    "ppr": SCORING,
+    "half_ppr": SCORING_HALF_PPR,
+    "standard": SCORING_STANDARD,
+}
+
+# Utilization Score weights by position
+# When goal-line and aDOT/air-yards data are available, set high_value_touch weight and
+# compute high_value_touch_rate (rushes inside 10, targets 15+ air yards) in utilization_score.
+UTILIZATION_WEIGHTS = {
+    "RB": {
+        "snap_share": 0.20,
+        "rush_share": 0.25,
+        "target_share": 0.20,
+        "redzone_share": 0.20,
+        "touch_share": 0.10,  # (carries + receptions) / team touches, Fantasy Life aligned
+        "high_value_touch": 0.05,  # rushes inside 10, high-value target share
+    },
+    "WR": {
+        "target_share": 0.30,
+        "air_yards_share": 0.25,
+        "snap_share": 0.15,
+        "redzone_targets": 0.20,
+        "route_participation": 0.05,
+        "high_value_touch": 0.05,  # targets 15+ air yards
+    },
+    "TE": {
+        "target_share": 0.30,
+        "snap_share": 0.20,
+        "redzone_targets": 0.25,
+        "air_yards_share": 0.15,
+        "inline_rate": 0.05,
+        "high_value_touch": 0.05,  # high-value target share
+    },
+    "QB": {
+        "dropback_rate": 0.25,
+        "rush_attempt_share": 0.20,
+        "redzone_opportunity": 0.25,
+        "play_volume": 0.30,
+    },
+}
+
+# Model settings
+MODEL_CONFIG = {
+    "test_size": 0.2,
+    "cv_folds": 5,
+    "random_state": 42,
+    "n_optuna_trials": 50,
+    "early_stopping_rounds": 25,
+    "validation_pct": 0.2,       # Fraction of training data for ensemble weight optimization
+    "n_features_per_position": 50,  # Max features after selection (per position)
+    "correlation_threshold": 0.92,  # Drop one of pair if correlation exceeds this
+    "recency_decay_halflife": 2.0,  # Seasons: weight halves every 2 seasons (None = no weighting)
+    "cv_gap_seasons": 1,  # Gap between train and val for purged CV (1 = purge last season before test)
+    # Horizon-specific models (per requirements): 4w LSTM+ARIMA, 18w deep feedforward
+    "use_4w_hybrid": True,   # Use Hybrid4WeekModel for n_weeks in 4w band when TF available
+    "use_18w_deep": True,   # Use DeepSeasonLongModel for long horizon when TF available
+    "horizon_4w_weeks": (4, 5, 6, 7, 8),   # n_weeks that use 4-week hybrid model
+    "horizon_long_threshold": 9,   # n_weeks >= this use 18-week deep model when available
+}
+
+# =============================================================================
+# TRAINING DATA WINDOW
+# =============================================================================
+# 
+# The NFL has evolved significantly over time:
+#   - 2000-2010: Run-heavy offenses, fewer spread concepts
+#   - 2011-2019: Pass-first revolution, RPO emergence
+#   - 2020+: RPO explosion, increased passing efficiency
+#
+# Training on older data (pre-2011) may teach outdated patterns.
+# Default training window: end_year = current NFL season (single source: CURRENT_NFL_SEASON).
+# start_year defaults are explicit so training windows are coherent and overridable.
+TRAINING_START_YEAR_DEFAULT = 2014   # Default first year for training (10+ seasons for 18w model)
+TRAINING_END_YEAR_DEFAULT = CURRENT_NFL_SEASON   # Latest season (same as CURRENT_NFL_SEASON)
+TRAINING_YEARS = {
+    "start_year": TRAINING_START_YEAR_DEFAULT,
+    "end_year": TRAINING_END_YEAR_DEFAULT,
+    "test_years": [TRAINING_END_YEAR_DEFAULT],   # Latest season held out for testing
+    "min_years": 5,
+}
+
+# Requirement-derived minimum training seasons per horizon (see docs/fantasy requirements)
+MIN_TRAINING_SEASONS_1W = 3   # 1-week model: min 3, optimal 5+
+MIN_TRAINING_SEASONS_18W = 8  # 18-week model: min 8, optimal 10+
+MIN_TRAINING_SEASONS_4W = 5  # 4-week horizon (LSTM+ARIMA): min 5, optimal 8+
+# Per-position minimum players for training (requirements: ~30 QB, 60 RB, 70 WR, 30 TE)
+MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30}
+
+# Alternative training windows (end_year = CURRENT_NFL_SEASON; start_year explicit)
+TRAINING_WINDOW_PRESETS = {
+    "modern": {"start_year": MIN_HISTORICAL_YEAR, "end_year": TRAINING_END_YEAR_DEFAULT},
+    "balanced": {"start_year": TRAINING_START_YEAR_DEFAULT, "end_year": TRAINING_END_YEAR_DEFAULT},
+    "extended": {"start_year": 2010, "end_year": TRAINING_END_YEAR_DEFAULT},
+    "full": {"start_year": 2000, "end_year": TRAINING_END_YEAR_DEFAULT},
+}
+
+# Feature engineering (requirements: 3, 4, 5, 8 week windows for temporal features)
+ROLLING_WINDOWS = [3, 4, 5, 8]
+LAG_WEEKS = [1, 2, 3, 4]  # Lag features
+
+# Prediction settings
+MAX_PREDICTION_WEEKS = 18
+MIN_GAMES_FOR_PREDICTION = 4  # Minimum historical games needed
+
+# QB target selection (util vs future fantasy points): metadata file written after training
+QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
+
+# Feature set version: bump when feature_engineering adds/removes/renames model features.
+# Saved when training; checked when loading models. Mismatch triggers a retrain warning.
+FEATURE_VERSION = "4"  # v4: offensive momentum, game script, return-from-injury, combine features
+FEATURE_VERSION_FILENAME = "feature_version.txt"
+
+# =============================================================================
+# PERFORMANCE TARGETS (from requirements)
+# =============================================================================
+# Position-specific RMSE targets by horizon
+RMSE_TARGETS_1W = {"QB": 7.5, "RB": 8.5, "WR": 8.0, "TE": 7.0}
+RMSE_TARGETS_4W = {"QB": 10.0, "RB": 11.0, "WR": 10.0, "TE": 9.0}
+RMSE_TARGETS_18W = {"QB": 15.0, "RB": 15.0, "WR": 15.0, "TE": 15.0}
+
+# MAPE targets by horizon
+MAPE_TARGETS = {"1w": 25.0, "4w": 35.0, "18w": 45.0}
+
+# R² targets by horizon
+R2_TARGETS = {"1w": 0.50, "4w": 0.40, "18w": 0.30}
+
+# Success criteria thresholds (from requirements Section VII)
+SUCCESS_CRITERIA = {
+    "spearman_rho_min": 0.65,        # Ranking accuracy target
+    "within_10_pts_pct_min": 80.0,   # 80%+ within 10 points
+    "within_7_pts_pct_min": 70.0,    # 70%+ within 7 points
+    "beat_naive_baseline_pct": 25.0, # Beat all baselines by >25%
+    "beat_expert_pct_qb": 10.0,      # Beat expert projections by 8-12%
+    "beat_expert_pct_rb": 12.5,      # Beat expert projections by 10-15%
+    "beat_expert_pct_wr": 10.0,      # Beat expert projections by 8-12%
+    "beat_expert_pct_te": 15.0,      # Beat expert projections by 12-18%
+    "tier_accuracy_min": 0.75,       # >75% correct tier classification
+    "max_weekly_degradation_pct": 20.0,  # No >20% accuracy degradation across season
+    "confidence_band_coverage": 88.2,    # % of players within 10-point CI
+}
+
+# Prediction speed requirement
+MAX_PREDICTION_TIME_PER_PLAYER_SECONDS = 5.0
+
+# Offensive Momentum Score time weights (per requirements)
+MOMENTUM_WEIGHTS = {
+    "recent_4w": 0.60,   # Recent 4 weeks = 60%
+    "mid_5_8w": 0.30,    # Weeks 5-8 = 30%
+    "early_9_plus": 0.10, # Weeks 9+ = 10%
+}

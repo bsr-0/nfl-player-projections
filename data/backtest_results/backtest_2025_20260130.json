@@ -1,0 +1,763 @@
+{
+  "season": 2025,
+  "backtest_date": "2026-01-30T23:18:44.445712",
+  "n_predictions": 850,
+  "metrics": {
+    "rmse": 3.65,
+    "mae": 3.04,
+    "r2": 0.739,
+    "correlation": 0.862,
+    "mape": 21.5,
+    "directional_accuracy_pct": 84.8,
+    "within_3_pts_pct": 53.9,
+    "within_5_pts_pct": 81.3,
+    "within_10_pts_pct": 100.0,
+    "avg_actual": 17.68,
+    "avg_predicted": 17.37,
+    "std_actual": 7.16,
+    "std_predicted": 5.82
+  },
+  "by_position": {
+    "WR": {
+      "rmse": 3.72,
+      "mae": 3.1,
+      "r2": 0.718,
+      "correlation": 0.85,
+      "mape": 22.1,
+      "directional_accuracy_pct": 86.2,
+      "within_3_pts_pct": 52.2,
+      "within_5_pts_pct": 80.8,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.32,
+      "avg_predicted": 17.03,
+      "std_actual": 7.02,
+      "std_predicted": 5.67,
+      "n_players": 50
+    },
+    "TE": {
+      "rmse": 3.61,
+      "mae": 3.05,
+      "r2": 0.728,
+      "correlation": 0.854,
+      "mape": 21.9,
+      "directional_accuracy_pct": 84.5,
+      "within_3_pts_pct": 52.1,
+      "within_5_pts_pct": 84.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.94,
+      "avg_predicted": 17.87,
+      "std_actual": 6.93,
+      "std_predicted": 5.71,
+      "n_players": 50
+    },
+    "RB": {
+      "rmse": 3.56,
+      "mae": 2.9,
+      "r2": 0.759,
+      "correlation": 0.876,
+      "mape": 19.9,
+      "directional_accuracy_pct": 86.6,
+      "within_3_pts_pct": 59.0,
+      "within_5_pts_pct": 81.1,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.73,
+      "avg_predicted": 17.3,
+      "std_actual": 7.27,
+      "std_predicted": 5.84,
+      "n_players": 50
+    },
+    "QB": {
+      "rmse": 3.73,
+      "mae": 3.1,
+      "r2": 0.747,
+      "correlation": 0.868,
+      "mape": 22.4,
+      "directional_accuracy_pct": 82.9,
+      "within_3_pts_pct": 52.1,
+      "within_5_pts_pct": 79.1,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.68,
+      "avg_predicted": 17.26,
+      "std_actual": 7.44,
+      "std_predicted": 6.07,
+      "n_players": 50
+    }
+  },
+  "by_week": {
+    "1": {
+      "rmse": 3.66,
+      "mae": 3.16,
+      "r2": 0.681,
+      "correlation": 0.825,
+      "mape": 21.2,
+      "directional_accuracy_pct": 76.0,
+      "within_3_pts_pct": 56.0,
+      "within_5_pts_pct": 78.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.08,
+      "avg_predicted": 17.05,
+      "std_actual": 6.55,
+      "std_predicted": 5.47
+    },
+    "2": {
+      "rmse": 3.96,
+      "mae": 3.31,
+      "r2": 0.701,
+      "correlation": 0.846,
+      "mape": 21.2,
+      "directional_accuracy_pct": 76.0,
+      "within_3_pts_pct": 42.0,
+      "within_5_pts_pct": 82.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.61,
+      "avg_predicted": 17.04,
+      "std_actual": 7.31,
+      "std_predicted": 5.52
+    },
+    "3": {
+      "rmse": 3.94,
+      "mae": 3.28,
+      "r2": 0.647,
+      "correlation": 0.806,
+      "mape": 25.7,
+      "directional_accuracy_pct": 88.0,
+      "within_3_pts_pct": 50.0,
+      "within_5_pts_pct": 76.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.17,
+      "avg_predicted": 17.49,
+      "std_actual": 6.7,
+      "std_predicted": 5.3
+    },
+    "4": {
+      "rmse": 3.65,
+      "mae": 3.03,
+      "r2": 0.746,
+      "correlation": 0.869,
+      "mape": 21.9,
+      "directional_accuracy_pct": 92.0,
+      "within_3_pts_pct": 52.0,
+      "within_5_pts_pct": 84.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.44,
+      "avg_predicted": 17.0,
+      "std_actual": 7.32,
+      "std_predicted": 5.83
+    },
+    "5": {
+      "rmse": 3.8,
+      "mae": 3.07,
+      "r2": 0.778,
+      "correlation": 0.895,
+      "mape": 20.4,
+      "directional_accuracy_pct": 86.0,
+      "within_3_pts_pct": 56.0,
+      "within_5_pts_pct": 76.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 18.11,
+      "avg_predicted": 17.0,
+      "std_actual": 8.16,
+      "std_predicted": 6.83
+    },
+    "6": {
+      "rmse": 3.44,
+      "mae": 2.85,
+      "r2": 0.719,
+      "correlation": 0.851,
+      "mape": 21.1,
+      "directional_accuracy_pct": 82.0,
+      "within_3_pts_pct": 52.0,
+      "within_5_pts_pct": 86.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.38,
+      "avg_predicted": 17.83,
+      "std_actual": 6.56,
+      "std_predicted": 5.79
+    },
+    "7": {
+      "rmse": 3.78,
+      "mae": 3.14,
+      "r2": 0.751,
+      "correlation": 0.874,
+      "mape": 23.1,
+      "directional_accuracy_pct": 88.0,
+      "within_3_pts_pct": 54.0,
+      "within_5_pts_pct": 80.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 18.1,
+      "avg_predicted": 17.75,
+      "std_actual": 7.65,
+      "std_predicted": 5.91
+    },
+    "8": {
+      "rmse": 3.38,
+      "mae": 2.77,
+      "r2": 0.739,
+      "correlation": 0.868,
+      "mape": 19.8,
+      "directional_accuracy_pct": 76.0,
+      "within_3_pts_pct": 56.0,
+      "within_5_pts_pct": 86.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.53,
+      "avg_predicted": 16.74,
+      "std_actual": 6.67,
+      "std_predicted": 5.69
+    },
+    "9": {
+      "rmse": 3.27,
+      "mae": 2.76,
+      "r2": 0.799,
+      "correlation": 0.896,
+      "mape": 21.4,
+      "directional_accuracy_pct": 82.0,
+      "within_3_pts_pct": 62.0,
+      "within_5_pts_pct": 86.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 18.23,
+      "avg_predicted": 18.44,
+      "std_actual": 7.38,
+      "std_predicted": 6.17
+    },
+    "10": {
+      "rmse": 3.78,
+      "mae": 3.1,
+      "r2": 0.66,
+      "correlation": 0.818,
+      "mape": 22.3,
+      "directional_accuracy_pct": 82.0,
+      "within_3_pts_pct": 54.0,
+      "within_5_pts_pct": 80.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 16.47,
+      "avg_predicted": 15.86,
+      "std_actual": 6.54,
+      "std_predicted": 5.2
+    },
+    "11": {
+      "rmse": 3.64,
+      "mae": 3.05,
+      "r2": 0.786,
+      "correlation": 0.896,
+      "mape": 20.4,
+      "directional_accuracy_pct": 86.0,
+      "within_3_pts_pct": 54.0,
+      "within_5_pts_pct": 82.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 19.38,
+      "avg_predicted": 18.6,
+      "std_actual": 7.94,
+      "std_predicted": 6.41
+    },
+    "12": {
+      "rmse": 3.9,
+      "mae": 3.33,
+      "r2": 0.685,
+      "correlation": 0.847,
+      "mape": 19.3,
+      "directional_accuracy_pct": 80.0,
+      "within_3_pts_pct": 54.0,
+      "within_5_pts_pct": 76.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 20.19,
+      "avg_predicted": 18.93,
+      "std_actual": 7.01,
+      "std_predicted": 5.87
+    },
+    "13": {
+      "rmse": 3.94,
+      "mae": 3.32,
+      "r2": 0.709,
+      "correlation": 0.866,
+      "mape": 28.0,
+      "directional_accuracy_pct": 90.0,
+      "within_3_pts_pct": 46.0,
+      "within_5_pts_pct": 78.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 16.24,
+      "avg_predicted": 17.31,
+      "std_actual": 7.38,
+      "std_predicted": 5.35
+    },
+    "14": {
+      "rmse": 2.97,
+      "mae": 2.42,
+      "r2": 0.818,
+      "correlation": 0.906,
+      "mape": 17.5,
+      "directional_accuracy_pct": 86.0,
+      "within_3_pts_pct": 68.0,
+      "within_5_pts_pct": 92.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 16.53,
+      "avg_predicted": 16.16,
+      "std_actual": 7.03,
+      "std_predicted": 6.56
+    },
+    "15": {
+      "rmse": 3.54,
+      "mae": 2.99,
+      "r2": 0.752,
+      "correlation": 0.872,
+      "mape": 20.9,
+      "directional_accuracy_pct": 86.0,
+      "within_3_pts_pct": 52.0,
+      "within_5_pts_pct": 80.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 18.09,
+      "avg_predicted": 17.81,
+      "std_actual": 7.18,
+      "std_predicted": 5.66
+    },
+    "16": {
+      "rmse": 3.49,
+      "mae": 2.9,
+      "r2": 0.749,
+      "correlation": 0.878,
+      "mape": 20.0,
+      "directional_accuracy_pct": 88.0,
+      "within_3_pts_pct": 58.0,
+      "within_5_pts_pct": 82.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.44,
+      "avg_predicted": 16.5,
+      "std_actual": 7.03,
+      "std_predicted": 5.68
+    },
+    "17": {
+      "rmse": 3.81,
+      "mae": 3.14,
+      "r2": 0.706,
+      "correlation": 0.844,
+      "mape": 22.2,
+      "directional_accuracy_pct": 86.0,
+      "within_3_pts_pct": 50.0,
+      "within_5_pts_pct": 78.0,
+      "within_10_pts_pct": 100.0,
+      "avg_actual": 17.5,
+      "avg_predicted": 17.79,
+      "std_actual": 7.09,
+      "std_predicted": 5.46
+    }
+  },
+  "top_performers": {
+    "WR": {
+      "top_10_actual": [
+        {
+          "name": "Player 9",
+          "actual_rank": 1.0,
+          "pred_rank": 1.0,
+          "fantasy_points": 206.95823778283005,
+          "predicted_points": 180.69662926970716
+        },
+        {
+          "name": "Player 16",
+          "actual_rank": 2.0,
+          "pred_rank": 2.0,
+          "fantasy_points": 168.38975421237257,
+          "predicted_points": 166.65879206781642
+        },
+        {
+          "name": "Player 15",
+          "actual_rank": 3.0,
+          "pred_rank": 3.0,
+          "fantasy_points": 128.1623801777542,
+          "predicted_points": 136.95765460701912
+        },
+        {
+          "name": "Player 1",
+          "actual_rank": 4.0,
+          "pred_rank": 4.0,
+          "fantasy_points": 123.24257938904701,
+          "predicted_points": 117.5791175375156
+        },
+        {
+          "name": "Player 48",
+          "actual_rank": 5.0,
+          "pred_rank": 6.0,
+          "fantasy_points": 117.32782735042423,
+          "predicted_points": 107.8785653796717
+        },
+        {
+          "name": "Player 21",
+          "actual_rank": 6.0,
+          "pred_rank": 7.0,
+          "fantasy_points": 116.46413571751492,
+          "predicted_points": 100.59593140831578
+        },
+        {
+          "name": "Player 20",
+          "actual_rank": 7.0,
+          "pred_rank": 5.0,
+          "fantasy_points": 114.2047832119674,
+          "predicted_points": 116.90038725728697
+        },
+        {
+          "name": "Player 23",
+          "actual_rank": 8.0,
+          "pred_rank": 12.0,
+          "fantasy_points": 99.73314574829898,
+          "predicted_points": 85.57676339183897
+        },
+        {
+          "name": "Player 49",
+          "actual_rank": 9.0,
+          "pred_rank": 18.0,
+          "fantasy_points": 96.0772116982213,
+          "predicted_points": 80.41860522087144
+        },
+        {
+          "name": "Player 30",
+          "actual_rank": 10.0,
+          "pred_rank": 11.0,
+          "fantasy_points": 90.77393561614255,
+          "predicted_points": 86.41829725660311
+        }
+      ],
+      "avg_pred_rank_of_top_10": 6.9,
+      "top_10_in_our_top_20": 10
+    },
+    "TE": {
+      "top_10_actual": [
+        {
+          "name": "Player 4",
+          "actual_rank": 1.0,
+          "pred_rank": 1.0,
+          "fantasy_points": 151.86747720995209,
+          "predicted_points": 142.06052428579397
+        },
+        {
+          "name": "Player 10",
+          "actual_rank": 2.0,
+          "pred_rank": 2.0,
+          "fantasy_points": 136.8430124913234,
+          "predicted_points": 139.91863395845277
+        },
+        {
+          "name": "Player 44",
+          "actual_rank": 3.0,
+          "pred_rank": 4.0,
+          "fantasy_points": 131.03982666616412,
+          "predicted_points": 123.4950549682685
+        },
+        {
+          "name": "Player 41",
+          "actual_rank": 4.0,
+          "pred_rank": 3.0,
+          "fantasy_points": 126.75302535181433,
+          "predicted_points": 131.16856965830928
+        },
+        {
+          "name": "Player 47",
+          "actual_rank": 5.0,
+          "pred_rank": 5.0,
+          "fantasy_points": 122.27149450912881,
+          "predicted_points": 122.51502762407796
+        },
+        {
+          "name": "Player 29",
+          "actual_rank": 6.0,
+          "pred_rank": 12.0,
+          "fantasy_points": 114.31655742983497,
+          "predicted_points": 100.00558302332934
+        },
+        {
+          "name": "Player 5",
+          "actual_rank": 7.0,
+          "pred_rank": 9.0,
+          "fantasy_points": 111.53919303778508,
+          "predicted_points": 101.60474205613396
+        },
+        {
+          "name": "Player 8",
+          "actual_rank": 8.0,
+          "pred_rank": 7.0,
+          "fantasy_points": 110.85993499905592,
+          "predicted_points": 110.27447538463356
+        },
+        {
+          "name": "Player 36",
+          "actual_rank": 9.0,
+          "pred_rank": 8.0,
+          "fantasy_points": 107.99871014765053,
+          "predicted_points": 102.18342876055178
+        },
+        {
+          "name": "Player 15",
+          "actual_rank": 10.0,
+          "pred_rank": 21.0,
+          "fantasy_points": 101.213633036647,
+          "predicted_points": 86.992351814225
+        }
+      ],
+      "avg_pred_rank_of_top_10": 7.2,
+      "top_10_in_our_top_20": 9
+    },
+    "RB": {
+      "top_10_actual": [
+        {
+          "name": "Player 20",
+          "actual_rank": 1.0,
+          "pred_rank": 1.0,
+          "fantasy_points": 144.0470118513215,
+          "predicted_points": 139.68217736589946
+        },
+        {
+          "name": "Player 26",
+          "actual_rank": 2.0,
+          "pred_rank": 3.0,
+          "fantasy_points": 137.19457059347744,
+          "predicted_points": 128.19286564547326
+        },
+        {
+          "name": "Player 42",
+          "actual_rank": 3.0,
+          "pred_rank": 2.0,
+          "fantasy_points": 136.86067344521803,
+          "predicted_points": 132.0192627690402
+        },
+        {
+          "name": "Player 33",
+          "actual_rank": 4.0,
+          "pred_rank": 6.0,
+          "fantasy_points": 127.615194439459,
+          "predicted_points": 120.77722719649675
+        },
+        {
+          "name": "Player 21",
+          "actual_rank": 5.0,
+          "pred_rank": 5.0,
+          "fantasy_points": 124.10528570185183,
+          "predicted_points": 124.01467337570715
+        },
+        {
+          "name": "Player 25",
+          "actual_rank": 6.0,
+          "pred_rank": 11.0,
+          "fantasy_points": 123.82015341718422,
+          "predicted_points": 104.68341198618772
+        },
+        {
+          "name": "Player 14",
+          "actual_rank": 7.0,
+          "pred_rank": 9.0,
+          "fantasy_points": 122.53562250963199,
+          "predicted_points": 108.63505679262539
+        },
+        {
+          "name": "Player 24",
+          "actual_rank": 8.0,
+          "pred_rank": 10.0,
+          "fantasy_points": 117.60682247264874,
+          "predicted_points": 106.09682831804012
+        },
+        {
+          "name": "Player 30",
+          "actual_rank": 9.0,
+          "pred_rank": 8.0,
+          "fantasy_points": 117.01903861962722,
+          "predicted_points": 110.11404954112888
+        },
+        {
+          "name": "Player 22",
+          "actual_rank": 10.0,
+          "pred_rank": 14.0,
+          "fantasy_points": 115.14028343818325,
+          "predicted_points": 96.4700842592785
+        }
+      ],
+      "avg_pred_rank_of_top_10": 6.9,
+      "top_10_in_our_top_20": 10
+    },
+    "QB": {
+      "top_10_actual": [
+        {
+          "name": "Player 45",
+          "actual_rank": 1.0,
+          "pred_rank": 1.0,
+          "fantasy_points": 153.74725812825372,
+          "predicted_points": 150.6941506269613
+        },
+        {
+          "name": "Player 29",
+          "actual_rank": 2.0,
+          "pred_rank": 2.0,
+          "fantasy_points": 139.59226898463623,
+          "predicted_points": 133.2827002804429
+        },
+        {
+          "name": "Player 46",
+          "actual_rank": 3.0,
+          "pred_rank": 3.0,
+          "fantasy_points": 132.61944594631595,
+          "predicted_points": 131.54395372363743
+        },
+        {
+          "name": "Player 6",
+          "actual_rank": 4.0,
+          "pred_rank": 4.0,
+          "fantasy_points": 131.67373195250352,
+          "predicted_points": 128.8721139296679
+        },
+        {
+          "name": "Player 39",
+          "actual_rank": 5.0,
+          "pred_rank": 7.0,
+          "fantasy_points": 123.78440246570554,
+          "predicted_points": 109.0167629901085
+        },
+        {
+          "name": "Player 8",
+          "actual_rank": 6.0,
+          "pred_rank": 6.0,
+          "fantasy_points": 118.18441805145453,
+          "predicted_points": 115.6374592883621
+        },
+        {
+          "name": "Player 5",
+          "actual_rank": 7.0,
+          "pred_rank": 5.0,
+          "fantasy_points": 108.38165923963874,
+          "predicted_points": 118.23368580154377
+        },
+        {
+          "name": "Player 49",
+          "actual_rank": 8.0,
+          "pred_rank": 8.0,
+          "fantasy_points": 103.44002008062651,
+          "predicted_points": 100.78382209841394
+        },
+        {
+          "name": "Player 50",
+          "actual_rank": 9.0,
+          "pred_rank": 10.0,
+          "fantasy_points": 102.98284555811323,
+          "predicted_points": 99.42692919870746
+        },
+        {
+          "name": "Player 9",
+          "actual_rank": 10.0,
+          "pred_rank": 13.0,
+          "fantasy_points": 102.43151041602556,
+          "predicted_points": 93.62692025698222
+        }
+      ],
+      "avg_pred_rank_of_top_10": 5.9,
+      "top_10_in_our_top_20": 10
+    }
+  },
+  "biggest_misses": [
+    {
+      "name": "Player 28",
+      "position": "RB",
+      "team": "KC",
+      "week": 17,
+      "fantasy_points": 29.12796741090114,
+      "predicted_points": 20.43897699697489,
+      "error": 8.688990413926248
+    },
+    {
+      "name": "Player 29",
+      "position": "QB",
+      "team": "KC",
+      "week": 13,
+      "fantasy_points": 29.985343144266665,
+      "predicted_points": 21.471860589592225,
+      "error": 8.51348255467444
+    },
+    {
+      "name": "Player 30",
+      "position": "WR",
+      "team": "PHI",
+      "week": 12,
+      "fantasy_points": 28.88809239887337,
+      "predicted_points": 20.403990505974974,
+      "error": 8.484101892898394
+    },
+    {
+      "name": "Player 10",
+      "position": "QB",
+      "team": "BUF",
+      "week": 5,
+      "fantasy_points": 29.246970667690977,
+      "predicted_points": 20.904478586889446,
+      "error": 8.34249208080153
+    },
+    {
+      "name": "Player 18",
+      "position": "WR",
+      "team": "KC",
+      "week": 11,
+      "fantasy_points": 27.408395463027993,
+      "predicted_points": 19.315896059226954,
+      "error": 8.092499403801039
+    },
+    {
+      "name": "Player 40",
+      "position": "TE",
+      "team": "BUF",
+      "week": 12,
+      "fantasy_points": 28.420561550827294,
+      "predicted_points": 20.41697187843934,
+      "error": 8.003589672387953
+    },
+    {
+      "name": "Player 7",
+      "position": "WR",
+      "team": "PHI",
+      "week": 3,
+      "fantasy_points": 5.633768585386438,
+      "predicted_points": 13.570122156549758,
+      "error": -7.93635357116332
+    },
+    {
+      "name": "Player 29",
+      "position": "TE",
+      "team": "KC",
+      "week": 5,
+      "fantasy_points": 29.24780115268176,
+      "predicted_points": 21.412467964771416,
+      "error": 7.835333187910344
+    },
+    {
+      "name": "Player 17",
+      "position": "QB",
+      "team": "PHI",
+      "week": 11,
+      "fantasy_points": 7.1337417019660965,
+      "predicted_points": 14.96236170983574,
+      "error": -7.8286200078696435
+    },
+    {
+      "name": "Player 13",
+      "position": "RB",
+      "team": "BUF",
+      "week": 2,
+      "fantasy_points": 28.02181001329533,
+      "predicted_points": 20.22604660785537,
+      "error": 7.79576340543996
+    }
+  ],
+  "ranking_accuracy": {
+    "WR": {
+      "top_5_hit_rate": 75.3,
+      "top_10_hit_rate": 93.8,
+      "top_20_hit_rate": null
+    },
+    "TE": {
+      "top_5_hit_rate": 80.0,
+      "top_10_hit_rate": 90.0,
+      "top_20_hit_rate": null
+    },
+    "RB": {
+      "top_5_hit_rate": 81.2,
+      "top_10_hit_rate": 88.6,
+      "top_20_hit_rate": null
+    },
+    "QB": {
+      "top_5_hit_rate": 82.4,
+      "top_10_hit_rate": 93.6,
+      "top_20_hit_rate": null
+    }
+  }
+}

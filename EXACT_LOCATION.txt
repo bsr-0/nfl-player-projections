@@ -1,0 +1,38 @@
+📍 EXACT REPOSITORY LOCATION
+=============================
+
+Claude's Directory Path:
+/home/claude/nfl-predictor/
+
+Your Local Machine Path:
+This is what you need to find on your computer.
+
+The repo is located somewhere on your Mac. Common locations:
+1. /Users/benrosen/Desktop/nfl-predictor
+2. /Users/benrosen/Documents/nfl-predictor
+3. /Users/benrosen/Downloads/nfl-predictor
+4. /Users/benrosen/Projects/nfl-predictor
+5. /Users/benrosen/CascadeProjects/nfl-predictor
+
+HOW TO FIND IT:
+===============
+
+Option 1 - Spotlight Search:
+1. Press Cmd + Space
+2. Type: analytics_dashboard.py
+3. Right-click result → "Reveal in Finder"
+4. This shows you the exact location
+
+Option 2 - Terminal Search:
+cd ~
+find . -name "nfl-predictor" -type d 2>/dev/null
+
+Option 3 - mdfind:
+mdfind -name nfl-predictor
+
+Once found, navigate there:
+cd /path/to/nfl-predictor/scripts
+streamlit run analytics_dashboard.py
+
+ALL FILES ARE UPDATED AND INTEGRATED!
+=====================================

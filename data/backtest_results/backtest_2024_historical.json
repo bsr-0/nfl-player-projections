@@ -1,0 +1,741 @@
+{
+  "season": 2024,
+  "backtest_date": "2026-01-31T00:19:18.158656",
+  "n_predictions": 3952,
+  "metrics": {
+    "rmse": 6.83,
+    "mae": 5.09,
+    "r2": 0.209,
+    "correlation": 0.487,
+    "mape": 141.9,
+    "directional_accuracy_pct": 70.5,
+    "within_3_pts_pct": 39.5,
+    "within_5_pts_pct": 60.7,
+    "within_10_pts_pct": 87.3,
+    "avg_actual": 8.49,
+    "avg_predicted": 8.43,
+    "std_actual": 7.68,
+    "std_predicted": 5.04
+  },
+  "by_position": {
+    "WR": {
+      "rmse": 7.34,
+      "mae": 5.53,
+      "r2": 0.138,
+      "correlation": 0.434,
+      "mape": 115.5,
+      "directional_accuracy_pct": 67.7,
+      "within_3_pts_pct": 35.7,
+      "within_5_pts_pct": 56.3,
+      "within_10_pts_pct": 85.2,
+      "avg_actual": 8.89,
+      "avg_predicted": 9.05,
+      "std_actual": 7.91,
+      "std_predicted": 5.19,
+      "n_players": 163
+    },
+    "TE": {
+      "rmse": 5.42,
+      "mae": 4.01,
+      "r2": 0.189,
+      "correlation": 0.462,
+      "mape": 96.2,
+      "directional_accuracy_pct": 70.8,
+      "within_3_pts_pct": 48.0,
+      "within_5_pts_pct": 71.2,
+      "within_10_pts_pct": 93.4,
+      "avg_actual": 6.35,
+      "avg_predicted": 6.15,
+      "std_actual": 6.02,
+      "std_predicted": 3.71,
+      "n_players": 92
+    },
+    "RB": {
+      "rmse": 7.1,
+      "mae": 5.33,
+      "r2": 0.254,
+      "correlation": 0.518,
+      "mape": 216.0,
+      "directional_accuracy_pct": 70.3,
+      "within_3_pts_pct": 38.0,
+      "within_5_pts_pct": 58.3,
+      "within_10_pts_pct": 85.6,
+      "avg_actual": 9.7,
+      "avg_predicted": 9.42,
+      "std_actual": 8.22,
+      "std_predicted": 5.19,
+      "n_players": 98
+    }
+  },
+  "by_week": {
+    "1": {
+      "rmse": 6.14,
+      "mae": 4.66,
+      "r2": 0.274,
+      "correlation": 0.56,
+      "mape": 120.2,
+      "directional_accuracy_pct": 74.1,
+      "within_3_pts_pct": 41.4,
+      "within_5_pts_pct": 65.1,
+      "within_10_pts_pct": 90.5,
+      "avg_actual": 7.7,
+      "avg_predicted": 8.76,
+      "std_actual": 7.22,
+      "std_predicted": 5.02
+    },
+    "2": {
+      "rmse": 6.15,
+      "mae": 4.65,
+      "r2": 0.292,
+      "correlation": 0.559,
+      "mape": 127.9,
+      "directional_accuracy_pct": 69.6,
+      "within_3_pts_pct": 43.3,
+      "within_5_pts_pct": 66.1,
+      "within_10_pts_pct": 87.9,
+      "avg_actual": 7.87,
+      "avg_predicted": 8.55,
+      "std_actual": 7.32,
+      "std_predicted": 4.91
+    },
+    "3": {
+      "rmse": 7.04,
+      "mae": 5.18,
+      "r2": 0.206,
+      "correlation": 0.476,
+      "mape": 136.3,
+      "directional_accuracy_pct": 69.0,
+      "within_3_pts_pct": 38.4,
+      "within_5_pts_pct": 58.2,
+      "within_10_pts_pct": 87.5,
+      "avg_actual": 8.37,
+      "avg_predicted": 8.2,
+      "std_actual": 7.91,
+      "std_predicted": 4.88
+    },
+    "4": {
+      "rmse": 6.33,
+      "mae": 4.71,
+      "r2": 0.288,
+      "correlation": 0.547,
+      "mape": 119.3,
+      "directional_accuracy_pct": 72.1,
+      "within_3_pts_pct": 40.5,
+      "within_5_pts_pct": 63.7,
+      "within_10_pts_pct": 90.7,
+      "avg_actual": 8.6,
+      "avg_predicted": 8.51,
+      "std_actual": 7.51,
+      "std_predicted": 4.91
+    },
+    "5": {
+      "rmse": 7.56,
+      "mae": 5.58,
+      "r2": -0.034,
+      "correlation": 0.326,
+      "mape": 106.3,
+      "directional_accuracy_pct": 64.5,
+      "within_3_pts_pct": 36.1,
+      "within_5_pts_pct": 56.3,
+      "within_10_pts_pct": 82.5,
+      "avg_actual": 9.71,
+      "avg_predicted": 8.59,
+      "std_actual": 7.46,
+      "std_predicted": 4.99
+    },
+    "6": {
+      "rmse": 6.72,
+      "mae": 5.05,
+      "r2": 0.216,
+      "correlation": 0.49,
+      "mape": 248.8,
+      "directional_accuracy_pct": 73.6,
+      "within_3_pts_pct": 34.7,
+      "within_5_pts_pct": 63.2,
+      "within_10_pts_pct": 87.6,
+      "avg_actual": 8.74,
+      "avg_predicted": 8.28,
+      "std_actual": 7.6,
+      "std_predicted": 4.8
+    },
+    "7": {
+      "rmse": 6.87,
+      "mae": 5.44,
+      "r2": 0.125,
+      "correlation": 0.423,
+      "mape": 157.4,
+      "directional_accuracy_pct": 67.3,
+      "within_3_pts_pct": 33.2,
+      "within_5_pts_pct": 52.2,
+      "within_10_pts_pct": 86.8,
+      "avg_actual": 8.13,
+      "avg_predicted": 8.4,
+      "std_actual": 7.37,
+      "std_predicted": 4.8
+    },
+    "8": {
+      "rmse": 6.14,
+      "mae": 4.63,
+      "r2": 0.333,
+      "correlation": 0.586,
+      "mape": 128.9,
+      "directional_accuracy_pct": 75.2,
+      "within_3_pts_pct": 39.8,
+      "within_5_pts_pct": 62.4,
+      "within_10_pts_pct": 90.3,
+      "avg_actual": 8.65,
+      "avg_predicted": 8.23,
+      "std_actual": 7.54,
+      "std_predicted": 5.07
+    },
+    "9": {
+      "rmse": 7.13,
+      "mae": 5.21,
+      "r2": 0.203,
+      "correlation": 0.48,
+      "mape": 128.7,
+      "directional_accuracy_pct": 76.4,
+      "within_3_pts_pct": 43.3,
+      "within_5_pts_pct": 63.0,
+      "within_10_pts_pct": 85.1,
+      "avg_actual": 8.79,
+      "avg_predicted": 8.38,
+      "std_actual": 8.01,
+      "std_predicted": 5.09
+    },
+    "10": {
+      "rmse": 6.49,
+      "mae": 4.54,
+      "r2": 0.201,
+      "correlation": 0.51,
+      "mape": 140.2,
+      "directional_accuracy_pct": 73.3,
+      "within_3_pts_pct": 46.1,
+      "within_5_pts_pct": 67.5,
+      "within_10_pts_pct": 89.0,
+      "avg_actual": 7.78,
+      "avg_predicted": 8.46,
+      "std_actual": 7.28,
+      "std_predicted": 5.36
+    },
+    "11": {
+      "rmse": 7.36,
+      "mae": 5.56,
+      "r2": 0.205,
+      "correlation": 0.48,
+      "mape": 163.9,
+      "directional_accuracy_pct": 72.0,
+      "within_3_pts_pct": 34.1,
+      "within_5_pts_pct": 57.3,
+      "within_10_pts_pct": 85.3,
+      "avg_actual": 8.58,
+      "avg_predicted": 8.44,
+      "std_actual": 8.28,
+      "std_predicted": 5.27
+    },
+    "12": {
+      "rmse": 7.05,
+      "mae": 5.38,
+      "r2": 0.199,
+      "correlation": 0.483,
+      "mape": 139.8,
+      "directional_accuracy_pct": 70.9,
+      "within_3_pts_pct": 38.5,
+      "within_5_pts_pct": 59.9,
+      "within_10_pts_pct": 87.9,
+      "avg_actual": 8.69,
+      "avg_predicted": 8.73,
+      "std_actual": 7.9,
+      "std_predicted": 5.27
+    },
+    "13": {
+      "rmse": 6.49,
+      "mae": 4.97,
+      "r2": 0.196,
+      "correlation": 0.493,
+      "mape": 136.5,
+      "directional_accuracy_pct": 72.1,
+      "within_3_pts_pct": 37.9,
+      "within_5_pts_pct": 59.8,
+      "within_10_pts_pct": 89.0,
+      "avg_actual": 8.74,
+      "avg_predicted": 8.67,
+      "std_actual": 7.26,
+      "std_predicted": 5.16
+    },
+    "14": {
+      "rmse": 7.37,
+      "mae": 5.28,
+      "r2": 0.284,
+      "correlation": 0.543,
+      "mape": 105.3,
+      "directional_accuracy_pct": 72.6,
+      "within_3_pts_pct": 38.3,
+      "within_5_pts_pct": 56.6,
+      "within_10_pts_pct": 87.4,
+      "avg_actual": 9.22,
+      "avg_predicted": 8.47,
+      "std_actual": 8.73,
+      "std_predicted": 5.25
+    },
+    "15": {
+      "rmse": 6.82,
+      "mae": 5.06,
+      "r2": 0.242,
+      "correlation": 0.512,
+      "mape": 120.8,
+      "directional_accuracy_pct": 69.4,
+      "within_3_pts_pct": 42.6,
+      "within_5_pts_pct": 62.0,
+      "within_10_pts_pct": 88.0,
+      "avg_actual": 8.31,
+      "avg_predicted": 8.55,
+      "std_actual": 7.86,
+      "std_predicted": 5.11
+    },
+    "16": {
+      "rmse": 6.58,
+      "mae": 4.98,
+      "r2": 0.306,
+      "correlation": 0.562,
+      "mape": 124.0,
+      "directional_accuracy_pct": 73.7,
+      "within_3_pts_pct": 39.7,
+      "within_5_pts_pct": 60.3,
+      "within_10_pts_pct": 88.4,
+      "avg_actual": 8.6,
+      "avg_predicted": 8.26,
+      "std_actual": 7.91,
+      "std_predicted": 5.14
+    },
+    "17": {
+      "rmse": 7.16,
+      "mae": 5.32,
+      "r2": 0.144,
+      "correlation": 0.435,
+      "mape": 196.6,
+      "directional_accuracy_pct": 65.2,
+      "within_3_pts_pct": 38.0,
+      "within_5_pts_pct": 59.7,
+      "within_10_pts_pct": 84.6,
+      "avg_actual": 8.26,
+      "avg_predicted": 8.08,
+      "std_actual": 7.75,
+      "std_predicted": 5.0
+    },
+    "18": {
+      "rmse": 7.76,
+      "mae": 5.59,
+      "r2": -0.011,
+      "correlation": 0.321,
+      "mape": 177.2,
+      "directional_accuracy_pct": 64.7,
+      "within_3_pts_pct": 41.7,
+      "within_5_pts_pct": 59.8,
+      "within_10_pts_pct": 83.8,
+      "avg_actual": 8.77,
+      "avg_predicted": 7.55,
+      "std_actual": 7.74,
+      "std_predicted": 4.8
+    },
+    "19": {
+      "rmse": 5.95,
+      "mae": 4.62,
+      "r2": 0.158,
+      "correlation": 0.512,
+      "mape": 115.3,
+      "directional_accuracy_pct": 68.5,
+      "within_3_pts_pct": 47.2,
+      "within_5_pts_pct": 61.8,
+      "within_10_pts_pct": 92.1,
+      "avg_actual": 7.27,
+      "avg_predicted": 8.6,
+      "std_actual": 6.52,
+      "std_predicted": 4.97
+    },
+    "20": {
+      "rmse": 7.63,
+      "mae": 5.67,
+      "r2": 0.186,
+      "correlation": 0.457,
+      "mape": 100.7,
+      "directional_accuracy_pct": 70.7,
+      "within_3_pts_pct": 43.1,
+      "within_5_pts_pct": 55.2,
+      "within_10_pts_pct": 79.3,
+      "avg_actual": 9.21,
+      "avg_predicted": 9.56,
+      "std_actual": 8.53,
+      "std_predicted": 5.14
+    },
+    "21": {
+      "rmse": 7.63,
+      "mae": 6.36,
+      "r2": 0.078,
+      "correlation": 0.35,
+      "mape": 117.4,
+      "directional_accuracy_pct": 51.7,
+      "within_3_pts_pct": 27.6,
+      "within_5_pts_pct": 48.3,
+      "within_10_pts_pct": 75.9,
+      "avg_actual": 9.23,
+      "avg_predicted": 9.5,
+      "std_actual": 8.09,
+      "std_predicted": 4.51
+    },
+    "22": {
+      "rmse": 5.59,
+      "mae": 4.55,
+      "r2": -0.078,
+      "correlation": 0.743,
+      "mape": 207.8,
+      "directional_accuracy_pct": 60.0,
+      "within_3_pts_pct": 33.3,
+      "within_5_pts_pct": 60.0,
+      "within_10_pts_pct": 93.3,
+      "avg_actual": 6.21,
+      "avg_predicted": 10.47,
+      "std_actual": 5.57,
+      "std_predicted": 4.54
+    }
+  },
+  "top_performers": {
+    "WR": {
+      "top_10_actual": [
+        {
+          "name": "Ja'Marr Chase",
+          "actual_rank": 1.0,
+          "pred_rank": 8.0,
+          "fantasy_points": 402.9999990463257,
+          "predicted_points": 279.1400038301945
+        },
+        {
+          "name": "Amon-Ra St. Brown",
+          "actual_rank": 2.0,
+          "pred_rank": 3.0,
+          "fantasy_points": 337.88000202178955,
+          "predicted_points": 366.15789699554443
+        },
+        {
+          "name": "Justin Jefferson",
+          "actual_rank": 3.0,
+          "pred_rank": 2.0,
+          "fantasy_points": 328.2800006866455,
+          "predicted_points": 367.5599979400635
+        },
+        {
+          "name": "Terry McLaurin",
+          "actual_rank": 4.0,
+          "pred_rank": 15.0,
+          "fantasy_points": 322.49999928474426,
+          "predicted_points": 239.05882498797246
+        },
+        {
+          "name": "Drake London",
+          "actual_rank": 5.0,
+          "pred_rank": 33.0,
+          "fantasy_points": 280.80000162124634,
+          "predicted_points": 185.27875290811062
+        },
+        {
+          "name": "CeeDee Lamb",
+          "actual_rank": 6.0,
+          "pred_rank": 4.0,
+          "fantasy_points": 263.3999991416931,
+          "predicted_points": 354.74999984105426
+        },
+        {
+          "name": "Mike Evans",
+          "actual_rank": 7.0,
+          "pred_rank": 10.0,
+          "fantasy_points": 262.6000020503998,
+          "predicted_points": 251.84210658073425
+        },
+        {
+          "name": "A.J. Brown",
+          "actual_rank": 8.0,
+          "pred_rank": 6.0,
+          "fantasy_points": 257.20000076293945,
+          "predicted_points": 289.60000195354223
+        },
+        {
+          "name": "Jaxon Smith-Njigba",
+          "actual_rank": 9.0,
+          "pred_rank": 41.0,
+          "fantasy_points": 253.00000095367432,
+          "predicted_points": 149.80000019073486
+        },
+        {
+          "name": "Courtland Sutton",
+          "actual_rank": 10.0,
+          "pred_rank": 30.0,
+          "fantasy_points": 252.80000257492065,
+          "predicted_points": 202.08750081062317
+        }
+      ],
+      "avg_pred_rank_of_top_10": 15.2,
+      "top_10_in_our_top_20": 7
+    },
+    "TE": {
+      "top_10_actual": [
+        {
+          "name": "Trey McBride",
+          "actual_rank": 1.0,
+          "pred_rank": 6.0,
+          "fantasy_points": 243.80000019073486,
+          "predicted_points": 170.82353030934053
+        },
+        {
+          "name": "George Kittle",
+          "actual_rank": 2.0,
+          "pred_rank": 5.0,
+          "fantasy_points": 236.6000006198883,
+          "predicted_points": 180.31579105477584
+        },
+        {
+          "name": "Travis Kelce",
+          "actual_rank": 3.0,
+          "pred_rank": 1.0,
+          "fantasy_points": 231.89999949932098,
+          "predicted_points": 305.4000024795532
+        },
+        {
+          "name": "Jonnu Smith",
+          "actual_rank": 4.0,
+          "pred_rank": 13.0,
+          "fantasy_points": 222.30000114440918,
+          "predicted_points": 140.7599991083145
+        },
+        {
+          "name": "Zach Ertz",
+          "actual_rank": 5.0,
+          "pred_rank": 11.0,
+          "fantasy_points": 216.90000128746033,
+          "predicted_points": 147.71428789411272
+        },
+        {
+          "name": "Mark Andrews",
+          "actual_rank": 6.0,
+          "pred_rank": 3.0,
+          "fantasy_points": 203.39999961853027,
+          "predicted_points": 239.91818033565173
+        },
+        {
+          "name": "Sam LaPorta",
+          "actual_rank": 7.0,
+          "pred_rank": 2.0,
+          "fantasy_points": 191.70000052452087,
+          "predicted_points": 241.31500170230868
+        },
+        {
+          "name": "Pat Freiermuth",
+          "actual_rank": 8.0,
+          "pred_rank": 18.0,
+          "fantasy_points": 172.79999923706055,
+          "predicted_points": 134.1000019311905
+        },
+        {
+          "name": "Tucker Kraft",
+          "actual_rank": 9.0,
+          "pred_rank": 16.0,
+          "fantasy_points": 171.89999914169312,
+          "predicted_points": 137.84999817609787
+        },
+        {
+          "name": "Dallas Goedert",
+          "actual_rank": 10.0,
+          "pred_rank": 15.0,
+          "fantasy_points": 149.39999961853027,
+          "predicted_points": 138.50666842460632
+        }
+      ],
+      "avg_pred_rank_of_top_10": 9.0,
+      "top_10_in_our_top_20": 10
+    },
+    "RB": {
+      "top_10_actual": [
+        {
+          "name": "Saquon Barkley",
+          "actual_rank": 1.0,
+          "pred_rank": 2.0,
+          "fantasy_points": 455.70000410079956,
+          "predicted_points": 318.8571446282523
+        },
+        {
+          "name": "Jahmyr Gibbs",
+          "actual_rank": 2.0,
+          "pred_rank": 3.0,
+          "fantasy_points": 390.399995803833,
+          "predicted_points": 292.90000104904175
+        },
+        {
+          "name": "Derrick Henry",
+          "actual_rank": 3.0,
+          "pred_rank": 5.0,
+          "fantasy_points": 381.40000343322754,
+          "predicted_points": 275.67882176006543
+        },
+        {
+          "name": "Bijan Robinson",
+          "actual_rank": 4.0,
+          "pred_rank": 15.0,
+          "fantasy_points": 341.6999979019165,
+          "predicted_points": 246.30000087618828
+        },
+        {
+          "name": "James Cook",
+          "actual_rank": 5.0,
+          "pred_rank": 7.0,
+          "fantasy_points": 324.2999997138977,
+          "predicted_points": 257.29999923706055
+        },
+        {
+          "name": "Josh Jacobs",
+          "actual_rank": 6.0,
+          "pred_rank": 11.0,
+          "fantasy_points": 314.2000036239624,
+          "predicted_points": 250.7538427206186
+        },
+        {
+          "name": "De'Von Achane",
+          "actual_rank": 7.0,
+          "pred_rank": 4.0,
+          "fantasy_points": 299.900000333786,
+          "predicted_points": 278.65833289424575
+        },
+        {
+          "name": "Kyren Williams",
+          "actual_rank": 8.0,
+          "pred_rank": 1.0,
+          "fantasy_points": 299.8000011444092,
+          "predicted_points": 364.1538487947904
+        },
+        {
+          "name": "Joe Mixon",
+          "actual_rank": 9.0,
+          "pred_rank": 9.0,
+          "fantasy_points": 275.39999890327454,
+          "predicted_points": 251.29411944221047
+        },
+        {
+          "name": "Alvin Kamara",
+          "actual_rank": 10.0,
+          "pred_rank": 10.0,
+          "fantasy_points": 265.29999828338623,
+          "predicted_points": 250.9230753825261
+        }
+      ],
+      "avg_pred_rank_of_top_10": 6.7,
+      "top_10_in_our_top_20": 10
+    }
+  },
+  "biggest_misses": [
+    {
+      "name": "Jauan Jennings",
+      "position": "WR",
+      "team": "SF",
+      "week": 3,
+      "fantasy_points": 46.5,
+      "predicted_points": 5.555999994277954,
+      "error": 40.944000005722046
+    },
+    {
+      "name": "Ja'Marr Chase",
+      "position": "WR",
+      "team": "CIN",
+      "week": 10,
+      "fantasy_points": 55.400001525878906,
+      "predicted_points": 16.420000225305557,
+      "error": 38.98000130057335
+    },
+    {
+      "name": "Taysom Hill",
+      "position": "TE",
+      "team": "NO",
+      "week": 11,
+      "fantasy_points": 41.52000045776367,
+      "predicted_points": 8.969999960623682,
+      "error": 32.55000049713999
+    },
+    {
+      "name": "Sean Tucker",
+      "position": "RB",
+      "team": "TB",
+      "week": 6,
+      "fantasy_points": 34.20000076293945,
+      "predicted_points": 1.7333333616455395,
+      "error": 32.46666740129391
+    },
+    {
+      "name": "Zach Charbonnet",
+      "position": "RB",
+      "team": "SEA",
+      "week": 14,
+      "fantasy_points": 38.29999923706055,
+      "predicted_points": 6.631249971687794,
+      "error": 31.668749265372753
+    },
+    {
+      "name": "Jerry Jeudy",
+      "position": "WR",
+      "team": "CLE",
+      "week": 13,
+      "fantasy_points": 40.5,
+      "predicted_points": 8.862499952316284,
+      "error": 31.637500047683716
+    },
+    {
+      "name": "Saquon Barkley",
+      "position": "RB",
+      "team": "PHI",
+      "week": 12,
+      "fantasy_points": 46.20000076293945,
+      "predicted_points": 15.942857231412615,
+      "error": 30.257143531526836
+    },
+    {
+      "name": "Drake London",
+      "position": "WR",
+      "team": "ATL",
+      "week": 18,
+      "fantasy_points": 40.70000076293945,
+      "predicted_points": 10.89875017106533,
+      "error": 29.801250591874123
+    },
+    {
+      "name": "Jahmyr Gibbs",
+      "position": "RB",
+      "team": "DET",
+      "week": 18,
+      "fantasy_points": 46.0,
+      "predicted_points": 16.27222228050232,
+      "error": 29.72777771949768
+    },
+    {
+      "name": "Ja'Marr Chase",
+      "position": "WR",
+      "team": "CIN",
+      "week": 14,
+      "fantasy_points": 45.099998474121094,
+      "predicted_points": 16.420000225305557,
+      "error": 28.679998248815536
+    }
+  ],
+  "ranking_accuracy": {
+    "WR": {
+      "top_5_hit_rate": 23.6,
+      "top_10_hit_rate": 33.8,
+      "top_20_hit_rate": 44.2
+    },
+    "TE": {
+      "top_5_hit_rate": 33.3,
+      "top_10_hit_rate": 47.5,
+      "top_20_hit_rate": 63.4
+    },
+    "RB": {
+      "top_5_hit_rate": 24.5,
+      "top_10_hit_rate": 41.5,
+      "top_20_hit_rate": 62.4
+    }
+  }
+}
