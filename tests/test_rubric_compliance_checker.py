@@ -14,7 +14,7 @@ def test_rubric_checker_core_checks_exist():
     results = run_checks(require_artifacts=False)
     payload = summarize(results)
     names = {c["name"] for c in payload["checks"]}
-    assert "positions_qb_rb_wr_te" in names
+    assert "positions_all" in names
     assert "horizon_model_classes" in names
     assert payload["failed_errors"] == 0
 
