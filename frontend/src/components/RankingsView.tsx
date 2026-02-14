@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList, CartesianGrid } from 'recharts'
-import type { PredictionsResponse, PredictionRow } from '../api'
+import { api, type PredictionsResponse, type PredictionRow, type TSBacktestPredictionRow } from '../api'
 
 const POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
 type HorizonValue = 1 | 4 | 18
@@ -58,10 +58,37 @@ interface RankingsViewProps {
   onHorizonChange: (h: HorizonValue) => void
 }
 
+type DataMode = 'live' | 'backtest'
+
 export function RankingsView({ data, position, horizon, loading, error, onPositionChange, onHorizonChange }: RankingsViewProps) {
   const [searchName, setSearchName] = useState('')
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table')
+  const [dataMode, setDataMode] = useState<DataMode>('live')
+  const [backtestSeasons, setBacktestSeasons] = useState<number[]>([])
+  const [selectedBtSeason, setSelectedBtSeason] = useState<number | null>(null)
+  const [btRows, setBtRows] = useState<TSBacktestPredictionRow[]>([])
+  const [btLoading, setBtLoading] = useState(false)
   const isQB = position === 'QB'
+
+  // Fetch available backtest seasons once
+  useEffect(() => {
+    api.tsBacktest()
+      .then((d) => {
+        setBacktestSeasons(d.available_seasons ?? [])
+        if (d.available_seasons?.length) setSelectedBtSeason(d.available_seasons[d.available_seasons.length - 1])
+      })
+      .catch(() => {})
+  }, [])
+
+  // Fetch backtest predictions when mode/season/position changes
+  useEffect(() => {
+    if (dataMode !== 'backtest' || selectedBtSeason == null) return
+    setBtLoading(true)
+    api.tsBacktestPredictions(selectedBtSeason, position)
+      .then((d) => setBtRows(d.rows ?? []))
+      .catch(() => setBtRows([]))
+      .finally(() => setBtLoading(false))
+  }, [dataMode, selectedBtSeason, position])
 
   const rows = data?.rows ?? []
 
@@ -126,13 +153,74 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
     URL.revokeObjectURL(url)
   }
 
+  // Backtest-mode enriched rows
+  const btEnriched = useMemo(() => {
+    if (dataMode !== 'backtest') return []
+    let items = btRows
+      .filter((r) => r.predicted != null && r.actual != null)
+      .map((r) => {
+        const predicted = Number(r.predicted)
+        const actual = Number(r.actual)
+        const err = predicted - actual
+        return { r, predicted, actual, error: err, absError: Math.abs(err), week: r.week ?? 0 }
+      })
+      .sort((a, b) => b.predicted - a.predicted)
+
+    if (searchName.trim()) {
+      const q = searchName.trim().toLowerCase()
+      items = items.filter((x) => String(x.r.name ?? '').toLowerCase().includes(q))
+    }
+    return items.map((x, i) => ({ ...x, rank: i + 1, tier: getTier(i + 1, items.length) }))
+  }, [btRows, dataMode, searchName])
+
   const horizonLabel = HORIZONS.find((h) => h.value === horizon)?.label ?? `${horizon} weeks`
+  const isBacktest = dataMode === 'backtest'
+  const activeLoading = isBacktest ? btLoading : loading
 
   return (
     <div className="rankings">
       {/* Controls */}
       <div className="rankings__controls section-card">
         <div className="rankings__control-row">
+          {/* Data Mode toggle */}
+          <div className="rankings__control-group">
+            <label className="rankings__label">Mode</label>
+            <div className="rankings__btn-group">
+              <button
+                className={`rankings__view-btn ${dataMode === 'live' ? 'rankings__view-btn--active' : ''}`}
+                onClick={() => setDataMode('live')}
+              >
+                Live
+              </button>
+              <button
+                className={`rankings__view-btn ${dataMode === 'backtest' ? 'rankings__view-btn--active' : ''}`}
+                onClick={() => setDataMode('backtest')}
+                disabled={backtestSeasons.length === 0}
+                title={backtestSeasons.length === 0 ? 'No backtest data available' : 'View historical backtest'}
+              >
+                Backtest
+              </button>
+            </div>
+          </div>
+          {/* Season selector (backtest mode) */}
+          {isBacktest && backtestSeasons.length > 0 && (
+            <div className="rankings__control-group">
+              <label className="rankings__label">Season</label>
+              <select
+                value={selectedBtSeason ?? ''}
+                onChange={(e) => setSelectedBtSeason(Number(e.target.value))}
+                style={{
+                  background: 'var(--color-card)', color: 'var(--color-text-primary)',
+                  border: '1px solid var(--color-card-border)', borderRadius: 6,
+                  padding: '0.35rem 0.6rem', fontSize: 'var(--text-small)',
+                }}
+              >
+                {backtestSeasons.map((s) => (
+                  <option key={s} value={s}>{s}/{s + 1}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="rankings__control-group">
             <label className="rankings__label">Position</label>
             <div className="rankings__btn-group">
@@ -148,20 +236,22 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
               ))}
             </div>
           </div>
-          <div className="rankings__control-group">
-            <label className="rankings__label">Horizon</label>
-            <div className="rankings__btn-group">
-              {HORIZONS.map((h) => (
-                <button
-                  key={h.value}
-                  className={`rankings__horizon-btn ${horizon === h.value ? 'rankings__horizon-btn--active' : ''}`}
-                  onClick={() => onHorizonChange(h.value)}
-                >
-                  {h.label}
-                </button>
-              ))}
+          {!isBacktest && (
+            <div className="rankings__control-group">
+              <label className="rankings__label">Horizon</label>
+              <div className="rankings__btn-group">
+                {HORIZONS.map((h) => (
+                  <button
+                    key={h.value}
+                    className={`rankings__horizon-btn ${horizon === h.value ? 'rankings__horizon-btn--active' : ''}`}
+                    onClick={() => onHorizonChange(h.value)}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           <div className="rankings__control-group">
             <label className="rankings__label">View</label>
             <div className="rankings__btn-group">
@@ -190,11 +280,14 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
 
       {/* Header info */}
       <div className="rankings__info">
-        <span className="rankings__count">{enriched.length} players</span>
+        <span className="rankings__count">{isBacktest ? btEnriched.length : enriched.length} players</span>
         <span className="rankings__metric">
-          {isQB ? 'Ranked by Fantasy Points' : 'Ranked by Utilization Score'} · {horizonLabel}
+          {isBacktest
+            ? `Historical Backtest · ${selectedBtSeason}/${(selectedBtSeason ?? 0) + 1} · Predicted vs Actual`
+            : `${isQB ? 'Ranked by Fantasy Points' : 'Ranked by Utilization Score'} · ${horizonLabel}`}
         </span>
-        {data?.schedule_available && <span className="pill pill--success" style={{ fontSize: 12 }}>Schedule ✓</span>}
+        {!isBacktest && data?.schedule_available && <span className="pill pill--success" style={{ fontSize: 12 }}>Schedule ✓</span>}
+        {isBacktest && <span className="pill" style={{ fontSize: 12, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}>Backtest</span>}
       </div>
 
       {/* Start/Sit Quick Summary — shown on 1-week horizon for lineup decisions */}
@@ -236,16 +329,106 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
         </div>
       )}
 
-      {error && (
+      {error && !isBacktest && (
         <div className="section-card" style={{ borderColor: 'var(--color-accent-amber)', textAlign: 'center' }}>
           <p style={{ color: 'var(--color-accent-amber)' }}>{error}</p>
         </div>
       )}
 
-      {loading ? (
+      {activeLoading ? (
         <div className="section-card">
           <div className="skeleton" style={{ height: 400 }} />
         </div>
+      ) : isBacktest ? (
+        /* Backtest Table View */
+        btEnriched.length === 0 ? (
+          <div className="section-card" style={{ textAlign: 'center', padding: '3rem' }}>
+            <p style={{ color: 'var(--color-text-muted)' }}>
+              No backtest predictions available for this season. Run:
+            </p>
+            <pre style={{ background: 'var(--color-bg)', padding: '0.75rem', borderRadius: 8, fontSize: 'var(--text-small)', display: 'inline-block', marginTop: '0.5rem' }}>
+              python scripts/run_ts_backtest.py --season {selectedBtSeason ?? 2024}
+            </pre>
+          </div>
+        ) : viewMode === 'chart' ? (
+          <div className="section-card">
+            <h2 className="section-heading">{position} Backtest — {selectedBtSeason}</h2>
+            <div style={{ height: Math.max(400, Math.min(btEnriched.length, 30) * 28), maxHeight: 700, overflowY: 'auto' }}>
+              <ResponsiveContainer width="100%" height={Math.max(400, Math.min(btEnriched.length, 30) * 28)}>
+                <BarChart
+                  data={btEnriched.slice(0, 30).map((x) => ({
+                    name: `${x.r.name ?? 'Unknown'} (W${x.week})`,
+                    predicted: x.predicted,
+                    actual: x.actual,
+                  }))}
+                  layout="vertical"
+                  margin={{ top: 8, right: 50, left: 200, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal vertical={false} />
+                  <XAxis type="number" stroke="#94a3b8" />
+                  <YAxis type="category" dataKey="name" stroke="#94a3b8" width={190} interval={0} tick={{ fontSize: 11, fill: '#cbd5e1' }} />
+                  <Tooltip
+                    contentStyle={{ background: '#1a1f3a', border: '1px solid #334155', borderRadius: 8, color: '#cbd5e1' }}
+                    formatter={(value: number, name: string) => [value.toFixed(1), name === 'predicted' ? 'Predicted' : 'Actual']}
+                  />
+                  <Bar dataKey="predicted" fill="var(--color-accent-cyan)" fillOpacity={0.7} radius={[0, 3, 3, 0]} name="predicted" />
+                  <Bar dataKey="actual" fill="var(--color-accent-emerald)" fillOpacity={0.7} radius={[0, 3, 3, 0]} name="actual" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        ) : (
+          <div className="section-card rankings__table-card">
+            <div className="rankings__table-wrap">
+              <table className="rankings__table">
+                <thead>
+                  <tr>
+                    <th className="rankings__th rankings__th--rank">Rank</th>
+                    <th className="rankings__th rankings__th--tier">Tier</th>
+                    <th className="rankings__th rankings__th--name">Player</th>
+                    <th className="rankings__th rankings__th--team">Team</th>
+                    <th className="rankings__th" style={{ textAlign: 'right' }}>Week</th>
+                    <th className="rankings__th rankings__th--pts">Predicted</th>
+                    <th className="rankings__th" style={{ textAlign: 'right' }}>Actual</th>
+                    <th className="rankings__th" style={{ textAlign: 'right' }}>Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {btEnriched.slice(0, 200).map((x, i) => (
+                    <tr key={i} className="rankings__tr">
+                      <td className="rankings__td rankings__td--rank">
+                        <span className="rankings__rank-num">{x.rank}</span>
+                      </td>
+                      <td className="rankings__td rankings__td--tier">
+                        <span className="tier-badge" style={{ color: x.tier.color, background: x.tier.bg }}>
+                          {x.tier.label}
+                        </span>
+                      </td>
+                      <td className="rankings__td rankings__td--name">
+                        <span className="rankings__player-name">{x.r.name ?? 'Unknown'}</span>
+                        <span className="rankings__player-pos">{x.r.position}</span>
+                      </td>
+                      <td className="rankings__td rankings__td--team">{x.r.team ?? '—'}</td>
+                      <td className="rankings__td" style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{x.week}</td>
+                      <td className="rankings__td rankings__td--pts">
+                        <span className="rankings__pts-value">{x.predicted.toFixed(1)}</span>
+                      </td>
+                      <td className="rankings__td" style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--color-accent-emerald)' }}>
+                        {x.actual.toFixed(1)}
+                      </td>
+                      <td className="rankings__td" style={{
+                        textAlign: 'right', fontFamily: 'var(--font-mono)',
+                        color: x.absError < 3 ? 'var(--color-accent-emerald)' : x.absError < 7 ? 'var(--color-accent-amber)' : '#f87171',
+                      }}>
+                        {x.error > 0 ? '+' : ''}{x.error.toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
       ) : enriched.length === 0 ? (
         <div className="section-card" style={{ textAlign: 'center', padding: '3rem' }}>
           <p style={{ color: 'var(--color-text-muted)' }}>

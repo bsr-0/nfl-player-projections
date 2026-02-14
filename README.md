@@ -1,5 +1,7 @@
 # NFL Player Performance Predictor
 
+[![Rubric Compliance](https://github.com/benrosen/nfl-player-projections/actions/workflows/rubric-compliance.yml/badge.svg)](https://github.com/benrosen/nfl-player-projections/actions/workflows/rubric-compliance.yml)
+
 A machine learning workflow that predicts NFL player fantasy performance for 1-18 weeks ahead, using historical player data, team statistics, and utilization scores.
 
 ## Features
@@ -83,6 +85,29 @@ nfl-predictor/
 - **Optional features** that need env vars: email alerts (`SMTP_*`), PostgreSQL migration (`DATABASE_URL`). See `.env.example`.
 - **Already tracked files**: If you previously committed `.env` or secrets, remove them with `git rm --cached .env` and rotate any exposed keys.
 - **Pre-push check**: Run `python scripts/scan_secrets.py` to scan staged files, or `python scripts/scan_secrets.py --all` to scan the repo. A GitHub Action runs the same scan on every push and pull request.
+
+## Rubric Compliance Gate
+
+The repository now includes a CI gate that verifies key fantasy-system requirements (position-specific architecture, multi-horizon model contracts, feature/evaluation surface checks, and monitoring artifacts).
+
+Run locally:
+
+```bash
+# Human-readable report
+python scripts/check_rubric_compliance.py
+
+# JSON output (CI-friendly)
+python scripts/check_rubric_compliance.py --json
+
+# Strict mode: fail if monitoring artifacts are missing
+python scripts/check_rubric_compliance.py --require-artifacts
+```
+
+Run the core regression tests for the gate:
+
+```bash
+pytest -q tests/test_rubric_compliance_checker.py tests/test_metrics_evaluator.py tests/test_production_retrain.py
+```
 
 ## Data and Mid-Season Updates
 

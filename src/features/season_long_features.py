@@ -833,6 +833,19 @@ class SeasonLongFeatureEngineer:
         
         result = df.copy()
         
+        # 0. Merge draft data before rookie features (draft_round/draft_pick required)
+        if 'draft_round' not in result.columns or 'draft_pick' not in result.columns:
+            try:
+                draft_loader = DraftDataLoader()
+                result = draft_loader.merge_draft_data(result)
+                print("  Merged draft data for rookie projections")
+            except Exception as e:
+                print(f"  Warning: Could not merge draft data: {e}")
+                if 'draft_round' not in result.columns:
+                    result['draft_round'] = 8
+                if 'draft_pick' not in result.columns:
+                    result['draft_pick'] = 260
+        
         # 1. Age/decline curves
         result = self.age_model.add_age_features(result)
         

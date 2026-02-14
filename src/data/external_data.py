@@ -363,20 +363,102 @@ class WeatherDataLoader:
             1.0 - result['weather_risk']
         )
         
-        # Placeholder for actual weather data
+        # Default cold/rain to 0, will overwrite from schedule weather data
         result['is_cold_game'] = 0
         result['is_rain_game'] = 0
+        # Standardized weather numeric columns used by downstream features/tests.
+        result['weather_temp_f'] = np.nan
+        result['weather_wind_mph'] = np.nan
         
-        # If we have schedule data with weather, use it
+        # Merge actual weather data from schedules when available
         if schedules is not None and not schedules.empty:
-            if 'temp' in schedules.columns:
-                # Merge temperature data
-                pass  # Would merge here if data available
+            sched = schedules.copy()
+            has_temp = 'temp' in sched.columns
+            has_wind = 'wind' in sched.columns
+            has_weather = 'weather' in sched.columns  # text description column
+            
+            if (has_temp or has_weather) and 'season' in sched.columns and 'week' in sched.columns:
+                # Build per-team weather lookup from home/away teams
+                home_col = 'home_team' if 'home_team' in sched.columns else None
+                away_col = 'away_team' if 'away_team' in sched.columns else None
+                
+                if home_col and away_col:
+                    weather_cols = ['season', 'week']
+                    if has_temp:
+                        weather_cols.append('temp')
+                    if has_wind:
+                        weather_cols.append('wind')
+                    if has_weather:
+                        weather_cols.append('weather')
+                    
+                    # Both home and away teams experience the same weather
+                    home_weather = sched[weather_cols + [home_col]].rename(columns={home_col: 'team'})
+                    away_weather = sched[weather_cols + [away_col]].rename(columns={away_col: 'team'})
+                    weather_lookup = pd.concat([home_weather, away_weather], ignore_index=True)
+                    weather_lookup = weather_lookup.drop_duplicates(subset=['season', 'week', 'team'], keep='first')
+                    
+                    if 'team' in result.columns and 'season' in result.columns and 'week' in result.columns:
+                        result = result.merge(
+                            weather_lookup,
+                            on=['season', 'week', 'team'],
+                            how='left',
+                            suffixes=('', '_sched')
+                        )
+                        
+                        # Derive is_cold_game from temperature (< 35F)
+                        if has_temp:
+                            temp_col = 'temp_sched' if 'temp_sched' in result.columns else 'temp'
+                            if temp_col in result.columns:
+                                temp_vals = pd.to_numeric(result[temp_col], errors='coerce')
+                                result.loc[temp_vals.notna(), 'weather_temp_f'] = temp_vals[temp_vals.notna()]
+                                result['is_cold_game'] = np.where(
+                                    (temp_vals < 35) & (result['is_dome'] == 0),
+                                    1, 0
+                                )
+                                # Refine weather_score using actual temperature and wind
+                                temp_penalty = np.where(temp_vals < 35, 0.15, np.where(temp_vals < 45, 0.05, 0.0))
+                                if has_wind:
+                                    wind_col = 'wind_sched' if 'wind_sched' in result.columns else 'wind'
+                                    if wind_col in result.columns:
+                                        wind_vals = pd.to_numeric(result[wind_col], errors='coerce').fillna(0)
+                                        result['weather_wind_mph'] = pd.to_numeric(result[wind_col], errors='coerce')
+                                        wind_penalty = np.where(wind_vals > 20, 0.15, np.where(wind_vals > 10, 0.05, 0.0))
+                                    else:
+                                        wind_penalty = 0.0
+                                else:
+                                    wind_penalty = 0.0
+                                
+                                result['weather_score'] = np.where(
+                                    result['is_dome'] == 1,
+                                    1.0,
+                                    (1.0 - temp_penalty - wind_penalty).clip(0.3, 1.0)
+                                )
+                                # Clean up merge column
+                                if temp_col != 'temp':
+                                    result = result.drop(columns=[temp_col], errors='ignore')
+                                if has_wind and f'wind_sched' in result.columns:
+                                    result = result.drop(columns=['wind_sched'], errors='ignore')
+                        
+                        # Derive is_rain_game from weather description
+                        if has_weather:
+                            weather_desc_col = 'weather_sched' if 'weather_sched' in result.columns else 'weather'
+                            if weather_desc_col in result.columns:
+                                weather_str = result[weather_desc_col].astype(str).str.lower()
+                                result['is_rain_game'] = np.where(
+                                    (weather_str.str.contains('rain|shower|precip|snow|sleet', na=False)) &
+                                    (result['is_dome'] == 0),
+                                    1, 0
+                                )
+                                if weather_desc_col != 'weather':
+                                    result = result.drop(columns=[weather_desc_col], errors='ignore')
+                        
+                        merged_count = weather_lookup.shape[0]
+                        print(f"  Merged actual weather data for {merged_count} team-game rows")
         
         # Drop intermediate column
         result = result.drop(columns=['weather_risk'], errors='ignore')
         
-        print(f"  Added weather features: is_dome, is_outdoor, weather_score")
+        print(f"  Added weather features: is_dome, is_outdoor, weather_score, is_cold_game, is_rain_game")
         
         return result
 
@@ -418,7 +500,7 @@ class VegasLinesLoader:
                 if 'spread_line' in schedules.columns:
                     print(f"  Using spread from schedules")
                     return schedules
-            except:
+            except Exception:
                 pass
             
             return pd.DataFrame()
@@ -466,35 +548,101 @@ class VegasLinesLoader:
         
         result = df.copy()
         
-        # If we have lines data, merge it
-        if lines_df is not None and not lines_df.empty:
-            lines_processed = self.calculate_implied_totals(lines_df)
-            
-            # Merge based on game identifiers
-            # This would need proper game_id matching
-            pass
-        
-        # For now, estimate based on historical averages
-        # Average NFL team scores ~23 points per game
+        # Initialize with defaults (will be overwritten by actual data where available)
         result['implied_team_total'] = 23.0
         result['game_total'] = 46.0
         result['spread'] = 0.0
         result['is_favorite'] = 0
         result['blowout_risk'] = 0.15  # ~15% of games are blowouts
         
-        # Adjust based on team strength using team-level offensive stats (NOT fantasy_points to avoid leakage)
-        # Use team_a_points_scored if available (from team stats, not player-level target)
-        if 'team_a_points_scored' in df.columns:
-            team_strength = (df['team_a_points_scored'] / 22.0).clip(0.7, 1.3)
-            result['implied_team_total'] = 23.0 * team_strength
-        elif 'total_yards' in df.columns:
-            # Proxy from total yards (safe: not the prediction target)
-            league_avg_yards = df['total_yards'].mean()
-            if league_avg_yards > 0:
-                team_strength = (df.groupby(['team', 'season'])['total_yards'].transform('mean') / league_avg_yards).clip(0.7, 1.3)
-                result['implied_team_total'] = 23.0 * team_strength
+        merged_count = 0
         
-        print(f"  Added Vegas features: implied_team_total, game_total, spread")
+        # If we have lines data, merge it
+        if lines_df is not None and not lines_df.empty:
+            lines_processed = self.calculate_implied_totals(lines_df)
+            
+            # Build a game-level lookup from lines data
+            # nfl-data-py schedules use: game_id, season, week, home_team, away_team,
+            #   spread_line, total_line (or total)
+            game_lines = lines_processed.copy()
+            
+            # Standardize column names for the merge
+            total_col = None
+            spread_col = None
+            for tc in ['total_line', 'total', 'over_under']:
+                if tc in game_lines.columns:
+                    total_col = tc
+                    break
+            for sc in ['spread_line', 'spread']:
+                if sc in game_lines.columns:
+                    spread_col = sc
+                    break
+            
+            if total_col and spread_col and 'season' in game_lines.columns and 'week' in game_lines.columns:
+                # Determine home/away team columns
+                home_col = 'home_team' if 'home_team' in game_lines.columns else None
+                away_col = 'away_team' if 'away_team' in game_lines.columns else None
+                
+                if home_col and away_col:
+                    # Build per-team-game lookup: one row per team per game
+                    home_rows = game_lines[['season', 'week', home_col, total_col, spread_col]].copy()
+                    home_rows = home_rows.rename(columns={home_col: 'team'})
+                    home_rows['is_home'] = 1
+                    home_rows['game_total'] = home_rows[total_col]
+                    home_rows['spread'] = home_rows[spread_col]  # negative = home favorite
+                    home_rows['implied_team_total'] = (home_rows[total_col] - home_rows[spread_col]) / 2
+                    
+                    away_rows = game_lines[['season', 'week', away_col, total_col, spread_col]].copy()
+                    away_rows = away_rows.rename(columns={away_col: 'team'})
+                    away_rows['is_home'] = 0
+                    away_rows['game_total'] = away_rows[total_col]
+                    away_rows['spread'] = -away_rows[spread_col]  # flip sign for away team
+                    away_rows['implied_team_total'] = (away_rows[total_col] + away_rows[spread_col]) / 2
+                    
+                    vegas_lookup = pd.concat([home_rows, away_rows], ignore_index=True)
+                    vegas_lookup = vegas_lookup[['season', 'week', 'team', 'game_total',
+                                                 'spread', 'implied_team_total']].copy()
+                    # Drop duplicates (multiple lines per game possible)
+                    vegas_lookup = vegas_lookup.drop_duplicates(subset=['season', 'week', 'team'], keep='first')
+                    
+                    # Merge with player data on season/week/team
+                    if 'team' in result.columns and 'season' in result.columns and 'week' in result.columns:
+                        # Suffix to avoid overwriting defaults yet
+                        result = result.merge(
+                            vegas_lookup,
+                            on=['season', 'week', 'team'],
+                            how='left',
+                            suffixes=('', '_vegas')
+                        )
+                        
+                        # Overwrite defaults where Vegas data is available
+                        for col in ['implied_team_total', 'game_total', 'spread']:
+                            vegas_col = f'{col}_vegas'
+                            if vegas_col in result.columns:
+                                mask = result[vegas_col].notna()
+                                result.loc[mask, col] = result.loc[mask, vegas_col]
+                                result = result.drop(columns=[vegas_col])
+                                merged_count = int(mask.sum())
+                        
+                        print(f"  Merged Vegas lines for {merged_count} player-game rows")
+        
+        # Derive is_favorite and blowout_risk from spread
+        result['is_favorite'] = (result['spread'] < 0).astype(int)
+        result['blowout_risk'] = (result['spread'].abs() / 20.0).clip(0.0, 0.5)
+        
+        # Fallback: adjust implied total based on team strength when Vegas data was not available
+        no_vegas = result['implied_team_total'] == 23.0
+        if no_vegas.any():
+            if 'team_a_points_scored' in df.columns:
+                team_strength = (df['team_a_points_scored'] / 22.0).clip(0.7, 1.3)
+                result.loc[no_vegas, 'implied_team_total'] = 23.0 * team_strength[no_vegas]
+            elif 'total_yards' in df.columns:
+                league_avg_yards = df['total_yards'].mean()
+                if league_avg_yards > 0:
+                    team_strength = (df.groupby(['team', 'season'])['total_yards'].transform('mean') / league_avg_yards).clip(0.7, 1.3)
+                    result.loc[no_vegas, 'implied_team_total'] = 23.0 * team_strength[no_vegas]
+        
+        print(f"  Added Vegas features: implied_team_total, game_total, spread, is_favorite, blowout_risk")
         
         return result
 
@@ -556,6 +704,52 @@ class ExternalDataIntegrator:
                         on=['player_id', 'season', 'week'],
                         how='left'
                     )
+                    # Fallback merge by normalized name when player IDs differ across sources.
+                    if (
+                        "name" in result.columns
+                        and result["injury_score"].isna().any()
+                        and ("player_name" in injury_status.columns or "name" in injury_status.columns)
+                    ):
+                        source_name_col = "player_name" if "player_name" in injury_status.columns else "name"
+                        fallback = injury_status[
+                            [source_name_col, "season", "week", "injury_score", "is_injured"]
+                        ].copy()
+                        fallback = fallback.dropna(subset=[source_name_col])
+                        fallback["name_key"] = (
+                            fallback[source_name_col]
+                            .astype(str)
+                            .str.lower()
+                            .str.replace(r"[^a-z0-9 ]", "", regex=True)
+                            .str.replace(r"\s+", " ", regex=True)
+                            .str.strip()
+                        )
+                        fallback = fallback.drop_duplicates(
+                            subset=["season", "week", "name_key"], keep="last"
+                        )
+                        missing_mask = result["injury_score"].isna()
+                        if missing_mask.any():
+                            left = result.loc[missing_mask, ["season", "week", "name"]].copy()
+                            left["name_key"] = (
+                                left["name"]
+                                .astype(str)
+                                .str.lower()
+                                .str.replace(r"[^a-z0-9 ]", "", regex=True)
+                                .str.replace(r"\s+", " ", regex=True)
+                                .str.strip()
+                            )
+                            left_idx = left.index
+                            left = left.merge(
+                                fallback[["season", "week", "name_key", "injury_score", "is_injured"]],
+                                on=["season", "week", "name_key"],
+                                how="left",
+                            )
+                            left.index = left_idx
+                            score_fill = left["injury_score"].notna()
+                            injured_fill = left["is_injured"].notna()
+                            if score_fill.any():
+                                result.loc[left.index[score_fill], "injury_score"] = left.loc[score_fill, "injury_score"]
+                            if injured_fill.any():
+                                result.loc[left.index[injured_fill], "is_injured"] = left.loc[injured_fill, "is_injured"]
                     result['injury_score'] = result['injury_score'].fillna(1.0)
                     result['is_injured'] = result['is_injured'].fillna(0)
                 else:

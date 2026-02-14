@@ -77,7 +77,8 @@ class ScheduleStrengthAnalyzer:
         return defense_pts
     
     def get_schedule_strength(self, df: pd.DataFrame, 
-                              n_weeks: int = 5) -> pd.DataFrame:
+                              n_weeks: int = 5,
+                              is_training: bool = True) -> pd.DataFrame:
         """
         Calculate schedule strength for next N weeks.
         
@@ -85,11 +86,18 @@ class ScheduleStrengthAnalyzer:
         - sos_next_N: Average defense strength of next N opponents
         - sos_rank_next_N: Rank of schedule difficulty
         - favorable_matchups_next_N: Count of favorable matchups
+        
+        Args:
+            df: Player data DataFrame.
+            n_weeks: Number of weeks for the horizon window.
+            is_training: If True, uses only backward-looking (past N weeks)
+                opponent strength to prevent data leakage. If False (inference),
+                uses forward-looking data from the known schedule.
         """
         if df.empty:
             return df
         
-        print(f"Calculating schedule strength for {n_weeks}-week windows...")
+        print(f"Calculating schedule strength for {n_weeks}-week windows (training={is_training})...")
         
         result = df.copy()
         
@@ -107,9 +115,6 @@ class ScheduleStrengthAnalyzer:
             ['team', 'season', 'position']
         )['defense_strength'].to_dict()
         
-        # For each player, calculate upcoming schedule strength
-        # This requires knowing the schedule - we'll estimate from historical patterns
-        
         # Group by player and calculate rolling opponent strength
         result = result.sort_values(['player_id', 'season', 'week'])
         
@@ -121,24 +126,38 @@ class ScheduleStrengthAnalyzer:
             axis=1
         )
         
-        # Calculate forward-looking schedule strength (next N weeks)
-        # We use a forward rolling window
-        result[f'sos_next_{n_weeks}'] = result.groupby(
-            ['player_id', 'season']
-        )['opp_defense_strength'].transform(
-            lambda x: x.shift(-1).rolling(n_weeks, min_periods=1).mean()
-        )
+        if is_training:
+            # BACKWARD-LOOKING: use rolling window of past N weeks' opponent
+            # strength to avoid leaking future schedule during training
+            result[f'sos_next_{n_weeks}'] = result.groupby(
+                ['player_id', 'season']
+            )['opp_defense_strength'].transform(
+                lambda x: x.rolling(n_weeks, min_periods=1).mean()
+            )
+            
+            result['is_favorable'] = (result['opp_defense_strength'] > 1.1).astype(int)
+            result[f'favorable_matchups_next_{n_weeks}'] = result.groupby(
+                ['player_id', 'season']
+            )['is_favorable'].transform(
+                lambda x: x.rolling(n_weeks, min_periods=1).sum()
+            ).fillna(n_weeks // 2)
+        else:
+            # FORWARD-LOOKING: use known future schedule for inference
+            result[f'sos_next_{n_weeks}'] = result.groupby(
+                ['player_id', 'season']
+            )['opp_defense_strength'].transform(
+                lambda x: x.shift(-1).rolling(n_weeks, min_periods=1).mean()
+            )
+            
+            result['is_favorable'] = (result['opp_defense_strength'] > 1.1).astype(int)
+            result[f'favorable_matchups_next_{n_weeks}'] = result.groupby(
+                ['player_id', 'season']
+            )['is_favorable'].transform(
+                lambda x: x.shift(-1).rolling(n_weeks, min_periods=1).sum()
+            ).fillna(n_weeks // 2)
         
         # Fill NaN with average
         result[f'sos_next_{n_weeks}'] = result[f'sos_next_{n_weeks}'].fillna(1.0)
-        
-        # Count favorable matchups (defense strength > 1.1)
-        result['is_favorable'] = (result['opp_defense_strength'] > 1.1).astype(int)
-        result[f'favorable_matchups_next_{n_weeks}'] = result.groupby(
-            ['player_id', 'season']
-        )['is_favorable'].transform(
-            lambda x: x.shift(-1).rolling(n_weeks, min_periods=1).sum()
-        ).fillna(n_weeks // 2)
         
         # Rank schedule strength within position
         result[f'sos_rank_next_{n_weeks}'] = result.groupby(

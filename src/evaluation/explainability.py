@@ -72,15 +72,86 @@ def explain_with_shap(
     n_samples: int = 100,
 ) -> Optional[Dict[str, np.ndarray]]:
     """
-    Compute SHAP values for tree-based model (RF/XGB). Returns dict with
-    'values' (SHAP array) and 'base_value' when available.
+    Compute weighted-average SHAP values across all tree-based models in the
+    ensemble (RF + XGB), using ensemble weights when available.
+
+    Returns dict with 'values' (SHAP array) and 'base_value'.
     """
     if not HAS_SHAP:
         return None
-    X = X[feature_names].fillna(0)
-    if len(X) > n_samples:
-        X = X.sample(n=n_samples, random_state=42)
+    Xf = X[feature_names].fillna(0)
+    if len(Xf) > n_samples:
+        Xf = Xf.sample(n=n_samples, random_state=42)
     try:
+        tree_models = []
+        model_keys = []
+        if hasattr(model, "models"):
+            for k, m in model.models.items():
+                if hasattr(m, "predict") and hasattr(m, "feature_importances_"):
+                    tree_models.append(m)
+                    model_keys.append(k)
+        elif hasattr(model, "feature_importances_"):
+            tree_models = [model]
+            model_keys = [None]
+        if not tree_models:
+            return None
+
+        # Compute SHAP per tree model and produce weighted average
+        ensemble_weights = getattr(model, "ensemble_weights", {})
+        all_shap = []
+        all_base = []
+        weight_sum = 0.0
+        for i, tm in enumerate(tree_models):
+            explainer = shap.TreeExplainer(tm, Xf)
+            sv = explainer.shap_values(Xf)
+            if isinstance(sv, list):
+                sv = sv[0]
+            bv = explainer.expected_value
+            if isinstance(bv, (list, np.ndarray)):
+                bv = bv[0]
+            w = ensemble_weights.get(model_keys[i], 1.0 / len(tree_models))
+            all_shap.append(sv * w)
+            all_base.append(bv * w)
+            weight_sum += w
+
+        if weight_sum > 0 and weight_sum != 1.0:
+            combined_shap = sum(all_shap) / weight_sum
+            combined_base = sum(all_base) / weight_sum
+        else:
+            combined_shap = sum(all_shap)
+            combined_base = sum(all_base)
+        return {"values": combined_shap, "base_value": combined_base}
+    except Exception:
+        return None
+
+
+def explain_individual_prediction(
+    model: Any,
+    X_single: pd.DataFrame,
+    feature_names: List[str],
+    top_n: int = 10,
+) -> Optional[Dict[str, Any]]:
+    """
+    Explain a single player's prediction using SHAP values.
+
+    Per requirements Section VI.B: individual prediction explanations.
+
+    Args:
+        model: Trained ensemble model (PositionModel or similar).
+        X_single: Single-row DataFrame with the player's features.
+        feature_names: List of feature column names.
+        top_n: Number of top contributing features to return.
+
+    Returns:
+        Dict with 'prediction', 'base_value', 'top_positive' (features
+        pushing prediction up), 'top_negative' (pushing down), and
+        'all_contributions' (sorted list of {feature, contribution}).
+    """
+    if not HAS_SHAP:
+        return None
+    Xf = X_single[feature_names].fillna(0)
+    try:
+        # Find the primary tree model for SHAP
         tree_models = []
         if hasattr(model, "models"):
             for m in model.models.values():
@@ -90,11 +161,35 @@ def explain_with_shap(
             tree_models = [model]
         if not tree_models:
             return None
-        explainer = shap.TreeExplainer(tree_models[0], X)
-        shap_values = explainer.shap_values(X)
-        if isinstance(shap_values, list):
-            shap_values = shap_values[0]
-        return {"values": shap_values, "base_value": explainer.expected_value}
+
+        # Use the first tree for individual explanation
+        explainer = shap.TreeExplainer(tree_models[0])
+        sv = explainer.shap_values(Xf)
+        if isinstance(sv, list):
+            sv = sv[0]
+        base = explainer.expected_value
+        if isinstance(base, (list, np.ndarray)):
+            base = float(base[0])
+
+        contribs = sv[0] if sv.ndim > 1 else sv
+        # Sort contributions
+        order = np.argsort(np.abs(contribs))[::-1]
+        all_contribs = [
+            {"feature": feature_names[i], "contribution": float(contribs[i]),
+             "value": float(Xf.iloc[0, i])}
+            for i in order
+        ]
+        top_pos = [c for c in all_contribs if c["contribution"] > 0][:top_n]
+        top_neg = [c for c in all_contribs if c["contribution"] < 0][:top_n]
+
+        prediction = float(base + np.sum(contribs))
+        return {
+            "prediction": prediction,
+            "base_value": float(base),
+            "top_positive": top_pos,
+            "top_negative": top_neg,
+            "all_contributions": all_contribs[:top_n * 2],
+        }
     except Exception:
         return None
 

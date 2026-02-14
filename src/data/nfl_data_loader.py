@@ -686,6 +686,9 @@ def load_all_historical_data(seasons: List[int] = None):
     Load all historical data from nfl-data-py.
     
     This is the main entry point for populating the database.
+    Loads: weekly stats, schedules, snap counts, rosters, and
+    coordinates with external_data / advanced_rookie_injury for
+    injuries, combine, and draft data.
     """
     loader = NFLDataLoader()
     
@@ -702,6 +705,22 @@ def load_all_historical_data(seasons: List[int] = None):
     
     # Load schedules
     schedule_df = loader.load_schedules(seasons)
+    
+    # Load rosters
+    print("\nLoading rosters...")
+    try:
+        roster_df = loader.load_rosters(seasons)
+        print(f"  Loaded rosters: {len(roster_df) if roster_df is not None else 0} records")
+    except Exception as e:
+        print(f"  Warning: Could not load rosters: {e}")
+    
+    # Load snap counts
+    print("\nLoading snap counts...")
+    try:
+        snap_df = loader.load_snap_counts(seasons)
+        print(f"  Loaded snap counts: {len(snap_df) if snap_df is not None else 0} records")
+    except Exception as e:
+        print(f"  Warning: Could not load snap counts: {e}")
     
     # Check what we have
     db = DatabaseManager()

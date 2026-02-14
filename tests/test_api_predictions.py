@@ -107,4 +107,16 @@ def test_predictions_empty_parquet_returns_schedule_by_horizon_defaults(mock_loa
     from api.main import get_predictions
     data = get_predictions(position=None, name=None, horizon=None)
     assert data["rows"] == []
+    assert data["qb_target"] in ("util", "fp")
     assert data["schedule_by_horizon"] == {"1": True, "4": True, "18": True}
+
+
+@patch("api.main.load_qb_target_choice")
+@patch("api.main.load_predictions_parquet")
+def test_predictions_includes_qb_target(mock_load_parquet, mock_qb_target):
+    """Predictions payload should include current QB dependent-variable choice."""
+    mock_load_parquet.return_value = _minimal_predictions_df()
+    mock_qb_target.return_value = "fp"
+    from api.main import get_predictions
+    data = get_predictions(position=None, name=None, horizon="1")
+    assert data["qb_target"] == "fp"

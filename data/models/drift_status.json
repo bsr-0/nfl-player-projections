@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-02-13T13:38:44.735901",
+  "drift_threshold_pct": 5.0,
+  "drift_detected": false,
+  "current_rmse": 11.67,
+  "previous_rmse": 11.67,
+  "pct_change": 0.0
+}

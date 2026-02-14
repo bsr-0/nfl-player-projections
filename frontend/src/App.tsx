@@ -30,6 +30,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [weekLabel, setWeekLabel] = useState('')
+  const [qbTarget, setQbTarget] = useState<'util' | 'fp'>('fp')
 
   const fetchPredictions = useCallback(() => {
     setLoading(true)
@@ -50,6 +51,14 @@ function App() {
   useEffect(() => {
     fetchPredictions()
   }, [fetchPredictions])
+
+  useEffect(() => {
+    api.modelConfig().then((cfg) => {
+      if (cfg?.qb_target === 'util' || cfg?.qb_target === 'fp') {
+        setQbTarget(cfg.qb_target)
+      }
+    }).catch(() => {})
+  }, [])
 
   // Fetch all positions for dashboard overview (1-week)
   useEffect(() => {
@@ -123,7 +132,7 @@ function App() {
           />
         )}
         {activeTab === 'draft' && (
-          <DraftAssistant allData={draftData} weekLabel={weekLabel} />
+          <DraftAssistant allData={draftData} weekLabel={weekLabel} qbTarget={qbTarget} />
         )}
         {activeTab === 'player' && (
           <PlayerLookup allData={allData} weekLabel={weekLabel} />

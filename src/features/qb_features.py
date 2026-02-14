@@ -85,7 +85,7 @@ class QBFeatureEngineer:
         )
         
         # Rushing attempt rate (rushing attempts as % of total plays)
-        total_plays = result['passing_attempts'] + result['rushing_attempts']
+        total_plays = result['passing_attempts'].fillna(0) + result['rushing_attempts'].fillna(0)
         result.loc[qb_mask, 'rush_attempt_rate'] = np.where(
             total_plays[qb_mask] > 0,
             result.loc[qb_mask, 'rushing_attempts'] / total_plays[qb_mask],
@@ -121,9 +121,77 @@ class QBFeatureEngineer:
             result.loc[qb_mask, 'rushing_tds']
         )
         
+        # ===== Air Yards / Deep Ball (per requirements) =====
+        # Air yards per attempt
+        if 'air_yards' in result.columns:
+            result.loc[qb_mask, 'air_yards_per_attempt'] = np.where(
+                result.loc[qb_mask, 'passing_attempts'] > 0,
+                result.loc[qb_mask, 'air_yards'].fillna(0) / result.loc[qb_mask, 'passing_attempts'],
+                0
+            )
+        else:
+            # Estimate from yards per attempt (air yards ≈ 55-65% of passing yards)
+            result.loc[qb_mask, 'air_yards_per_attempt'] = result.loc[qb_mask, 'yards_per_attempt'] * 0.6
+        
+        # Deep ball percentage (20+ yard attempts)
+        if 'deep_pass_attempts' in result.columns:
+            result.loc[qb_mask, 'deep_ball_pct'] = np.where(
+                result.loc[qb_mask, 'passing_attempts'] > 0,
+                result.loc[qb_mask, 'deep_pass_attempts'].fillna(0) / result.loc[qb_mask, 'passing_attempts'],
+                0
+            )
+        elif 'passing_air_yards' in result.columns:
+            # Proxy: if average air yards per attempt > 12, they're throwing deep
+            result.loc[qb_mask, 'deep_ball_pct'] = np.where(
+                result.loc[qb_mask, 'air_yards_per_attempt'] > 10, 0.15, 0.08
+            )
+        else:
+            result.loc[qb_mask, 'deep_ball_pct'] = 0.10  # league average ~10%
+        
+        # ===== Red Zone Metrics (per requirements) =====
+        if 'redzone_attempts' in result.columns:
+            result.loc[qb_mask, 'rz_attempts'] = result.loc[qb_mask, 'redzone_attempts'].fillna(0)
+            result.loc[qb_mask, 'rz_efficiency'] = np.where(
+                result.loc[qb_mask, 'redzone_attempts'].fillna(0) > 0,
+                result.loc[qb_mask, 'passing_tds'] / result.loc[qb_mask, 'redzone_attempts'].fillna(1),
+                0
+            )
+        else:
+            # Proxy from TD rate and volume
+            result.loc[qb_mask, 'rz_attempts'] = (result.loc[qb_mask, 'passing_attempts'] * 0.12).round()
+            result.loc[qb_mask, 'rz_efficiency'] = result.loc[qb_mask, 'td_rate'] * 3.0  # scaled
+        
+        # ===== Sack Rate (per requirements) =====
+        if 'sacks' in result.columns:
+            total_dropbacks = result.loc[qb_mask, 'passing_attempts'] + result.loc[qb_mask, 'sacks'].fillna(0)
+            result.loc[qb_mask, 'sack_rate'] = np.where(
+                total_dropbacks > 0,
+                result.loc[qb_mask, 'sacks'].fillna(0) / total_dropbacks,
+                0
+            )
+        elif 'sacks_taken' in result.columns:
+            total_dropbacks = result.loc[qb_mask, 'passing_attempts'] + result.loc[qb_mask, 'sacks_taken'].fillna(0)
+            result.loc[qb_mask, 'sack_rate'] = np.where(
+                total_dropbacks > 0,
+                result.loc[qb_mask, 'sacks_taken'].fillna(0) / total_dropbacks,
+                0
+            )
+        else:
+            result.loc[qb_mask, 'sack_rate'] = 0.065  # league average ~6.5%
+        
+        # ===== Time in Pocket (per requirements) =====
+        if 'time_in_pocket' in result.columns:
+            result.loc[qb_mask, 'avg_time_in_pocket'] = result.loc[qb_mask, 'time_in_pocket'].fillna(2.6)
+        else:
+            # Proxy: pocket QBs tend to have longer pocket time
+            result.loc[qb_mask, 'avg_time_in_pocket'] = np.where(
+                result.loc[qb_mask, 'is_mobile_qb'] == 1, 2.4, 2.7
+            )
+        
         # ===== Turnover Metrics =====
         # Turnover rate (INTs + fumbles lost per play)
-        turnovers = result['interceptions'] + result['fumbles_lost']
+        fumbles = result['fumbles_lost'].fillna(0) if 'fumbles_lost' in result.columns else 0
+        turnovers = result['interceptions'].fillna(0) + fumbles
         result.loc[qb_mask, 'turnover_rate'] = np.where(
             total_plays[qb_mask] > 0,
             turnovers[qb_mask] / total_plays[qb_mask],
@@ -144,7 +212,9 @@ class QBFeatureEngineer:
         qb_df = result[qb_mask].copy()
         
         for col in ['completion_pct', 'yards_per_attempt', 'td_rate', 'int_rate',
-                    'rush_attempt_rate', 'passer_rating', 'turnover_rate', 'total_plays']:
+                    'rush_attempt_rate', 'passer_rating', 'turnover_rate', 'total_plays',
+                    'air_yards_per_attempt', 'deep_ball_pct', 'sack_rate',
+                    'rz_efficiency', 'avg_time_in_pocket']:
             if col in qb_df.columns:
                 # Rolling 3-game average (shifted to avoid leakage)
                 qb_df[f'{col}_rolling_3'] = qb_df.groupby('player_id')[col].transform(
@@ -221,4 +291,10 @@ QB_FEATURE_PATTERNS = [
     'total_tds',
     'turnover_rate',
     'passer_rating',
+    'air_yards_per_attempt',
+    'deep_ball_pct',
+    'rz_attempts',
+    'rz_efficiency',
+    'sack_rate',
+    'avg_time_in_pocket',
 ]

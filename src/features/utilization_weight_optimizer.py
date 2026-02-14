@@ -42,10 +42,78 @@ KEY_MAP = {
            "redzone_opp_pct": "redzone_opportunity", "play_volume_pct": "play_volume"},
 }
 
+CORE_COMPONENT_KEYS = {
+    "RB": ("snap_share", "rush_share", "target_share", "redzone_share"),
+    "WR": ("target_share", "air_yards_share", "snap_share", "redzone_targets"),
+    "TE": ("target_share", "snap_share", "redzone_targets", "air_yards_share"),
+    "QB": ("dropback_rate", "rush_attempt_share", "redzone_opportunity", "play_volume"),
+}
+
+# Guardrail against pathological weight collapse from optimization.
+MIN_CORE_WEIGHT = 0.03
+
 
 def _get_default_weights() -> Dict:
     """Return config defaults as fallback."""
     return {k: v.copy() if isinstance(v, dict) else v for k, v in UTILIZATION_WEIGHTS.items()}
+
+
+def _renormalize(d: Dict[str, float]) -> Dict[str, float]:
+    """Normalize positive weights to sum to 1."""
+    total = float(sum(max(0.0, float(v)) for v in d.values()))
+    if total <= 0:
+        return {k: 0.0 for k in d.keys()}
+    return {k: max(0.0, float(v)) / total for k, v in d.items()}
+
+
+def _apply_guardrails(weights: Dict[str, float], defaults: Dict[str, float], position: str) -> Dict[str, float]:
+    """Apply floor constraints to core components and renormalize safely."""
+    merged = {k: float(weights.get(k, 0.0)) for k in defaults.keys()}
+    merged = _renormalize(merged)
+
+    core_keys = [k for k in CORE_COMPONENT_KEYS.get(position, ()) if k in merged]
+    if not core_keys:
+        return merged
+
+    floor_total = MIN_CORE_WEIGHT * len(core_keys)
+    if floor_total >= 1.0:
+        # Defensive fallback for impossible constraints.
+        return _renormalize(defaults)
+
+    adjusted = merged.copy()
+    floored_keys = []
+    for key in core_keys:
+        if adjusted[key] < MIN_CORE_WEIGHT:
+            adjusted[key] = MIN_CORE_WEIGHT
+            floored_keys.append(key)
+
+    reserve = MIN_CORE_WEIGHT * len(core_keys)
+    extra_core_total = sum(max(0.0, adjusted[k] - MIN_CORE_WEIGHT) for k in core_keys)
+    non_core_keys = [k for k in adjusted.keys() if k not in core_keys]
+    non_core_total = sum(max(0.0, adjusted[k]) for k in non_core_keys)
+    pool_current = extra_core_total + non_core_total
+    pool_target = max(0.0, 1.0 - reserve)
+
+    if pool_current <= 0:
+        # If everything collapsed, distribute remainder by default shape.
+        fallback = _renormalize(defaults)
+        for key in core_keys:
+            fallback[key] = max(fallback.get(key, 0.0), MIN_CORE_WEIGHT)
+        adjusted = _renormalize(fallback)
+    else:
+        scale = pool_target / pool_current
+        for key in core_keys:
+            adjusted[key] = MIN_CORE_WEIGHT + max(0.0, adjusted[key] - MIN_CORE_WEIGHT) * scale
+        for key in non_core_keys:
+            adjusted[key] = max(0.0, adjusted[key]) * scale
+        adjusted = _renormalize(adjusted)
+
+    if floored_keys:
+        print(
+            f"WARNING: Applied utilization weight floor for {position}: "
+            f"{', '.join(sorted(floored_keys))} (min={MIN_CORE_WEIGHT:.2f})"
+        )
+    return adjusted
 
 
 def _fit_one_position(
@@ -185,7 +253,8 @@ def fit_utilization_weights(
 
         weights_dict = _fit_one_position(pos_df, position, available, target_col, alpha_use)
         if weights_dict is not None:
-            result[position] = weights_dict
+            defaults = result.get(position, {})
+            result[position] = _apply_guardrails(weights_dict, defaults, position)
 
     return result
 

@@ -4,12 +4,13 @@ services:
   dashboard:
     build: .
     ports:
-      - "8501:8501"
+      - "${PORT:-8501}:${PORT:-8501}"
     volumes:
       - ./data:/app/data
       - ./scripts:/app/scripts
     environment:
       - PYTHONUNBUFFERED=1
+      - PORT=${PORT:-8501}
     restart: unless-stopped
 
   postgres:

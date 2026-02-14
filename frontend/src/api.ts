@@ -18,14 +18,25 @@ export const api = {
     ),
   utilizationWeights: () =>
     get<Record<string, Record<string, number>>>('/utilization-weights'),
+  modelConfig: () =>
+    get<{ qb_target: 'util' | 'fp' }>('/model-config'),
   advancedResults: () => get<AdvancedResults>('/advanced-results'),
   backtest: () => get<BacktestResponse>('/backtest'),
+  backtestSeason: (season: number) => get<BacktestSeasonResponse>(`/backtest/${season}`),
   predictions: (position?: string, name?: string, horizon?: 1 | 4 | 18 | 'all') => {
     const params = new URLSearchParams()
     if (position) params.set('position', position)
     if (name) params.set('name', name)
     if (horizon !== undefined) params.set('horizon', String(horizon))
     return get<PredictionsResponse>(`/predictions?${params}`)
+  },
+  tsBacktest: () => get<TSBacktestListResponse>('/ts-backtest'),
+  tsBacktestSeason: (season: number) => get<TSBacktestResult>(`/ts-backtest/${season}`),
+  tsBacktestPredictions: (season: number, position?: string, week?: number) => {
+    const params = new URLSearchParams()
+    if (position) params.set('position', position)
+    if (week !== undefined) params.set('week', String(week))
+    return get<TSBacktestPredictionsResponse>(`/ts-backtest/${season}/predictions?${params}`)
   },
 }
 
@@ -60,6 +71,8 @@ export interface BacktestResponse {
     by_week: Record<string, { r2?: number; correlation?: number; [k: string]: unknown }>
     metrics: Record<string, unknown>
     baseline_comparison?: BaselineComparison
+    season?: number
+    backtest_date?: string
   }
   train_seasons?: number[]
   test_season?: number
@@ -67,6 +80,7 @@ export interface BacktestResponse {
 
 export interface PredictionsResponse {
   rows: PredictionRow[]
+  qb_target?: 'util' | 'fp'
   week_label: string
   upcoming_week_label?: string | null
   schedule_available?: boolean
@@ -74,6 +88,83 @@ export interface PredictionsResponse {
   schedule_by_horizon?: Record<string, boolean>
   horizon_weeks?: number[][]
   horizon_weeks_label?: string
+}
+
+export interface TSBacktestMetrics {
+  mae?: number
+  rmse?: number
+  r2?: number
+  mape?: number
+  n?: number
+}
+
+export interface TSBacktestResult {
+  season?: number
+  backtest_type?: string
+  backtest_date?: string
+  n_predictions?: number
+  positions?: string[]
+  metrics?: TSBacktestMetrics
+  by_week?: Record<string, TSBacktestMetrics>
+  by_position?: Record<string, TSBacktestMetrics>
+  diagnostics?: Record<string, boolean>
+}
+
+export interface TSBacktestListResponse {
+  results: TSBacktestResult[]
+  latest: TSBacktestResult | null
+  available_seasons: number[]
+}
+
+export interface TSBacktestPredictionRow {
+  season?: number
+  week?: number
+  player_id?: string
+  name?: string
+  position?: string
+  team?: string
+  predicted?: number
+  actual?: number
+  prediction_timestamp?: string
+}
+
+export interface TSBacktestPredictionsResponse {
+  rows: TSBacktestPredictionRow[]
+  season: number
+}
+
+export interface BacktestSeasonResponse {
+  season?: number
+  backtest_date?: string
+  n_predictions?: number
+  metrics?: Record<string, number>
+  by_position?: Record<string, Record<string, number>>
+  by_week?: Record<string, Record<string, number>>
+  top_performers?: Record<string, {
+    top_10_actual?: Array<{
+      name: string
+      actual_rank: number
+      pred_rank: number
+      fantasy_points: number
+      predicted_points: number
+    }>
+    avg_pred_rank_of_top_10?: number
+    top_10_in_our_top_20?: number
+  }>
+  biggest_misses?: Array<{
+    name: string
+    position: string
+    team: string
+    week: number
+    fantasy_points: number
+    predicted_points: number
+    error: number
+  }>
+  ranking_accuracy?: Record<string, {
+    top_5_hit_rate?: number
+    top_10_hit_rate?: number
+    top_20_hit_rate?: number
+  }>
 }
 
 export interface PredictionRow {

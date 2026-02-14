@@ -1,8 +1,8 @@
 """
-Conversion layer: Utilization Score -> Fantasy Points for RB/WR/TE.
+Conversion layer: Utilization Score -> Fantasy Points.
 
-Per requirements: secondary model that converts predicted utilization to fantasy
-points using efficiency metrics (yards per touch, TD rate given opportunities).
+Primary usage is RB/WR/TE (required), with optional QB support when QB is trained
+on utilization and needs owner-facing fantasy-point projections.
 """
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -31,6 +31,7 @@ except ImportError:
 
 # Efficiency features used for utilization -> FP conversion (per position)
 EFFICIENCY_FEATURES = {
+    "QB": ["completion_pct", "yards_per_attempt", "td_rate", "int_rate", "rushing_yards", "rushing_attempts"],
     "RB": ["yards_per_carry", "yards_per_target", "catch_rate", "total_touches", "snap_share"],
     "WR": ["yards_per_reception", "yards_per_target", "catch_rate", "targets", "snap_share"],
     "TE": ["yards_per_reception", "yards_per_target", "catch_rate", "targets", "snap_share"],
@@ -136,10 +137,12 @@ class UtilizationToFPConverter:
         return c
 
 
-def train_utilization_to_fp_per_position(train_data: pd.DataFrame) -> Dict[str, UtilizationToFPConverter]:
-    """Train conversion model for each non-QB position."""
+def train_utilization_to_fp_per_position(
+    train_data: pd.DataFrame, positions: Optional[List[str]] = None
+) -> Dict[str, UtilizationToFPConverter]:
+    """Train conversion model for requested positions (default RB/WR/TE)."""
     converters = {}
-    for pos in ["RB", "WR", "TE"]:
+    for pos in (positions or ["RB", "WR", "TE"]):
         subset = train_data[train_data["position"] == pos]
         if "utilization_score" not in subset.columns or "fantasy_points" not in subset.columns:
             continue

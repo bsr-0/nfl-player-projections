@@ -26,9 +26,14 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
-from scipy import stats
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor, RandomForestClassifier
+
+try:
+    from imblearn.over_sampling import SMOTE
+    HAS_SMOTE = True
+except ImportError:
+    HAS_SMOTE = False
 
 
 # =============================================================================
@@ -955,6 +960,10 @@ class AdvancedInjuryPredictor:
     
     def __init__(self):
         self.injury_history = {}
+        self._ml_classifier = None
+        self._ml_scaler = None
+        self._ml_feature_names = []
+        self._ml_is_fitted = False
     
     def calculate_base_hazard_rate(self, position: str, weeks_played: int) -> float:
         """
@@ -1100,6 +1109,171 @@ class AdvancedInjuryPredictor:
             'performance_curve': performance_curve
         }
     
+    def _compute_prior_injury_counts(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute per-player cumulative prior injury counts from the data.
+        
+        Uses the 'is_injured' column (if present) to count how many previous
+        weeks a player was marked as injured, giving a running tally of
+        injury events up to (but not including) the current row.
+        
+        Returns:
+            DataFrame with 'prior_injuries' column added.
+        """
+        result = df.copy()
+        result['prior_injuries'] = 0
+        
+        if 'is_injured' in result.columns and 'player_id' in result.columns:
+            # Sort chronologically to compute cumulative count
+            result = result.sort_values(['player_id', 'season', 'week'])
+            # Cumulative sum of injured weeks per player, shifted by 1 so the
+            # current row doesn't count itself
+            result['prior_injuries'] = result.groupby('player_id')['is_injured'].cumsum().shift(1).fillna(0).astype(int)
+        elif 'injury_score' in result.columns and 'player_id' in result.columns:
+            result = result.sort_values(['player_id', 'season', 'week'])
+            was_injured = (result['injury_score'] < 1.0).astype(int)
+            result['prior_injuries'] = was_injured.groupby(result['player_id']).cumsum().shift(1).fillna(0).astype(int)
+        
+        return result
+    
+    def fit_injury_classifier(self, df: pd.DataFrame, use_smote: bool = True) -> bool:
+        """
+        Train an ML-based injury classifier on actual injury labels with
+        class imbalance handling.
+
+        Uses class_weight='balanced' (inverse-frequency weighting) as the
+        primary strategy, with optional SMOTE oversampling when imblearn
+        is available and use_smote=True.
+
+        The classifier learns from features like age, workload, position,
+        prior injuries, and week-in-season to predict whether a player
+        will be injured in the following week.
+
+        Returns True if the classifier was successfully fitted.
+        """
+        # Determine injury label column
+        if 'is_injured_next_week' in df.columns:
+            label_col = 'is_injured_next_week'
+        elif 'is_injured' in df.columns and 'player_id' in df.columns:
+            # Create next-week injury label from current-week flag
+            tmp = df.sort_values(['player_id', 'season', 'week']).copy()
+            tmp['is_injured_next_week'] = tmp.groupby('player_id')['is_injured'].shift(-1)
+            tmp = tmp.dropna(subset=['is_injured_next_week'])
+            tmp['is_injured_next_week'] = tmp['is_injured_next_week'].astype(int)
+            label_col = 'is_injured_next_week'
+            df = tmp
+        elif 'injury_score' in df.columns and 'player_id' in df.columns:
+            tmp = df.sort_values(['player_id', 'season', 'week']).copy()
+            tmp['is_injured_next_week'] = (tmp.groupby('player_id')['injury_score'].shift(-1) < 1.0).astype(int)
+            tmp = tmp.dropna(subset=['is_injured_next_week'])
+            label_col = 'is_injured_next_week'
+            df = tmp
+        else:
+            print("  Injury classifier: no injury label column found; skipping ML classifier.")
+            return False
+
+        # Build feature matrix from available columns
+        feature_candidates = [
+            'age', 'week', 'weekly_workload', 'season_workload',
+            'prior_injuries', 'injury_prob_advanced', 'injury_age_risk',
+            'injury_workload_risk',
+        ]
+        # Add position as numeric
+        pos_map = {'QB': 0, 'RB': 1, 'WR': 2, 'TE': 3}
+        if 'position' in df.columns:
+            df = df.copy()
+            df['_pos_encoded'] = df['position'].map(pos_map).fillna(2).astype(int)
+            feature_candidates.append('_pos_encoded')
+
+        available_features = [c for c in feature_candidates if c in df.columns]
+        if len(available_features) < 3:
+            print(f"  Injury classifier: only {len(available_features)} features available; need ≥3.")
+            return False
+
+        X = df[available_features].replace([np.inf, -np.inf], np.nan).fillna(0).values
+        y = df[label_col].values.astype(int)
+
+        # Check class distribution
+        n_pos = int(y.sum())
+        n_neg = len(y) - n_pos
+        if n_pos < 20 or n_neg < 20:
+            print(f"  Injury classifier: insufficient class balance (pos={n_pos}, neg={n_neg}); skipping.")
+            return False
+
+        prevalence = n_pos / len(y)
+        print(f"  Injury classifier: {len(y)} samples, {n_pos} positive ({prevalence:.1%} prevalence)")
+
+        # Scale features
+        self._ml_scaler = StandardScaler()
+        X_scaled = self._ml_scaler.fit_transform(X)
+
+        # Optional SMOTE oversampling for minority class
+        X_train, y_train = X_scaled, y
+        if use_smote and HAS_SMOTE and prevalence < 0.3:
+            try:
+                smote = SMOTE(
+                    sampling_strategy=min(0.5, prevalence * 3),
+                    random_state=42,
+                    k_neighbors=min(5, n_pos - 1),
+                )
+                X_train, y_train = smote.fit_resample(X_scaled, y)
+                print(f"  SMOTE applied: {len(y)} → {len(y_train)} samples "
+                      f"(minority {int(y_train.sum())}/{len(y_train)})")
+            except Exception as e:
+                print(f"  SMOTE failed ({e}); using class_weight='balanced' only.")
+                X_train, y_train = X_scaled, y
+
+        # Train classifier with class_weight='balanced' (inverse-frequency weighting)
+        self._ml_classifier = RandomForestClassifier(
+            n_estimators=200,
+            max_depth=8,
+            min_samples_leaf=10,
+            class_weight='balanced',
+            random_state=42,
+            n_jobs=-1,
+        )
+        self._ml_classifier.fit(X_train, y_train)
+        self._ml_feature_names = available_features
+        self._ml_is_fitted = True
+
+        # Report in-sample performance (for diagnostics only)
+        from sklearn.metrics import f1_score, precision_score, recall_score
+        y_pred = self._ml_classifier.predict(X_scaled)
+        y_proba = self._ml_classifier.predict_proba(X_scaled)[:, 1]
+        f1 = f1_score(y, y_pred, zero_division=0)
+        prec = precision_score(y, y_pred, zero_division=0)
+        rec = recall_score(y, y_pred, zero_division=0)
+        print(f"  Injury classifier fitted: F1={f1:.3f}, Precision={prec:.3f}, Recall={rec:.3f}")
+
+        return True
+
+    def predict_injury_ml(self, df: pd.DataFrame) -> np.ndarray:
+        """
+        Predict injury probability using the fitted ML classifier.
+
+        Returns array of probabilities (0-1). Falls back to NaN if
+        classifier is not fitted.
+        """
+        if not self._ml_is_fitted or self._ml_classifier is None:
+            return np.full(len(df), np.nan)
+
+        # Build feature matrix matching training features
+        tmp = df.copy()
+        pos_map = {'QB': 0, 'RB': 1, 'WR': 2, 'TE': 3}
+        if '_pos_encoded' in self._ml_feature_names and 'position' in tmp.columns:
+            tmp['_pos_encoded'] = tmp['position'].map(pos_map).fillna(2).astype(int)
+
+        available = [c for c in self._ml_feature_names if c in tmp.columns]
+        if len(available) < len(self._ml_feature_names):
+            # Fill missing features with 0
+            for c in self._ml_feature_names:
+                if c not in tmp.columns:
+                    tmp[c] = 0
+
+        X = tmp[self._ml_feature_names].replace([np.inf, -np.inf], np.nan).fillna(0).values
+        X_scaled = self._ml_scaler.transform(X)
+        return self._ml_classifier.predict_proba(X_scaled)[:, 1]
+
     def add_advanced_injury_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add advanced injury prediction features to DataFrame."""
         result = df.copy()
@@ -1119,6 +1293,9 @@ class AdvancedInjuryPredictor:
         # Season cumulative workload
         result['season_workload'] = result.groupby(['player_id', 'season'])['weekly_workload'].cumsum()
         
+        # Compute actual prior injury counts from historical data
+        result = self._compute_prior_injury_counts(result)
+        
         # Calculate injury probability for each row
         def calc_injury_prob(row):
             pred = self.predict_injury_probability(
@@ -1127,7 +1304,7 @@ class AdvancedInjuryPredictor:
                 weeks_played=int(row.get('week', 1)),
                 weekly_workload=float(row['weekly_workload']),
                 season_workload=float(row['season_workload']),
-                prior_injuries=0  # Would need injury history data
+                prior_injuries=int(row.get('prior_injuries', 0))
             )
             return pred['injury_probability']
         
@@ -1145,12 +1322,29 @@ class AdvancedInjuryPredictor:
         result['injury_age_risk'] = result.apply(calc_age_risk, axis=1)
         result['injury_workload_risk'] = result.apply(calc_workload_risk, axis=1)
         
-        # Risk level categorization
-        result['injury_risk_level'] = result['injury_prob_advanced'].apply(
+        # ML-based injury classifier with class imbalance handling
+        # Train on the data itself (uses class_weight='balanced' + optional SMOTE)
+        ml_fitted = self.fit_injury_classifier(result, use_smote=True)
+        if ml_fitted:
+            ml_proba = self.predict_injury_ml(result)
+            result['injury_prob_ml'] = ml_proba
+            # Blend: 60% ML + 40% heuristic for robust combined estimate
+            result['injury_prob_combined'] = (
+                0.6 * result['injury_prob_ml'] + 0.4 * result['injury_prob_advanced']
+            )
+            print("  ML injury classifier integrated (60% ML + 40% heuristic blend)")
+        else:
+            result['injury_prob_ml'] = np.nan
+            result['injury_prob_combined'] = result['injury_prob_advanced']
+        
+        # Risk level categorization (use combined when available)
+        prob_col = 'injury_prob_combined'
+        result['injury_risk_level'] = result[prob_col].apply(
             lambda x: 'high' if x > 0.12 else ('medium' if x > 0.06 else 'low')
         )
         
-        print(f"  Added: injury_prob_advanced, injury_age_risk, injury_workload_risk, injury_risk_level")
+        print(f"  Added: injury_prob_advanced, injury_prob_ml, injury_prob_combined, "
+              f"injury_age_risk, injury_workload_risk, injury_risk_level, prior_injuries")
         
         return result
 

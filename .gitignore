@@ -37,20 +37,21 @@ venv/
 ENV/
 env/
 
-# Data and databases – local/generated
-data/*.db
-data/*.sqlite
-data/*.sqlite3
-data/raw/
-data/processed/
-data/models/
-*.parquet
+# Data – large binary files that should NOT be in git
+# (trained model files are too large; predictions are pre-computed in parquets)
 *.joblib
 *.pkl
 *.pickle
+data/models/feature_scaler*.joblib
 
-# Keep data directory structure (optional placeholder)
-!data/.gitkeep
+# Keep small config files in data/models/ tracked
+!data/models/*.json
+!data/models/*.txt
+
+# Ignore generated/scratch directories
+data/processed/
+data/diagnostics/
+data/improvement_results/
 
 # Frontend
 frontend/node_modules/

@@ -8,6 +8,7 @@ Run from project root: python -m uvicorn api.main:app --reload --host 0.0.0.0 --
 
 import logging
 import math
+import json
 from typing import Any, Dict, List, Optional, Set
 
 import pandas as pd
@@ -32,13 +33,18 @@ import sys
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from config.settings import MODELS_DIR
+
 from src.app_data import (
     load_advanced_model_results,
     load_backtest_results,
     load_eda_sample,
     load_predictions_parquet,
     load_training_years_analysis,
+    load_qb_target_choice,
     get_utilization_weights_merged,
+    load_ts_backtest_results,
+    load_ts_backtest_predictions,
 )
 
 app = FastAPI(
@@ -100,6 +106,18 @@ def _json_safe_value(v: Any) -> Any:
         return str(v)
     except Exception:
         return None
+
+
+def _load_optional_json(path: Path) -> Dict[str, Any]:
+    """Load optional JSON payload safely."""
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            payload = json.load(f)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
 
 
 # -----------------------------------------------------------------------------
@@ -209,6 +227,20 @@ def get_advanced_results() -> Dict[str, Any]:
     return res
 
 
+@app.get("/api/model-config")
+def get_model_config() -> Dict[str, Any]:
+    """Serve model configuration metadata needed by UI (e.g. QB dependent variable)."""
+    model_metadata = _load_optional_json(MODELS_DIR / "model_metadata.json")
+    horizon_status = _load_optional_json(MODELS_DIR / "horizon_model_status.json")
+    monitoring = _load_optional_json(MODELS_DIR / "model_monitoring_report.json")
+    return {
+        "qb_target": load_qb_target_choice(),  # "util" or "fp"
+        "model_metadata": model_metadata,
+        "horizon_model_status": horizon_status,
+        "monitoring_report": monitoring,
+    }
+
+
 # -----------------------------------------------------------------------------
 # Backtest
 # -----------------------------------------------------------------------------
@@ -255,6 +287,56 @@ def get_backtest_season(season: int) -> Dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
+# Time-Series Backtest (expanding window, weekly refit)
+# -----------------------------------------------------------------------------
+@app.get("/api/ts-backtest")
+def get_ts_backtest() -> Dict[str, Any]:
+    """List available time-series backtest results + latest metrics summary."""
+    ts_results = load_ts_backtest_results()
+    if not ts_results:
+        return {"results": [], "latest": None, "available_seasons": []}
+    available_seasons = sorted({r.get("season") for r in ts_results if r.get("season")})
+    return {
+        "results": ts_results,
+        "latest": ts_results[0],
+        "available_seasons": available_seasons,
+    }
+
+
+@app.get("/api/ts-backtest/{season:int}")
+def get_ts_backtest_season(season: int) -> Dict[str, Any]:
+    """Metrics for a specific season's time-series backtest."""
+    ts_results = load_ts_backtest_results()
+    for r in ts_results:
+        if r.get("season") == season:
+            return r
+    return JSONResponse(status_code=404, content={"detail": f"No TS backtest for season {season}"})
+
+
+@app.get("/api/ts-backtest/{season:int}/predictions")
+def get_ts_backtest_predictions(
+    season: int,
+    position: Optional[str] = Query(None),
+    week: Optional[int] = Query(None),
+) -> Dict[str, Any]:
+    """Per-player, per-week predictions vs actuals from the time-series backtest."""
+    df = load_ts_backtest_predictions(season)
+    if df is None or df.empty:
+        return {"rows": [], "season": season}
+    if position:
+        df = df[df["position"].str.upper() == position.upper()]
+    if week is not None:
+        df = df[df["week"] == week]
+    records = []
+    for _, row in df.iterrows():
+        d = {}
+        for c in df.columns:
+            d[c] = _json_safe_value(row[c])
+        records.append(d)
+    return {"rows": records, "season": season}
+
+
+# -----------------------------------------------------------------------------
 # Predictions
 # -----------------------------------------------------------------------------
 def _parse_horizon(horizon: Optional[str]) -> Optional[int]:
@@ -297,6 +379,7 @@ def _get_predictions_impl(
     if df is None or df.empty:
         return {
             "rows": [],
+            "qb_target": load_qb_target_choice(),
             "week_label": "",
             "upcoming_week_label": None,
             "schedule_available": True,
@@ -464,6 +547,7 @@ def _get_predictions_impl(
 
     out = {
         "rows": records,
+        "qb_target": load_qb_target_choice(),
         "week_label": week_label,
         "schedule_available": schedule_available,
         "schedule_note": schedule_note,

@@ -29,11 +29,13 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
-import warnings
+import logging
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import POSITIONS, MODELS_DIR
+
+logger = logging.getLogger(__name__)
 
 # Try to import PyMC for full Bayesian inference
 try:
@@ -42,9 +44,9 @@ try:
     PYMC_AVAILABLE = True
 except ImportError:
     PYMC_AVAILABLE = False
-    warnings.warn(
-        "PyMC not installed. Using empirical Bayes approximation. "
-        "For full Bayesian inference, install with: pip install pymc arviz"
+    logger.info(
+        "PyMC not installed; using empirical Bayes approximation. "
+        "Install pymc+arviz for full Bayesian inference."
     )
 
 

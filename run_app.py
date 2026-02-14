@@ -63,8 +63,9 @@ Examples:
                         help=f'End year for range (default: current NFL season, {CURRENT_NFL_SEASON})')
     parser.add_argument('--refresh', action='store_true',
                         help='Force refresh data from source')
-    parser.add_argument('--port', type=int, default=8501,
-                        help='Port for web app (default: 8501)')
+    import os
+    parser.add_argument('--port', type=int, default=int(os.environ.get('PORT', 8501)),
+                        help='Port for web app (default: $PORT or 8501)')
     parser.add_argument('--skip-data', action='store_true',
                         help='Skip data loading, just start app')
     parser.add_argument('--with-predictions', action='store_true',

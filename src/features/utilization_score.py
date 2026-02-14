@@ -4,10 +4,10 @@ Utilization Score Calculator for NFL Fantasy Football.
 The Utilization Score ranges from 0-100 and measures player opportunity/usage.
 Higher scores correlate with better fantasy production.
 
-Components (per requirements): snap share, target/touch share, red zone involvement.
-High-value touch rate (rushes inside 10-yard line, targets 15+ air yards) is not yet
-included due to data availability limits; when goal-line and aDOT/air-yards data are
-available, add a high_value_touch component and weight in UTILIZATION_WEIGHTS.
+Components (per requirements): snap share, target/touch share, red zone involvement,
+and high-value touch rate (rushes inside 10-yard line, targets 15+ air yards) when
+PBP-derived data is available. The high_value_touch component is weighted in
+UTILIZATION_WEIGHTS and computed by _add_high_value_touch_rate().
 
 Position-specific benchmarks (PPR scoring):
 - RB 60-69: ~12.2 PPG, 70%+ finish as RB2/RB3
@@ -172,11 +172,18 @@ class UtilizationScoreCalculator:
                 group_cols.append(col)
         
         if not group_cols:
-            # No grouping possible, just add placeholder team columns
+            # No grouping possible -- set team totals to NaN so that
+            # downstream share calculations produce NaN rather than
+            # the misleading 100% share that results from team == individual.
+            import warnings
+            warnings.warn(
+                "Cannot compute team totals: missing team/season/week columns. "
+                "Share-based utilization components will be NaN."
+            )
             df = df.copy()
-            df["team_targets"] = df.get("targets", 0)
-            df["team_rush_attempts"] = df.get("rushing_attempts", 0)
-            df["team_snaps"] = df.get("snap_count", 0)
+            df["team_targets"] = np.nan
+            df["team_rush_attempts"] = np.nan
+            df["team_snaps"] = np.nan
             return df
         
         # Build aggregation dict based on available columns
@@ -303,8 +310,17 @@ class UtilizationScoreCalculator:
             df["snap_count"], df.get("team_snaps", df["snap_count"])
         ) * 100
         
-        # Red zone targets (estimate from TDs)
-        df["redzone_targets_pct"] = (df["receiving_tds"] * 15).clip(0, 100)
+        # Red zone targets: use PBP-derived data when available, else TD-based proxy
+        if "redzone_targets" in df.columns and "team_redzone_targets" in df.columns:
+            df["redzone_targets_pct"] = safe_divide(
+                df["redzone_targets"], df["team_redzone_targets"]
+            ).clip(0, 1) * 100
+        elif "redzone_targets" in df.columns:
+            # Normalize against a reasonable max (e.g., 3 RZ targets/game is high for WR)
+            df["redzone_targets_pct"] = (df["redzone_targets"] / 3.0 * 100).clip(0, 100)
+        else:
+            # Fallback: TD-based proxy (documented limitation)
+            df["redzone_targets_pct"] = (df["receiving_tds"] * 15).clip(0, 100)
         
         # Route participation: use actual routes when available (Fantasy Life), else proxy from snap share
         if "routes_run" in df.columns and "team_routes" in df.columns:
@@ -363,8 +379,17 @@ class UtilizationScoreCalculator:
             df["snap_count"], df.get("team_snaps", df["snap_count"])
         ) * 100
         
-        # Red zone targets (TEs are valuable in red zone)
-        df["redzone_targets_pct"] = (df["receiving_tds"] * 20).clip(0, 100)
+        # Red zone targets: use PBP-derived data when available, else TD-based proxy
+        if "redzone_targets" in df.columns and "team_redzone_targets" in df.columns:
+            df["redzone_targets_pct"] = safe_divide(
+                df["redzone_targets"], df["team_redzone_targets"]
+            ).clip(0, 1) * 100
+        elif "redzone_targets" in df.columns:
+            # TEs typically see 1-2 RZ targets/game at most
+            df["redzone_targets_pct"] = (df["redzone_targets"] / 2.0 * 100).clip(0, 100)
+        else:
+            # Fallback: TD-based proxy (documented limitation; TEs are valuable in RZ)
+            df["redzone_targets_pct"] = (df["receiving_tds"] * 20).clip(0, 100)
         
         # Air yards share
         if "air_yards" in df.columns:
@@ -465,6 +490,8 @@ class UtilizationScoreCalculator:
         """
         if series.isna().all() or len(series) == 0:
             return series
+        # Auto-load persisted bounds if none in memory
+        self._ensure_bounds_loaded()
         key = (position, component_key) if (position and component_key) else None
         bounds = self.position_percentiles.get(key) if key else None
         if bounds is not None and isinstance(bounds, (tuple, list)) and len(bounds) == 2:
@@ -474,10 +501,16 @@ class UtilizationScoreCalculator:
             return series.clip(0, 100)
         return series.rank(pct=True, na_option="bottom") * 100
 
-    def fit_percentile_bounds(self, train_df: pd.DataFrame, position: str, component_columns: list) -> None:
+    _BOUNDS_DEFAULT_PATH = Path(__file__).parent.parent.parent / "data" / "utilization_percentile_bounds.json"
+
+    def fit_percentile_bounds(self, train_df: pd.DataFrame, position: str, component_columns: list,
+                               persist: bool = True) -> None:
         """
         Fit min/max (or 1st/99th percentile) per component on train data for consistent apply at serve.
         Store in self.position_percentiles keyed by (position, col).
+        
+        When persist=True (default), auto-saves bounds to disk so that the
+        prediction pipeline can load them without retraining.
         """
         pos_df = train_df[train_df["position"] == position]
         if pos_df.empty:
@@ -490,6 +523,14 @@ class UtilizationScoreCalculator:
                 continue
             lo, hi = s.quantile(0.01), s.quantile(0.99)
             self.position_percentiles[(position, col)] = (float(lo), float(hi))
+        
+        if persist:
+            save_percentile_bounds(self.position_percentiles, self._BOUNDS_DEFAULT_PATH)
+
+    def _ensure_bounds_loaded(self) -> None:
+        """Auto-load persisted percentile bounds if none are in memory."""
+        if not self.position_percentiles and self._BOUNDS_DEFAULT_PATH.exists():
+            self.position_percentiles = load_percentile_bounds(self._BOUNDS_DEFAULT_PATH)
     
     def get_utilization_tier(self, score: float, position: str) -> str:
         """

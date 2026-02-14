@@ -318,7 +318,8 @@ class PositionModel:
                      sample_weight: Optional[np.ndarray] = None) -> Ridge:
         """Train Ridge regression with best params (X should already be scaled)."""
         params = self.best_params.get("ridge", self._get_default_params()["ridge"])
-        params["random_state"] = MODEL_CONFIG["random_state"]
+        # Ridge does not accept random_state; remove if present
+        params.pop("random_state", None)
         model = Ridge(**params)
         if sample_weight is not None:
             model.fit(X, y, sample_weight=sample_weight)
@@ -327,17 +328,30 @@ class PositionModel:
         return model
     
     def _optimize_ensemble_weights(self, X: np.ndarray, y: np.ndarray):
-        """Optimize ensemble weights for current model keys (RF+XGB+Ridge or legacy XGB+LGB+Ridge)."""
+        """Optimize ensemble weights near the spec-mandated 30/40/30 baseline.
+        
+        Constrains weights so they stay close to the requirements
+        (RF >= 0.25, XGB >= 0.35, Ridge >= 0.20) while allowing small
+        data-driven adjustments.  Only adopts new weights when they
+        improve validation MSE over the current spec weights.
+        """
         keys = list(self.models.keys())
         preds = {k: self.models[k].predict(X) for k in keys}
-        best_mse = float("inf")
-        best_weights = self.ensemble_weights.copy()
+        
+        # Start from the spec weights as the baseline to beat
+        spec_weights = dict(ENSEMBLE_WEIGHTS_1W)
+        spec_pred = sum(spec_weights.get(k, 1 / len(keys)) * preds[k] for k in keys)
+        best_mse = float(mean_squared_error(y, spec_pred))
+        best_weights = spec_weights.copy()
+        
         if len(keys) == 3:
             k1, k2, k3 = keys
-            for w1 in np.arange(0.2, 0.5, 0.05):
-                for w2 in np.arange(0.2, 0.55, 0.05):
-                    w3 = 1 - w1 - w2
-                    if w3 < 0.15:
+            # Floor constraints per spec: RF >= 0.25, XGB >= 0.35, Ridge >= 0.20
+            min_w = {k1: 0.25, k2: 0.35, k3: 0.20}
+            for w1 in np.arange(min_w[k1], 0.40, 0.05):
+                for w2 in np.arange(min_w[k2], 0.50, 0.05):
+                    w3 = round(1 - w1 - w2, 2)
+                    if w3 < min_w[k3]:
                         continue
                     ensemble_pred = w1 * preds[k1] + w2 * preds[k2] + w3 * preds[k3]
                     mse = mean_squared_error(y, ensemble_pred)
@@ -440,25 +454,35 @@ class MultiWeekModel:
             tune_hyperparameters: Whether to tune hyperparameters
             sample_weight: Optional recency weights (e.g. by season)
         """
-        # Train representative models for each horizon group
-        # Per requirements: long-horizon model should represent season-long (18-week) behavior.
+        # Train representative models for each horizon group.
+        # Prefer 1/4/18 exact horizons (requirements), but gracefully fall back
+        # to nearest available targets when a specific horizon column is absent.
+        available = sorted(int(k) for k in y_dict.keys())
+
+        def _pick_available(preferred: int, candidates: List[int]) -> Optional[int]:
+            subset = [w for w in available if w in candidates]
+            if not subset:
+                return None
+            return min(subset, key=lambda w: abs(w - preferred))
+
         representative_weeks = {
-            "short": 1,
-            "medium": 4,
-            "long": 18,
+            "short": _pick_available(1, self.horizon_groups["short"] + [1]),
+            "medium": _pick_available(4, self.horizon_groups["medium"] + [4]),
+            "long": _pick_available(18, self.horizon_groups["long"] + [18]),
         }
-        
+
         for horizon, n_weeks in representative_weeks.items():
-            if n_weeks in y_dict:
-                print(f"\nTraining {horizon}-term model ({n_weeks} weeks)...")
-                
-                model = PositionModel(self.position, n_weeks=n_weeks)
-                model.fit(X, y_dict[n_weeks], tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
-                
-                # Use this model for all weeks in the horizon group
-                for week in self.horizon_groups[horizon]:
-                    self.models[week] = model
-        
+            if n_weeks is None:
+                continue
+            print(f"\nTraining {horizon}-term model ({n_weeks} weeks)...")
+
+            model = PositionModel(self.position, n_weeks=n_weeks)
+            model.fit(X, y_dict[n_weeks], tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
+
+            # Use this model for all weeks in the horizon group
+            for week in self.horizon_groups[horizon]:
+                self.models[week] = model
+
         return self
     
     def predict(self, X: pd.DataFrame, n_weeks: int) -> np.ndarray:
@@ -470,16 +494,12 @@ class MultiWeekModel:
             model = self.models[closest]
         else:
             model = self.models[n_weeks]
-        
-        # Scale prediction based on week difference
-        base_pred = model.predict(X)
-        
-        if model.n_weeks != n_weeks:
-            # Adjust for different prediction horizon
-            scale_factor = n_weeks / model.n_weeks
-            return base_pred * scale_factor
-        
-        return base_pred
+
+        # Do not apply naive proportional scaling between horizons.
+        # Representative models (1w/4w/18w) are trained on horizon-specific
+        # targets (e.g., utilization mean vs fantasy-point sums), so linear
+        # week-ratio scaling introduces bias and semantic mismatch.
+        return model.predict(X)
     
     def save(self, filepath: Path = None):
         """Save all models."""

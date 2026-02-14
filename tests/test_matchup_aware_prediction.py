@@ -164,12 +164,13 @@ def test_add_team_matchup_features_seahawks_patriots_matchup():
         {"team": "SEA", "opponent": "NE", "season": 2025},
         {"team": "NE", "opponent": "SEA", "season": 2025},
     ])
-    # Mock team_stats: SEA 2025 and NE 2025 with different values
+    # Mock team_stats: season 2024 (prior year) — after leakage-safe season+1 shift,
+    # these will map to player rows in season 2025.
     team_stats = pd.DataFrame([
-        {"team": "SEA", "season": 2025, "points_scored": 26, "points_allowed": 20,
+        {"team": "SEA", "season": 2024, "points_scored": 26, "points_allowed": 20,
          "total_yards": 360, "passing_yards": 250, "rushing_yards": 110, "turnovers": 1,
          "pass_attempts": 38, "rush_attempts": 28, "redzone_scores": 3.0},
-        {"team": "NE", "season": 2025, "points_scored": 22, "points_allowed": 24,
+        {"team": "NE", "season": 2024, "points_scored": 22, "points_allowed": 24,
          "total_yards": 340, "passing_yards": 220, "rushing_yards": 120, "turnovers": 2,
          "pass_attempts": 35, "rush_attempts": 30, "redzone_scores": 2.5},
     ])
@@ -210,11 +211,13 @@ def test_refresh_matchup_features_produces_matchup_specific_values():
         "season": 2025,
         "week": 22,
     }])
-    team_stats_2025 = pd.DataFrame([
-        {"team": "SEA", "season": 2025, "points_scored": 26, "points_allowed": 20,
+    # Prior-season (2024) stats used for leakage-safe matchup features
+    # After season+1 shift, season 2024 stats map to season 2025 player rows.
+    team_stats_2024 = pd.DataFrame([
+        {"team": "SEA", "season": 2024, "points_scored": 26, "points_allowed": 20,
          "total_yards": 360, "passing_yards": 250, "rushing_yards": 110, "turnovers": 1,
          "pass_attempts": 38, "rush_attempts": 28, "redzone_scores": 3.0},
-        {"team": "NE", "season": 2025, "points_scored": 22, "points_allowed": 24,
+        {"team": "NE", "season": 2024, "points_scored": 22, "points_allowed": 24,
          "total_yards": 340, "passing_yards": 220, "rushing_yards": 120, "turnovers": 2,
          "pass_attempts": 35, "rush_attempts": 30, "redzone_scores": 2.5},
     ])
@@ -226,11 +229,10 @@ def test_refresh_matchup_features_produces_matchup_specific_values():
 
     def get_team_stats(season=None):
         if season is None:
-            return team_stats_2025
+            return team_stats_2024
         if season == 2024:
-            return pd.DataFrame([{"team": "SEA", "season": 2024, "points_scored": 24, "points_allowed": 22},
-                                 {"team": "NE", "season": 2024, "points_scored": 21, "points_allowed": 23}])
-        return team_stats_2025
+            return team_stats_2024
+        return team_stats_2024
 
     mock_db = MagicMock()
     mock_db.get_team_stats.side_effect = get_team_stats
@@ -264,11 +266,12 @@ def test_predict_flow_opponent_specific_features_integration():
     latest_data["opponent"] = latest_data["team"].map(lambda t: schedule_map.get(t, ("", "unknown"))[0])
     latest_data["home_away"] = latest_data["team"].map(lambda t: schedule_map.get(t, ("", "unknown"))[1])
 
-    team_stats_2025 = pd.DataFrame([
-        {"team": "SEA", "season": 2025, "points_scored": 26, "points_allowed": 20,
+    # Prior-season (2024) stats — after leakage-safe season+1 shift, maps to 2025 player rows.
+    team_stats_2024 = pd.DataFrame([
+        {"team": "SEA", "season": 2024, "points_scored": 26, "points_allowed": 20,
          "total_yards": 360, "passing_yards": 250, "rushing_yards": 110, "turnovers": 1,
          "pass_attempts": 38, "rush_attempts": 28, "redzone_scores": 3.0},
-        {"team": "NE", "season": 2025, "points_scored": 22, "points_allowed": 24,
+        {"team": "NE", "season": 2024, "points_scored": 22, "points_allowed": 24,
          "total_yards": 340, "passing_yards": 220, "rushing_yards": 120, "turnovers": 2,
          "pass_attempts": 35, "rush_attempts": 30, "redzone_scores": 2.5},
     ])
@@ -276,13 +279,10 @@ def test_predict_flow_opponent_specific_features_integration():
 
     def get_team_stats(season=None):
         if season is None:
-            return team_stats_2025
+            return team_stats_2024
         if season == 2024:
-            return pd.DataFrame([
-                {"team": "SEA", "season": 2024, "points_scored": 24, "points_allowed": 22},
-                {"team": "NE", "season": 2024, "points_scored": 21, "points_allowed": 23},
-            ])
-        return team_stats_2025
+            return team_stats_2024
+        return team_stats_2024
 
     mock_db = MagicMock()
     mock_db.get_team_stats.side_effect = get_team_stats

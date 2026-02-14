@@ -1,11 +1,12 @@
 """Ensemble predictor combining position-specific models."""
 import json
+import warnings
 import pandas as pd
 import numpy as np
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 import joblib
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -24,13 +25,38 @@ from src.features.dimensionality_reduction import (
     select_features_simple,
     compute_vif,
 )
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+except Exception:  # pragma: no cover - compatibility fallback
+    InconsistentVersionWarning = None
+
+# Suppress non-actionable model-serialization compatibility warnings in runtime/tests.
+warnings.filterwarnings(
+    "ignore",
+    message=".*Trying to unpickle estimator.*",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=".*If you are loading a serialized model.*XGBoost.*",
+    category=UserWarning,
+)
+if InconsistentVersionWarning is not None:
+    warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
 # Optional horizon-specific models (4w LSTM+ARIMA, 18w deep)
 try:
-    from src.models.horizon_models import Hybrid4WeekModel, DeepSeasonLongModel
+    from src.models.horizon_models import (
+        Hybrid4WeekModel,
+        DeepSeasonLongModel,
+        HAS_TF,
+        HAS_ARIMA,
+    )
     HAS_HORIZON_MODELS = True
 except ImportError:
     HAS_HORIZON_MODELS = False
+    HAS_TF = False
+    HAS_ARIMA = False
 
 
 def _warn_if_feature_version_mismatch() -> None:
@@ -72,7 +98,22 @@ class EnsemblePredictor:
         self.util_to_fp: Dict[str, UtilizationToFPConverter] = {}
         self.hybrid_4w: Dict[str, Any] = {}
         self.deep_18w: Dict[str, Any] = {}
+        self.qb_target: str = "util"
+        self.horizon_availability: Dict[str, Dict[str, Any]] = {}
         self.is_loaded = False
+
+    @staticmethod
+    def _load_qb_target_choice() -> str:
+        """Load persisted QB target choice. Defaults to utilization."""
+        qb_choice_path = MODELS_DIR / QB_TARGET_CHOICE_FILENAME
+        if not qb_choice_path.exists():
+            return "util"
+        try:
+            with open(qb_choice_path) as f:
+                choice = json.load(f).get("qb_target", "util")
+            return choice if choice in ("util", "fp") else "util"
+        except Exception:
+            return "util"
 
     def load_models(self, positions: List[str] = None):
         """
@@ -82,24 +123,47 @@ class EnsemblePredictor:
             positions: List of positions to load (default: all)
         """
         positions = positions or POSITIONS
+        self.qb_target = self._load_qb_target_choice()
+        self.horizon_availability = {}
         
         for position in positions:
             try:
                 # Try to load multi-week model first
                 multi_path = MODELS_DIR / f"multiweek_{position.lower()}.joblib"
                 if multi_path.exists():
-                    self.position_models[position] = MultiWeekModel.load(position)
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(
+                            "ignore",
+                            message=".*Trying to unpickle estimator.*",
+                            category=UserWarning,
+                        )
+                        warnings.filterwarnings(
+                            "ignore",
+                            message=".*If you are loading a serialized model.*XGBoost.*",
+                            category=UserWarning,
+                        )
+                        if InconsistentVersionWarning is not None:
+                            warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+                        self.position_models[position] = MultiWeekModel.load(position)
                     print(f"Loaded multi-week model for {position}")
                 else:
                     # Fall back to single-week model
                     single_path = MODELS_DIR / f"model_{position.lower()}_1w.joblib"
                     if single_path.exists():
-                        self.single_week_models[position] = PositionModel.load(position, n_weeks=1)
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings(
+                                "ignore",
+                                message=".*Trying to unpickle estimator.*",
+                                category=UserWarning,
+                            )
+                            if InconsistentVersionWarning is not None:
+                                warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+                            self.single_week_models[position] = PositionModel.load(position, n_weeks=1)
                         print(f"Loaded single-week model for {position}")
             except Exception as e:
                 print(f"Warning: Could not load model for {position}: {e}")
 
-        for pos in ["RB", "WR", "TE"]:
+        for pos in POSITIONS:
             try:
                 c = UtilizationToFPConverter.load(pos)
                 if c.is_fitted:
@@ -108,25 +172,62 @@ class EnsemblePredictor:
                 pass
 
         # Horizon-specific models (4w hybrid, 18w deep) when enabled
+        if not HAS_HORIZON_MODELS:
+            print("Warning: horizon models unavailable (module import failed).")
+        if MODEL_CONFIG.get("use_4w_hybrid", True) and not HAS_ARIMA:
+            print("Warning: 4-week hybrid requires statsmodels (ARIMA) but it is unavailable.")
+        if MODEL_CONFIG.get("use_4w_hybrid", True) and not HAS_TF:
+            print("Warning: 4-week hybrid requires TensorFlow (LSTM) but it is unavailable.")
+        if MODEL_CONFIG.get("use_18w_deep", True) and not HAS_TF:
+            print("Warning: 18-week deep model requires TensorFlow but it is unavailable.")
+
         horizon_4w_weeks = tuple(MODEL_CONFIG.get("horizon_4w_weeks", (4, 5, 6, 7, 8)))
-        if MODEL_CONFIG.get("use_4w_hybrid", True) and HAS_HORIZON_MODELS:
+        if MODEL_CONFIG.get("use_4w_hybrid", True) and HAS_HORIZON_MODELS and HAS_TF and HAS_ARIMA:
             for position in positions:
+                self.horizon_availability.setdefault(position, {})
                 try:
                     h = Hybrid4WeekModel.load(position)
                     if getattr(h, "is_fitted", False):
                         self.hybrid_4w[position] = h
+                        self.horizon_availability[position]["hybrid_4w"] = "loaded"
                         print(f"Loaded 4-week hybrid model for {position}")
+                    else:
+                        self.horizon_availability[position]["hybrid_4w"] = "not_fitted"
                 except Exception as e:
-                    pass
-        if MODEL_CONFIG.get("use_18w_deep", True) and HAS_HORIZON_MODELS:
+                    self.horizon_availability[position]["hybrid_4w"] = f"load_failed: {e}"
+        elif MODEL_CONFIG.get("use_4w_hybrid", True):
             for position in positions:
+                self.horizon_availability.setdefault(position, {})
+                reasons = []
+                if not HAS_TF:
+                    reasons.append("tensorflow_missing")
+                if not HAS_ARIMA:
+                    reasons.append("statsmodels_missing")
+                if not HAS_HORIZON_MODELS:
+                    reasons.append("horizon_module_missing")
+                self.horizon_availability[position]["hybrid_4w"] = "disabled_or_unavailable:" + ",".join(reasons)
+        if MODEL_CONFIG.get("use_18w_deep", True) and HAS_HORIZON_MODELS and HAS_TF:
+            for position in positions:
+                self.horizon_availability.setdefault(position, {})
                 try:
                     d = DeepSeasonLongModel.load(position)
                     if getattr(d, "is_fitted", False):
                         self.deep_18w[position] = d
+                        self.horizon_availability[position]["deep_18w"] = "loaded"
                         print(f"Loaded 18-week deep model for {position}")
+                    else:
+                        self.horizon_availability[position]["deep_18w"] = "not_fitted"
                 except Exception as e:
-                    pass
+                    self.horizon_availability[position]["deep_18w"] = f"load_failed: {e}"
+        elif MODEL_CONFIG.get("use_18w_deep", True):
+            for position in positions:
+                self.horizon_availability.setdefault(position, {})
+                reasons = []
+                if not HAS_TF:
+                    reasons.append("tensorflow_missing")
+                if not HAS_HORIZON_MODELS:
+                    reasons.append("horizon_module_missing")
+                self.horizon_availability[position]["deep_18w"] = "disabled_or_unavailable:" + ",".join(reasons)
 
         self.is_loaded = len(self.position_models) > 0 or len(self.single_week_models) > 0
 
@@ -143,8 +244,11 @@ class EnsemblePredictor:
             n_weeks: Number of weeks to predict (1-18)
             
         Returns:
-            DataFrame with predictions added
+            DataFrame with predictions added (includes prediction_speed_ok metadata)
         """
+        import time as _time
+        _pred_start = _time.perf_counter()
+
         if not self.is_loaded:
             raise ValueError("Models must be loaded before prediction. Call load_models() first.")
         
@@ -218,7 +322,13 @@ class EnsemblePredictor:
                             pass
                 results.loc[mask, "predicted_utilization"] = predictions
                 results.loc[mask, "predicted_points"] = predictions
-                if position in self.util_to_fp and self.util_to_fp[position].is_fitted:
+                # RB/WR/TE always convert utilization->FP; QB converts only when QB target is utilization.
+                should_convert = (
+                    position in self.util_to_fp
+                    and self.util_to_fp[position].is_fitted
+                    and (position != "QB" or self.qb_target == "util")
+                )
+                if should_convert:
                     eff_df = pos_data.copy()
                     eff_df["utilization_score"] = predictions
                     fp_pred = self.util_to_fp[position].predict(predictions, efficiency_df=eff_df)
@@ -244,7 +354,19 @@ class EnsemblePredictor:
                 base_pred = model.predict(pos_data)
                 scaled = base_pred * n_weeks
                 results.loc[mask, "predicted_utilization"] = scaled
-                results.loc[mask, "predicted_points"] = scaled
+                # Apply utilization-to-FP conversion for RB/WR/TE (base_pred is utilization 0-100)
+                should_convert = (
+                    position in self.util_to_fp
+                    and self.util_to_fp[position].is_fitted
+                    and (position != "QB" or self.qb_target == "util")
+                )
+                if should_convert:
+                    eff_df = pos_data.copy()
+                    eff_df["utilization_score"] = base_pred
+                    fp_pred = self.util_to_fp[position].predict(base_pred, efficiency_df=eff_df)
+                    results.loc[mask, "predicted_points"] = fp_pred * n_weeks
+                else:
+                    results.loc[mask, "predicted_points"] = scaled
                 _, std = model.predict_with_uncertainty(pos_data)
                 std_scaled = std * np.sqrt(n_weeks)
                 results.loc[mask, "prediction_std"] = std_scaled
@@ -253,6 +375,15 @@ class EnsemblePredictor:
                 results.loc[mask, "prediction_ci80_upper"] = scaled + z80 * std_scaled
                 results.loc[mask, "prediction_ci95_lower"] = scaled - z95 * std_scaled
                 results.loc[mask, "prediction_ci95_upper"] = scaled + z95 * std_scaled
+
+        # Prediction speed tracking (requirement: < 5s per player)
+        from config.settings import MAX_PREDICTION_TIME_PER_PLAYER_SECONDS
+        _pred_elapsed = _time.perf_counter() - _pred_start
+        n_players = len(player_data)
+        per_player = _pred_elapsed / max(n_players, 1)
+        results.attrs["prediction_elapsed_s"] = round(_pred_elapsed, 4)
+        results.attrs["prediction_per_player_s"] = round(per_player, 6)
+        results.attrs["prediction_speed_ok"] = per_player <= MAX_PREDICTION_TIME_PER_PLAYER_SECONDS
 
         return results
     
@@ -349,6 +480,10 @@ class EnsemblePredictor:
         
         return results.sort_values("predicted_points", ascending=False)
 
+    def get_horizon_availability(self) -> Dict[str, Dict[str, Any]]:
+        """Return loaded/disabled status for 4w and 18w horizon models per position."""
+        return self.horizon_availability
+
 
 class ModelTrainer:
     """Handles training of all position models."""
@@ -407,11 +542,31 @@ class ModelTrainer:
                     self.training_metrics["QB"] = chosen["metrics"]
                     qb_choice_path = MODELS_DIR / QB_TARGET_CHOICE_FILENAME
                     with open(qb_choice_path, "w") as f:
-                        json.dump({"qb_target": chosen["qb_target"]}, f, indent=2)
+                        json.dump(
+                            {
+                                "qb_target": chosen["qb_target"],
+                                "selection_method": "holdout_owner_fp_objective",
+                                "rmse_fp_model": chosen.get("rmse_fp"),
+                                "rmse_util_model_as_fp": chosen.get("rmse_util_as_fp"),
+                                "mae_fp_model": chosen.get("mae_fp"),
+                                "mae_util_model_as_fp": chosen.get("mae_util_as_fp"),
+                                "r2_fp_model": chosen.get("r2_fp"),
+                                "r2_util_model_as_fp": chosen.get("r2_util"),
+                            },
+                            f,
+                            indent=2,
+                        )
                     r2u, r2f = chosen.get("r2_util"), chosen.get("r2_fp")
+                    rmse_u, rmse_f = chosen.get("rmse_util_as_fp"), chosen.get("rmse_fp")
                     r2u_s = f"{r2u:.3f}" if np.isfinite(r2u) else "n/a"
                     r2f_s = f"{r2f:.3f}" if np.isfinite(r2f) else "n/a"
-                    print(f"  QB target chosen: {chosen['qb_target']} (test R² util={r2u_s}, fp={r2f_s})")
+                    rmse_u_s = f"{rmse_u:.3f}" if np.isfinite(rmse_u) else "n/a"
+                    rmse_f_s = f"{rmse_f:.3f}" if np.isfinite(rmse_f) else "n/a"
+                    print(
+                        "  QB target chosen (owner objective = future fantasy points): "
+                        f"{chosen['qb_target']} (RMSE util->fp={rmse_u_s}, fp={rmse_f_s}; "
+                        f"R² util->fp={r2u_s}, fp={r2f_s})"
+                    )
                     print(f"\nQB Training Metrics:")
                     for horizon, m in chosen["metrics"].items():
                         print(f"  {horizon}: RMSE={m['rmse']:.2f}, MAE={m['mae']:.2f}, R²={m['r2']:.3f}")
@@ -424,17 +579,27 @@ class ModelTrainer:
             # Prepare targets: primary = utilization (target_util_*), optional FP (target_*w)
             y_dict = {}
             for n_weeks in n_weeks_list:
-                util_col = f"target_util_{n_weeks}w" if n_weeks > 1 else "target_util_1w"
-                if util_col in pos_data.columns:
-                    y_dict[n_weeks] = pos_data[util_col]
-                else:
+                # QB fallback target is fantasy points (owner objective) when dual-test path is unavailable.
+                if position == "QB":
                     target_col = f"target_{n_weeks}w"
                     if target_col in pos_data.columns:
                         y_dict[n_weeks] = pos_data[target_col]
                     else:
-                        y_dict[n_weeks] = pos_data.groupby("player_id")["utilization_score"].transform(
-                            lambda x: x.shift(-1) if n_weeks == 1 else x.shift(-1).rolling(window=n_weeks, min_periods=1).mean()
+                        y_dict[n_weeks] = pos_data.groupby("player_id")["fantasy_points"].transform(
+                            lambda x: x.shift(-1) if n_weeks == 1 else x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
                         )
+                else:
+                    util_col = f"target_util_{n_weeks}w" if n_weeks > 1 else "target_util_1w"
+                    if util_col in pos_data.columns:
+                        y_dict[n_weeks] = pos_data[util_col]
+                    else:
+                        target_col = f"target_{n_weeks}w"
+                        if target_col in pos_data.columns:
+                            y_dict[n_weeks] = pos_data[target_col]
+                        else:
+                            y_dict[n_weeks] = pos_data.groupby("player_id")["utilization_score"].transform(
+                                lambda x: x.shift(-1) if n_weeks == 1 else x.shift(-1).rolling(window=n_weeks, min_periods=1).mean()
+                            )
             
             # Get feature columns - exclude non-numeric, metadata, and LEAK columns
             exclude_cols = [
@@ -508,11 +673,19 @@ class ModelTrainer:
             
             self.trained_models[position] = multi_model
             
-            # QB fallback: we trained single util model; persist choice
+            # QB fallback: if dual-path unavailable we train FP target model and persist choice
             if position == "QB":
                 qb_choice_path = MODELS_DIR / QB_TARGET_CHOICE_FILENAME
                 with open(qb_choice_path, "w") as f:
-                    json.dump({"qb_target": "util"}, f, indent=2)
+                    json.dump(
+                        {
+                            "qb_target": "fp",
+                            "selection_method": "fallback_no_qb_holdout",
+                            "reason": "Insufficient QB holdout rows for dual-target selection; using fantasy points for owner-facing objective.",
+                        },
+                        f,
+                        indent=2,
+                    )
             
             # Evaluate
             metrics = self._evaluate_model(multi_model, X, y_dict)
@@ -527,7 +700,8 @@ class ModelTrainer:
     def _train_qb_dual_and_pick(self, pos_data: pd.DataFrame, qb_test: pd.DataFrame,
                                  n_weeks_list: List[int], tune_hyperparameters: bool) -> Dict:
         """
-        Train two QB models (util and FP), compare R² on test, return winner and its metrics.
+        Train two QB models (util and FP), compare owner-centric FP metrics on test,
+        return winner and its metrics.
         Uses same feature matrix and exclude list for both; only target series change.
         """
         exclude_cols = [
@@ -593,15 +767,46 @@ class ModelTrainer:
         pred_util = multi_util.predict(qb_test, n_weeks=1)
         pred_fp = multi_fp.predict(qb_test, n_weeks=1)
         
-        y_util_test = qb_test["target_util_1w"].values
         y_fp_test = qb_test["target_1w"].values
-        valid_u = ~np.isnan(y_util_test) & np.isfinite(y_util_test)
         valid_f = ~np.isnan(y_fp_test) & np.isfinite(y_fp_test)
-        
-        r2_util = r2_score(y_util_test[valid_u], pred_util[valid_u]) if valid_u.sum() >= 5 else np.nan
+
+        # Convert QB util predictions to fantasy points for apples-to-apples owner objective.
+        qb_conv = UtilizationToFPConverter("QB")
+        conv_train_df = pd.DataFrame({
+            "utilization_score": y_dict_util[1].values,
+            "fantasy_points": y_dict_fp[1].values,
+        })
+        qb_conv.fit(conv_train_df, target_col="fantasy_points")
+        if qb_conv.is_fitted:
+            util_as_fp = qb_conv.predict(np.asarray(pred_util, dtype=float))
+        else:
+            # Conservative fallback mapping when converter cannot be fit.
+            util_as_fp = np.asarray(pred_util, dtype=float) * 0.25
+
+        rmse_util_as_fp = (
+            float(np.sqrt(mean_squared_error(y_fp_test[valid_f], util_as_fp[valid_f])))
+            if valid_f.sum() >= 5
+            else np.nan
+        )
+        rmse_fp = (
+            float(np.sqrt(mean_squared_error(y_fp_test[valid_f], pred_fp[valid_f])))
+            if valid_f.sum() >= 5
+            else np.nan
+        )
+        r2_util_as_fp = r2_score(y_fp_test[valid_f], util_as_fp[valid_f]) if valid_f.sum() >= 5 else np.nan
         r2_fp = r2_score(y_fp_test[valid_f], pred_fp[valid_f]) if valid_f.sum() >= 5 else np.nan
-        
-        if np.isfinite(r2_util) and np.isfinite(r2_fp) and r2_fp > r2_util:
+        mae_util_as_fp = (
+            float(mean_absolute_error(y_fp_test[valid_f], util_as_fp[valid_f]))
+            if valid_f.sum() >= 5
+            else np.nan
+        )
+        mae_fp = (
+            float(mean_absolute_error(y_fp_test[valid_f], pred_fp[valid_f]))
+            if valid_f.sum() >= 5
+            else np.nan
+        )
+
+        if np.isfinite(rmse_util_as_fp) and np.isfinite(rmse_fp) and rmse_fp <= rmse_util_as_fp:
             winner = multi_fp
             y_dict_winner = y_dict_fp
             qb_target = "fp"
@@ -609,6 +814,9 @@ class ModelTrainer:
             winner = multi_util
             y_dict_winner = y_dict_util
             qb_target = "util"
+            # Persist converter when util target wins so predictions remain fantasy-point native.
+            if qb_conv.is_fitted:
+                qb_conv.save()
         
         winner.save()
         if 1 in winner.models:
@@ -619,8 +827,12 @@ class ModelTrainer:
             "model": winner,
             "qb_target": qb_target,
             "metrics": metrics,
-            "r2_util": r2_util,
+            "r2_util": r2_util_as_fp,
             "r2_fp": r2_fp,
+            "rmse_util_as_fp": rmse_util_as_fp,
+            "rmse_fp": rmse_fp,
+            "mae_util_as_fp": mae_util_as_fp,
+            "mae_fp": mae_fp,
         }
     
     def _evaluate_model(self, model: MultiWeekModel, 

@@ -203,7 +203,7 @@ class ModelBacktester:
         def baseline_stats(baseline_name: str) -> Dict:
             v = valid.dropna(subset=[baseline_name])
             if len(v) < 10:
-                return {"rmse": None, "mae": None, "beat_by_20_pct": False}
+                return {"rmse": None, "mae": None, "beat_by_20_pct": False, "beat_by_25_pct": False}
             b_rmse = np.sqrt(mean_squared_error(v[actual_col], v[baseline_name]))
             b_mae = mean_absolute_error(v[actual_col], v[baseline_name])
             pct = (b_rmse - model_rmse) / b_rmse * 100 if b_rmse > 0 else 0
@@ -211,6 +211,7 @@ class ModelBacktester:
                 "rmse": round(b_rmse, 2),
                 "mae": round(b_mae, 2),
                 "beat_by_20_pct": pct >= 20.0,
+                "beat_by_25_pct": pct >= 25.0,
                 "improvement_pct": round(pct, 1),
             }
 
@@ -228,6 +229,25 @@ class ModelBacktester:
                 and season_avg.get("beat_by_20_pct", False)
                 and position_avg.get("beat_by_20_pct", False)
             ),
+            "model_beats_all_by_25_pct": (
+                persistence.get("beat_by_25_pct", False)
+                and season_avg.get("beat_by_25_pct", False)
+                and position_avg.get("beat_by_25_pct", False)
+            ),
+            "status": {
+                "pass_20pct_gate": (
+                    persistence.get("beat_by_20_pct", False)
+                    and season_avg.get("beat_by_20_pct", False)
+                    and position_avg.get("beat_by_20_pct", False)
+                ),
+                "pass_25pct_gate": (
+                    persistence.get("beat_by_25_pct", False)
+                    and season_avg.get("beat_by_25_pct", False)
+                    and position_avg.get("beat_by_25_pct", False)
+                ),
+                "primary_baseline": "season_avg",
+                "pass_primary_25pct_gate": season_avg.get("beat_by_25_pct", False),
+            },
         }
 
     def compare_to_expert_consensus(
@@ -246,33 +266,71 @@ class ModelBacktester:
             expert = pd.read_csv(expert_csv_path)
         except Exception as e:
             return {"error": f"Could not load expert CSV: {e}"}
+        if expert.empty:
+            return {"error": "Expert CSV is empty"}
         name_col = next((c for c in expert.columns if "name" in c.lower() or "player" in c.lower()), expert.columns[0])
         pts_col = next((c for c in expert.columns if "pts" in c.lower() or "points" in c.lower() or "proj" in c.lower()), None)
         if pts_col is None:
             return {"error": "Expert CSV must have a points/projection column"}
         expert = expert.rename(columns={name_col: "expert_name", pts_col: "expert_pts"})
+        required_df_cols = {player_key, actual_col, pred_col}
+        missing_df = sorted(c for c in required_df_cols if c not in df.columns)
+        if missing_df:
+            return {"error": f"Missing columns in predictions DataFrame: {missing_df}"}
         if player_key not in df.columns:
             return {"error": f"Player key {player_key} not in DataFrame"}
+        expert["expert_pts"] = pd.to_numeric(expert["expert_pts"], errors="coerce")
+        expert = expert.dropna(subset=["expert_name", "expert_pts"])
+        if expert.empty:
+            return {"error": "Expert CSV has no valid rows after parsing name/points columns"}
         df_key = df[player_key].astype(str).str.strip().str.upper()
         expert_key = expert["expert_name"].astype(str).str.strip().str.upper()
         expert = expert.assign(_key=expert_key)
         left = df.assign(_key=df_key)
         merged = left.merge(expert[["_key", "expert_pts"]], on="_key", how="inner").drop(columns=["_key"], errors="ignore")
+        merged = merged.dropna(subset=[actual_col, pred_col, "expert_pts"])
         if len(merged) < 10:
             return {"error": "Insufficient overlap between predictions and expert data"}
         model_rmse = np.sqrt(mean_squared_error(merged[actual_col], merged[pred_col]))
         expert_rmse = np.sqrt(mean_squared_error(merged[actual_col], merged["expert_pts"]))
+        beat_pct = round((expert_rmse - model_rmse) / expert_rmse * 100, 1) if expert_rmse > 0 else None
+
+        # Per-position expert comparison (requirements: QB/WR 8-12%, RB 10-15%, TE 12-18%)
+        by_position = {}
+        if "position" in merged.columns:
+            for pos in merged["position"].unique():
+                pos_df = merged[merged["position"] == pos]
+                if len(pos_df) < 5:
+                    continue
+                pos_model_rmse = np.sqrt(mean_squared_error(pos_df[actual_col], pos_df[pred_col]))
+                pos_expert_rmse = np.sqrt(mean_squared_error(pos_df[actual_col], pos_df["expert_pts"]))
+                pos_beat = round((pos_expert_rmse - pos_model_rmse) / pos_expert_rmse * 100, 1) if pos_expert_rmse > 0 else None
+                by_position[pos] = {
+                    "model_rmse": round(pos_model_rmse, 2),
+                    "expert_rmse": round(pos_expert_rmse, 2),
+                    "beat_pct": pos_beat,
+                    "n_matched": len(pos_df),
+                }
+
         return {
             "model_rmse": round(model_rmse, 2),
             "expert_rmse": round(expert_rmse, 2),
-            "model_vs_expert_pct": round((expert_rmse - model_rmse) / expert_rmse * 100, 1) if expert_rmse > 0 else None,
+            "model_vs_expert_pct": beat_pct,
             "n_matched": len(merged),
+            "by_position": by_position,
+            "status": {
+                "pass_5pct_gate": beat_pct is not None and beat_pct >= 5.0,
+                "pass_10pct_gate": beat_pct is not None and beat_pct >= 10.0,
+                "pass_15pct_gate": beat_pct is not None and beat_pct >= 15.0,
+            },
         }
 
     def calculate_confidence_intervals(self, df: pd.DataFrame,
                                         pred_col: str = 'predicted_points',
                                         actual_col: str = 'fantasy_points',
-                                        confidence: float = 0.8) -> pd.DataFrame:
+                                        confidence: float = 0.8,
+                                        lower_col: str = "ci_lower",
+                                        upper_col: str = "ci_upper") -> pd.DataFrame:
         """
         Add confidence intervals to predictions.
         
@@ -294,11 +352,11 @@ class ModelBacktester:
             lower_bound = pos_errors.quantile(lower_pct)
             upper_bound = pos_errors.quantile(upper_pct)
             
-            df.loc[pos_mask, 'ci_lower'] = df.loc[pos_mask, pred_col] + lower_bound
-            df.loc[pos_mask, 'ci_upper'] = df.loc[pos_mask, pred_col] + upper_bound
+            df.loc[pos_mask, lower_col] = df.loc[pos_mask, pred_col] + lower_bound
+            df.loc[pos_mask, upper_col] = df.loc[pos_mask, pred_col] + upper_bound
         
         # Ensure non-negative
-        df['ci_lower'] = df['ci_lower'].clip(lower=0)
+        df[lower_col] = df[lower_col].clip(lower=0)
         
         return df
     
@@ -434,12 +492,19 @@ class ModelBacktester:
         boom_bust = boom_bust_metrics(a, p, boom_thresh=20.0, bust_thresh=5.0)
         vor = vor_accuracy(a, p)
 
+        # MAE-to-RMSE ratio (requirement: MAE should be 20-25% lower than RMSE)
+        mae_rmse_ratio = round(mae / rmse, 3) if rmse > 0 else None
+        # Target: ratio ~0.75-0.80 means MAE is 20-25% lower than RMSE
+        mae_rmse_healthy = mae_rmse_ratio is not None and 0.70 <= mae_rmse_ratio <= 0.85
+
         return {
             "rmse": round(rmse, 2),
             "mae": round(mae, 2),
             "r2": round(r2, 3),
             "correlation": round(correlation, 3),
-            "mape": round(mape, 1) if mape else None,
+            "mape": round(mape, 1) if mape is not None else None,
+            "mae_rmse_ratio": mae_rmse_ratio,
+            "mae_rmse_healthy": mae_rmse_healthy,
             "directional_accuracy_pct": round(directional_correct, 1),
             "within_3_pts_pct": round(within_3, 1),
             "within_5_pts_pct": round(within_5, 1),
@@ -561,6 +626,9 @@ class ModelBacktester:
         lines.append(f"  Correlation:           {m['correlation']:.3f}")
         lines.append(f"  RMSE:                  {m['rmse']:.2f} points")
         lines.append(f"  MAE:                   {m['mae']:.2f} points")
+        if m.get("mae_rmse_ratio") is not None:
+            ratio_status = "OK" if m.get("mae_rmse_healthy") else "WARN"
+            lines.append(f"  MAE/RMSE ratio:        {m['mae_rmse_ratio']:.3f}  (target 0.75-0.80, {ratio_status})")
         if m.get("mape") is not None:
             lines.append(f"  MAPE:                  {m['mape']:.1f}%")
         lines.append(f"  Directional Accuracy:  {m['directional_accuracy_pct']:.1f}%")
@@ -668,6 +736,7 @@ class ModelBacktester:
             lines.append(f"  MAPE < 25%:                 {'PASS' if sc.get('mape_lt_25') else 'FAIL'}  (actual: {sc.get('mape')}%)")
             lines.append(f"  Tier accuracy ≥ 75%:        {'PASS' if sc.get('tier_accuracy_ge_075') else 'FAIL'}  (actual: {sc.get('tier_accuracy')})")
             lines.append(f"  Beat all baselines >20%:    {'PASS' if sc.get('beat_all_baselines_by_20_pct') else 'FAIL'}")
+            lines.append(f"  Beat all baselines >25%:    {'PASS' if sc.get('beat_all_baselines_by_25_pct') else 'FAIL'}")
             lines.append(f"  Beat primary baseline >25%: {'PASS' if sc.get('beat_primary_baseline_by_25_pct') else 'FAIL'}")
             lines.append(f"  Season stability (no >20%): {'PASS' if sc.get('season_stability_ok') else 'FAIL'}  (max weekly RMSE: {sc.get('max_weekly_rmse')}, avg: {sc.get('avg_weekly_rmse')})")
             lines.append(f"  CI coverage ≥ 88.2% (10pt): {'PASS' if sc.get('confidence_band_target_882') else 'FAIL'}  (actual: {sc.get('confidence_band_coverage_10pt')}%)")
@@ -1013,6 +1082,7 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     from src.models.train import (
         load_training_data,
         add_engineered_features,
+        add_advanced_features,
     )
     from src.features.utilization_score import (
         recalculate_utilization_with_weights,
@@ -1071,10 +1141,10 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
         test_data = add_external_features(test_data, seasons=list(test_data["season"].unique()))
     except Exception:
         pass
-    test_data = add_engineered_features(test_data)
+    test_data = add_advanced_features(add_engineered_features(test_data))
     
     # Create target columns for alignment with model expectations
-    for n_weeks in [1, 4, 12]:
+    for n_weeks in [1, 4, 18]:
         test_data[f"target_{n_weeks}w"] = test_data.groupby("player_id")["fantasy_points"].transform(
             lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
         )
@@ -1093,6 +1163,22 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     
     # Run backtest
     backtester = ModelBacktester()
+    test_data = backtester.calculate_confidence_intervals(
+        test_data,
+        pred_col="predicted_points",
+        actual_col="fantasy_points",
+        confidence=0.80,
+        lower_col="prediction_ci80_lower",
+        upper_col="prediction_ci80_upper",
+    )
+    test_data = backtester.calculate_confidence_intervals(
+        test_data,
+        pred_col="predicted_points",
+        actual_col="fantasy_points",
+        confidence=0.95,
+        lower_col="prediction_ci95_lower",
+        upper_col="prediction_ci95_upper",
+    )
     results = backtester.backtest_season(
         predictions=test_data,
         actuals=test_data,
@@ -1127,6 +1213,13 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     results["train_seasons"] = train_seasons
     results["test_season"] = actual_test_season
     results["model_source"] = "production_ensemble" if predictor.is_loaded else "baseline"
+    try:
+        metadata_path = MODELS_DIR / "model_metadata.json"
+        if metadata_path.exists():
+            with open(metadata_path, encoding="utf-8") as f:
+                results["model_metadata"] = json.load(f)
+    except Exception:
+        pass
     if predictor.is_loaded:
         try:
             fc = {}
@@ -1159,6 +1252,19 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     if "error" not in multi_baseline:
         results["multiple_baseline_comparison"] = multi_baseline
 
+    # Expert consensus benchmark when a CSV is available in data/.
+    expert_csv = DATA_DIR / "expert_consensus.csv"
+    if expert_csv.exists():
+        expert_comp = backtester.compare_to_expert_consensus(
+            test_data,
+            expert_csv_path=str(expert_csv),
+            actual_col="fantasy_points",
+            pred_col="predicted_points",
+            player_key="name",
+        )
+        if "error" not in expert_comp:
+            results["expert_comparison"] = expert_comp
+
     # Success criteria (requirements Section VII - comprehensive)
     m = results.get("metrics", {})
     spearman_rho = m.get("spearman_rho")
@@ -1173,8 +1279,15 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     max_weekly_rmse = max(weekly_rmse) if weekly_rmse else 0
     stability_ok = (max_weekly_rmse <= avg_weekly_rmse * 1.20) if avg_weekly_rmse > 0 else True
 
-    # Confidence interval calibration: % of predictions within 10-point band
-    ci_coverage = within_10  # within_10_pts_pct serves as the CI band coverage metric
+    # Confidence interval calibration: % of actuals covered by calibrated 80% interval.
+    ci_mask = test_data[["fantasy_points", "prediction_ci80_lower", "prediction_ci80_upper"]].dropna()
+    if len(ci_mask) > 0:
+        ci_coverage = float(
+            ((ci_mask["fantasy_points"] >= ci_mask["prediction_ci80_lower"])
+             & (ci_mask["fantasy_points"] <= ci_mask["prediction_ci80_upper"])).mean() * 100
+        )
+    else:
+        ci_coverage = within_10
 
     results["success_criteria"] = {
         "spearman_gt_065": spearman_rho is not None and spearman_rho > 0.65,
@@ -1188,6 +1301,7 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
         "tier_accuracy_ge_075": tier_acc is not None and tier_acc >= 0.75,
         "tier_accuracy": tier_acc,
         "beat_all_baselines_by_20_pct": results.get("multiple_baseline_comparison", {}).get("model_beats_all_by_20_pct", False),
+        "beat_all_baselines_by_25_pct": results.get("multiple_baseline_comparison", {}).get("model_beats_all_by_25_pct", False),
         "beat_primary_baseline_by_25_pct": (
             baseline_comp.get("improvement", {}).get("rmse_pct") >= 25.0
             if "error" not in baseline_comp else False
@@ -1198,6 +1312,7 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
         "confidence_band_coverage_10pt": ci_coverage,
         "confidence_band_target_882": ci_coverage is not None and ci_coverage >= 88.2,
     }
+    results["confidence_band_coverage_10pt"] = ci_coverage
 
     # Generate report
     report = backtester.generate_report(results)
@@ -1354,7 +1469,9 @@ def check_success_criteria(backtest_results: Dict) -> Dict:
     # --- Accuracy thresholds ---
     spearman = m.get("spearman_rho")
     sc["spearman_rho"] = spearman
-    sc["spearman_gt_065"] = (spearman is not None and spearman > 0.65)
+    sc["spearman_gt_065"] = (
+        spearman is not None and spearman > float(SUCCESS_CRITERIA.get("spearman_rho_min", 0.65))
+    )
     
     mape = m.get("mape")
     sc["mape"] = mape
@@ -1362,27 +1479,76 @@ def check_success_criteria(backtest_results: Dict) -> Dict:
     
     within_7 = m.get("within_7_pts_pct", 0)
     sc["within_7_pts_pct"] = within_7
-    sc["within_7_pts_pct_ge_70"] = within_7 >= 70.0
+    sc["within_7_pts_pct_ge_70"] = within_7 >= float(SUCCESS_CRITERIA.get("within_7_pts_pct_min", 70.0))
     
     within_10 = m.get("within_10_pts_pct", 0)
     sc["within_10_pts_pct"] = within_10
-    sc["within_10_pts_pct_ge_80"] = within_10 >= 80.0
+    sc["within_10_pts_pct_ge_80"] = within_10 >= float(SUCCESS_CRITERIA.get("within_10_pts_pct_min", 80.0))
     
     # --- Reliability thresholds ---
     tier_acc = m.get("tier_classification_accuracy")
     sc["tier_accuracy"] = tier_acc
-    sc["tier_accuracy_ge_075"] = (tier_acc is not None and tier_acc >= 0.75)
+    sc["tier_accuracy_ge_075"] = (
+        tier_acc is not None and tier_acc >= float(SUCCESS_CRITERIA.get("tier_accuracy_min", 0.75))
+    )
     
-    # Baseline comparison
+    # Baseline comparison (requirements: beat all baselines by >20%, primary by >25%)
     if isinstance(mbc, dict) and "error" not in mbc:
         sc["beat_all_baselines_by_20_pct"] = mbc.get("model_beats_all_by_20_pct", False)
+        sc["beat_all_baselines_by_25_pct"] = mbc.get("model_beats_all_by_25_pct", False)
         primary = mbc.get("baseline_season_avg", {})
         sc["beat_primary_baseline_by_25_pct"] = (
             primary.get("improvement_pct", 0) >= 25.0
         )
     else:
         sc["beat_all_baselines_by_20_pct"] = None
+        sc["beat_all_baselines_by_25_pct"] = None
         sc["beat_primary_baseline_by_25_pct"] = None
+    
+    # --- Position-specific benchmark checks (per requirements) ---
+    by_position = backtest_results.get("by_position", {})
+    horizon = backtest_results.get("horizon", "1w")
+    try:
+        from config.settings import (
+            RMSE_TARGETS_1W, RMSE_TARGETS_4W, RMSE_TARGETS_18W,
+            R2_TARGETS, MAPE_TARGETS,
+        )
+        if horizon == "4w":
+            rmse_targets = RMSE_TARGETS_4W
+        elif horizon == "18w":
+            rmse_targets = RMSE_TARGETS_18W
+        else:
+            rmse_targets = RMSE_TARGETS_1W
+        r2_target = R2_TARGETS.get(horizon, 0.50)
+        mape_target = MAPE_TARGETS.get(horizon, 25.0)
+    except ImportError:
+        rmse_targets = {}
+        r2_target = 0.50
+        mape_target = 25.0
+    
+    pos_benchmarks = {}
+    for pos, pm in by_position.items():
+        pb = {}
+        tgt = rmse_targets.get(pos)
+        if tgt is not None:
+            pb["rmse_target"] = tgt
+            pb["rmse_actual"] = pm.get("rmse")
+            pb["rmse_pass"] = pm.get("rmse") is not None and pm["rmse"] <= tgt
+        pb["r2_target"] = r2_target
+        pb["r2_actual"] = pm.get("r2")
+        pb["r2_pass"] = pm.get("r2") is not None and pm["r2"] >= r2_target
+        pos_mape = pm.get("mape")
+        pb["mape_target"] = mape_target
+        pb["mape_actual"] = pos_mape
+        pb["mape_pass"] = pos_mape is not None and pos_mape < mape_target
+        pos_benchmarks[pos] = pb
+    sc["position_benchmarks"] = pos_benchmarks
+    sc["all_positions_meet_rmse"] = all(
+        pb.get("rmse_pass", True) for pb in pos_benchmarks.values()
+    )
+    sc["all_positions_meet_r2"] = all(
+        pb.get("r2_pass", True) for pb in pos_benchmarks.values()
+    )
     
     # Season stability: no weekly RMSE should exceed avg by >20%
     if by_week:
@@ -1401,10 +1567,104 @@ def check_success_criteria(backtest_results: Dict) -> Dict:
         sc["season_stability_ok"] = None
     
     # --- Business thresholds ---
-    # CI coverage: % of predictions within 10 points as proxy for confidence band
-    sc["confidence_band_coverage_10pt"] = within_10
-    sc["confidence_band_target_882"] = within_10 >= 88.2
+    # CI coverage: prefer calibrated interval coverage when available, else fallback to within-10 proxy.
+    ci_cov = backtest_results.get("confidence_band_coverage_10pt", within_10)
+    sc["confidence_band_coverage_10pt"] = ci_cov
+    sc["confidence_band_target_882"] = (
+        ci_cov is not None and ci_cov >= float(SUCCESS_CRITERIA.get("confidence_band_coverage", 88.2))
+    )
+
+    # CI calibration check: evaluate whether predicted intervals are well-calibrated
+    # across multiple nominal levels (50%, 80%, 90%, 95%)
+    ci_cal = backtest_results.get("ci_calibration")
+    if ci_cal is None:
+        # Attempt to compute from raw backtest data if prediction_std is available
+        raw_df = backtest_results.get("_raw_predictions_df")
+        if raw_df is not None and isinstance(raw_df, pd.DataFrame):
+            pred_col = "predicted_points"
+            actual_col = "actual_for_backtest"
+            std_col = "prediction_std"
+            if all(c in raw_df.columns for c in [pred_col, actual_col, std_col]):
+                from src.evaluation.metrics import confidence_interval_calibration
+                ci_cal = confidence_interval_calibration(
+                    raw_df[actual_col].values,
+                    raw_df[pred_col].values,
+                    raw_df[std_col].values,
+                )
+    if ci_cal is not None and isinstance(ci_cal, dict) and "is_calibrated" in ci_cal:
+        sc["ci_calibration"] = ci_cal
+        sc["ci_is_calibrated"] = ci_cal.get("is_calibrated")
+        sc["ci_mean_calibration_error"] = ci_cal.get("mean_calibration_error")
+        sc["ci_max_calibration_error"] = ci_cal.get("max_calibration_error")
     
+    # Expert consensus comparison (when available in results)
+    # Overall check plus per-position targets (QB/WR 8-12%, RB 10-15%, TE 12-18%)
+    expert_comp = backtest_results.get("expert_comparison")
+    if isinstance(expert_comp, dict) and "model_vs_expert_pct" in expert_comp:
+        beat_pct = expert_comp["model_vs_expert_pct"]
+        sc["beat_expert_pct"] = beat_pct
+        sc["beat_expert_by_5_pct"] = beat_pct is not None and beat_pct >= 5.0
+        sc["beat_expert_by_15_pct"] = beat_pct is not None and beat_pct >= 15.0
+
+        # Per-position expert consensus targets from requirements
+        expert_by_pos = expert_comp.get("by_position", {})
+        pos_expert_results = {}
+        pos_expert_target_keys = {
+            "QB": "beat_expert_pct_qb",
+            "RB": "beat_expert_pct_rb",
+            "WR": "beat_expert_pct_wr",
+            "TE": "beat_expert_pct_te",
+        }
+        all_pos_expert_pass = True
+        any_pos_evaluated = False
+        for pos, target_key in pos_expert_target_keys.items():
+            target_pct = float(SUCCESS_CRITERIA.get(target_key, 10.0))
+            pos_data = expert_by_pos.get(pos, {})
+            pos_beat = pos_data.get("beat_pct")
+            passed = pos_beat is not None and pos_beat >= target_pct
+            pos_expert_results[pos] = {
+                "beat_pct": pos_beat,
+                "target_pct": target_pct,
+                "pass": passed if pos_beat is not None else None,
+                "n_matched": pos_data.get("n_matched", 0),
+            }
+            if pos_beat is not None:
+                any_pos_evaluated = True
+                if not passed:
+                    all_pos_expert_pass = False
+        sc["expert_by_position"] = pos_expert_results
+        sc["all_positions_beat_expert"] = all_pos_expert_pass if any_pos_evaluated else None
+    
+    # MAE-to-RMSE ratio health
+    mae_ratio = m.get("mae_rmse_ratio")
+    sc["mae_rmse_ratio"] = mae_ratio
+    sc["mae_rmse_healthy"] = m.get("mae_rmse_healthy", False)
+    
+    # Prediction distribution monitoring (detect degenerate predictions)
+    sc["pred_std"] = m.get("std_predicted")
+    sc["actual_std"] = m.get("std_actual")
+    if m.get("std_predicted") is not None and m.get("std_actual") is not None and m["std_actual"] > 0:
+        variance_ratio = m["std_predicted"] / m["std_actual"]
+        sc["prediction_variance_ratio"] = round(variance_ratio, 3)
+        # Healthy range: 0.5-1.2; too low = predictions are too clustered
+        sc["prediction_variance_ok"] = 0.4 <= variance_ratio <= 1.3
+    
+    # Prediction speed (requirement: < 5s per player)
+    pred_speed = backtest_results.get("prediction_per_player_s")
+    if pred_speed is not None:
+        from config.settings import MAX_PREDICTION_TIME_PER_PLAYER_SECONDS
+        sc["prediction_per_player_s"] = pred_speed
+        sc["prediction_speed_ok"] = pred_speed <= MAX_PREDICTION_TIME_PER_PLAYER_SECONDS
+    else:
+        sc["prediction_speed_ok"] = None
+
+    # Boom/bust F1 scores (class-imbalance-aware metric)
+    boom_bust = m.get("boom_bust", {})
+    sc["boom_f1"] = boom_bust.get("boom_f1")
+    sc["bust_f1"] = boom_bust.get("bust_f1")
+    sc["boom_prevalence"] = boom_bust.get("boom_prevalence")
+    sc["bust_prevalence"] = boom_bust.get("bust_prevalence")
+
     # Overall pass/fail
     accuracy_checks = [
         sc.get("spearman_gt_065"),
@@ -1415,6 +1675,7 @@ def check_success_criteria(backtest_results: Dict) -> Dict:
     reliability_checks = [
         sc.get("tier_accuracy_ge_075"),
         sc.get("season_stability_ok"),
+        sc.get("beat_all_baselines_by_25_pct"),
     ]
     
     sc["accuracy_passed"] = sum(1 for c in accuracy_checks if c is True)
@@ -1445,16 +1706,86 @@ def print_success_criteria_report(sc: Dict) -> str:
         f"  Tier accuracy ≥ 75%:   {'PASS' if sc.get('tier_accuracy_ge_075') else 'FAIL'}  (actual: {sc.get('tier_accuracy')})",
         f"  Season stability:      {'PASS' if sc.get('season_stability_ok') else 'FAIL'}  (max degradation: {sc.get('max_degradation_pct', 'N/A')}%)",
         f"  Beat baselines >20%:   {'PASS' if sc.get('beat_all_baselines_by_20_pct') else 'FAIL'}",
+        f"  Beat baselines >25%:   {'PASS' if sc.get('beat_all_baselines_by_25_pct') else 'FAIL'}",
         f"  Beat primary >25%:     {'PASS' if sc.get('beat_primary_baseline_by_25_pct') else 'FAIL'}",
         "",
         "BUSINESS THRESHOLDS:",
         f"  CI coverage ≥ 88.2%:   {'PASS' if sc.get('confidence_band_target_882') else 'FAIL'}  (actual: {sc.get('confidence_band_coverage_10pt')}%)",
+        f"  Pred speed < 5s/player: {'PASS' if sc.get('prediction_speed_ok') else 'FAIL' if sc.get('prediction_speed_ok') is not None else 'N/A'}  (actual: {sc.get('prediction_per_player_s', 'N/A')}s)",
         "",
+    ]
+    # Boom/bust F1 (class-imbalance-aware)
+    if sc.get("boom_f1") is not None or sc.get("bust_f1") is not None:
+        lines.append("BOOM/BUST DETECTION (class-imbalance-aware):")
+        if sc.get("boom_f1") is not None:
+            lines.append(f"  Boom F1:               {sc['boom_f1']:.3f}  (prevalence: {sc.get('boom_prevalence', 0):.1%})")
+        if sc.get("bust_f1") is not None:
+            lines.append(f"  Bust F1:               {sc['bust_f1']:.3f}  (prevalence: {sc.get('bust_prevalence', 0):.1%})")
+        lines.append("")
+    # Expert consensus (when available)
+    if sc.get("beat_expert_pct") is not None:
+        lines.append("EXPERT CONSENSUS:")
+        lines.append(f"  Overall beat ≥ 5%:     {'PASS' if sc.get('beat_expert_by_5_pct') else 'FAIL'}  (actual: {sc.get('beat_expert_pct')}%)")
+        lines.append(f"  Overall beat ≥ 15%:    {'PASS' if sc.get('beat_expert_by_15_pct') else 'FAIL'}  (actual: {sc.get('beat_expert_pct')}%)")
+        # Per-position expert targets (QB/WR 8-12%, RB 10-15%, TE 12-18%)
+        expert_by_pos = sc.get("expert_by_position", {})
+        if expert_by_pos:
+            for pos in ["QB", "RB", "WR", "TE"]:
+                pe = expert_by_pos.get(pos, {})
+                pos_beat = pe.get("beat_pct")
+                target = pe.get("target_pct")
+                passed = pe.get("pass")
+                if pos_beat is not None:
+                    status = "PASS" if passed else "FAIL"
+                    lines.append(f"  {pos} beat ≥ {target}%:{' ' * (8 - len(pos))}{status}  (actual: {pos_beat}%, n={pe.get('n_matched', 0)})")
+                else:
+                    lines.append(f"  {pos} beat ≥ {target}%:{' ' * (8 - len(pos))}N/A   (insufficient data)")
+            all_pass = sc.get("all_positions_beat_expert")
+            if all_pass is not None:
+                lines.append(f"  All positions beat expert: {'YES' if all_pass else 'NO'}")
+        lines.append("")
+    # Model health diagnostics
+    # CI calibration (when available)
+    ci_cal = sc.get("ci_calibration")
+    if ci_cal and isinstance(ci_cal, dict) and ci_cal.get("levels"):
+        lines.append("CI CALIBRATION (predicted intervals vs actual coverage):")
+        for lvl in ci_cal["levels"]:
+            nom_pct = int(lvl["nominal"] * 100)
+            act_pct = lvl["actual_coverage"] * 100
+            err_pct = lvl["calibration_error"] * 100
+            status = "PASS" if lvl.get("pass") else "FAIL"
+            lines.append(f"  {nom_pct}% CI: actual={act_pct:.1f}%, error={err_pct:.1f}pp, width={lvl['mean_interval_width']}  {status}")
+        cal_status = "CALIBRATED" if sc.get("ci_is_calibrated") else "MISCALIBRATED"
+        lines.append(f"  Overall: {cal_status} (mean error={sc.get('ci_mean_calibration_error')}, max={sc.get('ci_max_calibration_error')})")
+        lines.append("")
+    lines.append("MODEL HEALTH:")
+    if sc.get("mae_rmse_ratio") is not None:
+        lines.append(f"  MAE/RMSE ratio:        {'OK' if sc.get('mae_rmse_healthy') else 'WARN'}  (actual: {sc.get('mae_rmse_ratio')}, target: 0.75-0.80)")
+    if sc.get("prediction_variance_ratio") is not None:
+        lines.append(f"  Pred variance ratio:   {'OK' if sc.get('prediction_variance_ok') else 'WARN'}  (actual: {sc.get('prediction_variance_ratio')}, target: 0.5-1.2)")
+    lines.append("")
+    # Position-specific benchmark results
+    pos_benchmarks = sc.get("position_benchmarks", {})
+    if pos_benchmarks:
+        lines.append("POSITION-SPECIFIC BENCHMARKS:")
+        for pos, pb in sorted(pos_benchmarks.items()):
+            rmse_str = ""
+            if "rmse_target" in pb:
+                rmse_str = f"RMSE={'PASS' if pb.get('rmse_pass') else 'FAIL'} ({pb.get('rmse_actual')} vs ≤{pb.get('rmse_target')})  "
+            r2_str = f"R²={'PASS' if pb.get('r2_pass') else 'FAIL'} ({pb.get('r2_actual')} vs ≥{pb.get('r2_target')})"
+            mape_str = ""
+            if pb.get("mape_actual") is not None:
+                mape_str = f"  MAPE={'PASS' if pb.get('mape_pass') else 'FAIL'} ({pb.get('mape_actual')}% vs <{pb.get('mape_target')}%)"
+            lines.append(f"  {pos}: {rmse_str}{r2_str}{mape_str}")
+        lines.append(f"  All positions meet RMSE: {'YES' if sc.get('all_positions_meet_rmse') else 'NO'}")
+        lines.append(f"  All positions meet R²:   {'YES' if sc.get('all_positions_meet_r2') else 'NO'}")
+        lines.append("")
+    lines.extend([
         f"OVERALL: {sc.get('accuracy_passed', 0)}/{sc.get('accuracy_total', 0)} accuracy, "
         f"{sc.get('reliability_passed', 0)}/{sc.get('reliability_total', 0)} reliability",
         f"ALL CRITERIA MET: {'YES' if sc.get('all_criteria_met') else 'NO'}",
         "=" * 60,
-    ]
+    ])
     report = "\n".join(lines)
     print(report)
     return report

@@ -11,6 +11,7 @@ from config.settings import POSITIONS, SEASONS_TO_SCRAPE
 from src.scrapers.run_scrapers import run_all_scrapers
 from src.models.train import train_models
 from src.predict import NFLPredictor
+from src.evaluation.backtester import ModelBacktester
 
 
 class NFLPredictionPipeline:
@@ -130,6 +131,56 @@ class NFLPredictionPipeline:
             if not pos_rankings.empty:
                 print(pos_rankings.to_string(index=False))
 
+    def run_evaluation(self, positions: List[str] = None, n_seasons: int = 3):
+        """
+        Run backtesting and evaluation on the trained models.
+        
+        Generates a comprehensive metrics report including:
+        - RMSE, MAE, R2, MAPE per position
+        - Fantasy-specific metrics (Spearman, tier accuracy, boom/bust, VOR)
+        - Position benchmark checks
+        - Naive baseline comparison
+        - Success criteria verification
+        
+        Args:
+            positions: Positions to evaluate (default: all).
+            n_seasons: Number of most recent seasons to backtest.
+        """
+        positions = positions or POSITIONS
+        
+        print("=" * 70)
+        print("MODEL EVALUATION & BACKTESTING")
+        print("=" * 70)
+        
+        try:
+            backtester = ModelBacktester()
+            results = backtester.run_multi_season_backtest(n_seasons=n_seasons)
+            
+            if results:
+                print("\n--- Backtest Results ---")
+                for key, value in results.items():
+                    if isinstance(value, dict):
+                        print(f"\n  {key}:")
+                        for k2, v2 in value.items():
+                            print(f"    {k2}: {v2}")
+                    else:
+                        print(f"  {key}: {value}")
+                
+                # Check success criteria
+                if hasattr(backtester, 'check_success_criteria'):
+                    print("\n--- Success Criteria ---")
+                    criteria = backtester.check_success_criteria(results)
+                    for criterion, passed in criteria.items():
+                        status = "PASS" if passed else "FAIL"
+                        print(f"  [{status}] {criterion}")
+            else:
+                print("  No backtest results generated (models may not be trained yet)")
+                
+        except Exception as e:
+            print(f"  Evaluation failed: {e}")
+            import traceback
+            traceback.print_exc()
+
 
 def main():
     """Main CLI for pipeline."""
@@ -143,6 +194,7 @@ Commands:
   scrape    Only run data scrapers
   train     Only train models
   predict   Only make predictions
+  evaluate  Run backtesting and evaluation on trained models
 
 Examples:
   # Run full pipeline
@@ -153,12 +205,15 @@ Examples:
 
   # Train models only
   python -m src.pipeline train --positions QB RB --no-tune
+
+  # Evaluate models with 3-season backtest
+  python -m src.pipeline evaluate --backtest-seasons 3
         """
     )
     
     parser.add_argument(
         "command",
-        choices=["full", "refresh", "scrape", "train", "predict"],
+        choices=["full", "refresh", "scrape", "train", "predict", "evaluate"],
         help="Pipeline command to run"
     )
     
@@ -187,6 +242,13 @@ Examples:
         "--no-tune",
         action="store_true",
         help="Skip hyperparameter tuning"
+    )
+    
+    parser.add_argument(
+        "--backtest-seasons",
+        type=int,
+        default=3,
+        help="Number of seasons to backtest (default: 3)"
     )
     
     args = parser.parse_args()
@@ -235,6 +297,12 @@ Examples:
             print(f"\n--- Overall Rankings ({args.weeks} weeks) ---")
             results = predictor.predict(n_weeks=args.weeks, top_n=50)
             print(results.to_string(index=False))
+    
+    elif args.command == "evaluate":
+        pipeline.run_evaluation(
+            positions=args.positions,
+            n_seasons=args.backtest_seasons
+        )
 
 
 if __name__ == "__main__":

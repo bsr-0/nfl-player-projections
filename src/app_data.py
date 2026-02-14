@@ -87,6 +87,38 @@ def load_backtest_results() -> List[Dict[str, Any]]:
     return out
 
 
+def load_ts_backtest_results() -> List[Dict[str, Any]]:
+    """Load all ts_backtest_*.json files from data/backtest_results/ (newest first)."""
+    dir_path = _data_dir() / "backtest_results"
+    if not dir_path.exists():
+        return []
+    files = sorted(dir_path.glob("ts_backtest_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    out = []
+    for p in files:
+        try:
+            import json
+            with open(p) as f:
+                out.append(json.load(f))
+        except Exception:
+            continue
+    return out
+
+
+def load_ts_backtest_predictions(season: int = None) -> Optional["pd.DataFrame"]:
+    """Load the latest ts_backtest predictions CSV for a given season."""
+    dir_path = _data_dir() / "backtest_results"
+    if not dir_path.exists():
+        return None
+    pattern = f"ts_backtest_{season}_*_predictions.csv" if season else "ts_backtest_*_predictions.csv"
+    files = sorted(dir_path.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        return None
+    try:
+        return pd.read_csv(files[0])
+    except Exception:
+        return None
+
+
 def load_utilization_weights_from_file() -> Optional[Dict[str, Any]]:
     """Load data/models/utilization_weights.json if present."""
     path = _models_dir() / "utilization_weights.json"

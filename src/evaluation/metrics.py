@@ -2,7 +2,6 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
-from scipy.stats import spearmanr
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.metrics import (
     mean_squared_error, mean_absolute_error, r2_score,
@@ -16,6 +15,26 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import MODEL_CONFIG, POSITIONS
 
 
+def _safe_spearman(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """
+    Compute Spearman correlation without SciPy dependency.
+    Returns NaN for insufficient/degenerate inputs.
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    mask = np.isfinite(y_true) & np.isfinite(y_pred)
+    if mask.sum() < 2:
+        return np.nan
+    y_true = y_true[mask]
+    y_pred = y_pred[mask]
+    true_rank = pd.Series(y_true).rank(method="average").to_numpy(dtype=float)
+    pred_rank = pd.Series(y_pred).rank(method="average").to_numpy(dtype=float)
+    if np.std(true_rank) == 0 or np.std(pred_rank) == 0:
+        return np.nan
+    corr = np.corrcoef(true_rank, pred_rank)[0, 1]
+    return float(corr) if np.isfinite(corr) else np.nan
+
+
 def spearman_rank_correlation(
     y_true: np.ndarray, y_pred: np.ndarray, top_n: Optional[int] = 50
 ) -> float:
@@ -25,8 +44,7 @@ def spearman_rank_correlation(
     if top_n is not None and len(y_true) > top_n:
         idx = np.argsort(y_pred)[-top_n:]
         y_true, y_pred = y_true[idx], y_pred[idx]
-    r, _ = spearmanr(y_true, y_pred)
-    return float(r) if np.isfinite(r) else np.nan
+    return _safe_spearman(y_true, y_pred)
 
 
 def tier_classification_accuracy(
@@ -55,18 +73,31 @@ def boom_bust_metrics(
     y_true: np.ndarray, y_pred: np.ndarray,
     boom_thresh: float = 20.0, bust_thresh: float = 5.0,
 ) -> Dict[str, float]:
-    """Precision/recall for 20+ point weeks (boom) and <5 point weeks (bust)."""
+    """Precision/recall/F1 for 20+ point weeks (boom) and <5 point weeks (bust).
+    
+    Includes class prevalence rates for context on class imbalance.
+    F1 score provides a balanced metric when boom/bust classes are imbalanced
+    (booms are typically ~15-20% of weeks, busts ~25-30%).
+    """
     boom_true = (y_true >= boom_thresh).astype(int)
     bust_true = (y_true < bust_thresh).astype(int)
     boom_pred = (y_pred >= boom_thresh).astype(int)
     bust_pred = (y_pred < bust_thresh).astype(int)
     out = {}
+    n = len(y_true)
+    # Class prevalence (for understanding imbalance)
+    out["boom_prevalence"] = float(boom_true.mean()) if n > 0 else 0.0
+    out["bust_prevalence"] = float(bust_true.mean()) if n > 0 else 0.0
     if boom_true.sum() > 0:
         out["boom_precision"] = float(precision_score(boom_true, boom_pred, zero_division=0))
         out["boom_recall"] = float(recall_score(boom_true, boom_pred, zero_division=0))
+        p, r = out["boom_precision"], out["boom_recall"]
+        out["boom_f1"] = float(2 * p * r / (p + r)) if (p + r) > 0 else 0.0
     if bust_true.sum() > 0:
         out["bust_precision"] = float(precision_score(bust_true, bust_pred, zero_division=0))
         out["bust_recall"] = float(recall_score(bust_true, bust_pred, zero_division=0))
+        p, r = out["bust_precision"], out["bust_recall"]
+        out["bust_f1"] = float(2 * p * r / (p + r)) if (p + r) > 0 else 0.0
     return out
 
 
@@ -87,8 +118,93 @@ def vor_accuracy(
         vor_pred = y_pred - rep
     if len(vor_true) < 2:
         return np.nan
-    r, _ = spearmanr(vor_true, vor_pred)
-    return float(r) if np.isfinite(r) else np.nan
+    return _safe_spearman(vor_true, vor_pred)
+
+
+def confidence_interval_calibration(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    pred_std: np.ndarray,
+    nominal_levels: Optional[List[float]] = None,
+) -> Dict:
+    """
+    Evaluate confidence interval calibration across multiple nominal coverage levels.
+
+    A well-calibrated model's predicted intervals should contain the actual value
+    at approximately the stated confidence level. For example, an 80% CI should
+    contain ~80% of actuals.
+
+    Args:
+        y_true: Actual observed values.
+        y_pred: Point predictions (interval centers).
+        pred_std: Predicted standard deviations (used to construct intervals).
+        nominal_levels: Coverage levels to evaluate (default: [0.50, 0.80, 0.90, 0.95]).
+
+    Returns:
+        Dict with per-level actual coverage, calibration error, and overall assessment.
+        Keys: 'levels' (list of per-level dicts), 'mean_calibration_error',
+              'max_calibration_error', 'is_calibrated' (max error < 10pp).
+    """
+    if nominal_levels is None:
+        nominal_levels = [0.50, 0.80, 0.90, 0.95]
+
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    pred_std = np.asarray(pred_std, dtype=float)
+
+    # Filter to valid rows (finite values, positive std)
+    valid = np.isfinite(y_true) & np.isfinite(y_pred) & np.isfinite(pred_std) & (pred_std > 0)
+    if valid.sum() < 20:
+        return {
+            "levels": [],
+            "mean_calibration_error": None,
+            "max_calibration_error": None,
+            "is_calibrated": None,
+            "n_valid": int(valid.sum()),
+            "error": "Insufficient valid samples for calibration check (need >= 20)",
+        }
+
+    y_t = y_true[valid]
+    y_p = y_pred[valid]
+    std = pred_std[valid]
+    n = len(y_t)
+
+    # z-scores for each nominal level (two-tailed)
+    from scipy.stats import norm as _norm
+
+    levels_result = []
+    calibration_errors = []
+
+    for nominal in nominal_levels:
+        z = _norm.ppf(0.5 + nominal / 2.0)
+        lower = y_p - z * std
+        upper = y_p + z * std
+        covered = ((y_t >= lower) & (y_t <= upper))
+        actual_coverage = float(covered.mean())
+        cal_error = abs(actual_coverage - nominal)
+        calibration_errors.append(cal_error)
+
+        # Sharpness: mean interval width (narrower is better if calibrated)
+        mean_width = float(np.mean(upper - lower))
+
+        levels_result.append({
+            "nominal": nominal,
+            "actual_coverage": round(actual_coverage, 4),
+            "calibration_error": round(cal_error, 4),
+            "mean_interval_width": round(mean_width, 2),
+            "pass": cal_error < 0.10,  # Within 10 percentage points
+        })
+
+    mean_cal_error = float(np.mean(calibration_errors))
+    max_cal_error = float(np.max(calibration_errors))
+
+    return {
+        "levels": levels_result,
+        "mean_calibration_error": round(mean_cal_error, 4),
+        "max_calibration_error": round(max_cal_error, 4),
+        "is_calibrated": max_cal_error < 0.10,
+        "n_valid": n,
+    }
 
 
 class ModelEvaluator:
@@ -98,34 +214,124 @@ class ModelEvaluator:
         self.evaluation_results = {}
     
     def evaluate_model(self, model, X: pd.DataFrame, y: pd.Series,
-                       model_name: str = "model") -> Dict[str, float]:
+                       model_name: str = "model",
+                       positions: pd.Series = None,
+                       expert_predictions: Optional[np.ndarray] = None,
+                       expert_rmse_by_position: Optional[Dict[str, float]] = None) -> Dict[str, float]:
         """
-        Evaluate a single model with multiple metrics.
+        Evaluate a single model with multiple metrics including
+        fantasy-specific metrics (Spearman, tier accuracy, boom/bust, VOR).
         
         Args:
             model: Trained model with predict method
             X: Feature DataFrame
             y: True target values
             model_name: Name for logging
+            positions: Optional position labels for VOR calculation
+            expert_predictions: Optional expert-consensus predictions aligned to y
+            expert_rmse_by_position: Optional dict {position: expert_rmse}
             
         Returns:
             Dict of metric names to values
         """
         predictions = model.predict(X)
+        y_arr = np.asarray(y, dtype=float)
+        pred_arr = np.asarray(predictions, dtype=float)
         
         metrics = {
-            "mse": mean_squared_error(y, predictions),
-            "rmse": np.sqrt(mean_squared_error(y, predictions)),
-            "mae": mean_absolute_error(y, predictions),
-            "r2": r2_score(y, predictions),
-            "mape": self._safe_mape(y, predictions),
-            "median_ae": np.median(np.abs(y - predictions)),
+            "mse": mean_squared_error(y_arr, pred_arr),
+            "rmse": np.sqrt(mean_squared_error(y_arr, pred_arr)),
+            "mae": mean_absolute_error(y_arr, pred_arr),
+            "r2": r2_score(y_arr, pred_arr),
+            "mape": self._safe_mape(y_arr, pred_arr),
+            "median_ae": float(np.median(np.abs(y_arr - pred_arr))),
         }
         
         # Add percentile errors
-        errors = np.abs(y - predictions)
-        metrics["p90_error"] = np.percentile(errors, 90)
-        metrics["p95_error"] = np.percentile(errors, 95)
+        errors = np.abs(y_arr - pred_arr)
+        metrics["p90_error"] = float(np.percentile(errors, 90))
+        metrics["p95_error"] = float(np.percentile(errors, 95))
+        
+        # Fantasy-specific metrics (per requirements Section V)
+        # Spearman rank correlation
+        metrics["spearman_rho"] = spearman_rank_correlation(y_arr, pred_arr)
+        metrics["spearman_top50"] = spearman_rank_correlation(y_arr, pred_arr, top_n=50)
+        
+        # Tier classification accuracy (Elite/Strong/Flex/Waiver)
+        metrics["tier_accuracy"] = tier_classification_accuracy(y_arr, pred_arr)
+        
+        # Boom/bust prediction
+        boom = boom_bust_metrics(y_arr, pred_arr)
+        metrics["boom_precision"] = boom.get("boom_precision", np.nan)
+        metrics["boom_recall"] = boom.get("boom_recall", np.nan)
+        metrics["bust_precision"] = boom.get("bust_precision", np.nan)
+        metrics["bust_recall"] = boom.get("bust_recall", np.nan)
+        
+        # VOR accuracy (requires position labels)
+        if positions is not None:
+            metrics["vor_accuracy"] = vor_accuracy(y_arr, pred_arr, positions=np.asarray(positions))
+        
+        # Within-N accuracy (per requirements Section VII)
+        metrics["within_7_pts_pct"] = float(np.mean(errors <= 7.0) * 100)
+        metrics["within_10_pts_pct"] = float(np.mean(errors <= 10.0) * 100)
+        
+        # Beat naive baseline (season average)
+        baseline_pred = np.full_like(pred_arr, np.mean(y_arr))
+        baseline_rmse = np.sqrt(mean_squared_error(y_arr, baseline_pred))
+        metrics["naive_baseline_rmse"] = float(baseline_rmse)
+        if baseline_rmse > 0:
+            metrics["improvement_over_baseline_pct"] = float(
+                (1 - metrics["rmse"] / baseline_rmse) * 100
+            )
+        else:
+            metrics["improvement_over_baseline_pct"] = 0.0
+
+        # Expert consensus comparison (if expert projections are provided)
+        if expert_predictions is not None and len(expert_predictions) == len(y_arr):
+            exp_arr = np.asarray(expert_predictions, dtype=float)
+            expert_rmse = float(np.sqrt(mean_squared_error(y_arr, exp_arr)))
+            metrics["expert_rmse"] = expert_rmse
+            if expert_rmse > 0:
+                metrics["improvement_over_expert_pct"] = float(
+                    (expert_rmse - metrics["rmse"]) / expert_rmse * 100
+                )
+            else:
+                metrics["improvement_over_expert_pct"] = 0.0
+            metrics["beats_expert_overall"] = float(metrics["improvement_over_expert_pct"] > 0.0)
+
+        # Confidence interval calibration check (per requirements)
+        # If model supports uncertainty estimation, evaluate CI calibration
+        if hasattr(model, 'predict_with_uncertainty'):
+            try:
+                _, pred_std = model.predict_with_uncertainty(X)
+                pred_std_arr = np.asarray(pred_std, dtype=float)
+                ci_cal = confidence_interval_calibration(y_arr, pred_arr, pred_std_arr)
+                metrics["ci_calibration"] = ci_cal
+                metrics["ci_is_calibrated"] = ci_cal.get("is_calibrated")
+                metrics["ci_mean_calibration_error"] = ci_cal.get("mean_calibration_error")
+                metrics["ci_max_calibration_error"] = ci_cal.get("max_calibration_error")
+                # Per-level coverage for quick reference
+                for lvl in ci_cal.get("levels", []):
+                    nom_key = f"ci_{int(lvl['nominal']*100)}_coverage"
+                    metrics[nom_key] = lvl["actual_coverage"]
+            except Exception:
+                pass
+
+        # Expert RMSE lookup comparison by position (no expert predictions required)
+        if expert_rmse_by_position and positions is not None:
+            pos_arr = np.asarray(positions)
+            improvements = []
+            for pos in sorted(set(pos_arr)):
+                exp_rmse = expert_rmse_by_position.get(pos)
+                if exp_rmse is None or exp_rmse <= 0:
+                    continue
+                mask = pos_arr == pos
+                if mask.sum() == 0:
+                    continue
+                pos_rmse = float(np.sqrt(mean_squared_error(y_arr[mask], pred_arr[mask])))
+                improvements.append((exp_rmse - pos_rmse) / exp_rmse * 100)
+            if improvements:
+                metrics["improvement_over_expert_by_pos_avg_pct"] = float(np.mean(improvements))
         
         self.evaluation_results[model_name] = metrics
         return metrics
@@ -325,46 +531,120 @@ class ModelEvaluator:
     
     def generate_report(self, model, X: pd.DataFrame, y: pd.Series,
                         positions: pd.Series = None,
-                        utilization_scores: pd.Series = None) -> str:
-        """Generate a comprehensive evaluation report."""
+                        utilization_scores: pd.Series = None,
+                        expert_rmse: Dict[str, float] = None) -> str:
+        """Generate a comprehensive evaluation report including fantasy-specific metrics.
+        
+        Args:
+            model: Trained model with predict method.
+            X: Feature DataFrame.
+            y: True target values.
+            positions: Position labels for per-position evaluation.
+            utilization_scores: Utilization scores for tier evaluation.
+            expert_rmse: Optional dict {position: expert_rmse} for expert
+                consensus comparison (Section V.C of requirements).
+        """
         report = []
         report.append("=" * 60)
         report.append("MODEL EVALUATION REPORT")
         report.append("=" * 60)
         
-        # Overall metrics
+        # Overall metrics (now includes fantasy-specific)
         report.append("\n## Overall Performance")
-        metrics = self.evaluate_model(model, X, y)
+        metrics = self.evaluate_model(
+            model, X, y, positions=positions, expert_rmse_by_position=expert_rmse
+        )
         for name, value in metrics.items():
-            report.append(f"  {name}: {value:.4f}")
+            if isinstance(value, float):
+                report.append(f"  {name}: {value:.4f}")
+            else:
+                report.append(f"  {name}: {value}")
+        
+        # Fantasy-specific summary
+        report.append("\n## Fantasy-Specific Metrics (Requirements Section V)")
+        report.append(f"  Spearman Rank Correlation (all): {metrics.get('spearman_rho', 'N/A'):.4f}" if isinstance(metrics.get('spearman_rho'), float) else f"  Spearman Rank Correlation: N/A")
+        report.append(f"  Spearman Top-50: {metrics.get('spearman_top50', 'N/A'):.4f}" if isinstance(metrics.get('spearman_top50'), float) else f"  Spearman Top-50: N/A")
+        if isinstance(metrics.get("tier_accuracy"), float):
+            report.append(f"  Tier Classification Accuracy: {metrics.get('tier_accuracy', 0.0) * 100:.1f}%")
+        else:
+            report.append("  Tier Accuracy: N/A")
+        report.append(f"  Boom Precision/Recall: {self._fmt_metric(metrics.get('boom_precision'))} / {self._fmt_metric(metrics.get('boom_recall'))}")
+        report.append(f"  Bust Precision/Recall: {self._fmt_metric(metrics.get('bust_precision'))} / {self._fmt_metric(metrics.get('bust_recall'))}")
+        report.append(f"  Within 7 pts: {metrics.get('within_7_pts_pct', 'N/A'):.1f}%  (target: 70%+)")
+        report.append(f"  Within 10 pts: {metrics.get('within_10_pts_pct', 'N/A'):.1f}%  (target: 80%+)")
+        report.append(f"  Improvement over naive baseline: {metrics.get('improvement_over_baseline_pct', 'N/A'):.1f}%  (target: >25%)")
+        if isinstance(metrics.get("improvement_over_expert_by_pos_avg_pct"), float):
+            report.append(
+                f"  Avg improvement vs expert by position: {metrics['improvement_over_expert_by_pos_avg_pct']:+.1f}%"
+            )
         
         # Cross-validation
         report.append("\n## Cross-Validation Results")
-        cv_metrics = self.cross_validate(model, X, y)
-        for name, value in cv_metrics.items():
-            report.append(f"  {name}: {value:.4f}")
+        try:
+            cv_metrics = self.cross_validate(model, X, y)
+            for name, value in cv_metrics.items():
+                report.append(f"  {name}: {value:.4f}")
+        except Exception as e:
+            report.append(f"  Cross-validation failed: {e}")
         
-        # By position
+        # By position (with benchmarks)
         if positions is not None:
             report.append("\n## Performance by Position")
             pos_metrics = self.evaluate_by_position(model, X, y, positions)
-            for pos, metrics in pos_metrics.items():
+            for pos, pm in pos_metrics.items():
                 report.append(f"\n  {pos}:")
-                for name, value in metrics.items():
+                for name, value in pm.items():
                     report.append(f"    {name}: {value:.4f}" if isinstance(value, float) else f"    {name}: {value}")
+                # Check against benchmarks
+                bench = POSITION_BENCHMARKS.get(pos, {})
+                if bench and 'rmse' in pm:
+                    rmse_target = bench.get('rmse_target', 99)
+                    status = "PASS" if pm['rmse'] <= rmse_target else "FAIL"
+                    report.append(f"    benchmark: RMSE {pm['rmse']:.2f} vs target {rmse_target} [{status}]")
+        
+        # Expert consensus comparison (per requirements Section V.C)
+        # expert_rmse: dict like {"QB": 7.5, "RB": 8.5, ...} giving known expert RMSE per position
+        if expert_rmse and positions is not None:
+            report.append("\n## Expert Consensus Comparison (Section V.C)")
+            predictions = model.predict(X)
+            y_arr = np.asarray(y, dtype=float)
+            pred_arr = np.asarray(predictions, dtype=float)
+            pos_arr = np.asarray(positions)
+            for pos in sorted(set(pos_arr)):
+                mask = pos_arr == pos
+                if mask.sum() == 0:
+                    continue
+                model_rmse_val = float(np.sqrt(mean_squared_error(y_arr[mask], pred_arr[mask])))
+                exp_rmse_val = expert_rmse.get(pos)
+                if exp_rmse_val is not None and exp_rmse_val > 0:
+                    imp = (exp_rmse_val - model_rmse_val) / exp_rmse_val * 100
+                    status = "PASS" if imp > 0 else "FAIL"
+                    report.append(f"  {pos}: Model RMSE {model_rmse_val:.2f} vs Expert {exp_rmse_val:.2f}  ({imp:+.1f}%) [{status}]")
         
         # By utilization tier
         if utilization_scores is not None:
             report.append("\n## Performance by Utilization Tier")
             tier_metrics = self.evaluate_by_utilization_tier(model, X, y, utilization_scores)
-            for tier, metrics in tier_metrics.items():
+            for tier, tm in tier_metrics.items():
                 report.append(f"\n  {tier}:")
-                for name, value in metrics.items():
+                for name, value in tm.items():
                     report.append(f"    {name}: {value:.4f}" if isinstance(value, float) else f"    {name}: {value}")
         
         report.append("\n" + "=" * 60)
         
         return "\n".join(report)
+
+    @staticmethod
+    def _fmt_metric(value: Optional[float]) -> str:
+        """Format numeric metric values while handling NaN/None safely."""
+        if value is None:
+            return "N/A"
+        try:
+            if np.isnan(value):
+                return "N/A"
+        except TypeError:
+            return "N/A"
+        return f"{float(value):.3f}"
 
 
 # Position-specific benchmark targets (per requirements Section IV.A)

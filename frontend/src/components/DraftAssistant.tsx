@@ -49,9 +49,10 @@ interface DraftPlayer {
 interface DraftAssistantProps {
   allData: Record<string, PredictionRow[]>
   weekLabel: string
+  qbTarget?: 'util' | 'fp'
 }
 
-export function DraftAssistant({ allData }: DraftAssistantProps) {
+export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps) {
   const [draftPos, setDraftPos] = useState(6)
   const [numTeams, setNumTeams] = useState(12)
   const [numRounds, setNumRounds] = useState(15)
@@ -293,7 +294,7 @@ export function DraftAssistant({ allData }: DraftAssistantProps) {
           </h3>
           <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-small)', marginBottom: '1rem' }}>
             Players ranked by cross-position Value Over Replacement. Highlighted rows align with your estimated draft picks.
-            QB scored by fantasy points; RB/WR/TE by utilization score. VOR normalised for cross-position comparison.
+            QB training target: <strong>{qbTarget === 'fp' ? 'fantasy points' : 'utilization score'}</strong> (served to draft view as fantasy-point projections). RB/WR/TE use utilization score. VOR normalised for cross-position comparison.
           </p>
           <div className="draft-board__wrap">
             <table className="draft-board__table">

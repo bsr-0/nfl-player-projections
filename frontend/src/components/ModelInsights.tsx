@@ -4,10 +4,12 @@ import { Utilization } from './Utilization'
 import { Validation } from './Validation'
 import { ModelArena } from './ModelArena'
 import { Backtest } from './Backtest'
+import { TSBacktest } from './TSBacktest'
 import { TrainingYears } from './TrainingYears'
 import { EDA } from './EDA'
+import { SeasonProof } from './SeasonProof'
 
-type SubTab = 'pipeline' | 'utilization' | 'validation' | 'arena' | 'backtest' | 'training' | 'eda'
+type SubTab = 'pipeline' | 'utilization' | 'validation' | 'arena' | 'backtest' | 'season-proof' | 'ts-backtest' | 'training' | 'eda'
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'pipeline', label: 'Data Pipeline' },
@@ -15,6 +17,8 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'validation', label: 'Validation' },
   { id: 'arena', label: 'Model Arena' },
   { id: 'backtest', label: 'Backtesting' },
+  { id: 'season-proof', label: 'Last Season Results' },
+  { id: 'ts-backtest', label: 'TS Backtest' },
   { id: 'training', label: 'Training Years' },
   { id: 'eda', label: 'Exploratory Analysis' },
 ]
@@ -47,6 +51,8 @@ export function ModelInsights() {
       {activeSubTab === 'validation' && <Validation />}
       {activeSubTab === 'arena' && <ModelArena />}
       {activeSubTab === 'backtest' && <Backtest />}
+      {activeSubTab === 'season-proof' && <SeasonProof />}
+      {activeSubTab === 'ts-backtest' && <TSBacktest />}
       {activeSubTab === 'training' && <TrainingYears />}
       {activeSubTab === 'eda' && <EDA />}
     </div>

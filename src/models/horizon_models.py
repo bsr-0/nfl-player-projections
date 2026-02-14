@@ -38,12 +38,15 @@ except ImportError:
 # -----------------------------------------------------------------------------
 class LSTM4WeekModel:
     """LSTM for 4-week horizon; 3-4 LSTM layers, 128-256 units per layer (requirements), sequence length 8-12."""
-    def __init__(self, sequence_length: int = 10, lstm_units: int = 256, dropout: float = 0.25):
+    def __init__(self,
+                 sequence_length: int = None,
+                 lstm_units: int = None,
+                 dropout: float = None):
         if not HAS_TF:
             raise ImportError("TensorFlow required for 4-week LSTM. pip install tensorflow")
-        self.sequence_length = sequence_length
-        self.lstm_units = lstm_units  # first layer size (128-256)
-        self.dropout = dropout
+        self.sequence_length = sequence_length or MODEL_CONFIG.get("lstm_sequence_length", 10)
+        self.lstm_units = lstm_units or MODEL_CONFIG.get("lstm_units", 256)
+        self.dropout = dropout if dropout is not None else MODEL_CONFIG.get("lstm_dropout", 0.25)
         self.model = None
         self.scaler = None
         self.feature_names = []
@@ -65,7 +68,8 @@ class LSTM4WeekModel:
             Dense(32, activation="relu"),
             Dense(1),
         ])
-        m.compile(optimizer=Adam(learning_rate=0.001), loss="mse", metrics=["mae"])
+        lr = MODEL_CONFIG.get("lstm_learning_rate", 0.001)
+        m.compile(optimizer=Adam(learning_rate=lr), loss="mse", metrics=["mae"])
         return m
 
     def _sequences(self, X: np.ndarray, y: np.ndarray, player_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -80,7 +84,11 @@ class LSTM4WeekModel:
         return np.array(X_seq), np.array(y_seq)
 
     def fit(self, X: np.ndarray, y: np.ndarray, player_ids: np.ndarray,
-            feature_names: List[str], epochs: int = 80, batch_size: int = 32) -> "LSTM4WeekModel":
+            feature_names: List[str],
+            epochs: int = None,
+            batch_size: int = None) -> "LSTM4WeekModel":
+        epochs = epochs or MODEL_CONFIG.get("lstm_epochs", 80)
+        batch_size = batch_size or MODEL_CONFIG.get("lstm_batch_size", 32)
         from sklearn.preprocessing import StandardScaler
         self.feature_names = list(feature_names)
         self.scaler = StandardScaler()
@@ -131,18 +139,20 @@ class LSTM4WeekModel:
 class ARIMA4WeekModel:
     """
     Per-player ARIMA for 4-week horizon. Fits univariate ARIMA on each player's
-    target series; stores one-step-ahead forecast per player. Fallback: global mean
-    or 4-week rolling mean when ARIMA fails or series too short.
+    target series; produces a 4-step-ahead forecast (mean over next 4 weeks)
+    per player. Fallback: global mean or 4-week rolling mean when ARIMA fails
+    or series too short.
     """
     MIN_LENGTH = 6  # minimum observations to fit ARIMA
+    FORECAST_STEPS = 4  # 4-week horizon
 
-    def __init__(self, order: Tuple[int, int, int] = (2, 1, 2)):
+    def __init__(self, order: Tuple[int, int, int] = None):
         if not HAS_ARIMA:
             raise ImportError("statsmodels required for ARIMA. pip install statsmodels")
-        self.order = order
+        self.order = order or tuple(MODEL_CONFIG.get("arima_order", (2, 1, 2)))
         self.is_fitted = False
         self.fallback_mean = 0.0
-        self._player_forecast: Dict[str, float] = {}  # str(player_id) -> one-step-ahead forecast
+        self._player_forecast: Dict[str, float] = {}  # str(player_id) -> 4-week forecast
 
     def _key(self, pid: Any) -> str:
         return str(pid)
@@ -165,8 +175,9 @@ class ARIMA4WeekModel:
                 p, d, q = self.order
                 model = ARIMA(y, order=(p, d, q))
                 fit = model.fit()
-                fcast = fit.forecast(steps=1)
-                val = float(fcast[0])
+                # Forecast 4 steps ahead and average for the 4-week horizon
+                fcast = fit.forecast(steps=self.FORECAST_STEPS)
+                val = float(np.mean(fcast))
                 self._player_forecast[self._key(pid)] = val if np.isfinite(val) else float(np.mean(y[-4:]))
             except Exception:
                 self._player_forecast[self._key(pid)] = float(np.mean(y[-4:])) if len(y) >= 4 else float(np.mean(y))
@@ -192,8 +203,8 @@ class Hybrid4WeekModel:
         self.position = position
         self.lstm = None
         self.arima = None
-        self.lstm_weight = 0.6
-        self.arima_weight = 0.4
+        self.lstm_weight = MODEL_CONFIG.get("lstm_weight", 0.6)
+        self.arima_weight = MODEL_CONFIG.get("arima_weight", 0.4)
         self.is_fitted = False
         self.fallback_ensemble_pred = None
 
@@ -209,7 +220,11 @@ class Hybrid4WeekModel:
         X_np = X[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0).values
         y_np = y.values.astype(np.float64)
         try:
-            self.lstm = LSTM4WeekModel(sequence_length=10, lstm_units=256, dropout=0.25)
+            self.lstm = LSTM4WeekModel(
+                sequence_length=int(MODEL_CONFIG.get("lstm_sequence_length", 10)),
+                lstm_units=int(MODEL_CONFIG.get("lstm_units", 256)),
+                dropout=float(MODEL_CONFIG.get("lstm_dropout", 0.25)),
+            )
             self.lstm.fit(X_np, y_np, player_ids, feature_cols, epochs=epochs)
         except Exception:
             self.lstm = None
@@ -262,7 +277,7 @@ def _deep_feedforward_layers(input_dim: int, hidden_units: List[int] = None) -> 
 
     Architecture: ~100 hidden layers (each Dense+BatchNorm+Dropout = 3 Keras layers)
     organised as blocks of decreasing width: 512→256→128→64→32.
-    Total Dense layers ≈ 100, satisfying the 98+ layer requirement.
+    Total Dense layers >= 100, satisfying the 98+ layer requirement.
     """
     if not HAS_TF:
         raise ImportError("TensorFlow required for deep feedforward layers.")
@@ -276,36 +291,41 @@ def _deep_feedforward_layers(input_dim: int, hidden_units: List[int] = None) -> 
             [64] * 18 +    # 18 layers at 64
             [32] * 12      # 12 layers at 32
         )  # total = 100 Dense hidden layers
+    dropout_rate = MODEL_CONFIG.get("deep_dropout", 0.35)
     layers = []
     for u in hidden_units:
         layers.append(_Dense(u, activation="relu"))
         layers.append(_BN())
-        layers.append(_DO(0.35))
+        layers.append(_DO(dropout_rate))
     layers.append(_Dense(1))
     return layers
 
 
 class DeepSeasonLongModel:
     """98+ layer deep feedforward for 18-week; blend 70% deep + 30% traditional; regression-to-mean."""
-    def __init__(self, position: str, n_features: int = 150):
+    def __init__(self, position: str, n_features: int = None):
         if not HAS_TF:
             raise ImportError("TensorFlow required for 18-week deep model. pip install tensorflow")
         self.position = position
-        self.n_features = n_features
+        self.n_features = n_features or MODEL_CONFIG.get("deep_n_features", 150)
         self.model = None
         self.scaler = None
         self.feature_names = []
         self.is_fitted = False
-        self.regression_to_mean_scale = 0.95
+        self.regression_to_mean_scale = MODEL_CONFIG.get("deep_regression_to_mean_scale", 0.95)
 
     def _build(self):
-        layers = _deep_feedforward_layers(self.n_features)
+        hidden_units = MODEL_CONFIG.get("deep_hidden_units", None)
+        layers = _deep_feedforward_layers(self.n_features, hidden_units=hidden_units)
         m = Sequential([Input(shape=(self.n_features,))] + layers)
-        m.compile(optimizer=Adam(learning_rate=0.0005), loss="mse", metrics=["mae"])
+        lr = MODEL_CONFIG.get("deep_learning_rate", 0.0005)
+        m.compile(optimizer=Adam(learning_rate=lr), loss="mse", metrics=["mae"])
         return m
 
     def fit(self, X: np.ndarray, y: np.ndarray, feature_names: List[str],
-            epochs: int = 100, batch_size: int = 64) -> "DeepSeasonLongModel":
+            epochs: int = None, batch_size: int = None) -> "DeepSeasonLongModel":
+        epochs = epochs or MODEL_CONFIG.get("deep_epochs", 100)
+        batch_size = batch_size or MODEL_CONFIG.get("deep_batch_size", 64)
         from sklearn.preprocessing import StandardScaler
         self.feature_names = list(feature_names)
         self.scaler = StandardScaler()
@@ -323,7 +343,8 @@ class DeepSeasonLongModel:
         self.is_fitted = True
         return self
 
-    def predict(self, X: np.ndarray, traditional_pred: np.ndarray, blend_traditional: float = 0.3) -> np.ndarray:
+    def predict(self, X: np.ndarray, traditional_pred: np.ndarray, blend_traditional: float = None) -> np.ndarray:
+        blend_traditional = blend_traditional if blend_traditional is not None else MODEL_CONFIG.get("deep_blend_traditional", 0.3)
         if not self.is_fitted or self.model is None:
             return traditional_pred
         Xs = self.scaler.transform(X[:, :self.n_features] if X.shape[1] >= self.n_features else np.hstack([X, np.zeros((X.shape[0], self.n_features - X.shape[1]))]))

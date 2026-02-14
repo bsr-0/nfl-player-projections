@@ -97,7 +97,7 @@ class NFLDataRefresher:
                 sched = nfl.import_schedules([year])
                 if len(sched) > 0:
                     schedule_seasons.append(year)
-            except:
+            except Exception:
                 pass
         
         return {
@@ -121,7 +121,7 @@ class NFLDataRefresher:
         try:
             df = nfl.import_weekly_data([season])
             remote_max = df['week'].max() if len(df) > 0 else 0
-        except:
+        except Exception:
             remote_max = 0
         
         return local_max, remote_max

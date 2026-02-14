@@ -4,6 +4,7 @@ import json
 import warnings
 from pathlib import Path
 from datetime import datetime
+from typing import Any, Dict, List
 
 # Suppress SciPy/NumPy version mismatch warning (env may have numpy>=1.23 with older scipy)
 warnings.filterwarnings(
@@ -31,6 +32,7 @@ from config.settings import (
     MIN_TRAINING_SEASONS_18W,
     MIN_TRAINING_SEASONS_4W,
     MIN_PLAYERS_PER_POSITION,
+    RETRAINING_CONFIG,
 )
 from src.utils.database import DatabaseManager
 from src.utils.data_manager import DataManager, auto_refresh_data
@@ -48,8 +50,13 @@ from src.models.ensemble import ModelTrainer
 from src.models.robust_validation import RobustTimeSeriesCV
 from src.evaluation.backtester import ModelBacktester
 from src.models.utilization_to_fp import train_utilization_to_fp_per_position
-from src.evaluation.explainability import get_top10_feature_importance_per_position
+from src.evaluation.explainability import (
+    get_top10_feature_importance_per_position,
+    explain_with_shap,
+    partial_dependence_plots,
+)
 from sklearn.linear_model import Ridge
+from sklearn.preprocessing import MinMaxScaler
 
 
 def load_training_data(positions: list = None, min_games: int = 4, 
@@ -216,15 +223,158 @@ def _safe_mape(y_true, y_pred):
     return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
 
 
+def _report_missingness(df: pd.DataFrame, label: str, threshold: float = 0.05) -> Dict[str, float]:
+    """Report feature missingness and return columns above threshold."""
+    if df.empty:
+        print(f"  {label}: empty dataset for missingness check")
+        return {}
+    miss = df.isna().mean()
+    high = miss[miss > threshold].sort_values(ascending=False)
+    if len(high) == 0:
+        print(f"  {label}: no columns above {threshold:.0%} missingness")
+        return {}
+    print(f"  {label}: {len(high)} columns above {threshold:.0%} missingness")
+    for col, pct in high.head(15).items():
+        print(f"    - {col}: {pct:.1%}")
+    if len(high) > 15:
+        print(f"    ... {len(high) - 15} more")
+    return high.to_dict()
+
+
+def _validate_critical_missingness(df: pd.DataFrame, label: str, threshold: float = 0.05) -> None:
+    """
+    Validate critical columns after preprocessing.
+    Raise on severe quality issues that can invalidate training labels/features.
+    """
+    critical = [c for c in ["player_id", "position", "season", "week", "fantasy_points", "utilization_score"] if c in df.columns]
+    bad = {}
+    for col in critical:
+        pct = float(df[col].isna().mean())
+        if pct > threshold:
+            bad[col] = pct
+    if bad:
+        details = ", ".join(f"{k}={v:.1%}" for k, v in sorted(bad.items()))
+        raise ValueError(f"{label}: critical missingness exceeds {threshold:.0%}: {details}")
+
+
+def _report_outliers_3sigma(df: pd.DataFrame, label: str, cols: list) -> None:
+    """Diagnostics only: report >3 std outliers without dropping data."""
+    if df.empty:
+        return
+    print(f"  {label}: >3σ outlier diagnostics")
+    for col in cols:
+        if col not in df.columns:
+            continue
+        s = pd.to_numeric(df[col], errors="coerce")
+        s = s[np.isfinite(s)]
+        if len(s) < 30:
+            continue
+        mu, sigma = float(s.mean()), float(s.std(ddof=0))
+        if sigma <= 0:
+            continue
+        n_out = int(((s - mu).abs() > 3 * sigma).sum())
+        pct = 100.0 * n_out / max(len(s), 1)
+        print(f"    - {col}: {n_out}/{len(s)} ({pct:.2f}%)")
+
+
+def _report_train_serve_feature_parity(train_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
+    """Check train/test feature schema parity before model fitting."""
+    excluded_prefix = ("target_",)
+    excluded_cols = {"fantasy_points", "predicted_points", "predicted_utilization"}
+    train_feats = {c for c in train_df.columns if c not in excluded_cols and not c.startswith(excluded_prefix)}
+    test_feats = {c for c in test_df.columns if c not in excluded_cols and not c.startswith(excluded_prefix)}
+    missing_in_test = sorted(train_feats - test_feats)
+    unseen_in_test = sorted(test_feats - train_feats)
+    print("  Train/serve feature parity check:")
+    print(f"    - train feature count: {len(train_feats)}")
+    print(f"    - test feature count: {len(test_feats)}")
+    print(f"    - train-only features: {len(missing_in_test)}")
+    print(f"    - test-only features: {len(unseen_in_test)}")
+    if missing_in_test:
+        print("    - sample train-only:", missing_in_test[:8])
+    if unseen_in_test:
+        print("    - sample test-only:", unseen_in_test[:8])
+
+
+def _infer_bounded_columns(df: pd.DataFrame) -> List[str]:
+    """
+    Select bounded/percentage-like columns for explicit MinMax scaling.
+    Keeps scaling policy deterministic and train/serve consistent.
+    """
+    if df.empty:
+        return []
+    candidates: List[str] = []
+    bounded_tokens = ("pct", "rate", "share", "prob", "probability", "percentage")
+    for col in df.columns:
+        if col.startswith("target_util_") or (
+            col.startswith("target_") and (col.endswith("w") or col[7:8].isdigit())
+        ):
+            continue
+        if col in {"fantasy_points", "predicted_points", "predicted_utilization"}:
+            continue
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            continue
+        lower_col = col.lower()
+        if not any(t in lower_col for t in bounded_tokens):
+            continue
+        series = pd.to_numeric(df[col], errors="coerce").dropna()
+        if len(series) < 3:
+            continue
+        lo = float(series.quantile(0.01))
+        hi = float(series.quantile(0.99))
+        # Accept common bounded ranges like 0-1 and 0-100.
+        if lo >= -1e-6 and hi <= 1.5:
+            candidates.append(col)
+        elif lo >= -1e-6 and hi <= 100.5:
+            candidates.append(col)
+    return sorted(set(candidates))
+
+
+def _apply_bounded_scaling(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    path: Path,
+) -> Dict[str, Any]:
+    """
+    Fit MinMax scaler on bounded columns using train only, apply to train/test, persist artifact.
+    """
+    cols = _infer_bounded_columns(train_df)
+    artifact: Dict[str, Any] = {"columns": cols, "scaler": None}
+    if not cols:
+        return artifact
+    scaler = MinMaxScaler()
+    train_vals = train_df[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
+    test_vals = test_df[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
+    train_df.loc[:, cols] = scaler.fit_transform(train_vals)
+    test_df.loc[:, cols] = scaler.transform(test_vals)
+    artifact["scaler"] = scaler
+    try:
+        import joblib
+        joblib.dump(artifact, path)
+        print(f"  Saved bounded feature scaler artifact: {path.name} ({len(cols)} columns)")
+    except Exception as e:
+        print(f"  Bounded scaler artifact save skipped: {e}")
+    return artifact
+
+
 def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFrame):
     """Report model performance on held-out test set with full metrics per requirements.
     
     Reports RMSE, MAE, MAPE, R², within-7pt%, within-10pt%, and Spearman rho.
     """
     from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-    from scipy.stats import spearmanr
+    from src.evaluation.metrics import spearman_rank_correlation
+    from src.models.utilization_to_fp import UtilizationToFPConverter
     
     qb_target = _load_qb_target_choice()
+    converters = {}
+    for pos in ["RB", "WR", "TE"]:
+        try:
+            conv = UtilizationToFPConverter.load(pos)
+            if getattr(conv, "is_fitted", False):
+                converters[pos] = conv
+        except Exception:
+            pass
     
     for position in trainer.trained_models:
         multi_model = trainer.trained_models[position]
@@ -244,7 +394,7 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
             mape = _safe_mape(y_true.values, y_pred)
             within_7 = float((np.abs(y_true.values - y_pred) <= 7).mean() * 100)
             within_10 = float((np.abs(y_true.values - y_pred) <= 10).mean() * 100)
-            rho, _ = spearmanr(y_true.values, y_pred) if len(y_true) >= 5 else (np.nan, np.nan)
+            rho = spearman_rank_correlation(y_true.values, np.asarray(y_pred), top_n=None) if len(y_true) >= 5 else np.nan
             mape_str = f", MAPE={mape:.1f}%" if mape is not None else ""
             rho_str = f", ρ={rho:.3f}" if np.isfinite(rho) else ""
             print(f"  {pos} (test {label}): RMSE={rmse:.2f}, MAE={mae:.2f}, R²={r2:.3f}{mape_str}, ≤7pt={within_7:.1f}%, ≤10pt={within_10:.1f}%{rho_str}")
@@ -278,7 +428,15 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
             if valid.sum() >= 5:
                 pos_subset = pos_test.loc[valid]
                 preds = multi_model.predict(pos_subset, n_weeks=1)
-                _print_metrics(position, "FP", y_test[valid], preds)
+                preds_fp = preds
+                if position in converters:
+                    try:
+                        eff_df = pos_subset.copy()
+                        eff_df["utilization_score"] = preds
+                        preds_fp = converters[position].predict(preds, efficiency_df=eff_df)
+                    except Exception:
+                        preds_fp = preds
+                _print_metrics(position, "FP", y_test[valid], preds_fp)
 
 
 def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
@@ -306,6 +464,9 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 pass
     except Exception:
         converters = {}
+    import time as _time
+    _pred_start = _time.perf_counter()
+    _n_predicted = 0
     for position in trainer.trained_models:
         multi_model = trainer.trained_models[position]
         pos_mask = test_data["position"] == position
@@ -318,6 +479,7 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 test_data.loc[pos_mask, fn] = 0
         pos_test = test_data.loc[pos_mask].copy()
         preds = multi_model.predict(pos_test, n_weeks=1)
+        _n_predicted += len(pos_test)
         test_data.loc[pos_mask, "predicted_utilization"] = preds
         # Default: set points equal to utilization (kept for QB when trained on FP or util)
         test_data.loc[pos_mask, "predicted_points"] = preds
@@ -330,6 +492,12 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 test_data.loc[pos_mask, "predicted_points"] = fp_pred
             except Exception:
                 pass
+    _pred_elapsed = _time.perf_counter() - _pred_start
+    if _n_predicted > 0:
+        _per_player = _pred_elapsed / _n_predicted
+        from config.settings import MAX_PREDICTION_TIME_PER_PLAYER_SECONDS
+        print(f"  Prediction speed: {_per_player:.4f}s/player ({_n_predicted} players in {_pred_elapsed:.2f}s)"
+              f"  {'OK' if _per_player <= MAX_PREDICTION_TIME_PER_PLAYER_SECONDS else 'SLOW (>' + str(MAX_PREDICTION_TIME_PER_PLAYER_SECONDS) + 's)'}")
     valid_preds = test_data["predicted_points"].notna()
     if valid_preds.sum() < 10:
         return
@@ -358,6 +526,22 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     backtester = ModelBacktester()
     pred_col = "predicted_points"
     actual_col = "actual_for_backtest"
+    test_data = backtester.calculate_confidence_intervals(
+        test_data,
+        pred_col=pred_col,
+        actual_col=actual_col,
+        confidence=0.80,
+        lower_col="prediction_ci80_lower",
+        upper_col="prediction_ci80_upper",
+    )
+    test_data = backtester.calculate_confidence_intervals(
+        test_data,
+        pred_col=pred_col,
+        actual_col=actual_col,
+        confidence=0.95,
+        lower_col="prediction_ci95_lower",
+        upper_col="prediction_ci95_upper",
+    )
     results = backtester.backtest_season(
         predictions=test_data,
         actuals=test_data,
@@ -365,6 +549,12 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         prediction_col=pred_col,
         actual_col=actual_col,
     )
+    ci_mask = test_data[[actual_col, "prediction_ci80_lower", "prediction_ci80_upper"]].dropna()
+    if len(ci_mask) > 0:
+        results["confidence_band_coverage_10pt"] = float(
+            ((ci_mask[actual_col] >= ci_mask["prediction_ci80_lower"])
+             & (ci_mask[actual_col] <= ci_mask["prediction_ci80_upper"])).mean() * 100
+        )
     results["train_seasons"] = train_seasons
     results["test_season"] = actual_test_season
     results["model_source"] = "production_ensemble"
@@ -382,6 +572,22 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     )
     if "error" not in multi_baseline:
         results["multiple_baseline_comparison"] = multi_baseline
+    expert_csv = DATA_DIR / "expert_consensus.csv"
+    if expert_csv.exists():
+        expert_comp = backtester.compare_to_expert_consensus(
+            test_data,
+            expert_csv_path=str(expert_csv),
+            actual_col=actual_col,
+            pred_col=pred_col,
+            player_key="name",
+        )
+        if "error" not in expert_comp:
+            results["expert_comparison"] = expert_comp
+            print(
+                "  Expert benchmark: "
+                f"model RMSE={expert_comp['model_rmse']} vs expert RMSE={expert_comp['expert_rmse']} "
+                f"({expert_comp['model_vs_expert_pct']}% better)"
+            )
     # --- Success criteria evaluation (per requirements Section VII) ---
     from src.evaluation.backtester import check_success_criteria, print_success_criteria_report
     success_criteria = check_success_criteria(results)
@@ -399,13 +605,15 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
             curr_rmse = results.get("metrics", {}).get("rmse")
             if prev_rmse and curr_rmse and prev_rmse > 0:
                 drift_pct = (curr_rmse - prev_rmse) / prev_rmse * 100
+                drift_threshold_pct = float(RETRAINING_CONFIG.get("degradation_threshold_pct", 20.0))
                 results["model_drift"] = {
                     "previous_rmse": prev_rmse,
                     "current_rmse": curr_rmse,
                     "drift_pct": round(drift_pct, 1),
-                    "degradation_gt_20_pct": drift_pct > 20.0,
+                    "drift_threshold_pct": drift_threshold_pct,
+                    "degradation_exceeds_threshold": drift_pct > drift_threshold_pct,
                 }
-                if drift_pct > 20.0:
+                if drift_pct > drift_threshold_pct:
                     print(f"\n  *** WARNING: Model drift detected! RMSE degraded {drift_pct:.1f}% vs previous run. "
                           f"Consider rollback (prev RMSE={prev_rmse}, current={curr_rmse}).")
                 else:
@@ -415,16 +623,32 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
 
     backtester.save_results(results)
 
-    # Write app-compatible results
+    # Write app-compatible results (all rubric metrics per position)
     backtest_results_app = {}
     for pos, pm in results.get("by_position", {}).items():
         backtest_results_app[pos] = {
             "rmse": pm["rmse"],
             "mae": pm["mae"],
             "r2": pm["r2"],
+            "mape": pm.get("mape"),
+            "correlation": pm.get("correlation"),
             "directional_accuracy_pct": pm.get("directional_accuracy_pct"),
+            "within_3_pts_pct": pm.get("within_3_pts_pct"),
             "within_5_pts_pct": pm.get("within_5_pts_pct"),
+            "within_7_pts_pct": pm.get("within_7_pts_pct"),
+            "within_10_pts_pct": pm.get("within_10_pts_pct"),
+            "spearman_rho": pm.get("spearman_rho"),
+            "tier_classification_accuracy": pm.get("tier_classification_accuracy"),
+            "boom_bust": pm.get("boom_bust"),
+            "vor_rank_correlation": pm.get("vor_rank_correlation"),
+            "mae_rmse_ratio": pm.get("mae_rmse_ratio"),
         }
+    # Per-position Spearman from backtest
+    spearman_by_pos = results.get("spearman_by_position", {})
+    for pos, rho in spearman_by_pos.items():
+        if pos in backtest_results_app:
+            backtest_results_app[pos]["spearman_top50"] = rho
+
     app_results_path = DATA_DIR / "advanced_model_results.json"
     app_payload = {
         "timestamp": datetime.now().isoformat(),
@@ -432,6 +656,9 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         "test_season": actual_test_season,
         "backtest_results": backtest_results_app,
         "success_criteria": success_criteria,
+        "multiple_baseline_comparison": results.get("multiple_baseline_comparison"),
+        "model_drift": results.get("model_drift"),
+        "confidence_band_coverage_10pt": results.get("confidence_band_coverage_10pt"),
     }
     with open(app_results_path, "w") as f:
         json.dump(app_payload, f, indent=2, default=str)
@@ -490,6 +717,16 @@ def add_engineered_features(data: pd.DataFrame, position: str = None) -> pd.Data
     return engineer.create_features(data)
 
 
+def add_advanced_features(data: pd.DataFrame) -> pd.DataFrame:
+    """Add advanced rookie/injury/combine features with safe fallback."""
+    try:
+        from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features
+        return add_advanced_rookie_injury_features(data)
+    except Exception as e:
+        print(f"  Advanced rookie/injury features skipped: {e}")
+        return data
+
+
 def prepare_features(data: pd.DataFrame, position: str = None,
                      utilization_weights: dict = None) -> pd.DataFrame:
     """Prepare features for training (utilization + engineered features + advanced features)."""
@@ -497,13 +734,7 @@ def prepare_features(data: pd.DataFrame, position: str = None,
     data = add_utilization_scores(data, weights=utilization_weights)
     print("Engineering features...")
     data = add_engineered_features(data, position=position)
-    # Add advanced rookie & injury features (combine data, injury risk, draft capital)
-    try:
-        from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features
-        data = add_advanced_rookie_injury_features(data)
-    except Exception as e:
-        print(f"  Advanced rookie/injury features skipped: {e}")
-    return data
+    return add_advanced_features(data)
 
 
 def _run_one_fold(
@@ -534,6 +765,13 @@ def _run_one_fold(
         test_data = add_external_features(test_data, seasons=list(test_data["season"].unique()))
     except Exception:
         pass
+    # Season-long draft/rookie context (required for strict rookie/draft rubric)
+    try:
+        from src.features.season_long_features import add_season_long_features
+        train_data = add_season_long_features(train_data)
+        test_data = add_season_long_features(test_data)
+    except Exception as e:
+        print(f"  Season-long draft feature merge skipped: {e}")
     # Util + bounds
     team_df = pd.DataFrame()
     util_calc = UtilizationScoreCalculator(weights=None)
@@ -573,8 +811,13 @@ def _run_one_fold(
     test_data = recalculate_utilization_with_weights(test_data, util_weights)
     with open(MODELS_DIR / "utilization_weights.json", "w") as f:
         json.dump(util_weights, f, indent=2)
-    train_data = add_engineered_features(train_data)
-    test_data = add_engineered_features(test_data)
+    train_data = add_advanced_features(add_engineered_features(train_data))
+    test_data = add_advanced_features(add_engineered_features(test_data))
+    _apply_bounded_scaling(
+        train_data,
+        test_data,
+        MODELS_DIR / "feature_scaler_bounded.joblib",
+    )
     # Winsorize
     for pos in ["QB", "RB", "WR", "TE"]:
         mask = train_data["position"] == pos
@@ -598,7 +841,7 @@ def _run_one_fold(
     trainer = ModelTrainer()
     trainer.train_all_positions(train_data, positions=positions, tune_hyperparameters=tune_hyperparameters, n_weeks_list=[1, 4, 18], test_data=test_data)
     try:
-        train_utilization_to_fp_per_position(train_data)
+        train_utilization_to_fp_per_position(train_data, positions=["RB", "WR", "TE", "QB"])
     except Exception:
         pass
     test_data = test_data.copy()
@@ -744,6 +987,13 @@ def train_models(positions: list = None,
         test_data = add_external_features(test_data, seasons=list(test_data["season"].unique()))
     except Exception as e:
         print(f"  External features (weather/injury/Vegas) skip: {e}")
+    # Merge season-long context (draft capital + rookie archetypes) in mainline path
+    try:
+        from src.features.season_long_features import add_season_long_features
+        train_data = add_season_long_features(train_data)
+        test_data = add_season_long_features(test_data)
+    except Exception as e:
+        print(f"  Season-long features (draft/rookie context) skip: {e}")
 
     # Phase 1: Utilization scores with train-only percentile bounds (avoid test/serve leakage)
     print("\n[2/5] Preparing features...")
@@ -799,8 +1049,24 @@ def train_models(positions: list = None,
     
     # Phase 2: Feature engineering (uses utilization_score)
     print("\n[2c/5] Engineering features...")
-    train_data = add_engineered_features(train_data)
-    test_data = add_engineered_features(test_data)
+    train_data = add_advanced_features(add_engineered_features(train_data))
+    test_data = add_advanced_features(add_engineered_features(test_data))
+    _apply_bounded_scaling(
+        train_data,
+        test_data,
+        MODELS_DIR / "feature_scaler_bounded.joblib",
+    )
+    print("\n[2d/5] Data quality checks...")
+    _report_missingness(train_data, "train", threshold=0.05)
+    _report_missingness(test_data, "test", threshold=0.05)
+    _validate_critical_missingness(train_data, "train", threshold=0.05)
+    _validate_critical_missingness(test_data, "test", threshold=0.05)
+    _report_outliers_3sigma(
+        train_data,
+        "train",
+        cols=["fantasy_points", "target_1w", "target_4w", "target_18w", "target_util_1w", "utilization_score"],
+    )
+    _report_train_serve_feature_parity(train_data, test_data)
     
     # Winsorize targets at 1st/99th percentile per position (train only)
     print("\n[3/5] Winsorizing targets...")
@@ -838,7 +1104,7 @@ def train_models(positions: list = None,
     # Utilization -> Fantasy Points conversion layer for RB/WR/TE
     print("\n[4b/5] Training utilization-to-FP conversion models...")
     try:
-        converters = train_utilization_to_fp_per_position(train_data)
+        converters = train_utilization_to_fp_per_position(train_data, positions=["RB", "WR", "TE", "QB"])
         for pos, c in converters.items():
             if c.is_fitted:
                 print(f"  {pos}: utilization->FP converter saved")
@@ -847,37 +1113,70 @@ def train_models(positions: list = None,
 
     # Horizon-specific models: 4-week LSTM+ARIMA hybrid, 18-week deep (when enabled)
     print("\n[4c/5] Training horizon-specific models (4w hybrid, 18w deep)...")
+    horizon_status: Dict[str, Dict[str, str]] = {pos: {} for pos in positions}
     try:
-        from src.models.horizon_models import Hybrid4WeekModel, DeepSeasonLongModel
+        from src.models.horizon_models import (
+            Hybrid4WeekModel,
+            DeepSeasonLongModel,
+            HAS_TF,
+            HAS_ARIMA,
+        )
         n_seasons = len(train_seasons)
+        if not HAS_TF:
+            print("  Horizon note: TensorFlow unavailable; LSTM/deep components disabled.")
+        if not HAS_ARIMA:
+            print("  Horizon note: statsmodels unavailable; ARIMA component disabled.")
         for position in positions:
             if position not in trainer.trained_models:
+                horizon_status[position]["hybrid_4w"] = "base_model_missing"
+                horizon_status[position]["deep_18w"] = "base_model_missing"
                 continue
             multi = trainer.trained_models[position]
             base = multi.models.get(1) or list(multi.models.values())[0]
             feature_cols = getattr(base, "feature_names", [])
             if len(feature_cols) < 5:
+                horizon_status[position]["hybrid_4w"] = "insufficient_features"
+                horizon_status[position]["deep_18w"] = "insufficient_features"
                 continue
             pos_data = train_data[train_data["position"] == position].copy()
             pos_data = pos_data.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
             X_pos = pos_data[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
             player_ids = pos_data["player_id"].values
 
-            if MODEL_CONFIG.get("use_4w_hybrid", True):
+            if MODEL_CONFIG.get("use_4w_hybrid", True) and n_seasons >= MIN_TRAINING_SEASONS_4W:
                 y_4w = pos_data.get("target_util_4w", pos_data.get("target_4w"))
-                if y_4w is not None and y_4w.notna().sum() >= 100:
+                if not HAS_TF or not HAS_ARIMA:
+                    reason = []
+                    if not HAS_TF:
+                        reason.append("tensorflow_missing")
+                    if not HAS_ARIMA:
+                        reason.append("statsmodels_missing")
+                    horizon_status[position]["hybrid_4w"] = "unavailable:" + ",".join(reason)
+                elif y_4w is not None and y_4w.notna().sum() >= 100:
                     try:
                         hybrid = Hybrid4WeekModel(position)
                         hybrid.fit(pos_data, y_4w, player_ids, feature_cols, epochs=80)
                         if hybrid.is_fitted:
                             hybrid.save()
+                            horizon_status[position]["hybrid_4w"] = "trained_and_saved"
                             print(f"  {position}: 4-week hybrid model saved")
+                        else:
+                            horizon_status[position]["hybrid_4w"] = "fit_not_converged"
                     except Exception as e:
+                        horizon_status[position]["hybrid_4w"] = f"fit_failed:{e}"
                         print(f"  4-week hybrid skip for {position}: {e}")
+                else:
+                    horizon_status[position]["hybrid_4w"] = "insufficient_targets"
+            elif not MODEL_CONFIG.get("use_4w_hybrid", True):
+                horizon_status[position]["hybrid_4w"] = "disabled_by_config"
+            else:
+                horizon_status[position]["hybrid_4w"] = "insufficient_training_seasons"
 
             if MODEL_CONFIG.get("use_18w_deep", True) and n_seasons >= MIN_TRAINING_SEASONS_18W:
                 y_18w = pos_data.get("target_util_18w", pos_data.get("target_18w"))
-                if y_18w is not None and y_18w.notna().sum() >= 80:
+                if not HAS_TF:
+                    horizon_status[position]["deep_18w"] = "unavailable:tensorflow_missing"
+                elif y_18w is not None and y_18w.notna().sum() >= 80:
                     try:
                         deep = DeepSeasonLongModel(position, n_features=min(150, len(feature_cols)))
                         X_arr = X_pos.values.astype(np.float64)
@@ -892,13 +1191,44 @@ def train_models(positions: list = None,
                             )
                             if deep.is_fitted:
                                 deep.save()
+                                horizon_status[position]["deep_18w"] = "trained_and_saved"
                                 print(f"  {position}: 18-week deep model saved")
+                            else:
+                                horizon_status[position]["deep_18w"] = "fit_not_converged"
+                        else:
+                            horizon_status[position]["deep_18w"] = "insufficient_valid_rows"
                     except Exception as e:
+                        horizon_status[position]["deep_18w"] = f"fit_failed:{e}"
                         print(f"  18-week deep skip for {position}: {e}")
+                else:
+                    horizon_status[position]["deep_18w"] = "insufficient_targets"
+            elif not MODEL_CONFIG.get("use_18w_deep", True):
+                horizon_status[position]["deep_18w"] = "disabled_by_config"
+            else:
+                horizon_status[position]["deep_18w"] = "insufficient_training_seasons"
     except ImportError:
         print("  Horizon models skipped (TensorFlow not available).")
+        for position in positions:
+            horizon_status[position]["hybrid_4w"] = "unavailable:horizon_module_import_error"
+            horizon_status[position]["deep_18w"] = "unavailable:horizon_module_import_error"
     except Exception as e:
         print(f"  Horizon-specific training skipped: {e}")
+        for position in positions:
+            horizon_status[position]["hybrid_4w"] = f"unexpected_error:{e}"
+            horizon_status[position]["deep_18w"] = f"unexpected_error:{e}"
+    try:
+        with open(MODELS_DIR / "horizon_model_status.json", "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "generated_at": datetime.now().isoformat(),
+                    "train_seasons": train_seasons,
+                    "status_by_position": horizon_status,
+                },
+                f,
+                indent=2,
+            )
+    except Exception as e:
+        print(f"  Horizon status write skipped: {e}")
 
     # Top-10 feature importance per position (explainability)
     try:
@@ -908,8 +1238,103 @@ def train_models(positions: list = None,
         )
         for pos, feats in top10.items():
             print(f"  Top-3 {pos}: {[f['feature'] for f in feats[:3]]}")
+        if MODEL_CONFIG.get("enable_shap_pdp", True):
+            explain_dir = MODELS_DIR / "explainability"
+            explain_dir.mkdir(parents=True, exist_ok=True)
+            for pos, multi in trainer.trained_models.items():
+                try:
+                    base = multi.models.get(1) or list(multi.models.values())[0]
+                    feature_cols = getattr(base, "feature_names", [])
+                    if len(feature_cols) < 5:
+                        continue
+                    pos_data = train_data[train_data["position"] == pos].copy()
+                    if pos_data.empty:
+                        continue
+                    X_pos = pos_data[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+                    shap_result = explain_with_shap(
+                        base,
+                        X_pos,
+                        feature_cols,
+                        n_samples=int(MODEL_CONFIG.get("shap_samples", 200)),
+                    )
+                    if shap_result is not None:
+                        shap_vals = np.asarray(shap_result["values"])
+                        if shap_vals.ndim == 2 and shap_vals.shape[1] == len(feature_cols):
+                            mean_abs = np.mean(np.abs(shap_vals), axis=0)
+                            order = np.argsort(mean_abs)[::-1][:10]
+                            payload = {
+                                "position": pos,
+                                "top_shap_features": [
+                                    {"feature": feature_cols[i], "mean_abs_shap": float(mean_abs[i])}
+                                    for i in order
+                                ],
+                            }
+                            with open(explain_dir / f"shap_{pos.lower()}.json", "w", encoding="utf-8") as f:
+                                json.dump(payload, f, indent=2)
+
+                    partial_dependence_plots(
+                        base,
+                        X_pos,
+                        top_n=int(MODEL_CONFIG.get("pdp_top_n", 5)),
+                        grid_resolution=20,
+                        output_path=explain_dir / f"pdp_{pos.lower()}.json",
+                    )
+                except Exception as pos_err:
+                    print(f"  Explainability skip for {pos}: {pos_err}")
     except Exception as e:
         print(f"  Top-10 feature export skipped: {e}")
+
+    # Feature importance stability tracking across training runs (per requirements)
+    # Compare current top-10 features to previous run; flag drift if overlap < 60%
+    try:
+        top10_path = MODELS_DIR / "top10_features_per_position.json"
+        history_path = MODELS_DIR / "feature_importance_history.json"
+        if top10_path.exists():
+            with open(top10_path, encoding="utf-8") as f:
+                current_top10 = json.load(f)
+            # Load history (list of previous snapshots)
+            history = []
+            if history_path.exists():
+                try:
+                    with open(history_path, encoding="utf-8") as f:
+                        history = json.load(f)
+                except Exception:
+                    history = []
+            # Compare to most recent previous snapshot
+            stability_report = {}
+            if history:
+                prev = history[-1].get("top10", {})
+                for pos in POSITIONS:
+                    curr_feats = set(f["feature"] for f in current_top10.get(pos, []))
+                    prev_feats = set(f["feature"] for f in prev.get(pos, []))
+                    if curr_feats and prev_feats:
+                        overlap = len(curr_feats & prev_feats)
+                        overlap_pct = overlap / max(len(curr_feats), 1) * 100
+                        stability_report[pos] = {
+                            "overlap_pct": round(overlap_pct, 1),
+                            "stable": overlap_pct >= 60.0,
+                            "new_features": sorted(curr_feats - prev_feats),
+                            "dropped_features": sorted(prev_feats - curr_feats),
+                        }
+                        status = "STABLE" if overlap_pct >= 60 else "DRIFT"
+                        print(f"  {pos} feature stability: {overlap_pct:.0f}% overlap ({status})")
+                    else:
+                        stability_report[pos] = {"overlap_pct": None, "stable": True, "new_features": [], "dropped_features": []}
+            # Append current snapshot to history (keep last 10 runs)
+            history.append({
+                "date": datetime.now().isoformat(),
+                "feature_version": FEATURE_VERSION.strip(),
+                "train_seasons": train_seasons,
+                "top10": current_top10,
+                "stability": stability_report,
+            })
+            history = history[-10:]  # Keep last 10 snapshots
+            with open(history_path, "w", encoding="utf-8") as f:
+                json.dump(history, f, indent=2, default=str)
+            print(f"  Feature importance history updated ({len(history)} snapshots)")
+    except Exception as e:
+        print(f"  Feature stability tracking skipped: {e}")
 
     # Report QB target choice if present
     qb_choice_path = MODELS_DIR / QB_TARGET_CHOICE_FILENAME
@@ -961,6 +1386,22 @@ def train_models(positions: list = None,
         for pos, m in trainer.training_metrics.items():
             pos_test_metrics[pos] = m
 
+        # Archive previous metadata for rollback (keep last 5 versions)
+        version_history_path = MODELS_DIR / "model_version_history.json"
+        version_history = []
+        if version_history_path.exists():
+            try:
+                with open(version_history_path, encoding="utf-8") as f:
+                    version_history = json.load(f)
+            except Exception:
+                version_history = []
+        if prev_metadata.get("training_date"):
+            version_history.append(prev_metadata)
+            version_history = version_history[-5:]  # Keep last 5 versions for rollback
+            with open(version_history_path, "w", encoding="utf-8") as f:
+                json.dump(version_history, f, indent=2, default=str)
+            print(f"  Archived previous model version ({len(version_history)} versions available for rollback)")
+
         metadata = {
             "training_date": datetime.now().isoformat(),
             "feature_version": FEATURE_VERSION.strip(),
@@ -978,10 +1419,53 @@ def train_models(positions: list = None,
             "previous_training_date": prev_metadata.get("training_date"),
             "previous_feature_version": prev_metadata.get("feature_version"),
             "rollback_available": bool(prev_metadata.get("training_date")),
+            "n_rollback_versions": len(version_history),
+            "horizon_status_file": str(MODELS_DIR / "horizon_model_status.json"),
+            "bounded_scaler_file": str(MODELS_DIR / "feature_scaler_bounded.joblib"),
         }
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, default=str)
         print(f"Model metadata written: {metadata_path.name}")
+
+        # Unified monitoring artifact: model version + performance + explainability pointers.
+        top10_path = MODELS_DIR / "top10_features_per_position.json"
+        top10_payload = {}
+        if top10_path.exists():
+            try:
+                with open(top10_path, encoding="utf-8") as f:
+                    top10_payload = json.load(f)
+            except Exception:
+                top10_payload = {}
+        # Load feature stability data if available
+        feature_stability = {}
+        try:
+            hist_path = MODELS_DIR / "feature_importance_history.json"
+            if hist_path.exists():
+                with open(hist_path, encoding="utf-8") as f:
+                    hist = json.load(f)
+                if hist:
+                    feature_stability = hist[-1].get("stability", {})
+        except Exception:
+            pass
+
+        monitoring_summary = {
+            "generated_at": datetime.now().isoformat(),
+            "feature_version": FEATURE_VERSION.strip(),
+            "metadata_file": str(metadata_path),
+            "training_metadata": metadata,
+            "top10_features_per_position": top10_payload,
+            "feature_importance_stability": feature_stability,
+            "drift_threshold_pct": float(MODEL_CONFIG.get("drift_threshold_pct", 20.0)),
+            "retraining_config": {
+                "schedule": RETRAINING_CONFIG.get("retrain_day", "Tuesday"),
+                "auto_retrain": RETRAINING_CONFIG.get("auto_retrain", True),
+                "degradation_threshold_pct": RETRAINING_CONFIG.get("degradation_threshold_pct", 20.0),
+            },
+        }
+        monitoring_path = MODELS_DIR / "model_monitoring_report.json"
+        with open(monitoring_path, "w", encoding="utf-8") as f:
+            json.dump(monitoring_summary, f, indent=2, default=str)
+        print(f"Monitoring report written: {monitoring_path.name}")
     except Exception as e:
         print(f"Model metadata write skipped: {e}")
     print("Training complete!")

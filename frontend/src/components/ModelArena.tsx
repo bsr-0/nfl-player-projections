@@ -4,9 +4,13 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 
 export function ModelArena() {
   const [data, setData] = useState<AdvancedResults | null>(null)
+  const [qbTarget, setQbTarget] = useState<'util' | 'fp'>('fp')
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     api.advancedResults().then(setData).catch(() => setData(null)).finally(() => setLoading(false))
+    api.modelConfig().then((cfg) => {
+      if (cfg?.qb_target === 'util' || cfg?.qb_target === 'fp') setQbTarget(cfg.qb_target)
+    }).catch(() => {})
   }, [])
 
   const byPosition = (data?.backtest_results ?? (data as unknown as Record<string, unknown>)?.['by_position']) as Record<string, PositionResult> | undefined
@@ -22,7 +26,7 @@ export function ModelArena() {
     <div className="section-card">
       <h2>Model arena</h2>
       <p>
-        Per-position multi-week ensemble: XGBoost, LightGBM, and Ridge are trained on utilization (or FP for QB when chosen). Stacking meta-learner combines them. Best model per position below (test R²).
+        Per-position multi-week ensemble: XGBoost, LightGBM, and Ridge are trained on utilization (or FP for QB when chosen). Current QB target: <strong>{qbTarget === 'fp' ? 'fantasy points' : 'utilization score'}</strong>. Stacking meta-learner combines them. Best model per position below (test R²).
       </p>
       <p>
         <strong>Time horizon:</strong> All metrics below are for the <strong>1-week ahead</strong> horizon.

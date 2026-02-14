@@ -130,6 +130,27 @@ MODEL_CONFIG = {
     "use_18w_deep": True,   # Use DeepSeasonLongModel for long horizon when TF available
     "horizon_4w_weeks": (4, 5, 6, 7, 8),   # n_weeks that use 4-week hybrid model
     "horizon_long_threshold": 9,   # n_weeks >= this use 18-week deep model when available
+    
+    # 4-week LSTM hyperparameters (Section IV.A of requirements)
+    "lstm_sequence_length": 10,        # Sequence length 8-12 weeks
+    "lstm_units": 256,                 # First LSTM layer units (128-256)
+    "lstm_dropout": 0.25,              # Dropout between LSTM layers (0.2-0.3)
+    "lstm_learning_rate": 0.001,       # Adam optimizer learning rate
+    "lstm_epochs": 80,                 # Training epochs (50-100)
+    "lstm_batch_size": 32,             # Batch size (32-64)
+    "lstm_weight": 0.6,               # LSTM component weight in hybrid (60%)
+    "arima_weight": 0.4,              # ARIMA component weight in hybrid (40%)
+    "arima_order": (2, 1, 2),         # ARIMA (p, d, q) order
+    
+    # 18-week deep feedforward hyperparameters (Section IV.A of requirements)
+    "deep_n_features": 150,            # Expected input features (150-200)
+    "deep_hidden_units": None,         # None = auto-generate 100 Dense layers (512→256→128→64→32)
+    "deep_dropout": 0.35,              # Dropout per layer (0.3-0.5)
+    "deep_learning_rate": 0.0005,      # Adam learning rate (0.0001-0.01)
+    "deep_epochs": 100,                # Training epochs
+    "deep_batch_size": 64,             # Batch size (16-128)
+    "deep_blend_traditional": 0.3,     # 30% traditional + 70% deep
+    "deep_regression_to_mean_scale": 0.95,  # Regression-to-mean pull strength
 }
 
 # =============================================================================
@@ -175,6 +196,44 @@ LAG_WEEKS = [1, 2, 3, 4]  # Lag features
 # Prediction settings
 MAX_PREDICTION_WEEKS = 18
 MIN_GAMES_FOR_PREDICTION = 4  # Minimum historical games needed
+
+# Production retraining/monitoring configuration
+# Used by scripts/production_retrain_and_monitor.py and train drift checks.
+RETRAINING_CONFIG = {
+    # --- Schedule ---
+    "auto_retrain": True,
+    "retrain_day": "Tuesday",                  # Weekly retrain day (in-season)
+    "in_season_cadence_days": 7,               # Retrain every 7 days during NFL season
+    "off_season_cadence_days": 30,             # Retrain monthly during off-season
+    "retrain_hour_utc": 6,                     # Preferred retrain hour (UTC) for cron scheduling
+    "retrain_sla_seconds": 24 * 3600,          # Max allowed wall-clock time for a retrain cycle
+
+    # --- Drift detection ---
+    "degradation_threshold_pct": 20.0,         # Flag drift if RMSE degrades >20% vs previous run
+    "drift_auto_rollback": True,               # Auto-rollback to previous model on drift detection
+    "drift_check_after_retrain": True,          # Run drift check immediately after each retrain
+    "drift_position_threshold_pct": 25.0,      # Per-position RMSE drift threshold (stricter per-pos)
+
+    # --- Data freshness ---
+    "max_data_staleness_hours": 168,           # 7 days: alert if latest data is older than this
+    "require_current_season_data": True,       # Block retrain if current-season PBP data is missing
+    "min_new_weeks_for_retrain": 1,            # Require at least 1 new week of data before retraining
+
+    # --- Rollback policy ---
+    "max_rollback_versions": 5,                # Keep last 5 model versions for rollback
+    "rollback_on_test_regression": True,       # Rollback if test-set metrics regress beyond threshold
+    "rollback_rmse_increase_pct": 15.0,        # Rollback if RMSE increases >15% on test set
+
+    # --- Feature version enforcement ---
+    "block_retrain_on_version_mismatch": False, # If True, refuse to serve stale-feature models
+    "warn_on_version_mismatch": True,           # Print warning when feature version differs
+
+    # --- Monitoring hooks ---
+    "enable_drift_status_file": True,          # Write drift_status.json after each check
+    "enable_retrain_status_file": True,        # Write retrain_status.json after each retrain
+    "alert_on_drift": True,                    # Log WARNING-level alert on drift detection
+    "alert_on_sla_breach": True,               # Log WARNING if retrain exceeds SLA
+}
 
 # QB target selection (util vs future fantasy points): metadata file written after training
 QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"

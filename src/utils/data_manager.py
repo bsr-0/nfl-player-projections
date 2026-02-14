@@ -34,7 +34,7 @@ class DataManager:
             try:
                 with open(self.CACHE_FILE, 'r') as f:
                     return json.load(f)
-            except:
+            except Exception:
                 pass
         return {"last_check": None, "available_seasons": [], "latest_season": None}
     
@@ -288,7 +288,7 @@ class DataManager:
         try:
             player_count = len(self.db.get_player_stats())
             report.append(f"  Player weekly records: {player_count}")
-        except:
+        except Exception:
             report.append("  Player data: Unable to query")
         
         try:
@@ -297,7 +297,7 @@ class DataManager:
             if not schedule.empty:
                 seasons_in_db = schedule['season'].unique()
                 report.append(f"  Seasons in schedule DB: {sorted(seasons_in_db)}")
-        except:
+        except Exception:
             report.append("  Schedule data: Unable to query")
         
         report.append("=" * 50)

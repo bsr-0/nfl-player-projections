@@ -181,7 +181,7 @@ class NFLScheduleScraper(BaseScraper):
             if game_time:
                 try:
                     game_datetime = pd.to_datetime(game_time)
-                except:
+                except Exception:
                     game_datetime = None
             else:
                 game_datetime = None
@@ -421,7 +421,7 @@ def check_schedule_availability(year: int) -> bool:
         schedule = nfl.import_schedules([year])
         if not schedule.empty and len(schedule) > 100:  # Full schedule has 272+ games
             return True
-    except:
+    except Exception:
         pass
     
     # Check local CSV
@@ -435,7 +435,7 @@ def check_schedule_availability(year: int) -> bool:
         db = DatabaseManager()
         if db.has_schedule_for_season(year):
             return True
-    except:
+    except Exception:
         pass
     
     return False
