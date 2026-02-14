@@ -7,7 +7,7 @@ import type { PredictionRow } from '../api'
 
 /* ── colours ─────────────────────────────────────────────────── */
 const POS_COLOR: Record<string, string> = {
-  QB: '#00f5ff', RB: '#a78bfa', WR: '#10b981', TE: '#fbbf24',
+  QB: '#00f5ff', RB: '#a78bfa', WR: '#10b981', TE: '#fbbf24', K: '#f472b6', DST: '#fb923c',
 }
 
 /* ── snake-draft pick calculator ─────────────────────────────── */
@@ -27,6 +27,8 @@ function replacementRanks(numTeams: number) {
     RB: Math.round(numTeams * 2.5), // 2 starters + flex share
     WR: Math.round(numTeams * 2.5), // 2 starters + flex share
     TE: numTeams + 1,            // 1 starter per team
+    K: numTeams + 1,             // 1 kicker per team
+    DST: numTeams + 1,           // 1 DST per team
   }
 }
 
@@ -68,7 +70,7 @@ export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps
     const posMap: Record<string, { name: string; position: string; team: string; projection: number; matchup: string }[]> = {}
 
     // gather and sort by projection within each position
-    for (const pos of ['QB', 'RB', 'WR', 'TE']) {
+    for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
       const rows = allData[pos] ?? []
       const sorted = rows
         .map((r) => {
@@ -96,7 +98,7 @@ export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps
     const byPosition: Record<string, DraftPlayer[]> = {}
     const allPlayers: DraftPlayer[] = []
 
-    for (const pos of ['QB', 'RB', 'WR', 'TE']) {
+    for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
       const sorted = posMap[pos] ?? []
       const repIdx = Math.min((repRanks[pos as keyof typeof repRanks] ?? 13) - 1, sorted.length - 1)
       const repValue = repIdx >= 0 && sorted[repIdx] ? sorted[repIdx].projection : 0
@@ -117,7 +119,7 @@ export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps
 
     // normalise VOR across positions for cross-position ranking
     // use min-max within each position, then compare
-    for (const pos of ['QB', 'RB', 'WR', 'TE']) {
+    for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
       const posP = byPosition[pos] ?? []
       const maxVor = posP.length > 0 ? Math.max(...posP.map((p) => p.vor)) : 1
       const minVor = posP.length > 0 ? Math.min(...posP.map((p) => p.vor)) : 0
@@ -143,7 +145,7 @@ export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps
     const board = allPlayers.slice(0, totalPicks + 20)
 
     // positional scarcity data: VOR by rank within position
-    const posScarcity: { rank: number; QB: number; RB: number; WR: number; TE: number }[] = []
+    const posScarcity: { rank: number; QB: number; RB: number; WR: number; TE: number; K: number; DST: number }[] = []
     const maxLen = Math.max(
       ...(Object.values(byPosition).map((arr) => Math.min(arr.length, 40)))
     )
@@ -154,6 +156,8 @@ export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps
         RB: byPosition.RB?.[i]?.vor ?? 0,
         WR: byPosition.WR?.[i]?.vor ?? 0,
         TE: byPosition.TE?.[i]?.vor ?? 0,
+        K: byPosition.K?.[i]?.vor ?? 0,
+        DST: byPosition.DST?.[i]?.vor ?? 0,
       })
     }
 
@@ -347,7 +351,7 @@ export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps
             </table>
           </div>
           <div className="legend-row" style={{ marginTop: '0.75rem' }}>
-            {['QB', 'RB', 'WR', 'TE'].map((pos) => (
+            {['QB', 'RB', 'WR', 'TE', 'K', 'DST'].map((pos) => (
               <span key={pos} className="legend-item">
                 <span className="legend-dot" style={{ background: POS_COLOR[pos] }} />
                 {pos}
@@ -452,13 +456,15 @@ export function DraftAssistant({ allData, qbTarget = 'fp' }: DraftAssistantProps
                 <Line type="monotone" dataKey="RB" stroke={POS_COLOR.RB} strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="WR" stroke={POS_COLOR.WR} strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="TE" stroke={POS_COLOR.TE} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="K" stroke={POS_COLOR.K} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="DST" stroke={POS_COLOR.DST} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
           {/* Scarcity summary cards */}
           <div className="draft-scarcity__summary">
-            {(['QB', 'RB', 'WR', 'TE'] as const).map((pos) => {
+            {(['QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const).map((pos) => {
               const posPlayers = byPosition[pos] ?? []
               const top5Avg = posPlayers.slice(0, 5).reduce((s, p) => s + p.vor, 0) / Math.min(5, posPlayers.length || 1)
               const next10Avg = posPlayers.slice(5, 15).reduce((s, p) => s + p.vor, 0) / Math.min(10, Math.max(1, posPlayers.slice(5, 15).length))

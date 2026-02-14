@@ -101,6 +101,31 @@ def generate_app_data(save_daily: bool = False) -> bool:
                 )
         except Exception as e:
             print(f"  Prediction for {n_weeks}w failed: {e}")
+
+    # K/DST predictions (statistical model, not ML)
+    try:
+        from src.models.kicker_dst_predictor import KickerDSTPredictor, load_kicker_dst_history
+        from src.predict import get_schedule_map_for_week
+        kd_history = load_kicker_dst_history()
+        if not kd_history.empty:
+            kd_predictor = KickerDSTPredictor(_db)
+            kd_schedule = get_schedule_map_for_week(_db, pred_season, pred_week)
+            for n_weeks in horizons:
+                kd_pred = kd_predictor.predict_all(kd_history, n_weeks=n_weeks, schedule_map=kd_schedule)
+                if not kd_pred.empty:
+                    cols = ["player_id", "name", "position", "team", f"projection_{n_weeks}w"]
+                    if "opponent" in kd_pred.columns:
+                        cols.append("opponent")
+                    if "home_away" in kd_pred.columns:
+                        cols.append("home_away")
+                    kd_out = kd_pred[[c for c in cols if c in kd_pred.columns]].copy()
+                    if n_weeks in pred_dfs:
+                        pred_dfs[n_weeks] = pd.concat([pred_dfs[n_weeks], kd_out], ignore_index=True)
+                    else:
+                        pred_dfs[n_weeks] = kd_out
+                    print(f"  Added {len(kd_out)} K/DST predictions for {n_weeks}w horizon")
+    except Exception as e:
+        print(f"  K/DST predictions skipped: {e}")
     
     if not pred_dfs:
         print("No predictions generated.")

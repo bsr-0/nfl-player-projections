@@ -428,6 +428,17 @@ class ModelEvaluator:
                                      y_dict: Dict[int, pd.Series]) -> Dict[int, Dict]:
         """Evaluate model across different prediction horizons."""
         results = {}
+
+        def _predict_for_horizon(_model, _X: pd.DataFrame, _n_weeks: int) -> np.ndarray:
+            """Predict for a horizon, preferring horizon-aware model signatures."""
+            # Multi-horizon wrappers (e.g., MultiWeekModel) expose predict(X, n_weeks).
+            # Single-horizon models expose predict(X). Try the horizon form first.
+            try:
+                return _model.predict(_X, _n_weeks)
+            except TypeError:
+                return _model.predict(_X)
+            except AttributeError:
+                return _model.predict(_X)
         
         for n_weeks, y in y_dict.items():
             valid_mask = ~y.isna()
@@ -437,7 +448,7 @@ class ModelEvaluator:
             if len(y_valid) == 0:
                 continue
             
-            predictions = model.predict(X_valid, n_weeks) if hasattr(model, 'n_weeks') else model.predict(X_valid)
+            predictions = _predict_for_horizon(model, X_valid, n_weeks)
             
             results[n_weeks] = {
                 "n_samples": len(y_valid),

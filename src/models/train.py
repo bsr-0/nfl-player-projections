@@ -62,7 +62,8 @@ from sklearn.preprocessing import MinMaxScaler
 def load_training_data(positions: list = None, min_games: int = 4, 
                        test_season: int = None,
                        n_train_seasons: int = None,
-                       optimize_training_years: bool = False) -> tuple:
+                       optimize_training_years: bool = False,
+                       strict_requirements: bool = False) -> tuple:
     """
     Load and prepare training data with automatic train/test split.
     
@@ -170,20 +171,33 @@ def load_training_data(positions: list = None, min_games: int = 4,
     print(f"  Training: {len(train_data)} records from seasons {train_seasons}")
     print(f"  Testing: {len(test_data)} records from season {auto_test_season}")
     n_seasons = len(train_seasons)
-    # Requirement-derived minimums: warn when below (1w min 3, 4w min 5, 18w min 8)
+    # Requirement-derived minimums: warn (or fail in strict mode) when below
+    # (1w min 3, 4w min 5, 18w min 8)
+    requirement_failures = []
     if n_seasons < MIN_TRAINING_SEASONS_1W:
-        print(f"  WARNING: 1-week model requires >= {MIN_TRAINING_SEASONS_1W} training seasons (have {n_seasons}). Accuracy may suffer.")
+        msg = f"1-week model requires >= {MIN_TRAINING_SEASONS_1W} training seasons (have {n_seasons})"
+        print(f"  WARNING: {msg}. Accuracy may suffer.")
+        requirement_failures.append(msg)
     if MODEL_CONFIG.get("use_18w_deep", True) and n_seasons < MIN_TRAINING_SEASONS_18W:
-        print(f"  WARNING: 18-week deep model requires >= {MIN_TRAINING_SEASONS_18W} training seasons (have {n_seasons}). Consider skipping or adding data.")
+        msg = f"18-week deep model requires >= {MIN_TRAINING_SEASONS_18W} training seasons (have {n_seasons})"
+        print(f"  WARNING: {msg}. Consider skipping or adding data.")
+        requirement_failures.append(msg)
     if MODEL_CONFIG.get("use_4w_hybrid", True) and n_seasons < MIN_TRAINING_SEASONS_4W:
-        print(f"  WARNING: 4-week hybrid model benefits from >= {MIN_TRAINING_SEASONS_4W} training seasons (have {n_seasons}).")
+        msg = f"4-week hybrid model benefits from >= {MIN_TRAINING_SEASONS_4W} training seasons (have {n_seasons})"
+        print(f"  WARNING: {msg}.")
+        requirement_failures.append(msg)
     # Per-position player minimums (requirements: QB 30+, RB 60+, WR 70+, TE 30+)
     train_players_per_pos = train_data.groupby("position")["player_id"].nunique()
     for pos in POSITIONS:
         min_players = MIN_PLAYERS_PER_POSITION.get(pos, 30)
         n_players = int(train_players_per_pos.get(pos, 0))
         if n_players < min_players:
-            print(f"  WARNING: {pos} has {n_players} unique players in training (requirement-derived minimum >= {min_players}).")
+            msg = f"{pos} has {n_players} unique players in training (minimum >= {min_players})"
+            print(f"  WARNING: {msg}.")
+            requirement_failures.append(msg)
+    if strict_requirements and requirement_failures:
+        joined = "; ".join(requirement_failures)
+        raise ValueError(f"Strict requirements check failed: {joined}")
     return train_data, test_data, train_seasons, auto_test_season
 
 
@@ -257,11 +271,12 @@ def _validate_critical_missingness(df: pd.DataFrame, label: str, threshold: floa
         raise ValueError(f"{label}: critical missingness exceeds {threshold:.0%}: {details}")
 
 
-def _report_outliers_3sigma(df: pd.DataFrame, label: str, cols: list) -> None:
+def _report_outliers_3sigma(df: pd.DataFrame, label: str, cols: list) -> Dict[str, Dict[str, float]]:
     """Diagnostics only: report >3 std outliers without dropping data."""
     if df.empty:
-        return
+        return {}
     print(f"  {label}: >3σ outlier diagnostics")
+    out = {}
     for col in cols:
         if col not in df.columns:
             continue
@@ -275,6 +290,22 @@ def _report_outliers_3sigma(df: pd.DataFrame, label: str, cols: list) -> None:
         n_out = int(((s - mu).abs() > 3 * sigma).sum())
         pct = 100.0 * n_out / max(len(s), 1)
         print(f"    - {col}: {n_out}/{len(s)} ({pct:.2f}%)")
+        out[col] = {
+            "n_outliers": n_out,
+            "n_samples": int(len(s)),
+            "pct_outliers": round(pct, 3),
+        }
+    return out
+
+
+def _write_json_artifact(path: Path, payload: Dict[str, Any], label: str) -> None:
+    """Best-effort JSON artifact writer for training diagnostics."""
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, default=str)
+        print(f"  Wrote {label}: {path.name}")
+    except Exception as e:
+        print(f"  {label} write skipped: {e}")
 
 
 def _report_train_serve_feature_parity(train_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
@@ -907,7 +938,8 @@ def train_models(positions: list = None,
                  n_trials: int = None,
                  test_season: int = None,
                  optimize_training_years: bool = False,
-                 walk_forward: bool = False):
+                 walk_forward: bool = False,
+                 strict_requirements: bool = None):
     """
     Main training function with automatic train/test split.
     
@@ -920,6 +952,8 @@ def train_models(positions: list = None,
     """
     positions = positions or POSITIONS
     n_trials = n_trials or MODEL_CONFIG["n_optuna_trials"]
+    if strict_requirements is None:
+        strict_requirements = bool(MODEL_CONFIG.get("strict_requirements_default", False))
     
     print("=" * 60)
     print("NFL Player Performance Model Training")
@@ -932,6 +966,7 @@ def train_models(positions: list = None,
         test_season=test_season,
         n_train_seasons=None,  # Use all available by default
         optimize_training_years=optimize_training_years,
+        strict_requirements=strict_requirements,
     )
     print(f"Training records: {len(train_data)}")
     print(f"Test records: {len(test_data)}")
@@ -946,7 +981,12 @@ def train_models(positions: list = None,
         old_models_dir = settings.MODELS_DIR
         wf_metrics = []
         for ts in test_seasons_wf:
-            td, td_test, tr_ss, _ = load_training_data(positions, test_season=ts, optimize_training_years=False)
+            td, td_test, tr_ss, _ = load_training_data(
+                positions,
+                test_season=ts,
+                optimize_training_years=False,
+                strict_requirements=strict_requirements,
+            )
             if len(td_test) < 20:
                 continue
             with tempfile.TemporaryDirectory() as tmp:
@@ -1057,16 +1097,53 @@ def train_models(positions: list = None,
         MODELS_DIR / "feature_scaler_bounded.joblib",
     )
     print("\n[2d/5] Data quality checks...")
-    _report_missingness(train_data, "train", threshold=0.05)
-    _report_missingness(test_data, "test", threshold=0.05)
+    train_missing = _report_missingness(train_data, "train", threshold=0.05)
+    test_missing = _report_missingness(test_data, "test", threshold=0.05)
     _validate_critical_missingness(train_data, "train", threshold=0.05)
     _validate_critical_missingness(test_data, "test", threshold=0.05)
-    _report_outliers_3sigma(
+    train_outliers = _report_outliers_3sigma(
         train_data,
         "train",
         cols=["fantasy_points", "target_1w", "target_4w", "target_18w", "target_util_1w", "utilization_score"],
     )
     _report_train_serve_feature_parity(train_data, test_data)
+    quality_payload = {
+        "generated_at": datetime.now().isoformat(),
+        "strict_requirements": bool(strict_requirements),
+        "missingness_above_5pct": {
+            "train": train_missing,
+            "test": test_missing,
+        },
+        "train_outliers_3sigma": train_outliers,
+    }
+    _write_json_artifact(MODELS_DIR / "data_quality_report.json", quality_payload, "data quality report")
+
+    train_players_per_pos = {
+        pos: int(train_data[train_data["position"] == pos]["player_id"].nunique())
+        for pos in POSITIONS
+    }
+    requirement_gates = {
+        "generated_at": datetime.now().isoformat(),
+        "strict_requirements": bool(strict_requirements),
+        "training_seasons": len(train_seasons),
+        "min_training_seasons": {
+            "1w": MIN_TRAINING_SEASONS_1W,
+            "4w": MIN_TRAINING_SEASONS_4W,
+            "18w": MIN_TRAINING_SEASONS_18W,
+        },
+        "seasons_gate": {
+            "1w_pass": len(train_seasons) >= MIN_TRAINING_SEASONS_1W,
+            "4w_pass": (not MODEL_CONFIG.get("use_4w_hybrid", True)) or len(train_seasons) >= MIN_TRAINING_SEASONS_4W,
+            "18w_pass": (not MODEL_CONFIG.get("use_18w_deep", True)) or len(train_seasons) >= MIN_TRAINING_SEASONS_18W,
+        },
+        "players_per_position": train_players_per_pos,
+        "min_players_per_position": MIN_PLAYERS_PER_POSITION,
+        "players_gate": {
+            pos: train_players_per_pos.get(pos, 0) >= MIN_PLAYERS_PER_POSITION.get(pos, 0)
+            for pos in POSITIONS
+        },
+    }
+    _write_json_artifact(MODELS_DIR / "training_requirements_gate.json", requirement_gates, "requirements gate report")
     
     # Winsorize targets at 1st/99th percentile per position (train only)
     print("\n[3/5] Winsorizing targets...")
@@ -1114,6 +1191,7 @@ def train_models(positions: list = None,
     # Horizon-specific models: 4-week LSTM+ARIMA hybrid, 18-week deep (when enabled)
     print("\n[4c/5] Training horizon-specific models (4w hybrid, 18w deep)...")
     horizon_status: Dict[str, Dict[str, str]] = {pos: {} for pos in positions}
+    target_semantics: Dict[str, Dict[str, str]] = {pos: {} for pos in positions}
     try:
         from src.models.horizon_models import (
             Hybrid4WeekModel,
@@ -1130,10 +1208,17 @@ def train_models(positions: list = None,
             if position not in trainer.trained_models:
                 horizon_status[position]["hybrid_4w"] = "base_model_missing"
                 horizon_status[position]["deep_18w"] = "base_model_missing"
+                target_semantics[position]["1w"] = "base_model_missing"
+                target_semantics[position]["4w"] = "base_model_missing"
+                target_semantics[position]["18w"] = "base_model_missing"
                 continue
             multi = trainer.trained_models[position]
             base = multi.models.get(1) or list(multi.models.values())[0]
             feature_cols = getattr(base, "feature_names", [])
+            # Track semantically intended targets: QB may be fp/util; skill positions are utilization-first.
+            target_semantics[position]["1w"] = "target_1w_or_target_util_1w_trainer_selected"
+            target_semantics[position]["4w"] = "target_util_4w_preferred_over_target_4w"
+            target_semantics[position]["18w"] = "target_util_18w_preferred_over_target_18w"
             if len(feature_cols) < 5:
                 horizon_status[position]["hybrid_4w"] = "insufficient_features"
                 horizon_status[position]["deep_18w"] = "insufficient_features"
@@ -1223,6 +1308,7 @@ def train_models(positions: list = None,
                     "generated_at": datetime.now().isoformat(),
                     "train_seasons": train_seasons,
                     "status_by_position": horizon_status,
+                    "target_semantics": target_semantics,
                 },
                 f,
                 indent=2,
@@ -1508,6 +1594,11 @@ def main():
         action="store_true",
         help="Run walk-forward validation (train on 1..N-1, test on N for last 4 seasons); report mean +/- std RMSE/MAE"
     )
+    parser.add_argument(
+        "--strict-requirements",
+        action="store_true",
+        help="Fail training when minimum data requirements are not met (seasons/player counts)."
+    )
     
     args = parser.parse_args()
     
@@ -1518,6 +1609,7 @@ def main():
         test_season=args.test_season,
         optimize_training_years=args.optimize_years,
         walk_forward=args.walk_forward,
+        strict_requirements=args.strict_requirements,
     )
 
 

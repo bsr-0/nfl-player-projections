@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList, CartesianGrid } from 'recharts'
 import { api, type PredictionsResponse, type PredictionRow, type TSBacktestPredictionRow } from '../api'
 
-const POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
+const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
 type HorizonValue = 1 | 4 | 18
 const HORIZONS: { value: HorizonValue; label: string }[] = [
   { value: 1, label: '1 Week' },
@@ -15,6 +15,8 @@ const POSITION_COLORS: Record<string, string> = {
   RB: '#a78bfa',
   WR: '#10b981',
   TE: '#fbbf24',
+  K: '#f472b6',
+  DST: '#fb923c',
 }
 
 function getTier(rank: number, total: number): { label: string; color: string; bg: string; num: number } {
@@ -68,7 +70,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
   const [selectedBtSeason, setSelectedBtSeason] = useState<number | null>(null)
   const [btRows, setBtRows] = useState<TSBacktestPredictionRow[]>([])
   const [btLoading, setBtLoading] = useState(false)
-  const isQB = position === 'QB'
+  const isFPPosition = position === 'QB' || position === 'K' || position === 'DST'
 
   // Fetch available backtest seasons once
   useEffect(() => {
@@ -98,7 +100,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
         const pts = getProjectedPoints(r, horizon)
         const util = r.utilization_score != null ? Number(r.utilization_score) : null
         const std = r.prediction_std != null ? Number(r.prediction_std) : (r.weekly_volatility != null ? Number(r.weekly_volatility) : null)
-        const chartVal = isQB ? pts : (util ?? pts)
+        const chartVal = isFPPosition ? pts : (util ?? pts)
         return { r, pts, util, std, chartVal, matchup: formatMatchup(r) }
       })
       .filter((x) => x.chartVal != null)
@@ -117,7 +119,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
       floor: x.pts != null && x.std != null ? Math.max(0, x.pts - 1.5 * x.std) : null,
       ceiling: x.pts != null && x.std != null ? x.pts + 1.5 * x.std : null,
     }))
-  }, [rows, horizon, isQB, searchName])
+  }, [rows, horizon, isFPPosition, searchName])
 
   const chartData = useMemo(
     () =>
@@ -284,7 +286,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
         <span className="rankings__metric">
           {isBacktest
             ? `Historical Backtest · ${selectedBtSeason}/${(selectedBtSeason ?? 0) + 1} · Predicted vs Actual`
-            : `${isQB ? 'Ranked by Fantasy Points' : 'Ranked by Utilization Score'} · ${horizonLabel}`}
+            : `${isFPPosition ? 'Ranked by Fantasy Points' : 'Ranked by Utilization Score'} · ${horizonLabel}`}
         </span>
         {!isBacktest && data?.schedule_available && <span className="pill pill--success" style={{ fontSize: 12 }}>Schedule ✓</span>}
         {isBacktest && <span className="pill" style={{ fontSize: 12, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}>Backtest</span>}
@@ -447,7 +449,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
                 <YAxis type="category" dataKey="name" stroke="#94a3b8" width={190} interval={0} tick={{ fontSize: 11, fill: '#cbd5e1' }} />
                 <Tooltip
                   contentStyle={{ background: '#1a1f3a', border: '1px solid #334155', borderRadius: 8, color: '#cbd5e1' }}
-                  formatter={(value: number) => [value.toFixed(1), isQB ? 'Fantasy Pts' : 'Util Score']}
+                  formatter={(value: number) => [value.toFixed(1), isFPPosition ? 'Fantasy Pts' : 'Util Score']}
                 />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   <LabelList dataKey="value" position="right" formatter={(v: number) => v.toFixed(1)} fill="#cbd5e1" />
@@ -471,7 +473,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
                   <th className="rankings__th rankings__th--name">Player</th>
                   <th className="rankings__th rankings__th--team">Team</th>
                   <th className="rankings__th rankings__th--matchup">Matchup</th>
-                  <th className="rankings__th rankings__th--pts">{isQB ? 'Proj Pts' : 'Util Score'}</th>
+                  <th className="rankings__th rankings__th--pts">{isFPPosition ? 'Proj Pts' : 'Util Score'}</th>
                   {enriched.some((x) => x.floor != null) && (
                     <th className="rankings__th rankings__th--range">Floor / Ceiling</th>
                   )}

@@ -185,10 +185,11 @@ class DefenseRankingsLoader:
         )
         
         # Rolling average of points allowed vs average
+        # shift(1) ensures we only use data from PRIOR weeks (no leakage of current-week outcome)
         defense_allowed['defense_pts_allowed_roll4'] = defense_allowed.groupby(
             ['team', 'position']
         )['points_allowed'].transform(
-            lambda x: x.rolling(4, min_periods=1).mean()
+            lambda x: x.shift(1).rolling(4, min_periods=1).mean()
         )
         
         # Defense strength score: higher = allows more points = easier matchup

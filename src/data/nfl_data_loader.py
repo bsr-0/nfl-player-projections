@@ -35,7 +35,7 @@ import nfl_data_py as nfl
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config.settings import POSITIONS, SCORING
+from config.settings import POSITIONS, OFFENSIVE_POSITIONS, SCORING
 from src.utils.database import DatabaseManager
 from src.utils.helpers import calculate_fantasy_points
 from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week, current_season_has_weeks_played
@@ -164,7 +164,8 @@ class NFLDataLoader:
             
             if not df.empty:
                 df = self._standardize_weekly_columns(df)
-                df = df[df['position'].isin(POSITIONS)]
+                # nfl_data_py weekly data only has offensive positions
+                df = df[df['position'].isin(OFFENSIVE_POSITIONS)]
                 df['fantasy_points'] = df.apply(
                     lambda row: self._calculate_fantasy_points(row), axis=1
                 )
@@ -180,8 +181,19 @@ class NFLDataLoader:
             return d
         all_dfs = [_unique_columns(d) for d in all_dfs]
         df = pd.concat(all_dfs, ignore_index=True)
-        print(f"  Loaded {len(df)} records total")
-        print(f"  After filtering: {len(df)} records for {POSITIONS}")
+        print(f"  Loaded {len(df)} offensive records total")
+        
+        # Append K/DST data from PBP aggregation
+        try:
+            from src.data.kicker_dst_aggregator import load_kicker_dst_data
+            kd_df = load_kicker_dst_data(seasons)
+            if not kd_df.empty:
+                df = pd.concat([df, kd_df], ignore_index=True)
+                print(f"  Added {len(kd_df)} K/DST records from PBP")
+        except Exception as e:
+            print(f"  K/DST load skipped: {e}")
+        
+        print(f"  Total: {len(df)} records for {POSITIONS}")
         
         if store_in_db:
             self._store_weekly_data(df)

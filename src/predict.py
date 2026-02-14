@@ -322,7 +322,7 @@ class NFLPredictor:
         # when the model path did not produce uncertainty estimates
         if "prediction_std" in results.columns and results["prediction_std"].isna().all():
             # Position-specific default std based on typical RMSE from requirements
-            pos_default_std = {"QB": 7.0, "RB": 8.0, "WR": 7.5, "TE": 6.5}
+            pos_default_std = {"QB": 7.0, "RB": 8.0, "WR": 7.5, "TE": 6.5, "K": 3.5, "DST": 4.5}
             for pos, default_std in pos_default_std.items():
                 mask = results["position"] == pos
                 results.loc[mask, "prediction_std"] = default_std * (n_weeks ** 0.5)

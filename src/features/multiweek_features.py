@@ -814,13 +814,13 @@ class MultiWeekFeatureEngineer:
         self.injury_model = InjuryProbabilityModel()
     
     def add_multiweek_features(self, df: pd.DataFrame,
-                                horizons: List[int] = [1, 5, 18]) -> pd.DataFrame:
+                                horizons: List[int] = [1, 4, 18]) -> pd.DataFrame:
         """
         Add all multi-week features for specified horizons.
         
         Args:
             df: Player data DataFrame
-            horizons: List of week horizons to calculate (default: 1, 5, 18)
+            horizons: List of week horizons to calculate (default: 1, 4, 18)
             
         Returns:
             DataFrame with multi-week features added
@@ -854,7 +854,7 @@ class MultiWeekFeatureEngineer:
 
 
 def add_multiweek_features(df: pd.DataFrame, 
-                           horizons: List[int] = [1, 5, 18]) -> pd.DataFrame:
+                           horizons: List[int] = [1, 4, 18]) -> pd.DataFrame:
     """Convenience function to add all multi-week features."""
     engineer = MultiWeekFeatureEngineer()
     return engineer.add_multiweek_features(df, horizons)

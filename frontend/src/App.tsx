@@ -62,7 +62,7 @@ function App() {
 
   // Fetch all positions for dashboard overview (1-week)
   useEffect(() => {
-    const positions = ['QB', 'RB', 'WR', 'TE']
+    const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
     Promise.all(positions.map((p) => api.predictions(p, undefined, 1).then((d) => ({ pos: p, rows: d.rows }))))
       .then((results) => {
         const map: Record<string, PredictionRow[]> = {}
@@ -74,7 +74,7 @@ function App() {
 
   // Fetch all positions with 18-week horizon for draft assistant
   useEffect(() => {
-    const positions = ['QB', 'RB', 'WR', 'TE']
+    const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
     Promise.all(positions.map((p) => api.predictions(p, undefined, 18).then((d) => ({ pos: p, rows: d.rows }))))
       .then((results) => {
         const map: Record<string, PredictionRow[]> = {}

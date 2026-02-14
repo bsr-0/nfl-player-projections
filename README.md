@@ -6,10 +6,12 @@ A machine learning workflow that predicts NFL player fantasy performance for 1-1
 
 ## Features
 
-- **Multi-position support**: Separate optimized models for QB, RB, WR, TE
+- **6-position support**: ML models for QB, RB, WR, TE plus statistical models for K (Kicker) and DST (Defense/Special Teams)
 - **Flexible prediction window**: Predict performance for next week or entire season (1-18 weeks)
-- **Utilization Score integration**: Incorporates opportunity-based metrics for better predictions
-- **Automated data pipelines**: Scrapers to refresh historical data to latest results
+- **Utilization Score integration**: Incorporates opportunity-based metrics for offensive position predictions
+- **Kicker projections**: Aggregated from play-by-play field goal and extra point data with distance-based scoring
+- **DST projections**: Team defense stats (sacks, INTs, fumble recoveries, TDs, points allowed) from play-by-play data
+- **Automated data pipelines**: Scrapers to refresh historical data to latest results (back to 2006)
 - **Team context**: Includes team stats for every team a player has been on
 - **Model optimization**: Hyperparameter tuning with Optuna, dimensionality reduction
 
@@ -29,6 +31,7 @@ python -m src.scrapers.run_scrapers --seasons 2020-2024
 
 ### 2. Train Models
 ```bash
+# Train ML models for offensive positions (K/DST use statistical models automatically)
 python -m src.models.train --positions QB RB WR TE
 ```
 
@@ -46,7 +49,7 @@ python -m src.predict --player "Patrick Mahomes" --weeks 4
 
 ## Web app (FastAPI + React SPA)
 
-A dark-theme single-page app with **position** and **time horizon** filters and one interactive chart of projected fantasy points (matchup-aware; tooltips show opponent and utilization).
+A dark-theme single-page app with 5 tabs: **Dashboard**, **Rankings**, **Draft Assistant**, **Player Lookup**, and **Model Insights**. Supports all 6 positions (QB, RB, WR, TE, K, DST) with time horizon filters (1-week, 4-week, rest-of-season).
 
 **Recommended: one command** (builds frontend if needed, starts server):
    ```bash
@@ -118,7 +121,7 @@ pytest -q tests/test_rubric_compliance_checker.py tests/test_metrics_evaluator.p
 
 ## Utilization Score Methodology
 
-The Utilization Score (0-100) is the **primary prediction target**. Models predict future utilization; rankings and app display use predicted utilization. The score measures player opportunity and usage:
+The Utilization Score (0-100) is the **primary prediction target** for offensive positions. Models predict future utilization; rankings and app display use predicted utilization. The score measures player opportunity and usage:
 
 ### RB Utilization Score
 - **60-69**: ~12.2 PPG, 70%+ finish as RB2/RB3
@@ -137,6 +140,16 @@ The Utilization Score (0-100) is the **primary prediction target**. Models predi
 ### QB Utilization Score
 - Adjusted for rushing involvement
 - Red zone opportunity rate
+
+### Kicker (K) Projections
+- Rolling averages of FG made (by distance: 0-39, 40-49, 50+), XP made/missed
+- Home/away adjustment, team scoring context
+- Scoring: FG 0-39 = 3 pts, FG 40-49 = 4 pts, FG 50+ = 5 pts, XP = 1 pt, miss = -1 pt
+
+### Defense/Special Teams (DST) Projections
+- Rolling averages of sacks, interceptions, fumble recoveries, defensive/special teams TDs
+- Points allowed bracket scoring (shutout = 10 pts, 35+ allowed = -4 pts)
+- Home field advantage adjustment
 
 ## Model Architecture
 

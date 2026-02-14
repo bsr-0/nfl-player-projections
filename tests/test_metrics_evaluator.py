@@ -21,6 +21,17 @@ class _ArrayModel:
         return self._preds[: len(X)]
 
 
+class _HorizonAwareModel:
+    """Test double that requires n_weeks-aware prediction calls."""
+
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, X, n_weeks):
+        self.calls.append(int(n_weeks))
+        return np.full(len(X), float(n_weeks))
+
+
 def test_evaluate_model_uses_boom_bust_and_vor_with_positions():
     X = pd.DataFrame({"f1": [1, 2, 3, 4, 5, 6]})
     y = pd.Series([8.0, 12.0, 4.0, 22.0, 9.0, 15.0])
@@ -99,3 +110,20 @@ def test_compare_to_expert_consensus_position_thresholds():
     assert out["position"] == "RB"
     assert "beat_expert_target_pct" in out
     assert "rmse_improvement_pct" in out
+
+
+def test_evaluate_prediction_horizon_uses_horizon_aware_predict_signature():
+    X = pd.DataFrame({"f1": [1, 2, 3, 4]})
+    y_dict = {
+        1: pd.Series([1.0, 1.0, 1.0, 1.0]),
+        4: pd.Series([4.0, 4.0, 4.0, 4.0]),
+    }
+    model = _HorizonAwareModel()
+    evaluator = ModelEvaluator()
+
+    out = evaluator.evaluate_prediction_horizon(model, X, y_dict)
+
+    assert set(out.keys()) == {1, 4}
+    assert model.calls == [1, 4]
+    assert out[1]["rmse"] == 0.0
+    assert out[4]["rmse"] == 0.0

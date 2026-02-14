@@ -7,6 +7,8 @@ const POSITION_COLORS: Record<string, string> = {
   RB: '#a78bfa',
   WR: '#10b981',
   TE: '#fbbf24',
+  K: '#f472b6',
+  DST: '#fb923c',
 }
 
 const POSITION_LABELS: Record<string, string> = {
@@ -14,6 +16,8 @@ const POSITION_LABELS: Record<string, string> = {
   RB: 'Running Backs',
   WR: 'Wide Receivers',
   TE: 'Tight Ends',
+  K: 'Kickers',
+  DST: 'Defense/ST',
 }
 
 function getTier(rank: number, total: number): { label: string; color: string; bg: string } {
@@ -46,7 +50,7 @@ export function DashboardView({ allData, weekLabel, loading }: DashboardViewProp
 
   const topPicks = useMemo(() => {
     const picks: { pos: string; players: { name: string; team: string; pts: number; tier: ReturnType<typeof getTier>; matchup: string }[] }[] = []
-    for (const pos of ['QB', 'RB', 'WR', 'TE']) {
+    for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
       const rows = allData[pos] ?? []
       const sorted = rows
         .map((r) => ({ r, pts: getProjectedPoints(r) }))
@@ -73,7 +77,7 @@ export function DashboardView({ allData, weekLabel, loading }: DashboardViewProp
 
   const overallTop10 = useMemo(() => {
     const all: { r: PredictionRow; pts: number }[] = []
-    for (const pos of ['QB', 'RB', 'WR', 'TE']) {
+    for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
       (allData[pos] ?? []).forEach((r) => {
         const pts = getProjectedPoints(r)
         if (pts != null) all.push({ r, pts })
@@ -154,7 +158,7 @@ export function DashboardView({ allData, weekLabel, loading }: DashboardViewProp
             </ResponsiveContainer>
           </div>
           <div className="legend-row">
-            {['QB', 'RB', 'WR', 'TE'].map((p) => (
+            {['QB', 'RB', 'WR', 'TE', 'K', 'DST'].map((p) => (
               <span key={p} className="legend-item">
                 <span className="legend-dot" style={{ background: POSITION_COLORS[p] }} />
                 {p}

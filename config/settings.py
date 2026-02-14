@@ -31,8 +31,9 @@ def _current_nfl_season():
 # -----------------------------------------------------------------------------
 # Earliest season to load/scrape.
 # Requirements: 18-week model needs min 8, optimal 10+ seasons.
-# Set to 2014 to provide ~11 seasons of data through current season.
-MIN_HISTORICAL_YEAR = 2014
+# PBP data available back to 1999; weekly player data reliable from ~2014.
+# Set to 2006 to balance data volume and quality (provides ~19 seasons).
+MIN_HISTORICAL_YEAR = 2006
 # Earliest season nfl-data-py weekly data is considered complete (used for availability checks).
 AVAILABLE_SEASONS_START_YEAR = 2016
 # Current NFL season (Sept-Feb): Jan-Aug = previous year, Sept-Dec = current year.
@@ -41,8 +42,10 @@ CURRENT_NFL_SEASON = _current_nfl_season()
 # Default range for scraping/loading: MIN_HISTORICAL_YEAR through current NFL season (inclusive).
 SEASONS_TO_SCRAPE = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
 
-# Positions
-POSITIONS = ["QB", "RB", "WR", "TE"]
+# Positions (offensive skill + kicker + defense/special teams)
+POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"]
+# Offensive skill positions used by the utilization-based ML pipeline
+OFFENSIVE_POSITIONS = ["QB", "RB", "WR", "TE"]
 
 # Fantasy scoring (PPR - primary)
 SCORING = {
@@ -75,6 +78,35 @@ SCORING_FORMATS = {
     "ppr": SCORING,
     "half_ppr": SCORING_HALF_PPR,
     "standard": SCORING_STANDARD,
+}
+
+# Kicker scoring
+SCORING_KICKER = {
+    "fg_0_39": 3,        # FG made 0-39 yards
+    "fg_40_49": 4,       # FG made 40-49 yards
+    "fg_50_plus": 5,     # FG made 50+ yards
+    "xp_made": 1,        # Extra point made
+    "fg_missed": -1,     # FG missed
+    "xp_missed": -1,     # XP missed
+}
+
+# DST scoring
+SCORING_DST = {
+    "sack": 1,
+    "interception": 2,
+    "fumble_recovery": 2,
+    "safety": 2,
+    "defensive_td": 6,
+    "special_teams_td": 6,
+    "blocked_kick": 2,
+    # Points allowed brackets (bonus/penalty)
+    "pa_0": 10,          # shutout
+    "pa_1_6": 7,
+    "pa_7_13": 4,
+    "pa_14_20": 1,
+    "pa_21_27": 0,
+    "pa_28_34": -1,
+    "pa_35_plus": -4,
 }
 
 # Utilization Score weights by position
@@ -110,6 +142,17 @@ UTILIZATION_WEIGHTS = {
         "rush_attempt_share": 0.20,
         "redzone_opportunity": 0.25,
         "play_volume": 0.30,
+    },
+    "K": {
+        "fg_attempts": 0.50,
+        "xp_attempts": 0.30,
+        "team_scoring": 0.20,
+    },
+    "DST": {
+        "sacks": 0.25,
+        "turnovers": 0.30,
+        "points_allowed_inv": 0.25,
+        "defensive_tds": 0.20,
     },
 }
 
@@ -151,6 +194,9 @@ MODEL_CONFIG = {
     "deep_batch_size": 64,             # Batch size (16-128)
     "deep_blend_traditional": 0.3,     # 30% traditional + 70% deep
     "deep_regression_to_mean_scale": 0.95,  # Regression-to-mean pull strength
+    # Training gate policy: when True, fail-fast on requirement minimums
+    # (training seasons and per-position player counts) instead of warning only.
+    "strict_requirements_default": False,
 }
 
 # =============================================================================
@@ -179,7 +225,7 @@ MIN_TRAINING_SEASONS_1W = 3   # 1-week model: min 3, optimal 5+
 MIN_TRAINING_SEASONS_18W = 8  # 18-week model: min 8, optimal 10+
 MIN_TRAINING_SEASONS_4W = 5  # 4-week horizon (LSTM+ARIMA): min 5, optimal 8+
 # Per-position minimum players for training (requirements: ~30 QB, 60 RB, 70 WR, 30 TE)
-MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30}
+MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30, "K": 20, "DST": 32}
 
 # Alternative training windows (end_year = CURRENT_NFL_SEASON; start_year explicit)
 TRAINING_WINDOW_PRESETS = {
@@ -247,9 +293,9 @@ FEATURE_VERSION_FILENAME = "feature_version.txt"
 # PERFORMANCE TARGETS (from requirements)
 # =============================================================================
 # Position-specific RMSE targets by horizon
-RMSE_TARGETS_1W = {"QB": 7.5, "RB": 8.5, "WR": 8.0, "TE": 7.0}
-RMSE_TARGETS_4W = {"QB": 10.0, "RB": 11.0, "WR": 10.0, "TE": 9.0}
-RMSE_TARGETS_18W = {"QB": 15.0, "RB": 15.0, "WR": 15.0, "TE": 15.0}
+RMSE_TARGETS_1W = {"QB": 7.5, "RB": 8.5, "WR": 8.0, "TE": 7.0, "K": 4.0, "DST": 5.0}
+RMSE_TARGETS_4W = {"QB": 10.0, "RB": 11.0, "WR": 10.0, "TE": 9.0, "K": 6.0, "DST": 8.0}
+RMSE_TARGETS_18W = {"QB": 15.0, "RB": 15.0, "WR": 15.0, "TE": 15.0, "K": 10.0, "DST": 12.0}
 
 # MAPE targets by horizon
 MAPE_TARGETS = {"1w": 25.0, "4w": 35.0, "18w": 45.0}

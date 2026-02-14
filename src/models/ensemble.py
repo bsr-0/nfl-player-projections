@@ -376,6 +376,18 @@ class EnsemblePredictor:
                 results.loc[mask, "prediction_ci95_lower"] = scaled - z95 * std_scaled
                 results.loc[mask, "prediction_ci95_upper"] = scaled + z95 * std_scaled
 
+        # Prediction sanity bounds: clip to reasonable fantasy point ranges per position per week
+        _BOUNDS_PER_WEEK = {"QB": (0, 65), "RB": (0, 55), "WR": (0, 55), "TE": (0, 45), "K": (0, 25), "DST": (-5, 35)}
+        for position in POSITIONS:
+            mask = results["position"] == position
+            if not mask.any():
+                continue
+            lo, hi = _BOUNDS_PER_WEEK.get(position, (0, 60))
+            scaled_hi = hi * n_weeks
+            for col in ["predicted_points", "predicted_utilization"]:
+                if col in results.columns:
+                    results.loc[mask, col] = results.loc[mask, col].clip(lower=lo, upper=scaled_hi)
+
         # Prediction speed tracking (requirement: < 5s per player)
         from config.settings import MAX_PREDICTION_TIME_PER_PLAYER_SECONDS
         _pred_elapsed = _time.perf_counter() - _pred_start

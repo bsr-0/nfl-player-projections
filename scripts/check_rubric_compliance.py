@@ -46,11 +46,11 @@ def check_config_contract() -> List[CheckResult]:
 
     # Position-specific modeling contract
     positions = list(getattr(settings, "POSITIONS", []))
-    expected_positions = ["QB", "RB", "WR", "TE"]
+    expected_positions = ["QB", "RB", "WR", "TE", "K", "DST"]
     out.append(
         CheckResult(
-            name="positions_qb_rb_wr_te",
-            passed=set(positions) == set(expected_positions),
+            name="positions_all",
+            passed=set(expected_positions).issubset(set(positions)),
             details=f"POSITIONS={positions}",
         )
     )

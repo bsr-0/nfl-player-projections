@@ -996,13 +996,20 @@ class FeatureEngineer:
         
         if mqi_components:
             df["matchup_quality_indicator"] = sum(mqi_components)
-            # Normalize to 0-100 scale
+            # Normalize to 0-100 scale using expanding min/max to avoid future-data leakage
             mqi = df["matchup_quality_indicator"]
-            mqi_min, mqi_max = mqi.min(), mqi.max()
-            if mqi_max > mqi_min:
-                df["matchup_quality_indicator"] = ((mqi - mqi_min) / (mqi_max - mqi_min) * 100).clip(0, 100)
+            if "player_id" in df.columns and "season" in df.columns and "week" in df.columns:
+                # Point-in-time expanding normalization (only data seen so far)
+                expanding_min = mqi.expanding(min_periods=1).min()
+                expanding_max = mqi.expanding(min_periods=1).max()
+                denom = (expanding_max - expanding_min).replace(0, np.nan)
+                df["matchup_quality_indicator"] = (((mqi - expanding_min) / denom) * 100).fillna(50.0).clip(0, 100)
             else:
-                df["matchup_quality_indicator"] = 50.0
+                mqi_min, mqi_max = mqi.min(), mqi.max()
+                if mqi_max > mqi_min:
+                    df["matchup_quality_indicator"] = ((mqi - mqi_min) / (mqi_max - mqi_min) * 100).clip(0, 100)
+                else:
+                    df["matchup_quality_indicator"] = 50.0
         else:
             df["matchup_quality_indicator"] = 50.0
         
