@@ -659,7 +659,7 @@ class ModelTrainer:
                     n_features=n_features,
                     correlation_threshold=corr_thresh
                 )
-                print(f"  Selected {len(X.columns)} features for {position}")
+                print(f"  Selected {len(X.columns)} features for {position}", flush=True)
             
             # Multicollinearity check (VIF > 10 indicates concerning correlation)
             try:
@@ -667,9 +667,9 @@ class ModelTrainer:
                 high_vif = [(c, v) for c, v in vif.items() if v > 10 and np.isfinite(v)]
                 if high_vif:
                     print(f"  Multicollinearity: {len(high_vif)} features with VIF>10 "
-                          f"(max={max(v for _, v in high_vif):.1f})")
+                          f"(max={max(v for _, v in high_vif):.1f})", flush=True)
                 else:
-                    print(f"  Multicollinearity: OK (all VIF <= 10)")
+                    print(f"  Multicollinearity: OK (all VIF <= 10)", flush=True)
             except Exception:
                 pass  # Non-critical
             

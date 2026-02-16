@@ -84,22 +84,27 @@ class PositionModel:
         X_val_scaled = self.scaler.transform(X_val)
 
         if tune_hyperparameters:
-            print("Running hyperparameter optimization...")
+            print("Running hyperparameter optimization...", flush=True)
+            print(f"  Tuning Random Forest ({n_trials} trials)...", flush=True)
             self.best_params["random_forest"] = self._tune_random_forest(X_train_scaled, y_train_inner, n_trials)
+            print(f"  Tuning XGBoost ({n_trials} trials)...", flush=True)
             self.best_params["xgboost"] = self._tune_xgboost(X_train_scaled, y_train_inner, n_trials)
+            print(f"  Tuning Ridge ({n_trials} trials)...", flush=True)
             self.best_params["ridge"] = self._tune_ridge(X_train_scaled, y_train_inner, n_trials)
         else:
             self.best_params = self._get_default_params()
 
-        print("Training final models (RF + XGBoost + Ridge)...")
+        n_cv_folds = MODEL_CONFIG.get("cv_folds", 5)
+        print(f"Training final models (RF + XGBoost + Ridge) with {n_cv_folds}-fold OOF stacking...", flush=True)
 
         # --- Meta-learner stacking via cross-validated OOF predictions ---
         # Generate out-of-fold predictions on training set using TimeSeriesSplit
         # so the meta-learner never sees its own training labels through the
         # base models.  This prevents stacking leakage.
-        tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG.get("cv_folds", 5))
+        tscv = TimeSeriesSplit(n_splits=n_cv_folds)
         oof_preds = np.full((len(X_train_scaled), 3), np.nan)
-        for train_idx, oof_idx in tscv.split(X_train_scaled):
+        for fold_i, (train_idx, oof_idx) in enumerate(tscv.split(X_train_scaled), 1):
+            print(f"  OOF fold {fold_i}/{n_cv_folds}...", flush=True)
             X_tr_fold, y_tr_fold = X_train_scaled[train_idx], y_train_inner[train_idx]
             X_oof_fold = X_train_scaled[oof_idx]
             sw_fold = sw_train[train_idx] if sw_train is not None else None
@@ -194,7 +199,7 @@ class PositionModel:
             }
             model = RandomForestRegressor(**params)
             tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=-1)
+            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
             return -scores.mean()
         study = optuna.create_study(
             direction="minimize",
@@ -224,7 +229,7 @@ class PositionModel:
 
             # Time series cross-validation
             tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=-1)
+            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
 
             return -scores.mean()
 
@@ -243,10 +248,10 @@ class PositionModel:
             model = Ridge(alpha=alpha, random_state=MODEL_CONFIG["random_state"])
 
             tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=-1)
+            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
 
             return -scores.mean()
-        
+
         study = optuna.create_study(
             direction="minimize",
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])
