@@ -161,7 +161,7 @@ MODEL_CONFIG = {
     "test_size": 0.2,
     "cv_folds": 5,
     "random_state": 42,
-    "n_optuna_trials": 50,
+    "n_optuna_trials": 20,
     "early_stopping_rounds": 25,
     "validation_pct": 0.2,       # Fraction of training data for ensemble weight optimization
     "n_features_per_position": 50,  # Max features after selection (per position)

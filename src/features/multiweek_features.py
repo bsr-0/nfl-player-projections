@@ -37,43 +37,44 @@ class ScheduleStrengthAnalyzer:
     
     def calculate_defense_strength(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Calculate defense strength for each team by position.
-        
-        Defense strength = average fantasy points allowed to position
-        Higher = weaker defense (allows more points)
+        Calculate defense strength for each team by position using PRIOR season
+        data only to avoid within-season lookahead bias.
+
+        Defense strength = average fantasy points allowed to position in the
+        previous season, relative to that season's league average.
+        Higher = weaker defense (allows more points).
         """
         if df.empty:
             return pd.DataFrame()
-        
-        # Calculate points allowed by each defense to each position
+
+        # Use full prior-season averages (no within-season leakage).
         defense_pts = df.groupby(['opponent', 'season', 'position']).agg({
             'fantasy_points': ['mean', 'std', 'count']
         }).reset_index()
-        
-        defense_pts.columns = ['team', 'season', 'position', 
+
+        defense_pts.columns = ['team', 'season', 'position',
                                'pts_allowed_mean', 'pts_allowed_std', 'games']
-        
-        # Only use teams with enough games
+
+        # Only use teams with enough games for a reliable estimate
         defense_pts = defense_pts[defense_pts['games'] >= 4]
-        
-        # Calculate league average by position
+
+        # League average by position-season
         league_avg = df.groupby(['season', 'position'])['fantasy_points'].mean().reset_index()
         league_avg.columns = ['season', 'position', 'league_avg']
-        
+
         defense_pts = defense_pts.merge(league_avg, on=['season', 'position'], how='left')
-        
-        # Defense strength score: pts allowed / league avg
-        # > 1 = weak defense (allows more than avg)
-        # < 1 = strong defense (allows less than avg)
+
         defense_pts['defense_strength'] = (
             defense_pts['pts_allowed_mean'] / defense_pts['league_avg']
         ).clip(0.5, 1.5)
-        
-        # Rank defenses (1 = weakest = allows most points)
+
         defense_pts['defense_rank'] = defense_pts.groupby(
             ['season', 'position']
         )['pts_allowed_mean'].rank(ascending=False)
-        
+
+        # Shift to NEXT season so a row for season S uses season S-1 stats.
+        defense_pts['season'] = defense_pts['season'] + 1
+
         return defense_pts
     
     def get_schedule_strength(self, df: pd.DataFrame, 

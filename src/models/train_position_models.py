@@ -143,7 +143,8 @@ def create_targets(df: pd.DataFrame, n_weeks_list: List[int] = [1, 4, 18]) -> pd
     df = df.copy()
     
     for n_weeks in n_weeks_list:
-        df[f"target_{n_weeks}w"] = df.groupby("player_id")["fantasy_points"].transform(
+        group_cols = ["player_id", "season"] if "season" in df.columns else ["player_id"]
+        df[f"target_{n_weeks}w"] = df.groupby(group_cols)["fantasy_points"].transform(
             lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
         )
     

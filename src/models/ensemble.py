@@ -712,9 +712,9 @@ class ModelTrainer:
     def _train_qb_dual_and_pick(self, pos_data: pd.DataFrame, qb_test: pd.DataFrame,
                                  n_weeks_list: List[int], tune_hyperparameters: bool) -> Dict:
         """
-        Train two QB models (util and FP), compare owner-centric FP metrics on test,
-        return winner and its metrics.
-        Uses same feature matrix and exclude list for both; only target series change.
+        Train two QB models (util and FP), compare owner-centric FP metrics on a
+        VALIDATION split from training data (not the test set), return winner and
+        its metrics.
         """
         exclude_cols = [
             "player_id", "name", "position", "team", "season", "week",
@@ -724,12 +724,12 @@ class ModelTrainer:
             "fp_over_expected", "expected_fp",
             "utilization_score",
         ]
-        feature_cols = [c for c in pos_data.columns 
-                       if c not in exclude_cols 
+        feature_cols = [c for c in pos_data.columns
+                       if c not in exclude_cols
                        and not c.startswith("target_")
                        and pos_data[c].dtype in ['int64', 'float64', 'int32', 'float32']]
         assert "fantasy_points" not in feature_cols and "utilization_score" not in feature_cols
-        
+
         # Targets: util
         y_dict_util = {}
         for n_weeks in n_weeks_list:
@@ -740,17 +740,17 @@ class ModelTrainer:
         for n_weeks in n_weeks_list:
             target_col = f"target_{n_weeks}w"
             y_dict_fp[n_weeks] = pos_data[target_col] if target_col in pos_data.columns else pos_data["target_1w"]
-        
+
         valid_util = ~y_dict_util[1].isna()
         valid_fp = ~y_dict_fp[1].isna()
         valid_mask = valid_util & valid_fp
-        
+
         X = pos_data[feature_cols].copy()
         X = X.replace([np.inf, -np.inf], np.nan).fillna(0).infer_objects()
         X = X[valid_mask]
         y_dict_util = {k: v[valid_mask] for k, v in y_dict_util.items()}
         y_dict_fp = {k: v[valid_mask] for k, v in y_dict_fp.items()}
-        
+
         sample_weight = None
         halflife = MODEL_CONFIG.get("recency_decay_halflife")
         if halflife and "season" in pos_data.columns:
@@ -759,81 +759,105 @@ class ModelTrainer:
             if max_season > seasons.min():
                 decay = np.power(0.5, (max_season - seasons.values.astype(float)) / float(halflife))
                 sample_weight = decay / decay.max()
-        
+
         n_features = MODEL_CONFIG.get("n_features_per_position", 50)
         corr_thresh = MODEL_CONFIG.get("correlation_threshold", 0.92)
         if len(X.columns) > n_features:
             X, _ = select_features_simple(X, y_dict_util[1], n_features=n_features, correlation_threshold=corr_thresh)
-        
-        multi_util = MultiWeekModel("QB")
-        multi_util.fit(X, y_dict_util, tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
-        
-        multi_fp = MultiWeekModel("QB")
-        multi_fp.fit(X, y_dict_fp, tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
-        
-        # Evaluate on QB test slice (same features)
-        qb_test = qb_test.copy()
-        for fn in (list(multi_util.models.values())[0].feature_names if multi_util.models else []):
-            if fn not in qb_test.columns:
-                qb_test[fn] = 0
-        pred_util = multi_util.predict(qb_test, n_weeks=1)
-        pred_fp = multi_fp.predict(qb_test, n_weeks=1)
-        
-        y_fp_test = qb_test["target_1w"].values
-        valid_f = ~np.isnan(y_fp_test) & np.isfinite(y_fp_test)
 
-        # Convert QB util predictions to fantasy points for apples-to-apples owner objective.
+        # --- Use a VALIDATION SPLIT from training data for model selection ---
+        # Never use the held-out test set to pick between model variants.
+        val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
+        n_total = len(X)
+        split_idx = int(n_total * (1 - val_pct))
+        split_idx = max(50, min(split_idx, n_total - 20))
+
+        X_train_sel = X.iloc[:split_idx]
+        X_val_sel = X.iloc[split_idx:]
+        y_dict_util_train = {k: v.iloc[:split_idx] for k, v in y_dict_util.items()}
+        y_dict_fp_train = {k: v.iloc[:split_idx] for k, v in y_dict_fp.items()}
+        y_dict_util_val = {k: v.iloc[split_idx:] for k, v in y_dict_util.items()}
+        y_dict_fp_val = {k: v.iloc[split_idx:] for k, v in y_dict_fp.items()}
+        sw_train_sel = sample_weight[:split_idx] if sample_weight is not None else None
+
+        # Train both model variants on training portion only
+        multi_util_sel = MultiWeekModel("QB")
+        multi_util_sel.fit(X_train_sel, y_dict_util_train, tune_hyperparameters=tune_hyperparameters, sample_weight=sw_train_sel)
+
+        multi_fp_sel = MultiWeekModel("QB")
+        multi_fp_sel.fit(X_train_sel, y_dict_fp_train, tune_hyperparameters=tune_hyperparameters, sample_weight=sw_train_sel)
+
+        # Evaluate on validation portion
+        for fn in (list(multi_util_sel.models.values())[0].feature_names if multi_util_sel.models else []):
+            if fn not in X_val_sel.columns:
+                X_val_sel[fn] = 0
+        pred_util_val = multi_util_sel.predict(X_val_sel, n_weeks=1)
+        pred_fp_val = multi_fp_sel.predict(X_val_sel, n_weeks=1)
+
+        y_fp_val = y_dict_fp_val[1].values
+        valid_f = ~np.isnan(y_fp_val) & np.isfinite(y_fp_val)
+
+        # Convert util predictions to FP for comparison
         qb_conv = UtilizationToFPConverter("QB")
-        conv_train_df = pd.DataFrame({
-            "utilization_score": y_dict_util[1].values,
-            "fantasy_points": y_dict_fp[1].values,
-        })
+        conv_train_df = pos_data.loc[valid_mask].iloc[:split_idx].copy()
+        conv_train_df["utilization_score"] = np.asarray(y_dict_util_train[1], dtype=float)
+        conv_train_df["fantasy_points"] = np.asarray(y_dict_fp_train[1], dtype=float)
         qb_conv.fit(conv_train_df, target_col="fantasy_points")
         if qb_conv.is_fitted:
-            util_as_fp = qb_conv.predict(np.asarray(pred_util, dtype=float))
+            eff_df = pos_data.loc[valid_mask].iloc[split_idx:].copy()
+            eff_df["utilization_score"] = np.asarray(pred_util_val, dtype=float)
+            util_as_fp = qb_conv.predict(np.asarray(pred_util_val, dtype=float), efficiency_df=eff_df)
         else:
-            # Conservative fallback mapping when converter cannot be fit.
-            util_as_fp = np.asarray(pred_util, dtype=float) * 0.25
+            util_as_fp = np.asarray(pred_util_val, dtype=float) * 0.25
 
         rmse_util_as_fp = (
-            float(np.sqrt(mean_squared_error(y_fp_test[valid_f], util_as_fp[valid_f])))
-            if valid_f.sum() >= 5
-            else np.nan
+            float(np.sqrt(mean_squared_error(y_fp_val[valid_f], util_as_fp[valid_f])))
+            if valid_f.sum() >= 5 else np.nan
         )
         rmse_fp = (
-            float(np.sqrt(mean_squared_error(y_fp_test[valid_f], pred_fp[valid_f])))
-            if valid_f.sum() >= 5
-            else np.nan
+            float(np.sqrt(mean_squared_error(y_fp_val[valid_f], pred_fp_val[valid_f])))
+            if valid_f.sum() >= 5 else np.nan
         )
-        r2_util_as_fp = r2_score(y_fp_test[valid_f], util_as_fp[valid_f]) if valid_f.sum() >= 5 else np.nan
-        r2_fp = r2_score(y_fp_test[valid_f], pred_fp[valid_f]) if valid_f.sum() >= 5 else np.nan
+        r2_util_as_fp = r2_score(y_fp_val[valid_f], util_as_fp[valid_f]) if valid_f.sum() >= 5 else np.nan
+        r2_fp = r2_score(y_fp_val[valid_f], pred_fp_val[valid_f]) if valid_f.sum() >= 5 else np.nan
         mae_util_as_fp = (
-            float(mean_absolute_error(y_fp_test[valid_f], util_as_fp[valid_f]))
-            if valid_f.sum() >= 5
-            else np.nan
+            float(mean_absolute_error(y_fp_val[valid_f], util_as_fp[valid_f]))
+            if valid_f.sum() >= 5 else np.nan
         )
         mae_fp = (
-            float(mean_absolute_error(y_fp_test[valid_f], pred_fp[valid_f]))
-            if valid_f.sum() >= 5
-            else np.nan
+            float(mean_absolute_error(y_fp_val[valid_f], pred_fp_val[valid_f]))
+            if valid_f.sum() >= 5 else np.nan
         )
 
-        if np.isfinite(rmse_util_as_fp) and np.isfinite(rmse_fp) and rmse_fp <= rmse_util_as_fp:
-            winner = multi_fp
-            y_dict_winner = y_dict_fp
+        # Pick winner based on validation (not test) performance
+        margin = max(0.1, 0.02 * rmse_fp) if np.isfinite(rmse_fp) else 0.1
+        util_wins = (
+            np.isfinite(rmse_util_as_fp)
+            and np.isfinite(rmse_fp)
+            and (rmse_util_as_fp + margin < rmse_fp)
+        )
+        if not util_wins:
             qb_target = "fp"
+            y_dict_winner = y_dict_fp
         else:
-            winner = multi_util
-            y_dict_winner = y_dict_util
             qb_target = "util"
-            # Persist converter when util target wins so predictions remain fantasy-point native.
-            if qb_conv.is_fitted:
-                qb_conv.save()
-        
+            y_dict_winner = y_dict_util
+
+        # --- Retrain winner on ALL training data for final model ---
+        winner = MultiWeekModel("QB")
+        winner.fit(X, y_dict_winner, tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
+        if qb_target == "util" and qb_conv.is_fitted:
+            # Refit converter on full training data
+            conv_full = pos_data.loc[valid_mask].copy()
+            conv_full["utilization_score"] = np.asarray(y_dict_util[1], dtype=float)
+            conv_full["fantasy_points"] = np.asarray(y_dict_fp[1], dtype=float)
+            qb_conv.fit(conv_full, target_col="fantasy_points")
+            qb_conv.save()
+
         winner.save()
         if 1 in winner.models:
             winner.models[1].save()
-        
+
         metrics = self._evaluate_model(winner, X, y_dict_winner)
         return {
             "model": winner,
@@ -850,18 +874,34 @@ class ModelTrainer:
     def _evaluate_model(self, model: MultiWeekModel, 
                         X: pd.DataFrame, 
                         y_dict: Dict[int, pd.Series]) -> Dict[str, Dict]:
-        """Evaluate model on training data."""
+        """Evaluate model on a trailing holdout slice (time-aware)."""
         from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
         
         metrics = {}
+        n = len(X)
+        val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
+        split_idx = int(n * (1 - val_pct))
+        if split_idx < 50 or n - split_idx < 20:
+            split_idx = max(0, n - min(50, n))
         
         for n_weeks, y in y_dict.items():
-            preds = model.predict(X, n_weeks)
+            X_eval = X.iloc[split_idx:] if split_idx < n else X
+            y_eval = y.iloc[split_idx:] if split_idx < n else y
+            valid = y_eval.notna()
+            if valid.sum() < 10:
+                X_eval = X
+                y_eval = y
+                valid = y_eval.notna()
+            X_eval = X_eval.loc[valid]
+            y_eval = y_eval.loc[valid]
+            if len(y_eval) < 5:
+                continue
+            preds = model.predict(X_eval, n_weeks)
             
             metrics[f"{n_weeks}w"] = {
-                "rmse": np.sqrt(mean_squared_error(y, preds)),
-                "mae": mean_absolute_error(y, preds),
-                "r2": r2_score(y, preds),
+                "rmse": np.sqrt(mean_squared_error(y_eval, preds)),
+                "mae": mean_absolute_error(y_eval, preds),
+                "r2": r2_score(y_eval, preds),
             }
         
         return metrics

@@ -368,11 +368,18 @@ class FeatureEngineer:
         
         for col in opp_cols:
             if col in df.columns:
-                # Normalize to z-score using expanding (causal) mean/std to avoid lookahead
-                sorted_vals = df[col].sort_index()
-                expanding_mean = sorted_vals.expanding(min_periods=1).mean()
-                expanding_std = sorted_vals.expanding(min_periods=2).std().clip(lower=1e-6)
-                df[f"{col}_zscore"] = (df[col] - expanding_mean) / expanding_std
+                # Normalize to z-score using expanding (causal) mean/std per
+                # season to avoid lookahead.  Sort by (season, week) first so
+                # expanding windows respect temporal order.
+                if "season" in df.columns and "week" in df.columns:
+                    sorted_df = df.sort_values(["season", "week"])
+                    expanding_mean = sorted_df[col].expanding(min_periods=1).mean()
+                    expanding_std = sorted_df[col].expanding(min_periods=2).std().clip(lower=1e-6)
+                    df[f"{col}_zscore"] = ((sorted_df[col] - expanding_mean) / expanding_std).reindex(df.index)
+                else:
+                    expanding_mean = df[col].expanding(min_periods=1).mean()
+                    expanding_std = df[col].expanding(min_periods=2).std().clip(lower=1e-6)
+                    df[f"{col}_zscore"] = (df[col] - expanding_mean) / expanding_std
         
         # Create position-specific opponent feature
         if "position" in df.columns:
@@ -530,14 +537,16 @@ class FeatureEngineer:
                     )['turnovers'].transform(_momentum_60_30_10)
                     composite_parts.append(("_mom_to", 0.15))  # 15% ball security
 
-                # Normalize each component to z-scores within the dataframe, then combine
+                # Normalize each component to z-scores using EXPANDING (causal)
+                # mean/std within each team-season so future data doesn't leak.
                 for col, _ in composite_parts:
-                    col_mean = ts[col].mean()
-                    col_std = ts[col].std()
-                    if pd.notna(col_std) and col_std > 0:
-                        ts[col + "_z"] = (ts[col] - col_mean) / col_std
-                    else:
-                        ts[col + "_z"] = 0.0
+                    exp_mean = ts.groupby(['team', 'season'])[col].transform(
+                        lambda x: x.expanding(min_periods=1).mean()
+                    )
+                    exp_std = ts.groupby(['team', 'season'])[col].transform(
+                        lambda x: x.expanding(min_periods=2).std()
+                    ).clip(lower=1e-6)
+                    ts[col + "_z"] = ((ts[col] - exp_mean) / exp_std).fillna(0.0)
 
                 # Redistribute weight if some components are missing
                 total_weight = sum(w for _, w in composite_parts)
@@ -545,14 +554,16 @@ class FeatureEngineer:
                     ts[col + "_z"] * (w / total_weight) for col, w in composite_parts
                 )
                 # Rescale from z-score space to interpretable ~0-44 range (mean ~22)
-                mom_mean = ts["offensive_momentum_score"].mean()
-                mom_std = ts["offensive_momentum_score"].std()
-                if pd.notna(mom_std) and mom_std > 0:
-                    ts["offensive_momentum_score"] = (
-                        22.0 + 8.0 * (ts["offensive_momentum_score"] - mom_mean) / mom_std
-                    ).clip(0, 44)
-                else:
-                    ts["offensive_momentum_score"] = 22.0
+                # Use expanding stats to avoid global lookahead.
+                exp_mom_mean = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
+                    lambda x: x.expanding(min_periods=1).mean()
+                )
+                exp_mom_std = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
+                    lambda x: x.expanding(min_periods=2).std()
+                ).clip(lower=1e-6)
+                ts["offensive_momentum_score"] = (
+                    22.0 + 8.0 * (ts["offensive_momentum_score"] - exp_mom_mean) / exp_mom_std
+                ).fillna(22.0).clip(0, 44)
 
                 # Drop temp columns
                 temp_cols = [c for c in ts.columns if c.startswith("_mom_")]
@@ -998,12 +1009,15 @@ class FeatureEngineer:
             df["matchup_quality_indicator"] = sum(mqi_components)
             # Normalize to 0-100 scale using expanding min/max to avoid future-data leakage
             mqi = df["matchup_quality_indicator"]
-            if "player_id" in df.columns and "season" in df.columns and "week" in df.columns:
-                # Point-in-time expanding normalization (only data seen so far)
-                expanding_min = mqi.expanding(min_periods=1).min()
-                expanding_max = mqi.expanding(min_periods=1).max()
+            if "season" in df.columns and "week" in df.columns:
+                # Sort by time FIRST so expanding windows are causal
+                sort_order = df.sort_values(["season", "week"]).index
+                mqi_sorted = mqi.reindex(sort_order)
+                expanding_min = mqi_sorted.expanding(min_periods=1).min()
+                expanding_max = mqi_sorted.expanding(min_periods=1).max()
                 denom = (expanding_max - expanding_min).replace(0, np.nan)
-                df["matchup_quality_indicator"] = (((mqi - expanding_min) / denom) * 100).fillna(50.0).clip(0, 100)
+                normalized = (((mqi_sorted - expanding_min) / denom) * 100).fillna(50.0).clip(0, 100)
+                df["matchup_quality_indicator"] = normalized.reindex(df.index)
             else:
                 mqi_min, mqi_max = mqi.min(), mqi.max()
                 if mqi_max > mqi_min:

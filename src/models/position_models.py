@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import joblib
 
-from sklearn.model_selection import cross_val_score, TimeSeriesSplit
+from sklearn.model_selection import cross_val_score, cross_val_predict, TimeSeriesSplit
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
@@ -92,18 +92,36 @@ class PositionModel:
             self.best_params = self._get_default_params()
 
         print("Training final models (RF + XGBoost + Ridge)...")
+
+        # --- Meta-learner stacking via cross-validated OOF predictions ---
+        # Generate out-of-fold predictions on training set using TimeSeriesSplit
+        # so the meta-learner never sees its own training labels through the
+        # base models.  This prevents stacking leakage.
+        tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG.get("cv_folds", 5))
+        oof_preds = np.full((len(X_train_scaled), 3), np.nan)
+        for train_idx, oof_idx in tscv.split(X_train_scaled):
+            X_tr_fold, y_tr_fold = X_train_scaled[train_idx], y_train_inner[train_idx]
+            X_oof_fold = X_train_scaled[oof_idx]
+            sw_fold = sw_train[train_idx] if sw_train is not None else None
+
+            rf_fold = self._train_random_forest(X_tr_fold, y_tr_fold, sample_weight=sw_fold)
+            xgb_fold = self._train_xgboost(X_tr_fold, y_tr_fold, X_oof_fold, y_train_inner[oof_idx], sample_weight=sw_fold)
+            ridge_fold = self._train_ridge(X_tr_fold, y_tr_fold, sample_weight=sw_fold)
+
+            oof_preds[oof_idx, 0] = rf_fold.predict(X_oof_fold)
+            oof_preds[oof_idx, 1] = xgb_fold.predict(X_oof_fold)
+            oof_preds[oof_idx, 2] = ridge_fold.predict(X_oof_fold)
+
+        # Fit meta-learner on OOF predictions (rows with all folds filled)
+        oof_valid = ~np.isnan(oof_preds).any(axis=1)
+        self.meta_learner = Ridge(alpha=1.0, random_state=MODEL_CONFIG["random_state"])
+        self.meta_learner.fit(oof_preds[oof_valid], y_train_inner[oof_valid])
+
+        # Now train final base models on ALL training data for serving
         self.models["random_forest"] = self._train_random_forest(X_train_scaled, y_train_inner, sample_weight=sw_train)
         self.models["xgboost"] = self._train_xgboost(X_train_scaled, y_train_inner, X_val_scaled, y_val, sample_weight=sw_train)
         self.models["ridge"] = self._train_ridge(X_train_scaled, y_train_inner, sample_weight=sw_train)
 
-        preds_val = np.column_stack([
-            self.models["random_forest"].predict(X_val_scaled),
-            self.models["xgboost"].predict(X_val_scaled),
-            self.models["ridge"].predict(X_val_scaled),
-        ])
-        self.meta_learner = Ridge(alpha=1.0, random_state=MODEL_CONFIG["random_state"])
-        self.meta_learner.fit(preds_val, y_val)
-        
         self._optimize_ensemble_weights(X_val_scaled, y_val)
         self._base_model_keys = list(self.models.keys())
         self.is_fitted = True
@@ -172,16 +190,17 @@ class PositionModel:
                 "min_samples_split": trial.suggest_int("min_samples_split", 5, 10),
                 "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
                 "random_state": MODEL_CONFIG["random_state"],
+                "n_jobs": -1,
             }
             model = RandomForestRegressor(**params)
             tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error")
+            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=-1)
             return -scores.mean()
         study = optuna.create_study(
             direction="minimize",
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])
         )
-        study.optimize(objective, n_trials=min(n_trials, 30), show_progress_bar=True)
+        study.optimize(objective, n_trials=min(n_trials, 20), show_progress_bar=True)
         return study.best_params
 
     def _tune_xgboost(self, X: np.ndarray, y: np.ndarray, n_trials: int) -> Dict:
@@ -197,33 +216,35 @@ class PositionModel:
                 "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
                 "random_state": MODEL_CONFIG["random_state"],
+                "tree_method": "hist",  # Much faster than exact; equivalent quality
+                "n_jobs": -1,
             }
-            
+
             model = xgb.XGBRegressor(**params)
-            
+
             # Time series cross-validation
             tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error")
-            
+            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=-1)
+
             return -scores.mean()
-        
+
         study = optuna.create_study(
             direction="minimize",
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])
         )
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+        study.optimize(objective, n_trials=min(n_trials, 30), show_progress_bar=True)
         return study.best_params
 
     def _tune_ridge(self, X: np.ndarray, y: np.ndarray, n_trials: int) -> Dict:
         """Tune Ridge regression hyperparameters (requirements: alpha 1.0-10.0)."""
         def objective(trial):
             alpha = trial.suggest_float("alpha", 1.0, 10.0)
-            
+
             model = Ridge(alpha=alpha, random_state=MODEL_CONFIG["random_state"])
-            
+
             tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error")
-            
+            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=-1)
+
             return -scores.mean()
         
         study = optuna.create_study(
@@ -251,6 +272,8 @@ class PositionModel:
                 "subsample": 0.8,
                 "colsample_bytree": 0.8,
                 "random_state": MODEL_CONFIG["random_state"],
+                "tree_method": "hist",
+                "n_jobs": -1,
             },
             "ridge": {
                 "alpha": 5.0,
@@ -264,6 +287,8 @@ class PositionModel:
         """Train XGBoost with best params and early stopping."""
         params = self.best_params.get("xgboost", self._get_default_params()["xgboost"]).copy()
         params["random_state"] = MODEL_CONFIG["random_state"]
+        params["tree_method"] = "hist"  # Much faster; equivalent quality
+        params["n_jobs"] = -1
         model = xgb.XGBRegressor(**params)
         kw = {}
         if sample_weight is not None:
@@ -307,6 +332,7 @@ class PositionModel:
         """Train Random Forest with best params."""
         params = self.best_params.get("random_forest", self._get_default_params()["random_forest"]).copy()
         params["random_state"] = MODEL_CONFIG["random_state"]
+        params["n_jobs"] = -1  # Use all CPU cores
         model = RandomForestRegressor(**params)
         if sample_weight is not None:
             model.fit(X, y, sample_weight=sample_weight)

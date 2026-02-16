@@ -21,7 +21,7 @@ from src.evaluation.metrics import (
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config.settings import POSITIONS, DATA_DIR, MODELS_DIR
+from config.settings import POSITIONS, DATA_DIR, MODELS_DIR, MODEL_CONFIG
 
 
 class ModelBacktester:
@@ -470,10 +470,14 @@ class ModelBacktester:
         # Correlation
         correlation = actual.corr(predicted)
         
-        # Mean Absolute Percentage Error (for non-zero actuals)
-        non_zero = actual != 0
-        if non_zero.sum() > 0:
-            mape = np.mean(np.abs((actual[non_zero] - predicted[non_zero]) / actual[non_zero])) * 100
+        # MAPE with denominator floor to avoid instability near zero actuals.
+        denom_floor = float(MODEL_CONFIG.get("mape_denominator_floor", 3.0))
+        finite_mask = np.isfinite(actual.values) & np.isfinite(predicted.values)
+        if finite_mask.sum() > 0:
+            a = actual.values[finite_mask]
+            p = predicted.values[finite_mask]
+            denom = np.maximum(np.abs(a), denom_floor)
+            mape = np.mean(np.abs(a - p) / denom) * 100
         else:
             mape = None
         
@@ -1145,7 +1149,7 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     
     # Create target columns for alignment with model expectations
     for n_weeks in [1, 4, 18]:
-        test_data[f"target_{n_weeks}w"] = test_data.groupby("player_id")["fantasy_points"].transform(
+        test_data[f"target_{n_weeks}w"] = test_data.groupby(["player_id", "season"])["fantasy_points"].transform(
             lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
         )
     

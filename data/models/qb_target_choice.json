@@ -1,10 +1,10 @@
 {
-  "qb_target": "util",
+  "qb_target": "fp",
   "selection_method": "holdout_owner_fp_objective",
-  "rmse_fp_model": 6.887309568702232,
-  "rmse_util_model_as_fp": 6.869665044233973,
-  "mae_fp_model": 5.655377769350591,
-  "mae_util_model_as_fp": 5.66281871924716,
-  "r2_fp_model": 0.15533024619665448,
-  "r2_util_model_as_fp": 0.15965260314966045
+  "rmse_fp_model": 7.653345233320594,
+  "rmse_util_model_as_fp": 7.742565502725205,
+  "mae_fp_model": 5.96924872241691,
+  "mae_util_model_as_fp": 6.375367625635716,
+  "r2_fp_model": 0.17717519048041364,
+  "r2_util_model_as_fp": 0.15787890640608604
 }

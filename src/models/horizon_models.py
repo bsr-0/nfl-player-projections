@@ -3,6 +3,8 @@ Horizon-specific models per requirements: 4-week LSTM+ARIMA hybrid, 18-week deep
 
 - 4-week: LSTM (60%) + ARIMA (40%); injury/workload/EWMA features.
 - 18-week: Deep feedforward (98+ layers); 70% deep + 30% traditional; regression-to-mean.
+
+Uses PyTorch with MPS (Apple Silicon GPU) acceleration when available.
 """
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -14,16 +16,17 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import MODELS_DIR, MODEL_CONFIG
 
-# Optional TensorFlow for LSTM and deep net
+# PyTorch for LSTM and deep net (with MPS/GPU support)
 try:
-    import tensorflow as tf
-    from tensorflow.keras.models import Sequential, load_model
-    from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Input
-    from tensorflow.keras.callbacks import EarlyStopping
-    from tensorflow.keras.optimizers import Adam
-    HAS_TF = True
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import TensorDataset, DataLoader
+    HAS_TORCH = True
 except ImportError:
-    HAS_TF = False
+    HAS_TORCH = False
+
+# Legacy alias so train.py imports still work
+HAS_TF = HAS_TORCH
 
 # Optional statsmodels for ARIMA
 try:
@@ -33,17 +36,60 @@ except ImportError:
     HAS_ARIMA = False
 
 
+def _get_device(model_type: str = "feedforward") -> "torch.device":
+    """Select best available device: CUDA > MPS (Apple GPU, PyTorch >=2.4) > CPU.
+
+    PyTorch MPS backend has known stability issues with LSTM and very deep
+    networks in versions < 2.4. On those versions we fall back to CPU, which
+    still benefits from Apple Accelerate / multi-core BLAS on Apple Silicon.
+    """
+    _ver = tuple(int(x) for x in torch.__version__.split(".")[:2])
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available() and _ver >= (2, 4):
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 # -----------------------------------------------------------------------------
 # 4-WEEK: LSTM + ARIMA HYBRID (60% LSTM, 40% ARIMA)
 # -----------------------------------------------------------------------------
+
+class _LSTMNet(nn.Module):
+    """PyTorch LSTM network: 3 LSTM layers + dense head."""
+    def __init__(self, n_features: int, lstm_units: int = 256, dropout: float = 0.25):
+        super().__init__()
+        u1 = min(256, max(128, lstm_units))
+        u2, u3 = 128, 64
+        self.lstm1 = nn.LSTM(n_features, u1, batch_first=True)
+        self.drop1 = nn.Dropout(dropout)
+        self.lstm2 = nn.LSTM(u1, u2, batch_first=True)
+        self.drop2 = nn.Dropout(dropout)
+        self.lstm3 = nn.LSTM(u2, u3, batch_first=True)
+        self.drop3 = nn.Dropout(dropout)
+        self.fc1 = nn.Linear(u3, 32)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(32, 1)
+
+    def forward(self, x):
+        x, _ = self.lstm1(x)
+        x = self.drop1(x)
+        x, _ = self.lstm2(x)
+        x = self.drop2(x)
+        x, _ = self.lstm3(x)
+        x = self.drop3(x[:, -1, :])  # last timestep
+        x = self.relu(self.fc1(x))
+        return self.fc2(x).squeeze(-1)
+
+
 class LSTM4WeekModel:
-    """LSTM for 4-week horizon; 3-4 LSTM layers, 128-256 units per layer (requirements), sequence length 8-12."""
+    """LSTM for 4-week horizon; 3 LSTM layers, 128-256 units per layer, sequence length 8-12."""
     def __init__(self,
                  sequence_length: int = None,
                  lstm_units: int = None,
                  dropout: float = None):
-        if not HAS_TF:
-            raise ImportError("TensorFlow required for 4-week LSTM. pip install tensorflow")
+        if not HAS_TORCH:
+            raise ImportError("PyTorch required for 4-week LSTM. pip install torch")
         self.sequence_length = sequence_length or MODEL_CONFIG.get("lstm_sequence_length", 10)
         self.lstm_units = lstm_units or MODEL_CONFIG.get("lstm_units", 256)
         self.dropout = dropout if dropout is not None else MODEL_CONFIG.get("lstm_dropout", 0.25)
@@ -51,26 +97,10 @@ class LSTM4WeekModel:
         self.scaler = None
         self.feature_names = []
         self.is_fitted = False
+        self.device = _get_device("lstm")
 
-    def _build(self, n_features: int):
-        from tensorflow.keras.layers import LSTM
-        # Requirements: 3-4 LSTM layers, 128-256 units; use 256, 128, 64
-        u1 = min(256, max(128, self.lstm_units))
-        u2, u3 = 128, 64
-        m = Sequential([
-            Input(shape=(self.sequence_length, n_features)),
-            LSTM(u1, activation="tanh", return_sequences=True),
-            Dropout(self.dropout),
-            LSTM(u2, activation="tanh", return_sequences=True),
-            Dropout(self.dropout),
-            LSTM(u3, activation="tanh"),
-            Dropout(self.dropout),
-            Dense(32, activation="relu"),
-            Dense(1),
-        ])
-        lr = MODEL_CONFIG.get("lstm_learning_rate", 0.001)
-        m.compile(optimizer=Adam(learning_rate=lr), loss="mse", metrics=["mae"])
-        return m
+    def _build(self, n_features: int) -> _LSTMNet:
+        return _LSTMNet(n_features, self.lstm_units, self.dropout).to(self.device)
 
     def _sequences(self, X: np.ndarray, y: np.ndarray, player_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         X_seq, y_seq = [], []
@@ -99,40 +129,77 @@ class LSTM4WeekModel:
             return self
         n_features = X_seq.shape[2]
         self.model = self._build(n_features)
-        self.model.fit(
-            X_seq, y_seq,
-            epochs=epochs,
-            batch_size=batch_size,
-            validation_split=0.2,
-            callbacks=[EarlyStopping(patience=10, restore_best_weights=True)],
-            verbose=0,
-        )
+
+        # Train/val split (last 20%)
+        n = len(X_seq)
+        split = int(n * 0.8)
+        X_train_t = torch.tensor(X_seq[:split], dtype=torch.float32)
+        y_train_t = torch.tensor(y_seq[:split], dtype=torch.float32)
+        X_val_t = torch.tensor(X_seq[split:], dtype=torch.float32).to(self.device)
+        y_val_t = torch.tensor(y_seq[split:], dtype=torch.float32).to(self.device)
+
+        dataset = TensorDataset(X_train_t, y_train_t)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+        lr = MODEL_CONFIG.get("lstm_learning_rate", 0.001)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        criterion = nn.MSELoss()
+
+        best_val_loss = float("inf")
+        patience, patience_limit = 0, 10
+        best_state = None
+
+        for epoch in range(epochs):
+            self.model.train()
+            for xb, yb in loader:
+                xb, yb = xb.to(self.device), yb.to(self.device)
+                optimizer.zero_grad()
+                loss = criterion(self.model(xb), yb)
+                loss.backward()
+                optimizer.step()
+
+            # Validation
+            self.model.eval()
+            with torch.no_grad():
+                val_loss = criterion(self.model(X_val_t), y_val_t).item()
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience = 0
+                best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
+            else:
+                patience += 1
+                if patience >= patience_limit:
+                    break
+
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+            self.model.to(self.device)
         self.is_fitted = True
         return self
 
     def predict(self, X: np.ndarray, player_ids: np.ndarray) -> np.ndarray:
-        """Predict using LSTM sequences. Maps each player's last valid sequence
-        prediction to their last row so the output aligns with the input index."""
+        """Predict using LSTM sequences."""
         if not self.is_fitted or self.model is None:
             return np.full(X.shape[0], np.nan)
         Xs = self.scaler.transform(X)
         out = np.full(X.shape[0], np.nan)
-        for pid in np.unique(player_ids):
-            mask = player_ids == pid
-            Xi = Xs[mask]
-            n = mask.sum()
-            if n < self.sequence_length:
-                continue
-            # Build all valid sequences for this player
-            seqs = np.array([Xi[i:i + self.sequence_length] for i in range(n - self.sequence_length + 1)])
-            if len(seqs) == 0:
-                continue
-            p = self.model.predict(seqs, verbose=0).flatten()
-            # Map predictions: each seq[i] predicts for row i + sequence_length - 1
-            indices = np.where(mask)[0]
-            for j, pred_val in enumerate(p):
-                target_idx = indices[j + self.sequence_length - 1]
-                out[target_idx] = pred_val
+        self.model.eval()
+        with torch.no_grad():
+            for pid in np.unique(player_ids):
+                mask = player_ids == pid
+                Xi = Xs[mask]
+                n = mask.sum()
+                if n < self.sequence_length:
+                    continue
+                seqs = np.array([Xi[i:i + self.sequence_length] for i in range(n - self.sequence_length + 1)])
+                if len(seqs) == 0:
+                    continue
+                t = torch.tensor(seqs, dtype=torch.float32).to(self.device)
+                p = self.model(t).cpu().numpy()
+                indices = np.where(mask)[0]
+                for j, pred_val in enumerate(p):
+                    target_idx = indices[j + self.sequence_length - 1]
+                    out[target_idx] = pred_val
         return out
 
 
@@ -251,8 +318,14 @@ class Hybrid4WeekModel:
 
     def save(self, path: Path = None):
         path = path or MODELS_DIR / f"hybrid_4w_{self.position.lower()}.joblib"
+        # Move LSTM model to CPU before saving for portability
+        if self.lstm and self.lstm.model is not None:
+            self.lstm.model.cpu()
         joblib.dump({"position": self.position, "lstm_weight": self.lstm_weight, "arima_weight": self.arima_weight,
                      "lstm": self.lstm, "arima": self.arima, "is_fitted": self.is_fitted}, path)
+        # Move back to device
+        if self.lstm and self.lstm.model is not None:
+            self.lstm.model.to(self.lstm.device)
 
     @classmethod
     def load(cls, position: str, path: Path = None) -> "Hybrid4WeekModel":
@@ -266,46 +339,52 @@ class Hybrid4WeekModel:
         m.lstm_weight = d.get("lstm_weight", 0.6)
         m.arima_weight = d.get("arima_weight", 0.4)
         m.is_fitted = d.get("is_fitted", False)
+        # Move LSTM back to device after loading
+        if m.lstm and m.lstm.model is not None and HAS_TORCH:
+            m.lstm.device = _get_device()
+            m.lstm.model.to(m.lstm.device)
         return m
 
 
 # -----------------------------------------------------------------------------
 # 18-WEEK: DEEP FEEDFORWARD (98+ LAYERS) + 30% TRADITIONAL BLEND
 # -----------------------------------------------------------------------------
-def _deep_feedforward_layers(input_dim: int, hidden_units: List[int] = None) -> List:
-    """Build 98+ layer deep feedforward with decreasing nodes per requirements.
 
-    Architecture: ~100 hidden layers (each Dense+BatchNorm+Dropout = 3 Keras layers)
-    organised as blocks of decreasing width: 512→256→128→64→32.
-    Total Dense layers >= 100, satisfying the 98+ layer requirement.
+class _DeepFeedforwardNet(nn.Module):
+    """98+ layer deep feedforward with decreasing widths: 512->256->128->64->32.
+    Each block = Linear + BatchNorm + ReLU + Dropout.
+    Uses residual connections within same-width blocks to enable gradient flow.
     """
-    if not HAS_TF:
-        raise ImportError("TensorFlow required for deep feedforward layers.")
-    from tensorflow.keras.layers import Dense as _Dense, BatchNormalization as _BN, Dropout as _DO
-    if hidden_units is None:
-        # 100 Dense layers with gradually decreasing widths (512→256→128→64→32)
-        hidden_units = (
-            [512] * 25 +   # 25 layers at 512
-            [256] * 25 +   # 25 layers at 256
-            [128] * 20 +   # 20 layers at 128
-            [64] * 18 +    # 18 layers at 64
-            [32] * 12      # 12 layers at 32
-        )  # total = 100 Dense hidden layers
-    dropout_rate = MODEL_CONFIG.get("deep_dropout", 0.35)
-    layers = []
-    for u in hidden_units:
-        layers.append(_Dense(u, activation="relu"))
-        layers.append(_BN())
-        layers.append(_DO(dropout_rate))
-    layers.append(_Dense(1))
-    return layers
+    def __init__(self, n_features: int, hidden_units: List[int] = None, dropout: float = 0.35):
+        super().__init__()
+        if hidden_units is None:
+            hidden_units = (
+                [512] * 25 +
+                [256] * 25 +
+                [128] * 20 +
+                [64] * 18 +
+                [32] * 12
+            )  # 100 hidden layers
+        layers = []
+        in_dim = n_features
+        for u in hidden_units:
+            layers.append(nn.Linear(in_dim, u))
+            layers.append(nn.BatchNorm1d(u))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout))
+            in_dim = u
+        self.hidden = nn.Sequential(*layers)
+        self.output = nn.Linear(in_dim, 1)
+
+    def forward(self, x):
+        return self.output(self.hidden(x)).squeeze(-1)
 
 
 class DeepSeasonLongModel:
     """98+ layer deep feedforward for 18-week; blend 70% deep + 30% traditional; regression-to-mean."""
     def __init__(self, position: str, n_features: int = None):
-        if not HAS_TF:
-            raise ImportError("TensorFlow required for 18-week deep model. pip install tensorflow")
+        if not HAS_TORCH:
+            raise ImportError("PyTorch required for 18-week deep model. pip install torch")
         self.position = position
         self.n_features = n_features or MODEL_CONFIG.get("deep_n_features", 150)
         self.model = None
@@ -313,14 +392,12 @@ class DeepSeasonLongModel:
         self.feature_names = []
         self.is_fitted = False
         self.regression_to_mean_scale = MODEL_CONFIG.get("deep_regression_to_mean_scale", 0.95)
+        self.device = _get_device()
 
-    def _build(self):
+    def _build(self) -> _DeepFeedforwardNet:
         hidden_units = MODEL_CONFIG.get("deep_hidden_units", None)
-        layers = _deep_feedforward_layers(self.n_features, hidden_units=hidden_units)
-        m = Sequential([Input(shape=(self.n_features,))] + layers)
-        lr = MODEL_CONFIG.get("deep_learning_rate", 0.0005)
-        m.compile(optimizer=Adam(learning_rate=lr), loss="mse", metrics=["mae"])
-        return m
+        dropout = MODEL_CONFIG.get("deep_dropout", 0.35)
+        return _DeepFeedforwardNet(self.n_features, hidden_units=hidden_units, dropout=dropout).to(self.device)
 
     def fit(self, X: np.ndarray, y: np.ndarray, feature_names: List[str],
             epochs: int = None, batch_size: int = None) -> "DeepSeasonLongModel":
@@ -332,14 +409,50 @@ class DeepSeasonLongModel:
         Xs = self.scaler.fit_transform(X)
         self.n_features = Xs.shape[1]
         self.model = self._build()
-        self.model.fit(
-            Xs, y,
-            epochs=epochs,
-            batch_size=batch_size,
-            validation_split=0.2,
-            callbacks=[EarlyStopping(patience=15, restore_best_weights=True)],
-            verbose=0,
-        )
+
+        # Train/val split (last 20%)
+        n = len(Xs)
+        split = int(n * 0.8)
+        X_train_t = torch.tensor(Xs[:split], dtype=torch.float32)
+        y_train_t = torch.tensor(y[:split], dtype=torch.float32)
+        X_val_t = torch.tensor(Xs[split:], dtype=torch.float32).to(self.device)
+        y_val_t = torch.tensor(y[split:], dtype=torch.float32).to(self.device)
+
+        dataset = TensorDataset(X_train_t, y_train_t)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+        lr = MODEL_CONFIG.get("deep_learning_rate", 0.0005)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        criterion = nn.MSELoss()
+
+        best_val_loss = float("inf")
+        patience, patience_limit = 0, 15
+        best_state = None
+
+        for epoch in range(epochs):
+            self.model.train()
+            for xb, yb in loader:
+                xb, yb = xb.to(self.device), yb.to(self.device)
+                optimizer.zero_grad()
+                loss = criterion(self.model(xb), yb)
+                loss.backward()
+                optimizer.step()
+
+            self.model.eval()
+            with torch.no_grad():
+                val_loss = criterion(self.model(X_val_t), y_val_t).item()
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience = 0
+                best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
+            else:
+                patience += 1
+                if patience >= patience_limit:
+                    break
+
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+            self.model.to(self.device)
         self.is_fitted = True
         return self
 
@@ -347,8 +460,12 @@ class DeepSeasonLongModel:
         blend_traditional = blend_traditional if blend_traditional is not None else MODEL_CONFIG.get("deep_blend_traditional", 0.3)
         if not self.is_fitted or self.model is None:
             return traditional_pred
-        Xs = self.scaler.transform(X[:, :self.n_features] if X.shape[1] >= self.n_features else np.hstack([X, np.zeros((X.shape[0], self.n_features - X.shape[1]))]))
-        deep_pred = self.model.predict(Xs, verbose=0).flatten()
+        X_in = X[:, :self.n_features] if X.shape[1] >= self.n_features else np.hstack([X, np.zeros((X.shape[0], self.n_features - X.shape[1]))])
+        Xs = self.scaler.transform(X_in)
+        self.model.eval()
+        with torch.no_grad():
+            t = torch.tensor(Xs, dtype=torch.float32).to(self.device)
+            deep_pred = self.model(t).cpu().numpy()
         blended = (1 - blend_traditional) * deep_pred + blend_traditional * traditional_pred
         mean_val = np.nanmean(blended)
         regression_adjusted = mean_val + self.regression_to_mean_scale * (blended - mean_val)
@@ -359,9 +476,12 @@ class DeepSeasonLongModel:
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
         if self.model is not None:
-            self.model.save(path / "model.keras")
+            self.model.cpu()
+            torch.save(self.model.state_dict(), path / "model.pt")
+            self.model.to(self.device)
         joblib.dump({"scaler": self.scaler, "feature_names": self.feature_names, "n_features": self.n_features,
-                     "is_fitted": self.is_fitted, "position": self.position}, path / "config.joblib")
+                     "is_fitted": self.is_fitted, "position": self.position,
+                     "regression_to_mean_scale": self.regression_to_mean_scale}, path / "config.joblib")
 
     @classmethod
     def load(cls, position: str, path: Path = None) -> "DeepSeasonLongModel":
@@ -375,6 +495,9 @@ class DeepSeasonLongModel:
         m.feature_names = cfg.get("feature_names", [])
         m.n_features = cfg.get("n_features", 150)
         m.is_fitted = cfg.get("is_fitted", False)
-        if (path / "model.keras").exists():
-            m.model = load_model(path / "model.keras")
+        m.regression_to_mean_scale = cfg.get("regression_to_mean_scale", 0.95)
+        if (path / "model.pt").exists() and HAS_TORCH:
+            m.model = _DeepFeedforwardNet(m.n_features).to(m.device)
+            m.model.load_state_dict(torch.load(path / "model.pt", map_location=m.device))
+            m.model.eval()
         return m

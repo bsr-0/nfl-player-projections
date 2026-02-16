@@ -279,30 +279,32 @@ class GamesPlayedProjector:
         if 'age_expected_games' not in result.columns:
             result = self.age_model.add_age_features(result)
         
-        # Historical games played rate for player
-        player_history = df.groupby(['player_id']).agg({
-            'week': 'count'  # Games played
-        }).reset_index()
-        player_history.columns = ['player_id', 'historical_games']
-        
-        # Calculate per-season average
-        seasons_played = df.groupby('player_id')['season'].nunique().reset_index()
-        seasons_played.columns = ['player_id', 'seasons']
-        
-        player_history = player_history.merge(seasons_played, on='player_id')
-        player_history['historical_gpg'] = (
-            player_history['historical_games'] / player_history['seasons'] / 17
-        ).clip(0, 1)
-        
-        result = result.merge(
-            player_history[['player_id', 'historical_gpg']],
-            on='player_id',
-            how='left'
+        # Historical games-played rate (causal): use only data available before each row.
+        sort_cols = [c for c in ["player_id", "season", "week"] if c in result.columns]
+        if sort_cols:
+            result = result.reset_index(drop=False).rename(columns={"index": "_orig_idx"})
+            result = result.sort_values(sort_cols).reset_index(drop=True)
+            result["_first_game_of_season"] = (
+                result.groupby(["player_id", "season"]).cumcount() == 0
+            ).astype(int)
+            result["_prior_games"] = result.groupby("player_id").cumcount().astype(float)
+            result["_seasons_seen"] = result.groupby("player_id")["_first_game_of_season"].cumsum().astype(float)
+            result["_prior_seasons"] = (result["_seasons_seen"] - 1.0).clip(lower=0.0)
+            denom = (result["_prior_seasons"] * 17.0).replace(0.0, np.nan)
+            result["historical_gpg"] = (result["_prior_games"] / denom).clip(0, 1)
+            result = result.drop(
+                columns=["_first_game_of_season", "_prior_games", "_seasons_seen", "_prior_seasons"],
+                errors="ignore",
+            )
+            result = result.sort_values("_orig_idx").drop(columns=["_orig_idx"], errors="ignore").reset_index(drop=True)
+        else:
+            result["historical_gpg"] = np.nan
+
+        # Fill missing with fixed position priors (causal; no dependence on future rows).
+        pos_default_rate = result["position"].map(
+            lambda p: self.POSITION_GAMES_STATS.get(p, self.POSITION_GAMES_STATS["WR"])["mean"] / 17
         )
-        
-        # Fill missing with position average
-        pos_avg = result.groupby('position')['historical_gpg'].transform('mean')
-        result['historical_gpg'] = result['historical_gpg'].fillna(pos_avg).fillna(0.85)
+        result["historical_gpg"] = result["historical_gpg"].fillna(pos_default_rate).fillna(0.85)
         
         # Combine factors for projection
         # Weight: 40% age-based, 40% historical, 20% position average
@@ -721,42 +723,55 @@ class ADPIntegrator:
         result = df.copy()
         
         print("Adding ADP integration features...")
-        
-        # Calculate position rank based on fantasy points
-        result['position_rank'] = result.groupby(
-            ['season', 'week', 'position']
-        )['fantasy_points'].rank(ascending=False, method='min')
-        
-        # Season-long position rank (average)
-        season_rank = result.groupby(['player_id', 'season', 'position']).agg({
-            'fantasy_points': 'mean'
-        }).reset_index()
-        season_rank['season_position_rank'] = season_rank.groupby(
-            ['season', 'position']
-        )['fantasy_points'].rank(ascending=False, method='min')
-        
-        result = result.merge(
-            season_rank[['player_id', 'season', 'season_position_rank']],
-            on=['player_id', 'season'],
-            how='left'
-        )
-        
-        # Estimate ADP round
-        result['estimated_adp_round'] = result.apply(
-            lambda row: self.estimate_adp_round(
-                int(row['season_position_rank']) if pd.notna(row['season_position_rank']) else 50,
-                row['position']
-            ),
-            axis=1
-        )
-        
-        # Calculate projected rank (based on rolling average)
-        if 'fp_rolling_3' in result.columns:
-            result['projected_position_rank'] = result.groupby(
-                ['season', 'week', 'position']
-            )['fp_rolling_3'].rank(ascending=False, method='min')
+
+        result = result.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
+
+        # Point-in-time weekly rank: never use current-week fantasy_points directly.
+        if "fp_rolling_3" in result.columns:
+            result["_tmp_form_signal"] = result["fp_rolling_3"]
         else:
-            result['projected_position_rank'] = result['position_rank']
+            result["_tmp_form_signal"] = result.groupby(["player_id", "season"])["fantasy_points"].transform(
+                lambda x: x.shift(1).rolling(3, min_periods=1).mean()
+            )
+        result["position_rank"] = result.groupby(
+            ["season", "week", "position"]
+        )["_tmp_form_signal"].rank(ascending=False, method="min")
+        # Cold-start rows can have NaN signal; default to bottom rank in that group.
+        group_size = result.groupby(["season", "week", "position"])["player_id"].transform("count")
+        result["position_rank"] = result["position_rank"].fillna(group_size).clip(lower=1)
+        result = result.drop(columns=["_tmp_form_signal"], errors="ignore")
+
+        # Season-long rank: based on prior-season average only (no current-season leakage).
+        season_rank = result.groupby(["player_id", "season", "position"], as_index=False).agg(
+            season_fp_mean=("fantasy_points", "mean")
+        )
+        season_rank = season_rank.sort_values(["player_id", "season"]).reset_index(drop=True)
+        season_rank["prev_season_fp_mean"] = season_rank.groupby("player_id")["season_fp_mean"].shift(1)
+        season_rank["season_position_rank"] = season_rank.groupby(
+            ["season", "position"]
+        )["prev_season_fp_mean"].rank(ascending=False, method="min")
+
+        result = result.merge(
+            season_rank[["player_id", "season", "season_position_rank"]],
+            on=["player_id", "season"],
+            how="left",
+        )
+
+        # Cold-start fallback: use earliest weekly point-in-time rank this season.
+        preseason_rank = result.groupby(["player_id", "season"])["position_rank"].transform("first")
+        result["season_position_rank"] = result["season_position_rank"].fillna(preseason_rank)
+
+        # Estimate ADP round from leakage-safe season rank.
+        result["estimated_adp_round"] = result.apply(
+            lambda row: self.estimate_adp_round(
+                int(row["season_position_rank"]) if pd.notna(row["season_position_rank"]) else 50,
+                row["position"],
+            ),
+            axis=1,
+        )
+        
+        # Projected rank remains point-in-time.
+        result["projected_position_rank"] = result["position_rank"]
         
         # Estimate projected ADP
         result['projected_adp_round'] = result.apply(
@@ -771,13 +786,11 @@ class ADPIntegrator:
         result['adp_value_score'] = (
             result['estimated_adp_round'] - result['projected_adp_round']
         )
-        
-        # Normalize to -1 to 1 scale
-        max_value = result['adp_value_score'].abs().max()
-        if max_value > 0:
-            result['adp_value_normalized'] = result['adp_value_score'] / max_value
-        else:
-            result['adp_value_normalized'] = 0
+
+        # Normalize to -1 to 1 scale using a FIXED denominator (max possible
+        # ADP round difference ≈ 16) so the scale is stable across train/test.
+        _ADP_NORM_DENOM = 16.0
+        result['adp_value_normalized'] = (result['adp_value_score'] / _ADP_NORM_DENOM).clip(-1, 1)
         
         # Positional scarcity (how rare is top talent at position)
         scarcity_factors = {'QB': 0.7, 'RB': 1.0, 'WR': 0.9, 'TE': 0.8}

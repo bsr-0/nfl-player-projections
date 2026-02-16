@@ -4,7 +4,7 @@ import json
 import warnings
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 # Suppress SciPy/NumPy version mismatch warning (env may have numpy>=1.23 with older scipy)
 warnings.filterwarnings(
@@ -230,11 +230,87 @@ def _load_qb_target_choice() -> str:
 
 
 def _safe_mape(y_true, y_pred):
-    """Calculate MAPE avoiding division by zero."""
-    mask = y_true != 0
+    """Calculate MAPE with denominator floor for stability near zero actuals."""
+    denom_floor = float(MODEL_CONFIG.get("mape_denominator_floor", 3.0))
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    mask = np.isfinite(y_true) & np.isfinite(y_pred)
     if mask.sum() == 0:
         return None
-    return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
+    denom = np.maximum(np.abs(y_true[mask]), denom_floor)
+    return float(np.mean(np.abs(y_true[mask] - y_pred[mask]) / denom) * 100)
+
+
+def _create_horizon_targets(df: pd.DataFrame, n_weeks: List[int] = None) -> pd.DataFrame:
+    """Create causal horizon targets within each player-season boundary."""
+    if df.empty:
+        return df
+    n_weeks = n_weeks or [1, 4, 18]
+    out = df.copy()
+    group_cols = ["player_id", "season"] if "season" in out.columns else ["player_id"]
+
+    def _forward_window(series: pd.Series, window: int, agg: str) -> pd.Series:
+        """
+        Aggregate future values x[t+1:t+window] for each row t.
+        Uses reverse rolling to keep strict forward-looking targets.
+
+        Requires at least half the window to be available to avoid noisy
+        targets at season boundaries (e.g. week 17 with only 1 future game
+        for an 18-week window). Rows with insufficient future data become NaN
+        and are excluded during training.
+        """
+        shifted = series.shift(-1)
+        rev = shifted.iloc[::-1]
+        min_p = max(window // 2, 1)
+        if agg == "sum":
+            return rev.rolling(window=window, min_periods=min_p).sum().iloc[::-1]
+        return rev.rolling(window=window, min_periods=min_p).mean().iloc[::-1]
+
+    for nw in n_weeks:
+        out[f"target_{nw}w"] = out.groupby(group_cols)["fantasy_points"].transform(
+            lambda x, w=nw: _forward_window(x, window=w, agg="sum")
+        )
+    if "utilization_score" in out.columns:
+        out["target_util_1w"] = out.groupby(group_cols)["utilization_score"].shift(-1)
+        for nw in [w for w in n_weeks if w != 1]:
+            out[f"target_util_{nw}w"] = out.groupby(group_cols)["utilization_score"].transform(
+                lambda x, w=nw: _forward_window(x, window=w, agg="mean")
+            )
+    return out
+
+
+def _apply_with_temporal_context(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    transform_fn,
+    label: str,
+    **kwargs,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Apply a transformation to train+test together so test rows can use historical
+    context from prior train seasons while preserving split membership.
+    """
+    if train_df.empty and test_df.empty:
+        return train_df, test_df
+    split_col = "__split_context_marker__"
+    train_in = train_df.copy()
+    test_in = test_df.copy()
+    train_in[split_col] = 0
+    test_in[split_col] = 1
+    combined = pd.concat([train_in, test_in], ignore_index=True, sort=False)
+
+    sort_cols = [c for c in ["season", "week", "player_id"] if c in combined.columns]
+    if sort_cols:
+        combined = combined.sort_values(sort_cols).reset_index(drop=True)
+
+    transformed = transform_fn(combined, **kwargs)
+    if split_col not in transformed.columns:
+        raise ValueError(f"{label}: split marker missing after transform")
+
+    train_out = transformed[transformed[split_col] == 0].drop(columns=[split_col]).reset_index(drop=True)
+    test_out = transformed[transformed[split_col] == 1].drop(columns=[split_col]).reset_index(drop=True)
+    print(f"  Applied {label} with shared context: train={len(train_out)}, test={len(test_out)}")
+    return train_out, test_out
 
 
 def _report_missingness(df: pd.DataFrame, label: str, threshold: float = 0.05) -> Dict[str, float]:
@@ -399,7 +475,7 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
     
     qb_target = _load_qb_target_choice()
     converters = {}
-    for pos in ["RB", "WR", "TE"]:
+    for pos in ["RB", "WR", "TE", "QB"]:
         try:
             conv = UtilizationToFPConverter.load(pos)
             if getattr(conv, "is_fitted", False):
@@ -430,18 +506,26 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
             rho_str = f", ρ={rho:.3f}" if np.isfinite(rho) else ""
             print(f"  {pos} (test {label}): RMSE={rmse:.2f}, MAE={mae:.2f}, R²={r2:.3f}{mape_str}, ≤7pt={within_7:.1f}%, ≤10pt={within_10:.1f}%{rho_str}")
         
-        # QB: compare to chosen target only
+        # QB: report owner-facing FP metric (convert util->FP when needed).
         if position == "QB":
-            actual_col = "target_1w" if qb_target == "fp" else "target_util_1w"
-            if actual_col not in pos_test.columns:
+            if "target_1w" not in pos_test.columns and "target_util_1w" not in pos_test.columns:
                 continue
-            y_act = pos_test[actual_col]
+            target_col = "target_1w" if "target_1w" in pos_test.columns else "target_util_1w"
+            y_act = pos_test[target_col]
             valid = ~y_act.isna()
             if valid.sum() >= 5:
                 pos_subset = pos_test.loc[valid]
                 preds = multi_model.predict(pos_subset, n_weeks=1)
-                label = "FP (chosen)" if qb_target == "fp" else "util (chosen)"
-                _print_metrics(position, label, y_act[valid], preds)
+                label = "FP (owner objective)" if target_col == "target_1w" else "util (fallback)"
+                preds_out = preds
+                if target_col == "target_1w" and qb_target == "util" and "QB" in converters:
+                    try:
+                        eff_df = pos_subset.copy()
+                        eff_df["utilization_score"] = preds
+                        preds_out = converters["QB"].predict(preds, efficiency_df=eff_df)
+                    except Exception:
+                        preds_out = preds
+                _print_metrics(position, label, y_act[valid], preds_out)
             continue
         
         # RB/WR/TE: primary utilization, optional FP
@@ -482,11 +566,11 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     test_data["predicted_points"] = np.nan
     test_data["predicted_utilization"] = np.nan
 
-    # Load utilization->FP converters when present (RB/WR/TE)
+    # Load utilization->FP converters when present.
     converters = {}
     try:
         from src.models.utilization_to_fp import UtilizationToFPConverter
-        for pos in ["RB", "WR", "TE"]:
+        for pos in ["RB", "WR", "TE", "QB"]:
             try:
                 c = UtilizationToFPConverter.load(pos)
                 if getattr(c, "is_fitted", False):
@@ -495,6 +579,7 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 pass
     except Exception:
         converters = {}
+    qb_target = _load_qb_target_choice()
     import time as _time
     _pred_start = _time.perf_counter()
     _n_predicted = 0
@@ -512,10 +597,11 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         preds = multi_model.predict(pos_test, n_weeks=1)
         _n_predicted += len(pos_test)
         test_data.loc[pos_mask, "predicted_utilization"] = preds
-        # Default: set points equal to utilization (kept for QB when trained on FP or util)
+        # Default: set points equal to raw model output.
         test_data.loc[pos_mask, "predicted_points"] = preds
-        # Non-QB: convert utilization -> fantasy points when converter is available
-        if position in converters:
+        # Convert utilization -> fantasy points for skill positions and QB(util mode).
+        should_convert = position in converters and (position != "QB" or qb_target == "util")
+        if should_convert:
             eff_df = pos_test.copy()
             eff_df["utilization_score"] = preds
             try:
@@ -533,24 +619,22 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     if valid_preds.sum() < 10:
         return
     # Combined actual column:
-    # - QB: chosen target (util or FP)
-    # - RB/WR/TE: when utilization->FP conversion is applied, compare against future FP; otherwise utilization
-    qb_target = _load_qb_target_choice()
+    # - QB: owner-facing FP when available (fallback to util only when converter is unavailable)
+    # - RB/WR/TE: future FP (fallback util if FP target missing)
     test_data["actual_for_backtest"] = np.nan
     non_qb_mask = test_data["position"] != "QB"
     if "target_1w" in test_data.columns:
-        # Prefer FP actuals for non-QB when we are producing predicted_points via conversion.
         test_data.loc[non_qb_mask, "actual_for_backtest"] = test_data.loc[non_qb_mask, "target_1w"]
     if "target_util_1w" in test_data.columns:
-        # Fallback: if FP actual missing, use utilization target.
         test_data.loc[non_qb_mask, "actual_for_backtest"] = test_data.loc[non_qb_mask, "actual_for_backtest"].fillna(
             test_data.loc[non_qb_mask, "target_util_1w"]
         )
-    if "target_1w" in test_data.columns and "target_util_1w" in test_data.columns:
-        qb_mask = test_data["position"] == "QB"
-        test_data.loc[qb_mask, "actual_for_backtest"] = (
-            test_data.loc[qb_mask, "target_1w"] if qb_target == "fp"
-            else test_data.loc[qb_mask, "target_util_1w"]
+    qb_mask = test_data["position"] == "QB"
+    if "target_1w" in test_data.columns:
+        test_data.loc[qb_mask, "actual_for_backtest"] = test_data.loc[qb_mask, "target_1w"]
+    if qb_target == "util" and "QB" not in converters and "target_util_1w" in test_data.columns:
+        test_data.loc[qb_mask, "actual_for_backtest"] = test_data.loc[qb_mask, "actual_for_backtest"].fillna(
+            test_data.loc[qb_mask, "target_util_1w"]
         )
     if test_data["actual_for_backtest"].isna().all():
         test_data["actual_for_backtest"] = test_data.get("fantasy_points", np.nan)
@@ -789,18 +873,28 @@ def _run_one_fold(
         db.ensure_team_defense_stats()
     except Exception:
         pass
-    # External (Vegas, injury, weather)
+    # External (Vegas, injury, weather) with shared train/test temporal context.
     try:
         from src.data.external_data import add_external_features
-        train_data = add_external_features(train_data, seasons=list(train_data["season"].unique()))
-        test_data = add_external_features(test_data, seasons=list(test_data["season"].unique()))
+        all_seasons = sorted(set(train_data["season"].dropna().astype(int)) | set(test_data["season"].dropna().astype(int)))
+        train_data, test_data = _apply_with_temporal_context(
+            train_data,
+            test_data,
+            add_external_features,
+            "external features",
+            seasons=all_seasons,
+        )
     except Exception:
         pass
-    # Season-long draft/rookie context (required for strict rookie/draft rubric)
+    # Season-long draft/rookie context with shared temporal context.
     try:
         from src.features.season_long_features import add_season_long_features
-        train_data = add_season_long_features(train_data)
-        test_data = add_season_long_features(test_data)
+        train_data, test_data = _apply_with_temporal_context(
+            train_data,
+            test_data,
+            add_season_long_features,
+            "season-long features",
+        )
     except Exception as e:
         print(f"  Season-long draft feature merge skipped: {e}")
     # Util + bounds
@@ -814,25 +908,9 @@ def _run_one_fold(
     train_data = util_calc.calculate_all_scores(train_data, team_df)
     loaded_bounds = load_percentile_bounds(bounds_path)
     test_data = calculate_utilization_scores(test_data, team_df=team_df, weights=None, percentile_bounds=loaded_bounds)
-    # Targets
-    for n_weeks in [1, 4, 18]:
-        train_data[f"target_{n_weeks}w"] = train_data.groupby("player_id")["fantasy_points"].transform(
-            lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
-        )
-        test_data[f"target_{n_weeks}w"] = test_data.groupby("player_id")["fantasy_points"].transform(
-            lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
-        )
-    train_data["target_util_1w"] = train_data.groupby("player_id")["utilization_score"].shift(-1)
-    test_data["target_util_1w"] = test_data.groupby("player_id")["utilization_score"].shift(-1)
-    for nw in [4, 18]:
-        train_data[f"target_util_{nw}w"] = (
-            train_data.groupby("player_id")["utilization_score"]
-            .transform(lambda x, w=nw: x.shift(-1).rolling(window=w, min_periods=1).mean())
-        )
-        test_data[f"target_util_{nw}w"] = (
-            test_data.groupby("player_id")["utilization_score"]
-            .transform(lambda x, w=nw: x.shift(-1).rolling(window=w, min_periods=1).mean())
-        )
+    # Targets (season-bounded to avoid crossing off-season boundaries).
+    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
+    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
     util_weights = fit_utilization_weights(
         train_data,
         target_col="target_util_1w" if "target_util_1w" in train_data.columns else "target_1w",
@@ -840,10 +918,17 @@ def _run_one_fold(
     )
     train_data = recalculate_utilization_with_weights(train_data, util_weights)
     test_data = recalculate_utilization_with_weights(test_data, util_weights)
+    # Recompute utilization targets on the reweighted utilization scale for train/serve alignment.
+    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
+    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
     with open(MODELS_DIR / "utilization_weights.json", "w") as f:
         json.dump(util_weights, f, indent=2)
-    train_data = add_advanced_features(add_engineered_features(train_data))
-    test_data = add_advanced_features(add_engineered_features(test_data))
+    train_data, test_data = _apply_with_temporal_context(
+        train_data,
+        test_data,
+        lambda d: add_advanced_features(add_engineered_features(d)),
+        "feature engineering",
+    )
     _apply_bounded_scaling(
         train_data,
         test_data,
@@ -882,7 +967,7 @@ def _run_one_fold(
     converters = {}
     try:
         from src.models.utilization_to_fp import UtilizationToFPConverter
-        for pos in ["RB", "WR", "TE"]:
+        for pos in ["RB", "WR", "TE", "QB"]:
             try:
                 c = UtilizationToFPConverter.load(pos)
                 if getattr(c, "is_fitted", False):
@@ -891,6 +976,7 @@ def _run_one_fold(
                 pass
     except Exception:
         converters = {}
+    qb_target = _load_qb_target_choice()
     for position in positions:
         if position not in trainer.trained_models:
             continue
@@ -907,7 +993,8 @@ def _run_one_fold(
         preds = multi_model.predict(pos_test, n_weeks=1)
         test_data.loc[pos_mask, "predicted_utilization"] = preds
         test_data.loc[pos_mask, "predicted_points"] = preds
-        if position in converters:
+        should_convert = position in converters and (position != "QB" or qb_target == "util")
+        if should_convert:
             eff_df = pos_test.copy()
             eff_df["utilization_score"] = preds
             try:
@@ -915,17 +1002,22 @@ def _run_one_fold(
                 test_data.loc[pos_mask, "predicted_points"] = fp_pred
             except Exception:
                 pass
-    qb_target = _load_qb_target_choice()
     test_data["actual_for_backtest"] = np.nan
     # Backtest points: for non-QB we convert utilization->FP when possible, so compare to future FP.
     if "target_1w" in test_data.columns:
         test_data.loc[test_data["position"] != "QB", "actual_for_backtest"] = test_data.loc[
             test_data["position"] != "QB", "target_1w"
         ]
-    if "target_1w" in test_data.columns and "target_util_1w" in test_data.columns:
-        qb_mask = test_data["position"] == "QB"
-        test_data.loc[qb_mask, "actual_for_backtest"] = (
-            test_data.loc[qb_mask, "target_1w"] if qb_target == "fp" else test_data.loc[qb_mask, "target_util_1w"]
+    if "target_util_1w" in test_data.columns:
+        test_data.loc[test_data["position"] != "QB", "actual_for_backtest"] = test_data.loc[
+            test_data["position"] != "QB", "actual_for_backtest"
+        ].fillna(test_data.loc[test_data["position"] != "QB", "target_util_1w"])
+    qb_mask = test_data["position"] == "QB"
+    if "target_1w" in test_data.columns:
+        test_data.loc[qb_mask, "actual_for_backtest"] = test_data.loc[qb_mask, "target_1w"]
+    if qb_target == "util" and "QB" not in converters and "target_util_1w" in test_data.columns:
+        test_data.loc[qb_mask, "actual_for_backtest"] = test_data.loc[qb_mask, "actual_for_backtest"].fillna(
+            test_data.loc[qb_mask, "target_util_1w"]
         )
     if test_data["actual_for_backtest"].isna().all():
         test_data["actual_for_backtest"] = test_data.get("fantasy_points", np.nan)
@@ -1020,18 +1112,28 @@ def train_models(positions: list = None,
     except Exception as e:
         print(f"  Team defense stats skip: {e}")
 
-    # Integrate weather, injury, Vegas/game script (spread, over/under, implied total) into main training path
+    # Integrate external + season-long features with shared temporal context so test rows
+    # can use prior-year history from train seasons.
     try:
         from src.data.external_data import add_external_features
-        train_data = add_external_features(train_data, seasons=list(train_data["season"].unique()))
-        test_data = add_external_features(test_data, seasons=list(test_data["season"].unique()))
+        all_seasons = sorted(set(train_data["season"].dropna().astype(int)) | set(test_data["season"].dropna().astype(int)))
+        train_data, test_data = _apply_with_temporal_context(
+            train_data,
+            test_data,
+            add_external_features,
+            "external features",
+            seasons=all_seasons,
+        )
     except Exception as e:
         print(f"  External features (weather/injury/Vegas) skip: {e}")
-    # Merge season-long context (draft capital + rookie archetypes) in mainline path
     try:
         from src.features.season_long_features import add_season_long_features
-        train_data = add_season_long_features(train_data)
-        test_data = add_season_long_features(test_data)
+        train_data, test_data = _apply_with_temporal_context(
+            train_data,
+            test_data,
+            add_season_long_features,
+            "season-long features",
+        )
     except Exception as e:
         print(f"  Season-long features (draft/rookie context) skip: {e}")
 
@@ -1051,26 +1153,8 @@ def train_models(positions: list = None,
     
     # Create targets for different horizons (needed before utilization weight fitting)
     print("\n[2b/5] Creating prediction targets...")
-    for n_weeks in [1, 4, 18]:
-        train_data[f"target_{n_weeks}w"] = train_data.groupby("player_id")["fantasy_points"].transform(
-            lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
-        )
-        test_data[f"target_{n_weeks}w"] = test_data.groupby("player_id")["fantasy_points"].transform(
-            lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
-        )
-    
-    # Utilization targets (primary): next 1/4/18 weeks' utilization (future only)
-    train_data["target_util_1w"] = train_data.groupby("player_id")["utilization_score"].shift(-1)
-    test_data["target_util_1w"] = test_data.groupby("player_id")["utilization_score"].shift(-1)
-    for nw in [4, 18]:
-        train_data[f"target_util_{nw}w"] = (
-            train_data.groupby("player_id")["utilization_score"]
-            .transform(lambda x, w=nw: x.shift(-1).rolling(window=w, min_periods=1).mean())
-        )
-        test_data[f"target_util_{nw}w"] = (
-            test_data.groupby("player_id")["utilization_score"]
-            .transform(lambda x, w=nw: x.shift(-1).rolling(window=w, min_periods=1).mean())
-        )
+    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
+    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
     
     # Data-driven utilization weight optimization (fit on train only; target = future utilization)
     util_weights = fit_utilization_weights(
@@ -1080,6 +1164,9 @@ def train_models(positions: list = None,
     )
     train_data = recalculate_utilization_with_weights(train_data, util_weights)
     test_data = recalculate_utilization_with_weights(test_data, util_weights)
+    # Recompute targets after utilization reweighting so util targets align to the served scale.
+    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
+    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
     # Persist for train/serve consistency (predict pipeline loads these)
     import json
     weights_path = MODELS_DIR / "utilization_weights.json"
@@ -1089,8 +1176,12 @@ def train_models(positions: list = None,
     
     # Phase 2: Feature engineering (uses utilization_score)
     print("\n[2c/5] Engineering features...")
-    train_data = add_advanced_features(add_engineered_features(train_data))
-    test_data = add_advanced_features(add_engineered_features(test_data))
+    train_data, test_data = _apply_with_temporal_context(
+        train_data,
+        test_data,
+        lambda d: add_advanced_features(add_engineered_features(d)),
+        "feature engineering",
+    )
     _apply_bounded_scaling(
         train_data,
         test_data,
@@ -1201,7 +1292,7 @@ def train_models(positions: list = None,
         )
         n_seasons = len(train_seasons)
         if not HAS_TF:
-            print("  Horizon note: TensorFlow unavailable; LSTM/deep components disabled.")
+            print("  Horizon note: PyTorch unavailable; LSTM/deep components disabled.")
         if not HAS_ARIMA:
             print("  Horizon note: statsmodels unavailable; ARIMA component disabled.")
         for position in positions:

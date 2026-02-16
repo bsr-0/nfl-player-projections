@@ -142,10 +142,12 @@ class RobustTimeSeriesCV:
             mae = mean_absolute_error(y_test, predictions)
             r2 = r2_score(y_test, predictions)
             
-            # MAPE (avoid division by zero)
-            mask = y_test != 0
+            # MAPE with denominator floor for stability near zero values.
+            denom_floor = 3.0
+            mask = np.isfinite(y_test.values) & np.isfinite(predictions)
             if mask.sum() > 0:
-                mape = np.mean(np.abs((y_test[mask] - predictions[mask]) / y_test[mask])) * 100
+                denom = np.maximum(np.abs(y_test.values[mask]), denom_floor)
+                mape = np.mean(np.abs(y_test.values[mask] - predictions[mask]) / denom) * 100
             else:
                 mape = np.nan
             

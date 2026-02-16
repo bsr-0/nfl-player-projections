@@ -1,0 +1,170 @@
+{
+  "QB": [
+    {
+      "feature": "play_volume_norm",
+      "importance": 0.09032758593364769
+    },
+    {
+      "feature": "fantasy_points_roll3_mean",
+      "importance": 0.053855033586380066
+    },
+    {
+      "feature": "passing_yards",
+      "importance": 0.0448152204049791
+    },
+    {
+      "feature": "boom_rate_roll8",
+      "importance": 0.031261875686803636
+    },
+    {
+      "feature": "season_week_pct",
+      "importance": 0.028512608257634214
+    },
+    {
+      "feature": "season_position_rank",
+      "importance": 0.024030096746650756
+    },
+    {
+      "feature": "prev_season_ppg",
+      "importance": 0.023775771831860838
+    },
+    {
+      "feature": "team_points",
+      "importance": 0.01872286855200893
+    },
+    {
+      "feature": "matchup_quality_indicator",
+      "importance": 0.01673825213469831
+    },
+    {
+      "feature": "fantasy_points_lag4",
+      "importance": 0.015494495414227339
+    }
+  ],
+  "RB": [
+    {
+      "feature": "touch_share_norm",
+      "importance": 0.18889243881868947
+    },
+    {
+      "feature": "utilization_score_roll3_mean",
+      "importance": 0.033927210902324076
+    },
+    {
+      "feature": "season_week_pct",
+      "importance": 0.0252906720926759
+    },
+    {
+      "feature": "weighted_opportunities",
+      "importance": 0.024843602484636188
+    },
+    {
+      "feature": "is_workhorse_rb",
+      "importance": 0.017068445807485445
+    },
+    {
+      "feature": "total_touches_lag1",
+      "importance": 0.013992644846534227
+    },
+    {
+      "feature": "utilization_score_lag1",
+      "importance": 0.012548662338606235
+    },
+    {
+      "feature": "cumulative_workload_4w",
+      "importance": 0.010970491444610844
+    },
+    {
+      "feature": "total_yards_roll3_mean",
+      "importance": 0.010450014585478156
+    },
+    {
+      "feature": "total_yards",
+      "importance": 0.009356183914434563
+    }
+  ],
+  "WR": [
+    {
+      "feature": "air_yards_norm",
+      "importance": 0.5302976363251239
+    },
+    {
+      "feature": "season_week_pct",
+      "importance": 0.015303907225759639
+    },
+    {
+      "feature": "team_rush_attempts_x",
+      "importance": 0.0072094467162852555
+    },
+    {
+      "feature": "air_yards",
+      "importance": 0.004213774029704142
+    },
+    {
+      "feature": "team_points",
+      "importance": 0.004011195423448735
+    },
+    {
+      "feature": "utilization_score_lag2",
+      "importance": 0.003707356463355834
+    },
+    {
+      "feature": "average_depth_of_target",
+      "importance": 0.0036088087171860274
+    },
+    {
+      "feature": "cumulative_workload_4w",
+      "importance": 0.0034480094119191747
+    },
+    {
+      "feature": "expected_point_diff",
+      "importance": 0.0031920618664914796
+    },
+    {
+      "feature": "utilization_score_roll8_std",
+      "importance": 0.003124295573918759
+    }
+  ],
+  "TE": [
+    {
+      "feature": "air_yards_norm",
+      "importance": 0.6712109153867543
+    },
+    {
+      "feature": "team_points",
+      "importance": 0.04376908712165187
+    },
+    {
+      "feature": "season_week_pct",
+      "importance": 0.014184846084352757
+    },
+    {
+      "feature": "team_yards",
+      "importance": 0.011390013321292239
+    },
+    {
+      "feature": "average_depth_of_target",
+      "importance": 0.006706092248772605
+    },
+    {
+      "feature": "air_yards",
+      "importance": 0.0058865927986266695
+    },
+    {
+      "feature": "is_late_season",
+      "importance": 0.003790737885501374
+    },
+    {
+      "feature": "team_rush_attempts_x",
+      "importance": 0.0035404995445250625
+    },
+    {
+      "feature": "matchup_quality_indicator",
+      "importance": 0.002144232745229829
+    },
+    {
+      "feature": "utilization_score_lag3",
+      "importance": 0.0019947522972548967
+    }
+  ]
+}

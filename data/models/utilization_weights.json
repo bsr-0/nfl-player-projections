@@ -2,31 +2,42 @@
   "RB": {
     "snap_share": 0.03,
     "rush_share": 0.03,
-    "target_share": 0.14541374461474732,
-    "redzone_share": 0.16026293094872746,
-    "touch_share": 0.49476596275125323,
-    "high_value_touch": 0.139557361685272
+    "target_share": 0.1387142805123035,
+    "redzone_share": 0.16848046226268726,
+    "touch_share": 0.4869987571535574,
+    "high_value_touch": 0.1458065000714519
   },
   "WR": {
-    "target_share": 0.4772249447282957,
-    "air_yards_share": 0.34926095979906874,
-    "snap_share": 0.029999999999999992,
-    "redzone_targets": 0.10309703459029133,
+    "target_share": 0.4668686665320134,
+    "air_yards_share": 0.3551126948838864,
+    "snap_share": 0.03,
+    "redzone_targets": 0.1097668140949357,
     "route_participation": 0.0,
-    "high_value_touch": 0.040417060882344105
+    "high_value_touch": 0.03825182448916448
   },
   "TE": {
-    "target_share": 0.10196323631642723,
+    "target_share": 0.18662783173215153,
     "snap_share": 0.03,
-    "redzone_targets": 0.06429506169122168,
-    "air_yards_share": 0.24534460977820727,
-    "inline_rate": 0.5323478260313685,
-    "high_value_touch": 0.026049266182775293
+    "redzone_targets": 0.09167137482304841,
+    "air_yards_share": 0.24484231777876497,
+    "inline_rate": 0.416086037653236,
+    "high_value_touch": 0.030772438012799153
   },
   "QB": {
-    "dropback_rate": 0.27620361164032936,
-    "rush_attempt_share": 0.22657546932994233,
-    "redzone_opportunity": 0.2048722702114958,
-    "play_volume": 0.2923486488182325
+    "dropback_rate": 0.28478858329389345,
+    "rush_attempt_share": 0.23200973524262467,
+    "redzone_opportunity": 0.19172017633853491,
+    "play_volume": 0.29148150512494697
+  },
+  "K": {
+    "fg_attempts": 0.5,
+    "xp_attempts": 0.3,
+    "team_scoring": 0.2
+  },
+  "DST": {
+    "sacks": 0.25,
+    "turnovers": 0.3,
+    "points_allowed_inv": 0.25,
+    "defensive_tds": 0.2
   }
 }

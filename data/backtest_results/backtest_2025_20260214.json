@@ -1,0 +1,1410 @@
+{
+  "season": 2025,
+  "backtest_date": "2026-02-14T23:12:03.007122",
+  "n_predictions": 5477,
+  "metrics": {
+    "rmse": 8.71,
+    "mae": 6.17,
+    "r2": 0.258,
+    "correlation": 0.708,
+    "mape": 123.8,
+    "mae_rmse_ratio": 0.708,
+    "mae_rmse_healthy": "True",
+    "directional_accuracy_pct": 76.3,
+    "within_3_pts_pct": 38.9,
+    "within_5_pts_pct": 56.9,
+    "within_7_pts_pct": 68.8,
+    "within_10_pts_pct": 80.3,
+    "spearman_rho": 0.675,
+    "tier_classification_accuracy": 0.576,
+    "boom_bust": {
+      "boom_prevalence": 0.1513602337045828,
+      "bust_prevalence": 0.3669892276793865,
+      "boom_precision": 0.6394230769230769,
+      "boom_recall": 0.6417370325693607,
+      "boom_f1": 0.6405779650812762,
+      "bust_precision": 0.553245651251591,
+      "bust_recall": 0.6487562189054726,
+      "bust_f1": 0.5972063201282345
+    },
+    "vor_rank_correlation": 0.55,
+    "avg_actual": 10.07,
+    "avg_predicted": 10.61,
+    "std_actual": 10.12,
+    "std_predicted": 12.11
+  },
+  "by_position": {
+    "QB": {
+      "rmse": 16.32,
+      "mae": 14.1,
+      "r2": -0.738,
+      "correlation": 0.504,
+      "mape": 128.9,
+      "mae_rmse_ratio": 0.864,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 54.9,
+      "within_3_pts_pct": 8.2,
+      "within_5_pts_pct": 15.4,
+      "within_7_pts_pct": 22.0,
+      "within_10_pts_pct": 34.6,
+      "spearman_rho": 0.675,
+      "tier_classification_accuracy": 0.799,
+      "boom_bust": {
+        "boom_prevalence": 0.7625786163522013,
+        "bust_prevalence": 0.06761006289308176,
+        "boom_precision": 0.7678855325914149,
+        "boom_recall": 0.9958762886597938,
+        "boom_f1": 0.867145421903052,
+        "bust_precision": 0.0,
+        "bust_recall": 0.0,
+        "bust_f1": 0.0
+      },
+      "vor_rank_correlation": 0.405,
+      "avg_actual": 27.33,
+      "avg_predicted": 39.59,
+      "std_actual": 12.39,
+      "std_predicted": 7.51,
+      "n_players": 73
+    },
+    "WR": {
+      "rmse": 6.93,
+      "mae": 5.01,
+      "r2": -0.051,
+      "correlation": 0.435,
+      "mape": 117.0,
+      "mae_rmse_ratio": 0.723,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 69.7,
+      "within_3_pts_pct": 43.1,
+      "within_5_pts_pct": 62.7,
+      "within_7_pts_pct": 75.5,
+      "within_10_pts_pct": 86.7,
+      "spearman_rho": -0.129,
+      "tier_classification_accuracy": 0.57,
+      "boom_bust": {
+        "boom_prevalence": 0.06099033816425121,
+        "bust_prevalence": 0.4399154589371981,
+        "boom_precision": 0.2346368715083799,
+        "boom_recall": 0.2079207920792079,
+        "boom_f1": 0.22047244094488186,
+        "bust_precision": 0.5775962660443408,
+        "bust_recall": 0.6794783802333562,
+        "bust_f1": 0.6244087038789026
+      },
+      "vor_rank_correlation": 0.398,
+      "avg_actual": 7.22,
+      "avg_predicted": 6.73,
+      "std_actual": 6.76,
+      "std_predicted": 6.22,
+      "n_players": 316
+    },
+    "TE": {
+      "rmse": 6.1,
+      "mae": 4.32,
+      "r2": -0.121,
+      "correlation": 0.271,
+      "mape": 93.3,
+      "mae_rmse_ratio": 0.708,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 66.8,
+      "within_3_pts_pct": 50.9,
+      "within_5_pts_pct": 71.6,
+      "within_7_pts_pct": 81.2,
+      "within_10_pts_pct": 89.8,
+      "spearman_rho": 0.047,
+      "tier_classification_accuracy": 0.635,
+      "boom_bust": {
+        "boom_prevalence": 0.04289544235924933,
+        "bust_prevalence": 0.4584450402144772,
+        "boom_precision": 0.0,
+        "boom_recall": 0.0,
+        "boom_f1": 0.0,
+        "bust_precision": 0.5318181818181819,
+        "bust_recall": 0.6842105263157895,
+        "bust_f1": 0.5984654731457801
+      },
+      "vor_rank_correlation": 0.286,
+      "avg_actual": 6.57,
+      "avg_predicted": 5.39,
+      "std_actual": 5.77,
+      "std_predicted": 3.8,
+      "n_players": 34
+    },
+    "RB": {
+      "rmse": 7.97,
+      "mae": 5.71,
+      "r2": 0.063,
+      "correlation": 0.423,
+      "mape": 148.5,
+      "mae_rmse_ratio": 0.717,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 68.5,
+      "within_3_pts_pct": 39.8,
+      "within_5_pts_pct": 58.6,
+      "within_7_pts_pct": 71.2,
+      "within_10_pts_pct": 83.9,
+      "spearman_rho": 0.016,
+      "tier_classification_accuracy": 0.452,
+      "boom_bust": {
+        "boom_prevalence": 0.10899653979238755,
+        "bust_prevalence": 0.29325259515570934,
+        "boom_precision": 0.3181818181818182,
+        "boom_recall": 0.05555555555555555,
+        "boom_f1": 0.0945945945945946,
+        "bust_precision": 0.4657210401891253,
+        "bust_recall": 0.5811209439528023,
+        "bust_f1": 0.5170603674540682
+      },
+      "vor_rank_correlation": 0.446,
+      "avg_actual": 9.86,
+      "avg_predicted": 7.46,
+      "std_actual": 8.23,
+      "std_predicted": 4.94,
+      "n_players": 106
+    }
+  },
+  "by_week": {
+    "1": {
+      "rmse": 8.88,
+      "mae": 6.42,
+      "r2": 0.213,
+      "correlation": 0.717,
+      "mape": 98.4,
+      "mae_rmse_ratio": 0.723,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 75.9,
+      "within_3_pts_pct": 37.3,
+      "within_5_pts_pct": 52.1,
+      "within_7_pts_pct": 64.0,
+      "within_10_pts_pct": 77.5,
+      "spearman_rho": 0.672,
+      "tier_classification_accuracy": 0.556,
+      "boom_bust": {
+        "boom_prevalence": 0.13504823151125403,
+        "bust_prevalence": 0.3987138263665595,
+        "boom_precision": 0.47692307692307695,
+        "boom_recall": 0.7380952380952381,
+        "boom_f1": 0.5794392523364486,
+        "bust_precision": 0.6752136752136753,
+        "bust_recall": 0.6370967741935484,
+        "bust_f1": 0.6556016597510375
+      },
+      "vor_rank_correlation": 0.632,
+      "avg_actual": 10.21,
+      "avg_predicted": 11.77,
+      "std_actual": 10.03,
+      "std_predicted": 12.45
+    },
+    "2": {
+      "rmse": 8.94,
+      "mae": 6.04,
+      "r2": 0.103,
+      "correlation": 0.693,
+      "mape": 103.6,
+      "mae_rmse_ratio": 0.675,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 77.6,
+      "within_3_pts_pct": 40.1,
+      "within_5_pts_pct": 62.2,
+      "within_7_pts_pct": 72.4,
+      "within_10_pts_pct": 82.9,
+      "spearman_rho": 0.581,
+      "tier_classification_accuracy": 0.566,
+      "boom_bust": {
+        "boom_prevalence": 0.17105263157894737,
+        "bust_prevalence": 0.39144736842105265,
+        "boom_precision": 0.7446808510638298,
+        "boom_recall": 0.6730769230769231,
+        "boom_f1": 0.7070707070707072,
+        "bust_precision": 0.6129032258064516,
+        "bust_recall": 0.6386554621848739,
+        "bust_f1": 0.6255144032921811
+      },
+      "vor_rank_correlation": 0.585,
+      "avg_actual": 9.92,
+      "avg_predicted": 11.16,
+      "std_actual": 9.46,
+      "std_predicted": 12.24
+    },
+    "3": {
+      "rmse": 8.9,
+      "mae": 6.18,
+      "r2": 0.206,
+      "correlation": 0.687,
+      "mape": 161.0,
+      "mae_rmse_ratio": 0.694,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 76.2,
+      "within_3_pts_pct": 42.3,
+      "within_5_pts_pct": 58.6,
+      "within_7_pts_pct": 68.7,
+      "within_10_pts_pct": 78.8,
+      "spearman_rho": 0.569,
+      "tier_classification_accuracy": 0.583,
+      "boom_bust": {
+        "boom_prevalence": 0.16286644951140064,
+        "bust_prevalence": 0.40716612377850164,
+        "boom_precision": 0.6041666666666666,
+        "boom_recall": 0.58,
+        "boom_f1": 0.5918367346938774,
+        "bust_precision": 0.6666666666666666,
+        "bust_recall": 0.688,
+        "bust_f1": 0.6771653543307086
+      },
+      "vor_rank_correlation": 0.586,
+      "avg_actual": 10.13,
+      "avg_predicted": 10.59,
+      "std_actual": 10.01,
+      "std_predicted": 12.02
+    },
+    "4": {
+      "rmse": 8.73,
+      "mae": 6.31,
+      "r2": 0.319,
+      "correlation": 0.713,
+      "mape": 103.7,
+      "mae_rmse_ratio": 0.722,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 75.8,
+      "within_3_pts_pct": 38.7,
+      "within_5_pts_pct": 55.3,
+      "within_7_pts_pct": 65.2,
+      "within_10_pts_pct": 78.1,
+      "spearman_rho": 0.551,
+      "tier_classification_accuracy": 0.57,
+      "boom_bust": {
+        "boom_prevalence": 0.18543046357615894,
+        "bust_prevalence": 0.3609271523178808,
+        "boom_precision": 0.7727272727272727,
+        "boom_recall": 0.6071428571428571,
+        "boom_f1": 0.68,
+        "bust_precision": 0.5793650793650794,
+        "bust_recall": 0.6697247706422018,
+        "bust_f1": 0.6212765957446809
+      },
+      "vor_rank_correlation": 0.607,
+      "avg_actual": 11.24,
+      "avg_predicted": 10.71,
+      "std_actual": 10.6,
+      "std_predicted": 12.13
+    },
+    "5": {
+      "rmse": 8.2,
+      "mae": 5.89,
+      "r2": 0.212,
+      "correlation": 0.724,
+      "mape": 163.2,
+      "mae_rmse_ratio": 0.718,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 72.8,
+      "within_3_pts_pct": 44.6,
+      "within_5_pts_pct": 56.9,
+      "within_7_pts_pct": 67.8,
+      "within_10_pts_pct": 79.7,
+      "spearman_rho": 0.692,
+      "tier_classification_accuracy": 0.58,
+      "boom_bust": {
+        "boom_prevalence": 0.14130434782608695,
+        "bust_prevalence": 0.40942028985507245,
+        "boom_precision": 0.625,
+        "boom_recall": 0.6410256410256411,
+        "boom_f1": 0.6329113924050633,
+        "bust_precision": 0.6134453781512605,
+        "bust_recall": 0.6460176991150443,
+        "bust_f1": 0.6293103448275863
+      },
+      "vor_rank_correlation": 0.53,
+      "avg_actual": 9.49,
+      "avg_predicted": 10.54,
+      "std_actual": 9.26,
+      "std_predicted": 11.75
+    },
+    "6": {
+      "rmse": 8.94,
+      "mae": 6.2,
+      "r2": 0.293,
+      "correlation": 0.691,
+      "mape": 103.1,
+      "mae_rmse_ratio": 0.693,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 78.9,
+      "within_3_pts_pct": 41.2,
+      "within_5_pts_pct": 60.6,
+      "within_7_pts_pct": 69.2,
+      "within_10_pts_pct": 79.6,
+      "spearman_rho": 0.602,
+      "tier_classification_accuracy": 0.566,
+      "boom_bust": {
+        "boom_prevalence": 0.16487455197132617,
+        "bust_prevalence": 0.4121863799283154,
+        "boom_precision": 0.6923076923076923,
+        "boom_recall": 0.5869565217391305,
+        "boom_f1": 0.6352941176470588,
+        "bust_precision": 0.672566371681416,
+        "bust_recall": 0.6608695652173913,
+        "bust_f1": 0.6666666666666667
+      },
+      "vor_rank_correlation": 0.584,
+      "avg_actual": 10.3,
+      "avg_predicted": 10.44,
+      "std_actual": 10.65,
+      "std_predicted": 11.94
+    },
+    "7": {
+      "rmse": 8.73,
+      "mae": 6.44,
+      "r2": 0.249,
+      "correlation": 0.705,
+      "mape": 105.8,
+      "mae_rmse_ratio": 0.738,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 74.6,
+      "within_3_pts_pct": 36.4,
+      "within_5_pts_pct": 53.3,
+      "within_7_pts_pct": 62.9,
+      "within_10_pts_pct": 78.7,
+      "spearman_rho": 0.729,
+      "tier_classification_accuracy": 0.522,
+      "boom_bust": {
+        "boom_prevalence": 0.15120274914089346,
+        "bust_prevalence": 0.3642611683848797,
+        "boom_precision": 0.5869565217391305,
+        "boom_recall": 0.6136363636363636,
+        "boom_f1": 0.6,
+        "bust_precision": 0.5692307692307692,
+        "bust_recall": 0.6981132075471698,
+        "bust_f1": 0.6271186440677967
+      },
+      "vor_rank_correlation": 0.557,
+      "avg_actual": 10.55,
+      "avg_predicted": 10.68,
+      "std_actual": 10.08,
+      "std_predicted": 12.13
+    },
+    "8": {
+      "rmse": 9.38,
+      "mae": 6.59,
+      "r2": -0.065,
+      "correlation": 0.605,
+      "mape": 172.4,
+      "mae_rmse_ratio": 0.702,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 67.8,
+      "within_3_pts_pct": 39.5,
+      "within_5_pts_pct": 53.9,
+      "within_7_pts_pct": 65.5,
+      "within_10_pts_pct": 79.8,
+      "spearman_rho": 0.599,
+      "tier_classification_accuracy": 0.523,
+      "boom_bust": {
+        "boom_prevalence": 0.12015503875968993,
+        "bust_prevalence": 0.437984496124031,
+        "boom_precision": 0.475,
+        "boom_recall": 0.6129032258064516,
+        "boom_f1": 0.5352112676056339,
+        "bust_precision": 0.6363636363636364,
+        "bust_recall": 0.6194690265486725,
+        "bust_f1": 0.6278026905829596
+      },
+      "vor_rank_correlation": 0.458,
+      "avg_actual": 8.99,
+      "avg_predicted": 10.25,
+      "std_actual": 9.1,
+      "std_predicted": 11.34
+    },
+    "9": {
+      "rmse": 8.89,
+      "mae": 6.24,
+      "r2": 0.199,
+      "correlation": 0.689,
+      "mape": 120.9,
+      "mae_rmse_ratio": 0.702,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 78.9,
+      "within_3_pts_pct": 37.6,
+      "within_5_pts_pct": 54.9,
+      "within_7_pts_pct": 69.5,
+      "within_10_pts_pct": 80.8,
+      "spearman_rho": 0.58,
+      "tier_classification_accuracy": 0.564,
+      "boom_bust": {
+        "boom_prevalence": 0.16165413533834586,
+        "bust_prevalence": 0.3533834586466165,
+        "boom_precision": 0.6842105263157895,
+        "boom_recall": 0.6046511627906976,
+        "boom_f1": 0.6419753086419753,
+        "bust_precision": 0.5508474576271186,
+        "bust_recall": 0.6914893617021277,
+        "bust_f1": 0.6132075471698113
+      },
+      "vor_rank_correlation": 0.558,
+      "avg_actual": 10.42,
+      "avg_predicted": 10.47,
+      "std_actual": 9.95,
+      "std_predicted": 12.07
+    },
+    "10": {
+      "rmse": 8.84,
+      "mae": 6.28,
+      "r2": 0.112,
+      "correlation": 0.679,
+      "mape": 97.9,
+      "mae_rmse_ratio": 0.711,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 72.0,
+      "within_3_pts_pct": 39.1,
+      "within_5_pts_pct": 57.2,
+      "within_7_pts_pct": 68.6,
+      "within_10_pts_pct": 79.7,
+      "spearman_rho": 0.53,
+      "tier_classification_accuracy": 0.565,
+      "boom_bust": {
+        "boom_prevalence": 0.14022140221402213,
+        "bust_prevalence": 0.41697416974169743,
+        "boom_precision": 0.631578947368421,
+        "boom_recall": 0.631578947368421,
+        "boom_f1": 0.631578947368421,
+        "bust_precision": 0.6349206349206349,
+        "bust_recall": 0.7079646017699115,
+        "bust_f1": 0.6694560669456067
+      },
+      "vor_rank_correlation": 0.565,
+      "avg_actual": 9.47,
+      "avg_predicted": 10.25,
+      "std_actual": 9.4,
+      "std_predicted": 11.88
+    },
+    "11": {
+      "rmse": 9.06,
+      "mae": 6.25,
+      "r2": 0.191,
+      "correlation": 0.688,
+      "mape": 92.9,
+      "mae_rmse_ratio": 0.69,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 77.7,
+      "within_3_pts_pct": 38.3,
+      "within_5_pts_pct": 56.1,
+      "within_7_pts_pct": 71.4,
+      "within_10_pts_pct": 79.8,
+      "spearman_rho": 0.584,
+      "tier_classification_accuracy": 0.568,
+      "boom_bust": {
+        "boom_prevalence": 0.1602787456445993,
+        "bust_prevalence": 0.397212543554007,
+        "boom_precision": 0.627906976744186,
+        "boom_recall": 0.5869565217391305,
+        "boom_f1": 0.6067415730337078,
+        "bust_precision": 0.6097560975609756,
+        "bust_recall": 0.6578947368421053,
+        "bust_f1": 0.6329113924050632
+      },
+      "vor_rank_correlation": 0.569,
+      "avg_actual": 9.99,
+      "avg_predicted": 10.72,
+      "std_actual": 10.09,
+      "std_predicted": 12.26
+    },
+    "12": {
+      "rmse": 9.04,
+      "mae": 6.27,
+      "r2": 0.088,
+      "correlation": 0.688,
+      "mape": 110.3,
+      "mae_rmse_ratio": 0.693,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 72.9,
+      "within_3_pts_pct": 40.1,
+      "within_5_pts_pct": 55.0,
+      "within_7_pts_pct": 68.8,
+      "within_10_pts_pct": 79.9,
+      "spearman_rho": 0.522,
+      "tier_classification_accuracy": 0.599,
+      "boom_bust": {
+        "boom_prevalence": 0.1524163568773234,
+        "bust_prevalence": 0.42379182156133827,
+        "boom_precision": 0.675,
+        "boom_recall": 0.6585365853658537,
+        "boom_f1": 0.6666666666666667,
+        "bust_precision": 0.6339285714285714,
+        "bust_recall": 0.6228070175438597,
+        "bust_f1": 0.6283185840707964
+      },
+      "vor_rank_correlation": 0.549,
+      "avg_actual": 9.3,
+      "avg_predicted": 10.53,
+      "std_actual": 9.48,
+      "std_predicted": 12.29
+    },
+    "13": {
+      "rmse": 9.52,
+      "mae": 6.59,
+      "r2": -0.049,
+      "correlation": 0.636,
+      "mape": 156.0,
+      "mae_rmse_ratio": 0.692,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 73.2,
+      "within_3_pts_pct": 42.7,
+      "within_5_pts_pct": 57.3,
+      "within_7_pts_pct": 66.6,
+      "within_10_pts_pct": 76.5,
+      "spearman_rho": 0.672,
+      "tier_classification_accuracy": 0.56,
+      "boom_bust": {
+        "boom_prevalence": 0.1291390728476821,
+        "bust_prevalence": 0.4271523178807947,
+        "boom_precision": 0.5238095238095238,
+        "boom_recall": 0.5641025641025641,
+        "boom_f1": 0.5432098765432098,
+        "bust_precision": 0.6268656716417911,
+        "bust_recall": 0.6511627906976745,
+        "bust_f1": 0.6387832699619772
+      },
+      "vor_rank_correlation": 0.519,
+      "avg_actual": 9.45,
+      "avg_predicted": 10.37,
+      "std_actual": 9.31,
+      "std_predicted": 12.13
+    },
+    "14": {
+      "rmse": 8.17,
+      "mae": 5.92,
+      "r2": 0.386,
+      "correlation": 0.752,
+      "mape": 120.2,
+      "mae_rmse_ratio": 0.724,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 80.7,
+      "within_3_pts_pct": 37.9,
+      "within_5_pts_pct": 58.2,
+      "within_7_pts_pct": 69.8,
+      "within_10_pts_pct": 80.4,
+      "spearman_rho": 0.537,
+      "tier_classification_accuracy": 0.604,
+      "boom_bust": {
+        "boom_prevalence": 0.17543859649122806,
+        "bust_prevalence": 0.3684210526315789,
+        "boom_precision": 0.6666666666666666,
+        "boom_recall": 0.6,
+        "boom_f1": 0.631578947368421,
+        "bust_precision": 0.5652173913043478,
+        "bust_recall": 0.7428571428571429,
+        "bust_f1": 0.6419753086419753
+      },
+      "vor_rank_correlation": 0.589,
+      "avg_actual": 10.52,
+      "avg_predicted": 10.41,
+      "std_actual": 10.45,
+      "std_predicted": 12.27
+    },
+    "15": {
+      "rmse": 8.83,
+      "mae": 6.27,
+      "r2": 0.307,
+      "correlation": 0.708,
+      "mape": 156.8,
+      "mae_rmse_ratio": 0.71,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 76.4,
+      "within_3_pts_pct": 39.5,
+      "within_5_pts_pct": 55.1,
+      "within_7_pts_pct": 65.8,
+      "within_10_pts_pct": 79.7,
+      "spearman_rho": 0.494,
+      "tier_classification_accuracy": 0.585,
+      "boom_bust": {
+        "boom_prevalence": 0.17275747508305647,
+        "bust_prevalence": 0.3521594684385382,
+        "boom_precision": 0.7111111111111111,
+        "boom_recall": 0.6153846153846154,
+        "boom_f1": 0.6597938144329897,
+        "bust_precision": 0.5245901639344263,
+        "bust_recall": 0.6037735849056604,
+        "bust_f1": 0.5614035087719299
+      },
+      "vor_rank_correlation": 0.564,
+      "avg_actual": 10.68,
+      "avg_predicted": 10.9,
+      "std_actual": 10.62,
+      "std_predicted": 12.19
+    },
+    "16": {
+      "rmse": 8.72,
+      "mae": 6.44,
+      "r2": 0.227,
+      "correlation": 0.704,
+      "mape": 147.8,
+      "mae_rmse_ratio": 0.738,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 76.5,
+      "within_3_pts_pct": 33.9,
+      "within_5_pts_pct": 52.7,
+      "within_7_pts_pct": 66.5,
+      "within_10_pts_pct": 79.9,
+      "spearman_rho": 0.634,
+      "tier_classification_accuracy": 0.539,
+      "boom_bust": {
+        "boom_prevalence": 0.14420062695924765,
+        "bust_prevalence": 0.3605015673981191,
+        "boom_precision": 0.6326530612244898,
+        "boom_recall": 0.6739130434782609,
+        "boom_f1": 0.6526315789473685,
+        "bust_precision": 0.5,
+        "bust_recall": 0.5652173913043478,
+        "bust_f1": 0.5306122448979592
+      },
+      "vor_rank_correlation": 0.524,
+      "avg_actual": 9.86,
+      "avg_predicted": 10.85,
+      "std_actual": 9.93,
+      "std_predicted": 12.05
+    },
+    "17": {
+      "rmse": 8.97,
+      "mae": 6.19,
+      "r2": 0.118,
+      "correlation": 0.653,
+      "mape": 156.6,
+      "mae_rmse_ratio": 0.69,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 75.2,
+      "within_3_pts_pct": 38.2,
+      "within_5_pts_pct": 56.7,
+      "within_7_pts_pct": 69.4,
+      "within_10_pts_pct": 81.5,
+      "spearman_rho": 0.545,
+      "tier_classification_accuracy": 0.567,
+      "boom_bust": {
+        "boom_prevalence": 0.10828025477707007,
+        "bust_prevalence": 0.3853503184713376,
+        "boom_precision": 0.46511627906976744,
+        "boom_recall": 0.5882352941176471,
+        "boom_f1": 0.5194805194805194,
+        "bust_precision": 0.5172413793103449,
+        "bust_recall": 0.6198347107438017,
+        "bust_f1": 0.5639097744360902
+      },
+      "vor_rank_correlation": 0.443,
+      "avg_actual": 8.97,
+      "avg_predicted": 9.92,
+      "std_actual": 9.57,
+      "std_predicted": 11.48
+    },
+    "18": {
+      "rmse": 6.82,
+      "mae": 5.09,
+      "r2": 0.684,
+      "correlation": 0.84,
+      "mape": 91.2,
+      "mae_rmse_ratio": 0.746,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 86.1,
+      "within_3_pts_pct": 35.8,
+      "within_5_pts_pct": 64.2,
+      "within_7_pts_pct": 79.8,
+      "within_10_pts_pct": 88.1,
+      "spearman_rho": 0.672,
+      "tier_classification_accuracy": 0.685,
+      "boom_bust": {
+        "boom_prevalence": 0.16556291390728478,
+        "bust_prevalence": 0.1423841059602649,
+        "boom_precision": 0.8723404255319149,
+        "boom_recall": 0.82,
+        "boom_f1": 0.8453608247422681,
+        "bust_precision": 0.1510791366906475,
+        "bust_recall": 0.4883720930232558,
+        "bust_f1": 0.23076923076923078
+      },
+      "vor_rank_correlation": 0.461,
+      "avg_actual": 11.2,
+      "avg_predicted": 9.87,
+      "std_actual": 12.16,
+      "std_predicted": 11.45
+    },
+    "19": {
+      "rmse": 7.1,
+      "mae": 5.41,
+      "r2": 0.662,
+      "correlation": 0.869,
+      "mape": 81.9,
+      "mae_rmse_ratio": 0.763,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 80.9,
+      "within_3_pts_pct": 38.3,
+      "within_5_pts_pct": 60.0,
+      "within_7_pts_pct": 72.2,
+      "within_10_pts_pct": 81.7,
+      "spearman_rho": 0.687,
+      "tier_classification_accuracy": 0.617,
+      "boom_bust": {
+        "boom_prevalence": 0.13043478260869565,
+        "bust_prevalence": 0.1565217391304348,
+        "boom_precision": 0.6842105263157895,
+        "boom_recall": 0.8666666666666667,
+        "boom_f1": 0.7647058823529413,
+        "bust_precision": 0.1875,
+        "bust_recall": 0.5,
+        "bust_f1": 0.2727272727272727
+      },
+      "vor_rank_correlation": 0.455,
+      "avg_actual": 10.95,
+      "avg_predicted": 11.35,
+      "std_actual": 12.26,
+      "std_predicted": 14.36
+    },
+    "20": {
+      "rmse": 7.15,
+      "mae": 5.31,
+      "r2": 0.616,
+      "correlation": 0.865,
+      "mape": 82.9,
+      "mae_rmse_ratio": 0.743,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 82.7,
+      "within_3_pts_pct": 35.8,
+      "within_5_pts_pct": 61.7,
+      "within_7_pts_pct": 80.2,
+      "within_10_pts_pct": 87.7,
+      "spearman_rho": 0.718,
+      "tier_classification_accuracy": 0.716,
+      "boom_bust": {
+        "boom_prevalence": 0.13580246913580246,
+        "bust_prevalence": 0.1728395061728395,
+        "boom_precision": 1.0,
+        "boom_recall": 0.7272727272727273,
+        "boom_f1": 0.8421052631578948,
+        "bust_precision": 0.2702702702702703,
+        "bust_recall": 0.7142857142857143,
+        "bust_f1": 0.39215686274509803
+      },
+      "vor_rank_correlation": 0.572,
+      "avg_actual": 10.27,
+      "avg_predicted": 10.44,
+      "std_actual": 11.62,
+      "std_predicted": 14.28
+    },
+    "21": {
+      "rmse": 8.56,
+      "mae": 6.0,
+      "r2": 0.052,
+      "correlation": 0.88,
+      "mape": 73.8,
+      "mae_rmse_ratio": 0.701,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 81.1,
+      "within_3_pts_pct": 29.7,
+      "within_5_pts_pct": 67.6,
+      "within_7_pts_pct": 83.8,
+      "within_10_pts_pct": 86.5,
+      "spearman_rho": 0.538,
+      "tier_classification_accuracy": 0.649,
+      "boom_bust": {
+        "boom_prevalence": 0.10810810810810811,
+        "bust_prevalence": 0.0,
+        "boom_precision": 0.6666666666666666,
+        "boom_recall": 1.0,
+        "boom_f1": 0.8
+      },
+      "vor_rank_correlation": 0.538,
+      "avg_actual": 9.46,
+      "avg_predicted": 11.35,
+      "std_actual": 8.91,
+      "std_predicted": 15.18
+    }
+  },
+  "top_performers": {
+    "QB": {
+      "top_10_actual": [
+        {
+          "name": "M.Stafford",
+          "actual_rank": 1.0,
+          "pred_rank": 1.0,
+          "actual_for_backtest": 1077.5559752016952,
+          "predicted_points": 1125.0305804639495
+        },
+        {
+          "name": "C.Williams",
+          "actual_rank": 2.0,
+          "pred_rank": 3.0,
+          "actual_for_backtest": 610.6212290187854,
+          "predicted_points": 840.2109104315787
+        },
+        {
+          "name": "D.Maye",
+          "actual_rank": 3.0,
+          "pred_rank": 2.0,
+          "actual_for_backtest": 601.785196064958,
+          "predicted_points": 914.2327602565797
+        },
+        {
+          "name": "B.Nix",
+          "actual_rank": 4.0,
+          "pred_rank": 9.0,
+          "actual_for_backtest": 576.1444805194806,
+          "predicted_points": 769.8486081196393
+        },
+        {
+          "name": "T.Lawrence",
+          "actual_rank": 5.0,
+          "pred_rank": 5.0,
+          "actual_for_backtest": 565.0158901944616,
+          "predicted_points": 808.8089424398758
+        },
+        {
+          "name": "D.Prescott",
+          "actual_rank": 6.0,
+          "pred_rank": 7.0,
+          "actual_for_backtest": 535.5322356215213,
+          "predicted_points": 784.3267599739199
+        },
+        {
+          "name": "J.Goff",
+          "actual_rank": 7.0,
+          "pred_rank": 6.0,
+          "actual_for_backtest": 535.2261131725418,
+          "predicted_points": 797.0862476320074
+        },
+        {
+          "name": "J.Allen",
+          "actual_rank": 8.0,
+          "pred_rank": 8.0,
+          "actual_for_backtest": 530.1089147780324,
+          "predicted_points": 782.98933441769
+        },
+        {
+          "name": "S.Darnold",
+          "actual_rank": 9.0,
+          "pred_rank": 4.0,
+          "actual_for_backtest": 529.5133326095307,
+          "predicted_points": 819.4156588921835
+        },
+        {
+          "name": "J.Herbert",
+          "actual_rank": 10.0,
+          "pred_rank": 11.0,
+          "actual_for_backtest": 504.65921974850545,
+          "predicted_points": 724.1248055180738
+        }
+      ],
+      "avg_pred_rank_of_top_10": 5.6,
+      "top_10_in_our_top_20": 10
+    },
+    "WR": {
+      "top_10_actual": [
+        {
+          "name": "P.Nacua",
+          "actual_rank": 1.0,
+          "pred_rank": 2.0,
+          "actual_for_backtest": 437.9,
+          "predicted_points": 373.1657746726484
+        },
+        {
+          "name": "J.Smith-Njigba",
+          "actual_rank": 2.0,
+          "pred_rank": 1.0,
+          "actual_for_backtest": 389.1,
+          "predicted_points": 443.9254825706282
+        },
+        {
+          "name": "A.St. Brown",
+          "actual_rank": 3.0,
+          "pred_rank": 3.0,
+          "actual_for_backtest": 321.9,
+          "predicted_points": 348.34662682660485
+        },
+        {
+          "name": "J.Chase",
+          "actual_rank": 4.0,
+          "pred_rank": 6.0,
+          "actual_for_backtest": 317.40000000000003,
+          "predicted_points": 318.36388461591974
+        },
+        {
+          "name": "T.McBride",
+          "actual_rank": 5.0,
+          "pred_rank": 4.0,
+          "actual_for_backtest": 310.2,
+          "predicted_points": 344.9808698409601
+        },
+        {
+          "name": "G.Pickens",
+          "actual_rank": 6.0,
+          "pred_rank": 5.0,
+          "actual_for_backtest": 290.3,
+          "predicted_points": 332.7305798055164
+        },
+        {
+          "name": "D.Adams",
+          "actual_rank": 7.0,
+          "pred_rank": 29.0,
+          "actual_for_backtest": 255.7,
+          "predicted_points": 191.69982947822933
+        },
+        {
+          "name": "C.Olave",
+          "actual_rank": 8.0,
+          "pred_rank": 7.0,
+          "actual_for_backtest": 251.0,
+          "predicted_points": 296.1317280035306
+        },
+        {
+          "name": "K.Gainwell",
+          "actual_rank": 9.0,
+          "pred_rank": 50.0,
+          "actual_for_backtest": 233.0,
+          "predicted_points": 138.61982654425879
+        },
+        {
+          "name": "N.Collins",
+          "actual_rank": 10.0,
+          "pred_rank": 10.0,
+          "actual_for_backtest": 232.2,
+          "predicted_points": 257.76409045317683
+        }
+      ],
+      "avg_pred_rank_of_top_10": 11.7,
+      "top_10_in_our_top_20": 8
+    },
+    "TE": {
+      "top_10_actual": [
+        {
+          "name": "D.Goedert",
+          "actual_rank": 1.0,
+          "pred_rank": 4.0,
+          "actual_for_backtest": 199.5,
+          "predicted_points": 123.92946393264516
+        },
+        {
+          "name": "H.Henry",
+          "actual_rank": 2.0,
+          "pred_rank": 3.0,
+          "actual_for_backtest": 194.70000000000002,
+          "predicted_points": 149.06612512799447
+        },
+        {
+          "name": "D.Schultz",
+          "actual_rank": 3.0,
+          "pred_rank": 1.0,
+          "actual_for_backtest": 189.20000000000002,
+          "predicted_points": 169.04090933156778
+        },
+        {
+          "name": "T.Kelce",
+          "actual_rank": 4.0,
+          "pred_rank": 2.0,
+          "actual_for_backtest": 184.9,
+          "predicted_points": 160.5896270154494
+        },
+        {
+          "name": "G.Kittle",
+          "actual_rank": 5.0,
+          "pred_rank": 5.0,
+          "actual_for_backtest": 157.0,
+          "predicted_points": 120.28864390693285
+        },
+        {
+          "name": "M.Andrews",
+          "actual_rank": 6.0,
+          "pred_rank": 10.0,
+          "actual_for_backtest": 135.9,
+          "predicted_points": 89.58818471312034
+        },
+        {
+          "name": "Z.Ertz",
+          "actual_rank": 7.0,
+          "pred_rank": 7.0,
+          "actual_for_backtest": 119.19999999999999,
+          "predicted_points": 102.75667921198513
+        },
+        {
+          "name": "D.Knox",
+          "actual_rank": 8.0,
+          "pred_rank": 9.0,
+          "actual_for_backtest": 116.3,
+          "predicted_points": 92.93978098534367
+        },
+        {
+          "name": "T.Hockenson",
+          "actual_rank": 9.0,
+          "pred_rank": 8.0,
+          "actual_for_backtest": 114.7,
+          "predicted_points": 93.22817974485375
+        },
+        {
+          "name": "E.Engram",
+          "actual_rank": 10.0,
+          "pred_rank": 6.0,
+          "actual_for_backtest": 109.7,
+          "predicted_points": 103.22674445066052
+        }
+      ],
+      "avg_pred_rank_of_top_10": 5.5,
+      "top_10_in_our_top_20": 10
+    },
+    "RB": {
+      "top_10_actual": [
+        {
+          "name": "C.McCaffrey",
+          "actual_rank": 1.0,
+          "pred_rank": 2.0,
+          "actual_for_backtest": 422.2,
+          "predicted_points": 282.43711910636387
+        },
+        {
+          "name": "J.Gibbs",
+          "actual_rank": 2.0,
+          "pred_rank": 4.0,
+          "actual_for_backtest": 360.0,
+          "predicted_points": 250.34065586706745
+        },
+        {
+          "name": "B.Robinson",
+          "actual_rank": 3.0,
+          "pred_rank": 1.0,
+          "actual_for_backtest": 356.8,
+          "predicted_points": 292.5483629511408
+        },
+        {
+          "name": "J.Taylor",
+          "actual_rank": 4.0,
+          "pred_rank": 6.0,
+          "actual_for_backtest": 355.9,
+          "predicted_points": 232.53425098949666
+        },
+        {
+          "name": "K.Williams",
+          "actual_rank": 5.0,
+          "pred_rank": 7.0,
+          "actual_for_backtest": 317.1,
+          "predicted_points": 229.62344122088558
+        },
+        {
+          "name": "J.Cook",
+          "actual_rank": 6.0,
+          "pred_rank": 3.0,
+          "actual_for_backtest": 316.6,
+          "predicted_points": 257.41798110386645
+        },
+        {
+          "name": "D.Achane",
+          "actual_rank": 7.0,
+          "pred_rank": 5.0,
+          "actual_for_backtest": 312.0,
+          "predicted_points": 237.6145219255811
+        },
+        {
+          "name": "C.Brown",
+          "actual_rank": 8.0,
+          "pred_rank": 13.0,
+          "actual_for_backtest": 271.6,
+          "predicted_points": 197.02082395370752
+        },
+        {
+          "name": "T.Etienne",
+          "actual_rank": 9.0,
+          "pred_rank": 10.0,
+          "actual_for_backtest": 264.3,
+          "predicted_points": 203.696800784905
+        },
+        {
+          "name": "D.Swift",
+          "actual_rank": 10.0,
+          "pred_rank": 9.0,
+          "actual_for_backtest": 253.4,
+          "predicted_points": 209.01697556398275
+        }
+      ],
+      "avg_pred_rank_of_top_10": 6.0,
+      "top_10_in_our_top_20": 10
+    }
+  },
+  "biggest_misses": [
+    {
+      "name": "J.Gibbs",
+      "position": "RB",
+      "team": "DET",
+      "week": 11,
+      "actual_for_backtest": 55.4,
+      "predicted_points": 13.4266750962644,
+      "error": 41.9733249037356
+    },
+    {
+      "name": "J.Taylor",
+      "position": "RB",
+      "team": "IND",
+      "week": 9,
+      "actual_for_backtest": 49.6,
+      "predicted_points": 8.522727856147476,
+      "error": 41.077272143852525
+    },
+    {
+      "name": "D.Prescott",
+      "position": "QB",
+      "team": "DAL",
+      "week": 17,
+      "actual_for_backtest": 6.122448979591836,
+      "predicted_points": 46.21042085118396,
+      "error": -40.087971871592124
+    },
+    {
+      "name": "J.Brissett",
+      "position": "QB",
+      "team": "ARI",
+      "week": 2,
+      "actual_for_backtest": 0.0,
+      "predicted_points": 39.4712970609969,
+      "error": -39.4712970609969
+    },
+    {
+      "name": "S.Rattler",
+      "position": "QB",
+      "team": "NO",
+      "week": 8,
+      "actual_for_backtest": 0.0,
+      "predicted_points": 38.40400402524386,
+      "error": -38.40400402524386
+    },
+    {
+      "name": "C.Ward",
+      "position": "QB",
+      "team": "TEN",
+      "week": 17,
+      "actual_for_backtest": 1.2244897959183674,
+      "predicted_points": 39.414809031491046,
+      "error": -38.19031923557268
+    },
+    {
+      "name": "J.Flacco",
+      "position": "QB",
+      "team": "CIN",
+      "week": 12,
+      "actual_for_backtest": 0.0,
+      "predicted_points": 37.383801682303826,
+      "error": -37.383801682303826
+    },
+    {
+      "name": "D.Jones",
+      "position": "QB",
+      "team": "IND",
+      "week": 13,
+      "actual_for_backtest": 3.6734693877551026,
+      "predicted_points": 40.92915630083375,
+      "error": -37.25568691307865
+    },
+    {
+      "name": "T.Tucker",
+      "position": "WR",
+      "team": "LV",
+      "week": 2,
+      "actual_for_backtest": 40.9,
+      "predicted_points": 4.526274091905385,
+      "error": 36.37372590809461
+    },
+    {
+      "name": "L.Jackson",
+      "position": "QB",
+      "team": "BAL",
+      "week": 15,
+      "actual_for_backtest": 5.510204081632653,
+      "predicted_points": 41.88250673832324,
+      "error": -36.372302656690586
+    }
+  ],
+  "ranking_accuracy": {
+    "QB": {
+      "top_5_hit_rate": 38.0,
+      "top_10_hit_rate": 46.8,
+      "top_20_hit_rate": 72.5
+    },
+    "WR": {
+      "top_5_hit_rate": 15.2,
+      "top_10_hit_rate": 25.2,
+      "top_20_hit_rate": 38.1
+    },
+    "TE": {
+      "top_5_hit_rate": 46.0,
+      "top_10_hit_rate": 61.7,
+      "top_20_hit_rate": 93.3
+    },
+    "RB": {
+      "top_5_hit_rate": 28.6,
+      "top_10_hit_rate": 39.5,
+      "top_20_hit_rate": 55.0
+    }
+  },
+  "spearman_by_position": {
+    "QB": 0.675,
+    "WR": -0.129,
+    "TE": 0.047,
+    "RB": 0.016
+  },
+  "confidence_band_coverage_10pt": 79.66039802811758,
+  "train_seasons": [
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ],
+  "test_season": 2025,
+  "model_source": "production_ensemble",
+  "feature_counts": {
+    "QB": 50,
+    "RB": 50,
+    "WR": 50,
+    "TE": 50
+  },
+  "baseline_comparison": {
+    "model": {
+      "rmse": 8.72,
+      "mae": 6.18,
+      "r2": 0.265
+    },
+    "baseline": {
+      "rmse": 7.61,
+      "mae": 5.47,
+      "r2": 0.439
+    },
+    "improvement": {
+      "rmse_pct": -14.5,
+      "mae_pct": -13.0,
+      "r2_gain": -0.175
+    },
+    "model_beats_baseline": "False",
+    "beat_baseline_by_20_pct": "False"
+  },
+  "multiple_baseline_comparison": {
+    "model": {
+      "rmse": 8.71,
+      "mae": 6.17
+    },
+    "baseline_persistence": {
+      "rmse": 9.13,
+      "mae": 6.52,
+      "beat_by_20_pct": "False",
+      "beat_by_25_pct": "False",
+      "improvement_pct": 4.5
+    },
+    "baseline_season_avg": {
+      "rmse": 7.83,
+      "mae": 5.69,
+      "beat_by_20_pct": "False",
+      "beat_by_25_pct": "False",
+      "improvement_pct": -11.3
+    },
+    "baseline_position_avg": {
+      "rmse": 7.69,
+      "mae": 5.61,
+      "beat_by_20_pct": "False",
+      "beat_by_25_pct": "False",
+      "improvement_pct": -13.2
+    },
+    "model_beats_all_by_20_pct": "False",
+    "model_beats_all_by_25_pct": "False",
+    "status": {
+      "pass_20pct_gate": "False",
+      "pass_25pct_gate": "False",
+      "primary_baseline": "season_avg",
+      "pass_primary_25pct_gate": "False"
+    }
+  },
+  "success_criteria": {
+    "spearman_rho": 0.675,
+    "spearman_gt_065": true,
+    "mape": 123.8,
+    "mape_lt_25": false,
+    "within_7_pts_pct": 68.8,
+    "within_7_pts_pct_ge_70": "False",
+    "within_10_pts_pct": 80.3,
+    "within_10_pts_pct_ge_80": "True",
+    "tier_accuracy": 0.576,
+    "tier_accuracy_ge_075": false,
+    "beat_all_baselines_by_20_pct": "False",
+    "beat_all_baselines_by_25_pct": "False",
+    "beat_primary_baseline_by_25_pct": "False",
+    "position_benchmarks": {
+      "QB": {
+        "rmse_target": 7.5,
+        "rmse_actual": 16.32,
+        "rmse_pass": "False",
+        "r2_target": 0.5,
+        "r2_actual": -0.738,
+        "r2_pass": "False",
+        "mape_target": 25.0,
+        "mape_actual": 128.9,
+        "mape_pass": false
+      },
+      "WR": {
+        "rmse_target": 8.0,
+        "rmse_actual": 6.93,
+        "rmse_pass": "True",
+        "r2_target": 0.5,
+        "r2_actual": -0.051,
+        "r2_pass": "False",
+        "mape_target": 25.0,
+        "mape_actual": 117.0,
+        "mape_pass": false
+      },
+      "TE": {
+        "rmse_target": 7.0,
+        "rmse_actual": 6.1,
+        "rmse_pass": "True",
+        "r2_target": 0.5,
+        "r2_actual": -0.121,
+        "r2_pass": "False",
+        "mape_target": 25.0,
+        "mape_actual": 93.3,
+        "mape_pass": false
+      },
+      "RB": {
+        "rmse_target": 8.5,
+        "rmse_actual": 7.97,
+        "rmse_pass": "True",
+        "r2_target": 0.5,
+        "r2_actual": 0.063,
+        "r2_pass": "False",
+        "mape_target": 25.0,
+        "mape_actual": 148.5,
+        "mape_pass": false
+      }
+    },
+    "all_positions_meet_rmse": false,
+    "all_positions_meet_r2": false,
+    "avg_weekly_rmse": 8.59,
+    "max_weekly_rmse": 9.52,
+    "season_stability_ok": "True",
+    "max_degradation_pct": 10.8,
+    "confidence_band_coverage_10pt": 79.66039802811758,
+    "confidence_band_target_882": false,
+    "mae_rmse_ratio": 0.708,
+    "mae_rmse_healthy": "True",
+    "pred_std": 12.11,
+    "actual_std": 10.12,
+    "prediction_variance_ratio": 1.197,
+    "prediction_variance_ok": true,
+    "prediction_speed_ok": null,
+    "boom_f1": 0.6405779650812762,
+    "bust_f1": 0.5972063201282345,
+    "boom_prevalence": 0.1513602337045828,
+    "bust_prevalence": 0.3669892276793865,
+    "accuracy_passed": 1,
+    "accuracy_total": 4,
+    "reliability_passed": 0,
+    "reliability_total": 3,
+    "all_criteria_met": false
+  },
+  "model_drift": {
+    "previous_rmse": 11.67,
+    "current_rmse": 8.71,
+    "drift_pct": -25.4,
+    "drift_threshold_pct": 20.0,
+    "degradation_exceeds_threshold": "False"
+  }
+}
