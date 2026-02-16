@@ -55,31 +55,32 @@ def _get_device(model_type: str = "feedforward") -> "torch.device":
 # 4-WEEK: LSTM + ARIMA HYBRID (60% LSTM, 40% ARIMA)
 # -----------------------------------------------------------------------------
 
-class _LSTMNet(nn.Module):
-    """PyTorch LSTM network: 3 LSTM layers + dense head."""
-    def __init__(self, n_features: int, lstm_units: int = 256, dropout: float = 0.25):
-        super().__init__()
-        u1 = min(256, max(128, lstm_units))
-        u2, u3 = 128, 64
-        self.lstm1 = nn.LSTM(n_features, u1, batch_first=True)
-        self.drop1 = nn.Dropout(dropout)
-        self.lstm2 = nn.LSTM(u1, u2, batch_first=True)
-        self.drop2 = nn.Dropout(dropout)
-        self.lstm3 = nn.LSTM(u2, u3, batch_first=True)
-        self.drop3 = nn.Dropout(dropout)
-        self.fc1 = nn.Linear(u3, 32)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(32, 1)
+if HAS_TORCH:
+    class _LSTMNet(nn.Module):
+        """PyTorch LSTM network: 3 LSTM layers + dense head."""
+        def __init__(self, n_features: int, lstm_units: int = 256, dropout: float = 0.25):
+            super().__init__()
+            u1 = min(256, max(128, lstm_units))
+            u2, u3 = 128, 64
+            self.lstm1 = nn.LSTM(n_features, u1, batch_first=True)
+            self.drop1 = nn.Dropout(dropout)
+            self.lstm2 = nn.LSTM(u1, u2, batch_first=True)
+            self.drop2 = nn.Dropout(dropout)
+            self.lstm3 = nn.LSTM(u2, u3, batch_first=True)
+            self.drop3 = nn.Dropout(dropout)
+            self.fc1 = nn.Linear(u3, 32)
+            self.relu = nn.ReLU()
+            self.fc2 = nn.Linear(32, 1)
 
-    def forward(self, x):
-        x, _ = self.lstm1(x)
-        x = self.drop1(x)
-        x, _ = self.lstm2(x)
-        x = self.drop2(x)
-        x, _ = self.lstm3(x)
-        x = self.drop3(x[:, -1, :])  # last timestep
-        x = self.relu(self.fc1(x))
-        return self.fc2(x).squeeze(-1)
+        def forward(self, x):
+            x, _ = self.lstm1(x)
+            x = self.drop1(x)
+            x, _ = self.lstm2(x)
+            x = self.drop2(x)
+            x, _ = self.lstm3(x)
+            x = self.drop3(x[:, -1, :])  # last timestep
+            x = self.relu(self.fc1(x))
+            return self.fc2(x).squeeze(-1)
 
 
 class LSTM4WeekModel:
@@ -350,34 +351,35 @@ class Hybrid4WeekModel:
 # 18-WEEK: DEEP FEEDFORWARD (98+ LAYERS) + 30% TRADITIONAL BLEND
 # -----------------------------------------------------------------------------
 
-class _DeepFeedforwardNet(nn.Module):
-    """98+ layer deep feedforward with decreasing widths: 512->256->128->64->32.
-    Each block = Linear + BatchNorm + ReLU + Dropout.
-    Uses residual connections within same-width blocks to enable gradient flow.
-    """
-    def __init__(self, n_features: int, hidden_units: List[int] = None, dropout: float = 0.35):
-        super().__init__()
-        if hidden_units is None:
-            hidden_units = (
-                [512] * 25 +
-                [256] * 25 +
-                [128] * 20 +
-                [64] * 18 +
-                [32] * 12
-            )  # 100 hidden layers
-        layers = []
-        in_dim = n_features
-        for u in hidden_units:
-            layers.append(nn.Linear(in_dim, u))
-            layers.append(nn.BatchNorm1d(u))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(dropout))
-            in_dim = u
-        self.hidden = nn.Sequential(*layers)
-        self.output = nn.Linear(in_dim, 1)
+if HAS_TORCH:
+    class _DeepFeedforwardNet(nn.Module):
+        """98+ layer deep feedforward with decreasing widths: 512->256->128->64->32.
+        Each block = Linear + BatchNorm + ReLU + Dropout.
+        Uses residual connections within same-width blocks to enable gradient flow.
+        """
+        def __init__(self, n_features: int, hidden_units: List[int] = None, dropout: float = 0.35):
+            super().__init__()
+            if hidden_units is None:
+                hidden_units = (
+                    [512] * 25 +
+                    [256] * 25 +
+                    [128] * 20 +
+                    [64] * 18 +
+                    [32] * 12
+                )  # 100 hidden layers
+            layers = []
+            in_dim = n_features
+            for u in hidden_units:
+                layers.append(nn.Linear(in_dim, u))
+                layers.append(nn.BatchNorm1d(u))
+                layers.append(nn.ReLU())
+                layers.append(nn.Dropout(dropout))
+                in_dim = u
+            self.hidden = nn.Sequential(*layers)
+            self.output = nn.Linear(in_dim, 1)
 
-    def forward(self, x):
-        return self.output(self.hidden(x)).squeeze(-1)
+        def forward(self, x):
+            return self.output(self.hidden(x)).squeeze(-1)
 
 
 class DeepSeasonLongModel:

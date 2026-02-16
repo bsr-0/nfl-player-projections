@@ -14,7 +14,7 @@ statsmodels>=0.14.0
 scipy>=1.11.0
 
 # Deep Learning & Explainability (required for 4w LSTM+ARIMA hybrid, 18w deep model, SHAP)
-tensorflow>=2.13.0
+torch>=2.1.0
 shap>=0.43.0
 
 # Data storage
