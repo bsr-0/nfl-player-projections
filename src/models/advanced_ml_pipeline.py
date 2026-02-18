@@ -89,7 +89,7 @@ class EnsembleStack:
             'elastic_net': ElasticNet(alpha=0.1, l1_ratio=0.5),
             'rf': RandomForestRegressor(
                 n_estimators=100, max_depth=8, min_samples_leaf=10,
-                random_state=42, n_jobs=-1
+                random_state=42, n_jobs=1
             ),
             'gbm': GradientBoostingRegressor(
                 n_estimators=100, max_depth=4, learning_rate=0.1,
@@ -133,53 +133,54 @@ class EnsembleStack:
         print("="*60)
         
         self.feature_names = feature_names or [f'f{i}' for i in range(X.shape[1])]
-        
-        # Scale features
-        X_scaled = self.scaler.fit_transform(X)
-        
+
         # Get base models
         base_models = self._get_base_models()
-        
+
         # Store OOF predictions for meta-learner
         oof_predictions = np.zeros((len(y), len(base_models)))
         model_scores = {}
-        
+
         # Time-series split for proper validation
         tscv = TimeSeriesSplit(n_splits=self.n_folds)
-        
+
         for i, (name, model) in enumerate(base_models.items()):
             print(f"\nTraining {name}...")
-            
+
             oof_pred = np.zeros(len(y))
             fold_scores = []
-            
-            for fold, (train_idx, val_idx) in enumerate(tscv.split(X_scaled)):
-                X_train, X_val = X_scaled[train_idx], X_scaled[val_idx]
+
+            for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
+                # Fit scaler on training fold only (no data leakage)
+                fold_scaler = StandardScaler()
+                X_train = fold_scaler.fit_transform(X[train_idx])
+                X_val = fold_scaler.transform(X[val_idx])
                 y_train, y_val = y[train_idx], y[val_idx]
-                
+
                 # Clone and fit model
                 model_clone = self._clone_model(model)
                 model_clone.fit(X_train, y_train)
-                
+
                 # Predict on validation
                 pred = model_clone.predict(X_val)
                 oof_pred[val_idx] = pred
-                
+
                 # Score
                 fold_rmse = np.sqrt(mean_squared_error(y_val, pred))
                 fold_scores.append(fold_rmse)
-            
+
             # Store OOF predictions
             oof_predictions[:, i] = oof_pred
-            
+
             # Calculate overall score
             valid_mask = oof_pred != 0
             if valid_mask.sum() > 0:
                 rmse = np.sqrt(mean_squared_error(y[valid_mask], oof_pred[valid_mask]))
                 model_scores[name] = rmse
                 print(f"  {name} OOF RMSE: {rmse:.3f}")
-            
-            # Fit final model on all data
+
+            # Fit final model on all data with scaler fit on all data
+            X_scaled = self.scaler.fit_transform(X)
             model.fit(X_scaled, y)
             self.base_models[name] = model
         
@@ -1300,27 +1301,30 @@ def run_comprehensive_evaluation():
                     'fantasy_points', 'opponent', 'home_away', 'rookie_archetype',
                     'first_season']
     
+    # Use only training data for correlation-based feature filtering (avoid test leakage)
+    train_only = df[df['season'] < 2024] if 'season' in df.columns else df
+
     feature_cols = []
     for c in df.columns:
         if c in exclude_cols:
             continue
         if df[c].dtype not in ['int64', 'float64']:
             continue
-        
+
         # Check if forbidden
         is_forbidden = any(pattern in c.lower() for pattern in forbidden_patterns)
         if is_forbidden:
             continue
-        
+
         # Check if allowed
         is_allowed = any(pattern in c for pattern in allowed_patterns)
         if not is_allowed:
-            # Check correlation - if too high, it's probably leaky
-            corr = abs(df[c].corr(df['fantasy_points']))
+            # Check correlation on training data only - if too high, it's probably leaky
+            corr = abs(train_only[c].corr(train_only['fantasy_points']))
             if corr > 0.7:
                 print(f"  Excluding potential leaky feature: {c} (corr={corr:.3f})")
                 continue
-        
+
         feature_cols.append(c)
     
     print(f"Total features available: {len(feature_cols)}")

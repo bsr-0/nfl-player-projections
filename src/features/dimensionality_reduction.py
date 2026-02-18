@@ -63,13 +63,14 @@ class DimensionalityReducer:
             self
         """
         X = X.copy()
-        
-        # Handle missing values
-        X = X.fillna(X.median())
-        
+
+        # Handle missing values - store medians for use in transform()
+        self.train_medians_ = X.median()
+        X = X.fillna(self.train_medians_)
+
         # Replace infinities
         X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
-        
+
         # Step 1: Remove low variance features
         X, low_var_removed = self._remove_low_variance(X)
         print(f"Removed {len(low_var_removed)} low-variance features")
@@ -118,9 +119,10 @@ class DimensionalityReducer:
             raise ValueError("DimensionalityReducer must be fitted before transform")
         
         X = X.copy()
-        
-        # Handle missing values
-        X = X.fillna(X.median())
+
+        # Handle missing values using training medians (no test-data leakage)
+        if hasattr(self, 'train_medians_'):
+            X = X.fillna(self.train_medians_)
         X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
         
         # Select only features that were kept
@@ -204,7 +206,7 @@ class DimensionalityReducer:
         mi_scores = mi_scores / mi_scores.max() if mi_scores.max() > 0 else mi_scores
         
         # Method 2: Random Forest importance
-        rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+        rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
         rf.fit(X, y)
         rf_scores = rf.feature_importances_
         rf_scores = rf_scores / rf_scores.max() if rf_scores.max() > 0 else rf_scores
@@ -226,7 +228,7 @@ class DimensionalityReducer:
     
     def _apply_rfe(self, X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, List[str]]:
         """Apply Recursive Feature Elimination."""
-        estimator = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1)
+        estimator = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=1)
         
         n_features = min(self.n_features_to_select, len(X.columns))
         

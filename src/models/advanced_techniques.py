@@ -368,7 +368,11 @@ class PlayerEmbeddings:
     def fit(self, df: pd.DataFrame) -> 'PlayerEmbeddings':
         """
         Create embeddings from player statistics.
-        
+
+        IMPORTANT: Only pass training data to avoid data leakage.
+        Aggregated stats (mean, std, max of fantasy_points etc.) will
+        include future performance if test data is included.
+
         Uses PCA on aggregated player stats as a simple
         embedding approach (neural embeddings would require
         more data and compute).
@@ -460,7 +464,7 @@ class AutoModelSelector:
         self.models = {
             'ridge': (Ridge, {'alpha': 10.0}),
             'random_forest': (RandomForestRegressor, {
-                'n_estimators': 100, 'max_depth': 8, 'n_jobs': -1
+                'n_estimators': 100, 'max_depth': 8, 'n_jobs': 1
             }),
             'gradient_boosting': (GradientBoostingRegressor, {
                 'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1
@@ -600,10 +604,10 @@ def run_comprehensive_validation():
     print(f"   Mean RMSE: {summary['rmse_mean']:.4f} ± {summary['rmse_std']:.4f}")
     print(f"   Consistency: {summary['consistency']:.2%}")
     
-    # 5. Player Embeddings
+    # 5. Player Embeddings (fit on training data only to avoid leakage)
     print("\n5. Creating Player Embeddings...")
     embeddings = PlayerEmbeddings(embedding_dim=8)
-    embeddings.fit(df)
+    embeddings.fit(train_df)
     print(f"   Created embeddings for {len(embeddings.embeddings)} players")
     
     # 6. SHAP Explanations

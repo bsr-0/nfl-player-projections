@@ -972,33 +972,42 @@ class FeatureEngineer:
         # --- Matchup Quality Indicator (requirements III.B) ---
         # Composite score combining opponent defense weakness, game script favorability,
         # and pace environment. Higher = better matchup for fantasy production.
+        # Use expanding mean/std to avoid future data leakage in z-score components.
         mqi_components = []
-        
+
+        # Helper: compute causal z-scores using expanding mean/std (no future leakage)
+        def _causal_zscore(series: pd.Series) -> pd.Series:
+            if "season" in df.columns and "week" in df.columns:
+                sorted_vals = series.reindex(df.sort_values(["season", "week"]).index)
+                exp_mean = sorted_vals.expanding(min_periods=1).mean()
+                exp_std = sorted_vals.expanding(min_periods=1).std().clip(lower=0.1)
+                z = ((sorted_vals - exp_mean) / exp_std).reindex(df.index)
+            else:
+                s_std = max(series.std(), 0.1) if pd.notna(series.std()) else 0.1
+                z = (series - series.mean()) / s_std
+            return z
+
         # Component 1: Opponent points allowed (position-specific when available)
         if "opp_fpts_allowed" in df.columns:
-            opp_std = max(df["opp_fpts_allowed"].std(), 0.1) if pd.notna(df["opp_fpts_allowed"].std()) else 0.1
-            opp_z = (df["opp_fpts_allowed"] - df["opp_fpts_allowed"].mean()) / opp_std
+            opp_z = _causal_zscore(df["opp_fpts_allowed"])
             mqi_components.append(opp_z.fillna(0) * 0.35)
         elif "matchup_difficulty" in df.columns:
             # matchup_difficulty: higher = harder opponent, so invert
             md_z = -(df["matchup_difficulty"] - 50.0) / 25.0
             mqi_components.append(md_z.fillna(0) * 0.35)
-        
+
         # Component 2: Game script favorability (implied team total or expected point diff)
         if "implied_team_total" in df.columns:
-            itt_std = max(df["implied_team_total"].std(), 0.1) if pd.notna(df["implied_team_total"].std()) else 0.1
-            itt_z = (df["implied_team_total"] - df["implied_team_total"].mean()) / itt_std
+            itt_z = _causal_zscore(df["implied_team_total"])
             mqi_components.append(itt_z.fillna(0) * 0.30)
         elif "expected_point_diff" in df.columns:
-            epd_std = max(df["expected_point_diff"].std(), 0.1) if pd.notna(df["expected_point_diff"].std()) else 0.1
-            epd_z = (df["expected_point_diff"] - df["expected_point_diff"].mean()) / epd_std
+            epd_z = _causal_zscore(df["expected_point_diff"])
             mqi_components.append(epd_z.fillna(0) * 0.30)
-        
+
         # Component 3: Pace environment (team plays per game)
         if "team_a_plays_per_game" in df.columns and "team_b_plays_per_game" in df.columns:
             combined_pace = df["team_a_plays_per_game"] + df["team_b_plays_per_game"]
-            pace_std = max(combined_pace.std(), 0.1) if pd.notna(combined_pace.std()) else 0.1
-            pace_z = (combined_pace - combined_pace.mean()) / pace_std
+            pace_z = _causal_zscore(combined_pace)
             mqi_components.append(pace_z.fillna(0) * 0.20)
         
         # Component 4: Home field advantage
@@ -1371,31 +1380,46 @@ class FeatureEngineer:
             return df
         
         outlier_mask = pd.Series(False, index=df.index)
+
+        # Use expanding mean/std to avoid future data leakage in outlier thresholds
+        has_temporal = "season" in df.columns and "week" in df.columns
+        if has_temporal:
+            sort_idx = df.sort_values(["season", "week"]).index
         for col in key_cols:
             if col not in df.columns:
                 continue
-            mean_val = df[col].mean()
-            std_val = df[col].std()
-            if pd.isna(std_val) or std_val == 0:
+            if has_temporal:
+                col_sorted = df[col].reindex(sort_idx)
+                mean_val = col_sorted.expanding(min_periods=10).mean().reindex(df.index)
+                std_val = col_sorted.expanding(min_periods=10).std().reindex(df.index)
+            else:
+                mean_val = df[col].mean()
+                std_val = df[col].std()
+            if isinstance(std_val, (int, float)) and (pd.isna(std_val) or std_val == 0):
                 continue
             col_outlier = (df[col] - mean_val).abs() > sigma_threshold * std_val
-            outlier_mask = outlier_mask | col_outlier
-        
+            outlier_mask = outlier_mask | col_outlier.fillna(False)
+
         df["is_statistical_outlier"] = outlier_mask.astype(int)
         n_outliers = outlier_mask.sum()
         if n_outliers > 0:
             print(f"  Outlier detection: {n_outliers} rows flagged (>{sigma_threshold}σ in {key_cols})")
-        
-        # Injury-impacted outlier flag: low performance + injured
+
+        # Injury-impacted outlier flag: low performance + injured (expanding stats)
         if "injury_score" in df.columns and "fantasy_points" in df.columns:
-            fp_mean = df["fantasy_points"].mean()
-            fp_std = df["fantasy_points"].std()
-            if pd.notna(fp_std) and fp_std > 0:
+            if has_temporal:
+                fp_sorted = df["fantasy_points"].reindex(sort_idx)
+                fp_mean = fp_sorted.expanding(min_periods=10).mean().reindex(df.index)
+                fp_std = fp_sorted.expanding(min_periods=10).std().reindex(df.index)
+            else:
+                fp_mean = df["fantasy_points"].mean()
+                fp_std = df["fantasy_points"].std()
+            if isinstance(fp_std, (int, float)) and (pd.isna(fp_std) or fp_std == 0):
+                df["is_outlier_injury"] = 0
+            else:
                 low_perf = df["fantasy_points"] < (fp_mean - 2 * fp_std)
                 injured = df["injury_score"].fillna(1.0) < 0.7
-                df["is_outlier_injury"] = (low_perf & injured).astype(int)
-            else:
-                df["is_outlier_injury"] = 0
+                df["is_outlier_injury"] = (low_perf & injured).fillna(False).astype(int)
         else:
             df["is_outlier_injury"] = 0
         

@@ -651,20 +651,30 @@ class ModelTrainer:
                     sample_weight = decay / decay.max()
             
             # Position-specific feature selection (reduce overfitting)
+            # Use only the training portion for feature selection to avoid leakage
+            # into the internal validation holdout used by _evaluate_model
             n_features = MODEL_CONFIG.get("n_features_per_position", 50)
             corr_thresh = MODEL_CONFIG.get("correlation_threshold", 0.92)
             if len(X.columns) > n_features:
-                X, _ = select_features_simple(
-                    X, y_dict[1],
+                val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
+                fs_split = int(len(X) * (1 - val_pct))
+                X_fs_train = X.iloc[:fs_split]
+                y_fs_train = y_dict[1].iloc[:fs_split]
+                _, selected_cols = select_features_simple(
+                    X_fs_train, y_fs_train,
                     n_features=n_features,
                     correlation_threshold=corr_thresh
                 )
+                X = X[selected_cols] if selected_cols else X
                 print(f"  Selected {len(X.columns)} features for {position}", flush=True)
             
             # Multicollinearity check (VIF > 10 indicates concerning correlation)
             try:
+                print('computing VIF')
                 vif = compute_vif(X)
+                print('computed VIF')
                 high_vif = [(c, v) for c, v in vif.items() if v > 10 and np.isfinite(v)]
+                print('computed high VIF')
                 if high_vif:
                     print(f"  Multicollinearity: {len(high_vif)} features with VIF>10 "
                           f"(max={max(v for _, v in high_vif):.1f})", flush=True)
@@ -674,6 +684,7 @@ class ModelTrainer:
                 pass  # Non-critical
             
             # Train (with optional recency sample_weight)
+            print(f"  Starting model training for {position}...", flush=True)
             multi_model.fit(X, y_dict, tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
             
             # Save
@@ -763,7 +774,14 @@ class ModelTrainer:
         n_features = MODEL_CONFIG.get("n_features_per_position", 50)
         corr_thresh = MODEL_CONFIG.get("correlation_threshold", 0.92)
         if len(X.columns) > n_features:
-            X, _ = select_features_simple(X, y_dict_util[1], n_features=n_features, correlation_threshold=corr_thresh)
+            # Feature selection on training portion only to avoid leakage into val
+            val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
+            fs_split = int(len(X) * (1 - val_pct))
+            _, selected_cols = select_features_simple(
+                X.iloc[:fs_split], y_dict_util[1].iloc[:fs_split],
+                n_features=n_features, correlation_threshold=corr_thresh
+            )
+            X = X[selected_cols] if selected_cols else X
 
         # --- Use a VALIDATION SPLIT from training data for model selection ---
         # Never use the held-out test set to pick between model variants.
@@ -889,9 +907,9 @@ class ModelTrainer:
             y_eval = y.iloc[split_idx:] if split_idx < n else y
             valid = y_eval.notna()
             if valid.sum() < 10:
-                X_eval = X
-                y_eval = y
-                valid = y_eval.notna()
+                # Skip this horizon rather than falling back to full training data
+                # (evaluating on training data produces misleadingly optimistic metrics)
+                continue
             X_eval = X_eval.loc[valid]
             y_eval = y_eval.loc[valid]
             if len(y_eval) < 5:

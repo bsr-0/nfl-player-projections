@@ -68,7 +68,7 @@ class FeatureImportanceAnalyzer:
                                 feature_names: List[str], n_repeats: int = 10) -> pd.DataFrame:
         """Calculate permutation importance (most reliable method)."""
         result = permutation_importance(model, X, y, n_repeats=n_repeats, 
-                                        random_state=42, n_jobs=-1)
+                                        random_state=42, n_jobs=1)
         
         importance_df = pd.DataFrame({
             'feature': feature_names,
@@ -210,21 +210,23 @@ class OptimalFeatureCountFinder:
         available_features = [f for f in feature_ranking if f in X.columns]
         max_features = min(self.max_features, len(available_features))
         
-        scaler = StandardScaler()
+        from sklearn.pipeline import Pipeline
         tscv = TimeSeriesSplit(n_splits=5)
-        
+
         results = []
-        
+
         for n_features in range(self.min_features, max_features + 1, self.step):
             selected = available_features[:n_features]
             X_sel = X[selected].fillna(0)
-            X_scaled = scaler.fit_transform(X_sel)
-            
-            # Use Ridge with CV to find optimal alpha
-            model = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0, 100.0], cv=3)
-            
+
+            # Use Pipeline so scaler is fit inside each CV fold (no data leakage)
+            model = Pipeline([
+                ('scaler', StandardScaler()),
+                ('ridge', RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0, 100.0], cv=3)),
+            ])
+
             # Cross-validation scores
-            cv_scores = cross_val_score(model, X_scaled, y, cv=tscv, 
+            cv_scores = cross_val_score(model, X_sel, y, cv=tscv,
                                         scoring='neg_root_mean_squared_error')
             
             mean_rmse = -cv_scores.mean()
@@ -318,7 +320,7 @@ class OverfittingDetector:
         
         train_sizes_abs, train_scores, test_scores = learning_curve(
             model, X, y, train_sizes=train_sizes, cv=5,
-            scoring='neg_root_mean_squared_error', n_jobs=-1
+            scoring='neg_root_mean_squared_error', n_jobs=1
         )
         
         results = []
@@ -705,6 +707,9 @@ def run_feature_engineering_pipeline():
                     'fantasy_points', 'opponent', 'home_away', 'rookie_archetype',
                     'first_season']
     
+    # Use only training data for correlation-based feature filtering (avoid test leakage)
+    train_only = df[df['season'] < 2024] if 'season' in df.columns else df
+
     feature_cols = []
     for c in df.columns:
         if c in exclude_cols:
@@ -716,7 +721,7 @@ def run_feature_engineering_pipeline():
             continue
         is_allowed = any(pattern in c for pattern in allowed_patterns)
         if not is_allowed:
-            corr = abs(df[c].corr(df['fantasy_points']))
+            corr = abs(train_only[c].corr(train_only['fantasy_points']))
             if corr > 0.7:
                 continue
         feature_cols.append(c)

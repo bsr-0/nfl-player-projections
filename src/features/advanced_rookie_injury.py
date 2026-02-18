@@ -1230,7 +1230,7 @@ class AdvancedInjuryPredictor:
             min_samples_leaf=10,
             class_weight='balanced',
             random_state=42,
-            n_jobs=-1,
+            n_jobs=1,
         )
         self._ml_classifier.fit(X_train, y_train)
         self._ml_feature_names = available_features
@@ -1274,28 +1274,35 @@ class AdvancedInjuryPredictor:
         X_scaled = self._ml_scaler.transform(X)
         return self._ml_classifier.predict_proba(X_scaled)[:, 1]
 
-    def add_advanced_injury_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add advanced injury prediction features to DataFrame."""
+    def add_advanced_injury_features(self, df: pd.DataFrame, fit_classifier: bool = False) -> pd.DataFrame:
+        """Add advanced injury prediction features to DataFrame.
+
+        Args:
+            df: Player DataFrame
+            fit_classifier: If True, fit the ML injury classifier on this data.
+                Only set True when df contains TRAINING data only (no test data).
+                When False, uses a previously fitted classifier or skips ML features.
+        """
         result = df.copy()
-        
+
         print("Adding advanced injury prediction features...")
-        
+
         # Ensure we have required columns
         if 'age' not in result.columns:
             result['age'] = 26  # Default
-        
+
         # Calculate workload proxies
         if 'rushing_attempts' in result.columns and 'targets' in result.columns:
             result['weekly_workload'] = result['rushing_attempts'].fillna(0) + result['targets'].fillna(0)
         else:
             result['weekly_workload'] = 15  # Default
-        
+
         # Season cumulative workload
         result['season_workload'] = result.groupby(['player_id', 'season'])['weekly_workload'].cumsum()
-        
+
         # Compute actual prior injury counts from historical data
         result = self._compute_prior_injury_counts(result)
-        
+
         # Calculate injury probability for each row
         def calc_injury_prob(row):
             pred = self.predict_injury_probability(
@@ -1307,25 +1314,27 @@ class AdvancedInjuryPredictor:
                 prior_injuries=int(row.get('prior_injuries', 0))
             )
             return pred['injury_probability']
-        
+
         def calc_age_risk(row):
             return self.calculate_age_risk_multiplier(int(row['age']))
-        
+
         def calc_workload_risk(row):
             return self.calculate_workload_risk(
                 row['position'],
                 float(row['weekly_workload']),
                 float(row['season_workload'])
             )
-        
+
         result['injury_prob_advanced'] = result.apply(calc_injury_prob, axis=1)
         result['injury_age_risk'] = result.apply(calc_age_risk, axis=1)
         result['injury_workload_risk'] = result.apply(calc_workload_risk, axis=1)
-        
-        # ML-based injury classifier with class imbalance handling
-        # Train on the data itself (uses class_weight='balanced' + optional SMOTE)
-        ml_fitted = self.fit_injury_classifier(result, use_smote=True)
-        if ml_fitted:
+
+        # ML-based injury classifier: only fit on training data to avoid leakage
+        if fit_classifier:
+            self.fit_injury_classifier(result, use_smote=True)
+
+        # Use previously fitted classifier for predictions (or skip if not fitted)
+        if self._ml_is_fitted:
             ml_proba = self.predict_injury_ml(result)
             result['injury_prob_ml'] = ml_proba
             # Blend: 60% ML + 40% heuristic for robust combined estimate
@@ -1336,16 +1345,16 @@ class AdvancedInjuryPredictor:
         else:
             result['injury_prob_ml'] = np.nan
             result['injury_prob_combined'] = result['injury_prob_advanced']
-        
+
         # Risk level categorization (use combined when available)
         prob_col = 'injury_prob_combined'
         result['injury_risk_level'] = result[prob_col].apply(
             lambda x: 'high' if x > 0.12 else ('medium' if x > 0.06 else 'low')
         )
-        
+
         print(f"  Added: injury_prob_advanced, injury_prob_ml, injury_prob_combined, "
               f"injury_age_risk, injury_workload_risk, injury_risk_level, prior_injuries")
-        
+
         return result
 
 
@@ -1353,8 +1362,14 @@ class AdvancedInjuryPredictor:
 # COMBINED FEATURE ADDITION
 # =============================================================================
 
-def add_advanced_rookie_injury_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add all advanced rookie, injury, and combine features."""
+def add_advanced_rookie_injury_features(df: pd.DataFrame, fit_injury_classifier: bool = False) -> pd.DataFrame:
+    """Add all advanced rookie, injury, and combine features.
+
+    Args:
+        df: Player DataFrame
+        fit_injury_classifier: If True, fit the ML injury classifier on this data.
+            Only set True when df contains TRAINING data only (no test data).
+    """
     print("\n" + "="*60)
     print("Adding Advanced Rookie & Injury Features")
     print("="*60)
@@ -1375,8 +1390,10 @@ def add_advanced_rookie_injury_features(df: pd.DataFrame) -> pd.DataFrame:
             df["athleticism_grade"] = "Average"
 
     # Advanced injury features (hazard modeling, workload risk)
+    # ML classifier is NOT fitted here by default to avoid data leakage
+    # when called on combined train+test data via _apply_with_temporal_context
     injury_predictor = AdvancedInjuryPredictor()
-    df = injury_predictor.add_advanced_injury_features(df)
+    df = injury_predictor.add_advanced_injury_features(df, fit_classifier=fit_injury_classifier)
 
     print(f"\nAdded advanced rookie, combine, and injury features")
 

@@ -25,7 +25,7 @@
   ],
   "RB|target_share_pct": [
     0.0,
-    30.76923076923077
+    100.0
   ],
   "RB|redzone_share_pct": [
     0.0,
@@ -33,7 +33,7 @@
   ],
   "RB|touch_share_pct": [
     0.0,
-    74.35897435897436
+    100.0
   ],
   "RB|high_value_touch_rate": [
     0.0,

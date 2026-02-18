@@ -87,69 +87,77 @@ class VolatilityCalculator:
     Low volatility = consistent floor (safer for weekly leagues)
     """
     
-    def calculate_weekly_volatility(self, df: pd.DataFrame, 
+    def calculate_weekly_volatility(self, df: pd.DataFrame,
                                     min_games: int = 3) -> pd.DataFrame:
         """
-        Calculate weekly volatility for each player.
-        
-        Volatility = Standard deviation of fantasy points
+        Calculate weekly volatility for each player using expanding windows.
+
+        Uses shift(1) + expanding to avoid leaking current/future game data.
+        Volatility = Standard deviation of fantasy points (prior games only)
         Consistency = 1 / (1 + CV) where CV = std/mean
         """
         result = df.copy()
-        
-        # Group by player and calculate stats
-        player_stats = df.groupby('player_id').agg({
-            'fantasy_points': ['mean', 'std', 'count', 'min', 'max']
-        }).reset_index()
-        
-        player_stats.columns = ['player_id', 'fp_mean', 'fp_std', 'games', 'fp_min', 'fp_max']
-        
-        # Filter to minimum games
-        player_stats = player_stats[player_stats['games'] >= min_games]
-        
-        # Calculate volatility metrics
-        player_stats['weekly_volatility'] = player_stats['fp_std']
-        player_stats['coefficient_of_variation'] = np.where(
-            player_stats['fp_mean'] > 0,
-            player_stats['fp_std'] / player_stats['fp_mean'],
+        result = result.sort_values(['player_id', 'season', 'week'])
+
+        # Expanding stats per player using only prior games (shift(1) prevents current-game leakage)
+        result['_fp_shifted'] = result.groupby('player_id')['fantasy_points'].transform(
+            lambda x: x.shift(1)
+        )
+        result['_fp_exp_mean'] = result.groupby('player_id')['_fp_shifted'].transform(
+            lambda x: x.expanding(min_periods=min_games).mean()
+        )
+        result['_fp_exp_std'] = result.groupby('player_id')['_fp_shifted'].transform(
+            lambda x: x.expanding(min_periods=min_games).std()
+        )
+        result['_fp_exp_min'] = result.groupby('player_id')['_fp_shifted'].transform(
+            lambda x: x.expanding(min_periods=min_games).min()
+        )
+        result['_fp_exp_max'] = result.groupby('player_id')['_fp_shifted'].transform(
+            lambda x: x.expanding(min_periods=min_games).max()
+        )
+
+        result['weekly_volatility'] = result['_fp_exp_std']
+        result['coefficient_of_variation'] = np.where(
+            result['_fp_exp_mean'] > 0,
+            result['_fp_exp_std'] / result['_fp_exp_mean'],
             0
         )
-        player_stats['consistency_score'] = 1 / (1 + player_stats['coefficient_of_variation'])
-        player_stats['boom_bust_range'] = player_stats['fp_max'] - player_stats['fp_min']
-        
-        # Merge back to original dataframe
-        result = result.merge(
-            player_stats[['player_id', 'weekly_volatility', 'coefficient_of_variation', 
-                         'consistency_score', 'boom_bust_range']],
-            on='player_id',
-            how='left'
-        )
-        
+        result['consistency_score'] = 1 / (1 + result['coefficient_of_variation'])
+        result['boom_bust_range'] = result['_fp_exp_max'] - result['_fp_exp_min']
+
+        # Clean up temp columns
+        result = result.drop(columns=['_fp_shifted', '_fp_exp_mean', '_fp_exp_std',
+                                       '_fp_exp_min', '_fp_exp_max'])
+
         return result
     
-    def calculate_rolling_volatility(self, df: pd.DataFrame, 
+    def calculate_rolling_volatility(self, df: pd.DataFrame,
                                      window: int = 4) -> pd.DataFrame:
-        """Calculate rolling volatility over recent games."""
+        """Calculate rolling volatility over recent games.
+
+        Uses shift(1) to exclude the current game from the rolling window,
+        preventing look-ahead leakage.
+        """
         result = df.copy()
-        
+
         # Sort by player and time
         result = result.sort_values(['player_id', 'season', 'week'])
-        
-        # Rolling std
+
+        # Rolling std with shift(1) to exclude current game
         result['rolling_volatility'] = result.groupby('player_id')['fantasy_points'].transform(
-            lambda x: x.rolling(window, min_periods=2).std()
+            lambda x: x.shift(1).rolling(window, min_periods=2).std()
         )
-        
-        # Rolling consistency
+
+        # Rolling consistency with shift(1) to exclude current game
         rolling_mean = result.groupby('player_id')['fantasy_points'].transform(
-            lambda x: x.rolling(window, min_periods=2).mean()
+            lambda x: x.shift(1).rolling(window, min_periods=2).mean()
         )
         result['rolling_consistency'] = np.where(
             rolling_mean > 0,
             1 / (1 + result['rolling_volatility'] / rolling_mean),
             0.5
         )
-        
+
         return result
 
 
@@ -204,24 +212,25 @@ class UncertaintyQuantifier:
         - Injury status (healthy = higher confidence)
         """
         result = df.copy()
-        
-        # Sample size factor (0-1, asymptotic)
-        games_played = result.groupby('player_id')['fantasy_points'].transform('count')
+        result = result.sort_values(['player_id', 'season', 'week'])
+
+        # Sample size factor using expanding count (only prior games, no future leakage)
+        games_played = result.groupby('player_id').cumcount()  # 0-indexed count up to current row
         sample_factor = 1 - np.exp(-games_played / 8)  # ~0.63 at 8 games, ~0.86 at 16
-        
+
         # Consistency factor
         if 'consistency_score' in result.columns:
             consistency_factor = result['consistency_score'].fillna(0.5)
         else:
             consistency_factor = 0.5
-        
-        # Recency factor: decay by weeks since latest game (higher confidence for recent data)
+
+        # Recency factor: use per-player cumulative game index (no global max leakage)
+        # More recent games get higher confidence. We use the cumcount itself
+        # so each row only knows how many games the player has played so far.
         if 'season' in result.columns and 'week' in result.columns:
-            max_season = result['season'].max()
-            max_week = result.loc[result['season'] == max_season, 'week'].max()
-            weeks_since = (max_season - result['season'].fillna(max_season)) * 18 + (max_week - result['week'].fillna(max_week))
-            weeks_since = weeks_since.clip(lower=0)
-            recency_factor = np.exp(-weeks_since / 8).values
+            # games_played is already the cumcount (0-indexed), use it directly
+            # Scale: at game 0 recency is ~0.53, at game 16 it's ~0.86
+            recency_factor = (1 - np.exp(-games_played / 8)).values
         else:
             recency_factor = 0.8
         
@@ -248,8 +257,10 @@ class UncertaintyQuantifier:
             vol_calc = VolatilityCalculator()
             result = vol_calc.calculate_weekly_volatility(result)
         
-        # Normalize volatility to 0-1 scale
-        max_vol = result['weekly_volatility'].quantile(0.95)
+        # Normalize volatility to 0-1 scale using expanding quantile (no future leakage)
+        result = result.sort_values(['season', 'week']) if 'season' in result.columns else result
+        max_vol = result['weekly_volatility'].expanding(min_periods=10).quantile(0.95)
+        max_vol = max_vol.clip(lower=0.1)  # avoid division by zero
         normalized_vol = (result['weekly_volatility'] / max_vol).clip(0, 1)
         
         # Risk adjustment factor (0.1 = 10% discount for max volatility)

@@ -168,13 +168,18 @@ class DefenseRankingsLoader:
         
         defense_allowed.columns = ['team', 'season', 'week', 'position', 'points_allowed']
         
-        # Calculate season averages by position
-        season_avg = df.groupby(['season', 'position'])['fantasy_points'].mean().reset_index()
-        season_avg.columns = ['season', 'position', 'league_avg_points']
-        
+        # Calculate league average by position using expanding mean (no future leakage)
+        # Sort temporally so expanding window only sees past data
+        df_sorted = df.sort_values(['season', 'week'])
+        df_sorted['league_avg_points'] = df_sorted.groupby('position')['fantasy_points'].transform(
+            lambda x: x.shift(1).expanding(min_periods=1).mean()
+        )
+        # Build a (season, week, position) -> league_avg lookup from the player-level data
+        league_avg = df_sorted.groupby(['season', 'week', 'position'])['league_avg_points'].first().reset_index()
+
         # Merge to get relative performance
         defense_allowed = defense_allowed.merge(
-            season_avg, on=['season', 'position'], how='left'
+            league_avg, on=['season', 'week', 'position'], how='left'
         )
         
         # Calculate rolling defense strength (last 4 weeks)
@@ -193,16 +198,17 @@ class DefenseRankingsLoader:
         )
         
         # Defense strength score: higher = allows more points = easier matchup
-        # Normalize to 0-1 scale within each position
+        # Normalize to 0-1 scale using expanding min/max per position (no future leakage)
+        defense_allowed = defense_allowed.sort_values(['position', 'season', 'week'])
         for pos in defense_allowed['position'].unique():
             mask = defense_allowed['position'] == pos
             pts = defense_allowed.loc[mask, 'defense_pts_allowed_roll4']
-            if pts.std() > 0:
-                defense_allowed.loc[mask, 'matchup_score'] = (
-                    (pts - pts.min()) / (pts.max() - pts.min())
-                )
-            else:
-                defense_allowed.loc[mask, 'matchup_score'] = 0.5
+            exp_min = pts.expanding(min_periods=1).min()
+            exp_max = pts.expanding(min_periods=1).max()
+            denom = (exp_max - exp_min).replace(0, np.nan)
+            defense_allowed.loc[mask, 'matchup_score'] = (
+                ((pts - exp_min) / denom).fillna(0.5)
+            )
         
         # Rank defenses (1 = allows most points = easiest matchup)
         defense_allowed['defense_rank'] = defense_allowed.groupby(

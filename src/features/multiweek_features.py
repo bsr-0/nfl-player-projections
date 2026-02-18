@@ -219,19 +219,29 @@ class MultiWeekAggregator:
         - Current injury status
         """
         result = df.copy()
-        
-        # Get player's historical games played rate
-        player_games = df.groupby(['player_id', 'season']).size().reset_index(name='games_in_season')
-        player_games['games_rate'] = player_games['games_in_season'] / 17  # 17-game season
-        
+
+        # Get player's historical games played rate using PRIOR seasons only
+        # to avoid leaking full-season game counts into mid-season rows
+        result = result.sort_values(['player_id', 'season', 'week'])
+
+        # Count games per player-season for prior seasons
+        player_season_games = df.groupby(['player_id', 'season']).size().reset_index(name='games_in_season')
+        player_season_games['games_rate_season'] = player_season_games['games_in_season'] / 17
+
+        # Use expanding mean of prior seasons' games_rate (shift to exclude current season)
+        player_season_games = player_season_games.sort_values(['player_id', 'season'])
+        player_season_games['games_rate'] = player_season_games.groupby('player_id')['games_rate_season'].transform(
+            lambda x: x.shift(1).expanding(min_periods=1).mean()
+        )
+
         # Merge back
         result = result.merge(
-            player_games[['player_id', 'season', 'games_rate']],
+            player_season_games[['player_id', 'season', 'games_rate']],
             on=['player_id', 'season'],
             how='left',
             suffixes=('', '_calc')
         )
-        
+
         # Handle column naming from merge
         if 'games_rate_calc' in result.columns:
             result['games_rate'] = result['games_rate_calc']
@@ -284,8 +294,12 @@ class MultiWeekAggregator:
             0.1 * np.log(n_weeks + 1)  # Log-based for other horizons
         )
         
-        # Calculate position average for regression target
-        pos_avg = result.groupby('position')['weekly_projection'].transform('mean')
+        # Calculate position average for regression target using expanding mean (no future leakage)
+        result = result.sort_values(['season', 'week'])
+        pos_avg = result.groupby('position')['weekly_projection'].transform(
+            lambda x: x.shift(1).expanding(min_periods=1).mean()
+        )
+        pos_avg = pos_avg.fillna(result.groupby('position')['weekly_projection'].transform('first'))
         
         # Regressed weekly projection
         result['weekly_regressed'] = (
@@ -306,7 +320,9 @@ class MultiWeekAggregator:
         if 'weekly_volatility' in result.columns:
             weekly_var = result['weekly_volatility'] ** 2
         else:
-            weekly_var = result.groupby('position')['fantasy_points'].transform('std') ** 2
+            weekly_var = result.groupby('position')['fantasy_points'].transform(
+                lambda x: x.shift(1).expanding(min_periods=3).std()
+            ).fillna(result.groupby('position')['fantasy_points'].transform('std')) ** 2
         
         # Variance of N-week sum with correlation
         n_games = result[f'expected_games_next_{n_weeks}']

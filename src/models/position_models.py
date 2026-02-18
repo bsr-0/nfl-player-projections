@@ -84,13 +84,20 @@ class PositionModel:
         X_val_scaled = self.scaler.transform(X_val)
 
         if tune_hyperparameters:
+            import time as _time
             print("Running hyperparameter optimization...", flush=True)
+            _t0 = _time.perf_counter()
             print(f"  Tuning Random Forest ({n_trials} trials)...", flush=True)
             self.best_params["random_forest"] = self._tune_random_forest(X_train_scaled, y_train_inner, n_trials)
+            print(f"  RF tuning done in {_time.perf_counter()-_t0:.1f}s", flush=True)
+            _t0 = _time.perf_counter()
             print(f"  Tuning XGBoost ({n_trials} trials)...", flush=True)
             self.best_params["xgboost"] = self._tune_xgboost(X_train_scaled, y_train_inner, n_trials)
+            print(f"  XGBoost tuning done in {_time.perf_counter()-_t0:.1f}s", flush=True)
+            _t0 = _time.perf_counter()
             print(f"  Tuning Ridge ({n_trials} trials)...", flush=True)
             self.best_params["ridge"] = self._tune_ridge(X_train_scaled, y_train_inner, n_trials)
+            print(f"  Ridge tuning done in {_time.perf_counter()-_t0:.1f}s", flush=True)
         else:
             self.best_params = self._get_default_params()
 
@@ -186,33 +193,66 @@ class PositionModel:
         
         return mean_pred, std_pred
     
+    @staticmethod
+    def _subsample_for_tuning(X: np.ndarray, y: np.ndarray,
+                              max_samples: int = 5000) -> Tuple[np.ndarray, np.ndarray]:
+        """Subsample data for hyperparameter tuning to keep trial times reasonable.
+
+        Uses the most recent rows (tail) to preserve time-series ordering and
+        ensure tuning reflects recent data patterns. Only subsamples when data
+        exceeds max_samples.
+        """
+        if len(X) <= max_samples:
+            return X, y
+        # Take the tail (most recent data) to respect time ordering
+        X_sub = X[-max_samples:]
+        y_sub = y[-max_samples:]
+        return X_sub, y_sub
+
     def _tune_random_forest(self, X: np.ndarray, y: np.ndarray, n_trials: int) -> Dict:
-        """Tune Random Forest hyperparameters (requirements: 500-1000 trees, max_depth 10-15)."""
+        """Tune Random Forest hyperparameters (requirements: 500-1000 trees, max_depth 10-15).
+
+        Uses reduced n_estimators during tuning for speed; the tuned structural
+        hyperparameters (max_depth, min_samples_*) transfer well to the full
+        tree count used in final training.
+        """
+        X_tune, y_tune = self._subsample_for_tuning(X, y)
+        tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
         def objective(trial):
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 500, 1000),
+                "n_estimators": 150,  # Reduced for tuning speed; structural params transfer
                 "max_depth": trial.suggest_int("max_depth", 10, 15),
                 "min_samples_split": trial.suggest_int("min_samples_split", 5, 10),
                 "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
                 "random_state": MODEL_CONFIG["random_state"],
-                "n_jobs": -1,
+                "n_jobs": 1,
             }
             model = RandomForestRegressor(**params)
-            tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
+            tscv = TimeSeriesSplit(n_splits=tune_folds)
+            scores = cross_val_score(model, X_tune, y_tune, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
             return -scores.mean()
         study = optuna.create_study(
             direction="minimize",
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])
         )
-        study.optimize(objective, n_trials=min(n_trials, 20), show_progress_bar=True)
-        return study.best_params
+        study.optimize(objective, n_trials=min(n_trials, 10), show_progress_bar=True)
+        best = study.best_params
+        # Restore production n_estimators from the tuned trial's suggestion
+        # (use the best trial's n_estimators if it was tuned, otherwise use midpoint)
+        best["n_estimators"] = 750
+        return best
 
     def _tune_xgboost(self, X: np.ndarray, y: np.ndarray, n_trials: int) -> Dict:
-        """Tune XGBoost hyperparameters (requirements: lr 0.01-0.05, max_depth 6-8, n_estimators 500-1000)."""
+        """Tune XGBoost hyperparameters (requirements: lr 0.01-0.05, max_depth 6-8, n_estimators 500-1000).
+
+        Uses reduced n_estimators during tuning; early stopping in final training
+        determines the optimal iteration count.
+        """
+        X_tune, y_tune = self._subsample_for_tuning(X, y)
+        tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
         def objective(trial):
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 500, 1000),
+                "n_estimators": 200,  # Reduced for tuning speed; early stopping in final training
                 "max_depth": trial.suggest_int("max_depth", 6, 8),
                 "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.05, log=True),
                 "subsample": trial.suggest_float("subsample", 0.6, 1.0),
@@ -221,15 +261,14 @@ class PositionModel:
                 "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
                 "random_state": MODEL_CONFIG["random_state"],
-                "tree_method": "hist",  # Much faster than exact; equivalent quality
-                "n_jobs": -1,
+                "tree_method": "hist",
+                "n_jobs": 1,
             }
 
             model = xgb.XGBRegressor(**params)
 
-            # Time series cross-validation
-            tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
+            tscv = TimeSeriesSplit(n_splits=tune_folds)
+            scores = cross_val_score(model, X_tune, y_tune, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
 
             return -scores.mean()
 
@@ -237,18 +276,22 @@ class PositionModel:
             direction="minimize",
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])
         )
-        study.optimize(objective, n_trials=min(n_trials, 30), show_progress_bar=True)
-        return study.best_params
+        study.optimize(objective, n_trials=min(n_trials, 15), show_progress_bar=True)
+        best = study.best_params
+        best["n_estimators"] = 750  # Restore production count
+        return best
 
     def _tune_ridge(self, X: np.ndarray, y: np.ndarray, n_trials: int) -> Dict:
         """Tune Ridge regression hyperparameters (requirements: alpha 1.0-10.0)."""
+        X_tune, y_tune = self._subsample_for_tuning(X, y)
+        tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
         def objective(trial):
             alpha = trial.suggest_float("alpha", 1.0, 10.0)
 
             model = Ridge(alpha=alpha, random_state=MODEL_CONFIG["random_state"])
 
-            tscv = TimeSeriesSplit(n_splits=MODEL_CONFIG["cv_folds"])
-            scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
+            tscv = TimeSeriesSplit(n_splits=tune_folds)
+            scores = cross_val_score(model, X_tune, y_tune, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
 
             return -scores.mean()
 
@@ -257,7 +300,7 @@ class PositionModel:
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])
         )
         study.optimize(objective, n_trials=min(n_trials, 20), show_progress_bar=False)
-        
+
         return study.best_params
     
     def _get_default_params(self) -> Dict[str, Dict]:
@@ -278,7 +321,7 @@ class PositionModel:
                 "colsample_bytree": 0.8,
                 "random_state": MODEL_CONFIG["random_state"],
                 "tree_method": "hist",
-                "n_jobs": -1,
+                "n_jobs": 1,
             },
             "ridge": {
                 "alpha": 5.0,
@@ -293,7 +336,7 @@ class PositionModel:
         params = self.best_params.get("xgboost", self._get_default_params()["xgboost"]).copy()
         params["random_state"] = MODEL_CONFIG["random_state"]
         params["tree_method"] = "hist"  # Much faster; equivalent quality
-        params["n_jobs"] = -1
+        params["n_jobs"] = 1  # Avoid macOS fork deadlock with sequential position training
         model = xgb.XGBRegressor(**params)
         kw = {}
         if sample_weight is not None:
@@ -337,7 +380,7 @@ class PositionModel:
         """Train Random Forest with best params."""
         params = self.best_params.get("random_forest", self._get_default_params()["random_forest"]).copy()
         params["random_state"] = MODEL_CONFIG["random_state"]
-        params["n_jobs"] = -1  # Use all CPU cores
+        params["n_jobs"] = 1  # Avoid macOS fork deadlock with sequential position training
         model = RandomForestRegressor(**params)
         if sample_weight is not None:
             model.fit(X, y, sample_weight=sample_weight)

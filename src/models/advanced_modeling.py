@@ -422,7 +422,7 @@ class ModelComparisonFramework:
         
         # Random Forest
         start = time.time()
-        rf = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42, n_jobs=-1)
+        rf = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42, n_jobs=1)
         rf.fit(X_train_scaled, y_train)
         train_pred = rf.predict(X_train_scaled)
         test_pred = rf.predict(X_test_scaled)
@@ -677,7 +677,7 @@ def run_model_comparison():
         'coefficient_of_variation', 'boom_bust_range', 'confidence_score',
         'injury_score', 'opp_defense_rank', 'opp_matchup_score',
         'sos_next_', 'projection_', 'age_factor', 'projected_games',
-        'utilization_score', 'target_share', 'rush_share',
+        'utilization_score_', 'target_share', 'rush_share',  # trailing _ ensures only lagged/rolling util features match
     ]
     
     feature_cols = []
