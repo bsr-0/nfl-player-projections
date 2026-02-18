@@ -259,23 +259,36 @@ class BacktestingFramework:
         self.model_params = model_params or {'n_estimators': 100, 'max_depth': 5}
         self.results = []
     
-    def walk_forward_backtest(self, df: pd.DataFrame, 
+    def walk_forward_backtest(self, df: pd.DataFrame,
                                feature_cols: List[str],
                                target_col: str = 'fantasy_points',
                                train_seasons: int = 3,
-                               test_seasons: int = 1) -> List[BacktestResult]:
+                               test_seasons: int = 1,
+                               gap_seasons: int = None) -> List[BacktestResult]:
         """
         Walk-forward backtesting across seasons.
-        
-        Train on N seasons, test on next season, roll forward.
+
+        Train on N seasons, skip gap_seasons, test on next season, roll forward.
+        The purge gap prevents feature leakage from rolling/lag features that
+        span the train/test boundary.
+
+        Args:
+            gap_seasons: Number of seasons to skip between train and test.
+                Defaults to MODEL_CONFIG["cv_gap_seasons"] (typically 1).
         """
+        if gap_seasons is None:
+            from config.settings import MODEL_CONFIG as _MC
+            gap_seasons = _MC.get("cv_gap_seasons", 1)
+
         seasons = sorted(df['season'].unique())
         results = []
-        
-        for i in range(len(seasons) - train_seasons - test_seasons + 1):
+
+        for i in range(len(seasons) - train_seasons - gap_seasons - test_seasons + 1):
             train_seasons_list = seasons[i:i + train_seasons]
-            test_seasons_list = seasons[i + train_seasons:i + train_seasons + test_seasons]
-            
+            # Skip gap_seasons between training and test to prevent feature leakage
+            test_start = i + train_seasons + gap_seasons
+            test_seasons_list = seasons[test_start:test_start + test_seasons]
+
             train_df = df[df['season'].isin(train_seasons_list)]
             test_df = df[df['season'].isin(test_seasons_list)]
             

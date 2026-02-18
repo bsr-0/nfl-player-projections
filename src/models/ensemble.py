@@ -19,7 +19,7 @@ from config.settings import (
     FEATURE_VERSION,
     FEATURE_VERSION_FILENAME,
 )
-from src.models.position_models import PositionModel, MultiWeekModel
+from src.models.position_models import PositionModel, MultiWeekModel, VALIDATION_PCT
 from src.models.utilization_to_fp import UtilizationToFPConverter
 from src.features.dimensionality_reduction import (
     select_features_simple,
@@ -271,19 +271,21 @@ class EnsemblePredictor:
             
             pos_data = results[mask].copy()
             
-            # Ensure feature consistency: fill missing columns with 0 (train/serve alignment)
+            # Ensure feature consistency: fill missing columns with training medians
             def _fill_missing_features(data, pm):
                 pos_model = pm.models.get(1) or list(pm.models.values())[0]
+                medians = getattr(pos_model, "feature_medians", {})
                 for fn in getattr(pos_model, "feature_names", []):
                     if fn not in data.columns:
-                        data[fn] = 0
-            
+                        data[fn] = medians.get(fn, 0)
+
             if position in self.position_models:
                 _fill_missing_features(pos_data, self.position_models[position])
             elif position in self.single_week_models:
+                medians = getattr(self.single_week_models[position], "feature_medians", {})
                 for fn in getattr(self.single_week_models[position], "feature_names", []):
                     if fn not in pos_data.columns:
-                        pos_data[fn] = 0
+                        pos_data[fn] = medians.get(fn, 0)
             
             if position in self.position_models:
                 model = self.position_models[position]
@@ -333,19 +335,65 @@ class EnsemblePredictor:
                     eff_df["utilization_score"] = predictions
                     fp_pred = self.util_to_fp[position].predict(predictions, efficiency_df=eff_df)
                     results.loc[mask, "predicted_points"] = fp_pred
-                # Prediction intervals (80%, 95%) from ensemble std when available
+                # Prediction intervals using conformal quantiles when available,
+                # falling back to Gaussian z-score approximation.
+                # When util->FP conversion is applied, combine conversion uncertainty
+                # with utilization model uncertainty via error propagation.
                 try:
                     base_model = model.models.get(1) or list(model.models.values())[0]
                     if hasattr(base_model, "predict_with_uncertainty"):
                         _, std = base_model.predict_with_uncertainty(pos_data)
-                        std_scaled = std * (n_weeks ** 0.5)
-                        z80, z95 = 1.28, 1.96
                         pred_pts = results.loc[mask, "predicted_points"].values
-                        results.loc[mask, "prediction_std"] = std_scaled
-                        results.loc[mask, "prediction_ci80_lower"] = pred_pts - z80 * std_scaled
-                        results.loc[mask, "prediction_ci80_upper"] = pred_pts + z80 * std_scaled
-                        results.loc[mask, "prediction_ci95_lower"] = pred_pts - z95 * std_scaled
-                        results.loc[mask, "prediction_ci95_upper"] = pred_pts + z95 * std_scaled
+                        conformal_q = getattr(base_model, "_conformal_quantiles", None)
+                        hetero = getattr(base_model, "_conformal_hetero", None)
+
+                        # Conversion uncertainty: if util->FP was applied, get converter residuals
+                        conv_q = None
+                        if should_convert and position in self.util_to_fp:
+                            conv_q = getattr(self.util_to_fp[position], "_conversion_conformal_q", None)
+
+                        # Multi-week scaling: use n_weeks^0.4 instead of sqrt
+                        # to account for autocorrelation in weekly errors (injuries,
+                        # role changes create correlated outcomes across weeks)
+                        multi_week_scale = n_weeks ** 0.4
+
+                        if hetero is not None and 0.80 in hetero and 0.95 in hetero:
+                            # Heteroscedastic conformal: width scales with prediction magnitude
+                            abs_pred = np.abs(pred_pts)
+                            h80, h95 = hetero[0.80], hetero[0.95]
+                            q80 = np.maximum(h80["slope"] * abs_pred + h80["intercept"], 0.5) * multi_week_scale
+                            q95 = np.maximum(h95["slope"] * abs_pred + h95["intercept"], 0.5) * multi_week_scale
+                            # Propagate conversion uncertainty: combined_q = sqrt(util_q^2 + conv_q^2)
+                            if conv_q is not None:
+                                q80 = np.sqrt(q80**2 + conv_q.get(0.80, 0)**2)
+                                q95 = np.sqrt(q95**2 + conv_q.get(0.95, 0)**2)
+                            results.loc[mask, "prediction_std"] = std
+                            results.loc[mask, "prediction_ci80_lower"] = np.maximum(pred_pts - q80, 0)
+                            results.loc[mask, "prediction_ci80_upper"] = pred_pts + q80
+                            results.loc[mask, "prediction_ci95_lower"] = np.maximum(pred_pts - q95, 0)
+                            results.loc[mask, "prediction_ci95_upper"] = pred_pts + q95
+                        elif conformal_q and 0.80 in conformal_q and 0.95 in conformal_q:
+                            # Constant-width conformal intervals (fallback)
+                            q80 = conformal_q[0.80] * multi_week_scale
+                            q95 = conformal_q[0.95] * multi_week_scale
+                            # Propagate conversion uncertainty
+                            if conv_q is not None:
+                                q80 = np.sqrt(q80**2 + conv_q.get(0.80, 0)**2)
+                                q95 = np.sqrt(q95**2 + conv_q.get(0.95, 0)**2)
+                            results.loc[mask, "prediction_std"] = std
+                            results.loc[mask, "prediction_ci80_lower"] = np.maximum(pred_pts - q80, 0)
+                            results.loc[mask, "prediction_ci80_upper"] = pred_pts + q80
+                            results.loc[mask, "prediction_ci95_lower"] = np.maximum(pred_pts - q95, 0)
+                            results.loc[mask, "prediction_ci95_upper"] = pred_pts + q95
+                        else:
+                            # Fallback: Gaussian z-scores
+                            std_scaled = std * multi_week_scale
+                            z80, z95 = 1.28, 1.96
+                            results.loc[mask, "prediction_std"] = std_scaled
+                            results.loc[mask, "prediction_ci80_lower"] = np.maximum(pred_pts - z80 * std_scaled, 0)
+                            results.loc[mask, "prediction_ci80_upper"] = pred_pts + z80 * std_scaled
+                            results.loc[mask, "prediction_ci95_lower"] = np.maximum(pred_pts - z95 * std_scaled, 0)
+                            results.loc[mask, "prediction_ci95_upper"] = pred_pts + z95 * std_scaled
                 except Exception:
                     pass
 
@@ -633,7 +681,32 @@ class ModelTrainer:
             
             X = pos_data[feature_cols].copy()
             X = X.replace([np.inf, -np.inf], np.nan)
-            X = X.fillna(0).infer_objects()
+            # Missingness-aware imputation: add binary indicators for rolling/lag
+            # features with structural NaN (early-season rows), then median-fill.
+            # This prevents the model from interpreting "no history" as "zero performance."
+            rolling_lag_tokens = ("_roll", "_lag", "_ewm", "_trend")
+            n_rows = len(X)
+            indicator_cols = {}
+            for col in X.columns:
+                if not any(tok in col for tok in rolling_lag_tokens):
+                    continue
+                n_miss = int(X[col].isna().sum())
+                if n_miss > 0 and (n_miss / n_rows) > 0.02:
+                    ind_name = f"{col}_missing"
+                    if ind_name not in X.columns:
+                        indicator_cols[ind_name] = X[col].isna().astype(np.int8)
+            if indicator_cols:
+                X = pd.concat([X, pd.DataFrame(indicator_cols, index=X.index)], axis=1)
+            # Median imputation per column using TRAINING portion only.
+            # PositionModel.fit() splits at (1 - validation_pct), so compute
+            # medians on the same prefix to avoid val→train information leakage.
+            _imp_split = int(len(X) * (1 - VALIDATION_PCT))
+            for col in X.columns:
+                if not X[col].isna().any():
+                    continue
+                med = X[col].iloc[:_imp_split].median()
+                X[col] = X[col].fillna(med if pd.notna(med) else 0.0)
+            X = X.infer_objects()
             
             # Remove rows without valid targets (use primary util target)
             valid_mask = ~y_dict[1].isna()
@@ -650,42 +723,62 @@ class ModelTrainer:
                     decay = np.power(0.5, (max_season - seasons.values.astype(float)) / float(halflife))
                     sample_weight = decay / decay.max()
             
-            # Position-specific feature selection (reduce overfitting)
-            # Use only the training portion for feature selection to avoid leakage
-            # into the internal validation holdout used by _evaluate_model
-            n_features = MODEL_CONFIG.get("n_features_per_position", 50)
+            # Per-horizon feature selection: select features relevant to each horizon's target
+            from src.features.dimensionality_reduction import adaptive_feature_count
+            base_n = MODEL_CONFIG.get("n_features_per_position", 50)
+            if MODEL_CONFIG.get("adaptive_feature_count", True):
+                n_features = adaptive_feature_count(len(X), default=base_n)
+            else:
+                n_features = base_n
             corr_thresh = MODEL_CONFIG.get("correlation_threshold", 0.92)
+            val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
+            fs_split = int(len(X) * (1 - val_pct))
+
             if len(X.columns) > n_features:
-                val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
-                fs_split = int(len(X) * (1 - val_pct))
-                X_fs_train = X.iloc[:fs_split]
-                y_fs_train = y_dict[1].iloc[:fs_split]
-                _, selected_cols = select_features_simple(
-                    X_fs_train, y_fs_train,
-                    n_features=n_features,
-                    correlation_threshold=corr_thresh
-                )
-                X = X[selected_cols] if selected_cols else X
-                print(f"  Selected {len(X.columns)} features for {position}", flush=True)
-            
-            # Multicollinearity check (VIF > 10 indicates concerning correlation)
+                # Select features separately per horizon for better horizon-specific modeling
+                horizon_features = {}
+                for n_weeks, y_horizon in y_dict.items():
+                    y_fs = y_horizon.iloc[:fs_split]
+                    X_fs = X.iloc[:fs_split]
+                    _, sel_cols = select_features_simple(
+                        X_fs, y_fs,
+                        n_features=n_features,
+                        correlation_threshold=corr_thresh
+                    )
+                    horizon_features[n_weeks] = sel_cols if sel_cols else list(X.columns)
+
+                # Union all horizon features (each model gets its optimal features,
+                # but we pass the union so MultiWeekModel can train each horizon)
+                all_selected = set()
+                for cols in horizon_features.values():
+                    all_selected.update(cols)
+                X = X[sorted(all_selected)]
+                print(f"  Selected {len(X.columns)} features for {position} "
+                      f"(union across {len(y_dict)} horizons)", flush=True)
+
+            # Actionable VIF pruning: iteratively drop highest-VIF feature
             try:
-                print('computing VIF')
-                vif = compute_vif(X)
-                print('computed VIF')
-                high_vif = [(c, v) for c, v in vif.items() if v > 10 and np.isfinite(v)]
-                print('computed high VIF')
-                if high_vif:
-                    print(f"  Multicollinearity: {len(high_vif)} features with VIF>10 "
-                          f"(max={max(v for _, v in high_vif):.1f})", flush=True)
+                from src.features.dimensionality_reduction import prune_by_vif
+                vif_thresh = MODEL_CONFIG.get("vif_threshold", 10.0)
+                pre_vif_count = X.shape[1]
+                X, vif_removed = prune_by_vif(X, threshold=vif_thresh)
+                if vif_removed:
+                    print(f"  VIF pruning: removed {len(vif_removed)} features (VIF>{vif_thresh}), "
+                          f"{pre_vif_count} -> {X.shape[1]}", flush=True)
                 else:
-                    print(f"  Multicollinearity: OK (all VIF <= 10)", flush=True)
+                    print(f"  Multicollinearity: OK (all VIF <= {vif_thresh})", flush=True)
             except Exception:
                 pass  # Non-critical
-            
-            # Train (with optional recency sample_weight)
+
+            # Extract season labels for season-aware CV splits
+            seasons_arr = None
+            if "season" in pos_data.columns:
+                seasons_arr = pos_data.loc[valid_mask, "season"].values
+
+            # Train (with optional recency sample_weight and season-aware CV)
             print(f"  Starting model training for {position}...", flush=True)
-            multi_model.fit(X, y_dict, tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
+            multi_model.fit(X, y_dict, tune_hyperparameters=tune_hyperparameters,
+                           sample_weight=sample_weight, seasons=seasons_arr)
             
             # Save
             multi_model.save()
@@ -757,7 +850,29 @@ class ModelTrainer:
         valid_mask = valid_util & valid_fp
 
         X = pos_data[feature_cols].copy()
-        X = X.replace([np.inf, -np.inf], np.nan).fillna(0).infer_objects()
+        X = X.replace([np.inf, -np.inf], np.nan)
+        # Missingness-aware imputation (same as main training path)
+        _rl_tokens = ("_roll", "_lag", "_ewm", "_trend")
+        _n = len(X)
+        _ind = {}
+        for _c in X.columns:
+            if not any(_t in _c for _t in _rl_tokens):
+                continue
+            _nm = int(X[_c].isna().sum())
+            if _nm > 0 and (_nm / _n) > 0.02:
+                _in = f"{_c}_missing"
+                if _in not in X.columns:
+                    _ind[_in] = X[_c].isna().astype(np.int8)
+        if _ind:
+            X = pd.concat([X, pd.DataFrame(_ind, index=X.index)], axis=1)
+        # Median imputation using training portion only (same policy as main path)
+        _imp_split = int(len(X) * (1 - VALIDATION_PCT))
+        for _c in X.columns:
+            if not X[_c].isna().any():
+                continue
+            _med = X[_c].iloc[:_imp_split].median()
+            X[_c] = X[_c].fillna(_med if pd.notna(_med) else 0.0)
+        X = X.infer_objects()
         X = X[valid_mask]
         y_dict_util = {k: v[valid_mask] for k, v in y_dict_util.items()}
         y_dict_fp = {k: v[valid_mask] for k, v in y_dict_fp.items()}
@@ -889,39 +1004,31 @@ class ModelTrainer:
             "mae_fp": mae_fp,
         }
     
-    def _evaluate_model(self, model: MultiWeekModel, 
-                        X: pd.DataFrame, 
+    def _evaluate_model(self, model: MultiWeekModel,
+                        X: pd.DataFrame,
                         y_dict: Dict[int, pd.Series]) -> Dict[str, Dict]:
-        """Evaluate model on a trailing holdout slice (time-aware)."""
-        from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-        
+        """Evaluate model using honest OOF (out-of-fold) metrics.
+
+        Previously this method re-predicted on a trailing slice of the training
+        data, but the final base models are retrained on ALL of X_train_inner
+        (see PositionModel.fit), so the last-20% slice is NOT held out from
+        the final model.  OOF metrics from cross-validated predictions during
+        training are the correct honest estimate.
+        """
         metrics = {}
-        n = len(X)
-        val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
-        split_idx = int(n * (1 - val_pct))
-        if split_idx < 50 or n - split_idx < 20:
-            split_idx = max(0, n - min(50, n))
-        
-        for n_weeks, y in y_dict.items():
-            X_eval = X.iloc[split_idx:] if split_idx < n else X
-            y_eval = y.iloc[split_idx:] if split_idx < n else y
-            valid = y_eval.notna()
-            if valid.sum() < 10:
-                # Skip this horizon rather than falling back to full training data
-                # (evaluating on training data produces misleadingly optimistic metrics)
+
+        for n_weeks in y_dict:
+            pos_model = model.models.get(n_weeks)
+            if pos_model is None:
                 continue
-            X_eval = X_eval.loc[valid]
-            y_eval = y_eval.loc[valid]
-            if len(y_eval) < 5:
-                continue
-            preds = model.predict(X_eval, n_weeks)
-            
-            metrics[f"{n_weeks}w"] = {
-                "rmse": np.sqrt(mean_squared_error(y_eval, preds)),
-                "mae": mean_absolute_error(y_eval, preds),
-                "r2": r2_score(y_eval, preds),
-            }
-        
+            oof = getattr(pos_model, "_oof_metrics", None)
+            if oof is not None:
+                metrics[f"{n_weeks}w"] = {
+                    "rmse": oof["rmse"],
+                    "mae": oof["mae"],
+                    "r2": oof["r2"],
+                }
+
         return metrics
     
     def get_training_summary(self) -> pd.DataFrame:

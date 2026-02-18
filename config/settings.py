@@ -161,11 +161,13 @@ MODEL_CONFIG = {
     "test_size": 0.2,
     "cv_folds": 5,
     "random_state": 42,
-    "n_optuna_trials": 20,
+    "n_optuna_trials": 100,
     "early_stopping_rounds": 25,
     "validation_pct": 0.2,       # Fraction of training data for ensemble weight optimization
     "n_features_per_position": 50,  # Max features after selection (per position)
     "correlation_threshold": 0.92,  # Drop one of pair if correlation exceeds this
+    "vif_threshold": 10,  # Iteratively drop features with VIF above this
+    "adaptive_feature_count": True,  # Scale n_features_per_position by sqrt(n_samples)
     "recency_decay_halflife": 2.0,  # Seasons: weight halves every 2 seasons (None = no weighting)
     "cv_gap_seasons": 1,  # Gap between train and val for purged CV (1 = purge last season before test)
     # Horizon-specific models (per requirements): 4w LSTM+ARIMA, 18w deep feedforward
@@ -236,7 +238,9 @@ TRAINING_WINDOW_PRESETS = {
 }
 
 # Feature engineering (requirements: 3, 4, 5, 8 week windows for temporal features)
-ROLLING_WINDOWS = [3, 4, 5, 8]
+# Additional 6, 12 week windows capture differentiated medium/long timescales;
+# VIF pruning removes redundant near-collinear features downstream.
+ROLLING_WINDOWS = [3, 4, 5, 6, 8, 12]
 LAG_WEEKS = [1, 2, 3, 4]  # Lag features
 
 # Prediction settings
@@ -286,7 +290,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "4"  # v4: offensive momentum, game script, return-from-injury, combine features
+FEATURE_VERSION = "5"  # v5: LightGBM ensemble, VIF pruning, adaptive features, median imputation, wider rolling windows
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

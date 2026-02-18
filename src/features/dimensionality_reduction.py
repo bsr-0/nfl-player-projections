@@ -385,16 +385,50 @@ def compute_vif(X: pd.DataFrame) -> Dict[str, float]:
     return vif_data
 
 
+def prune_by_vif(X: pd.DataFrame, threshold: float = 10.0,
+                 max_iterations: int = 50) -> Tuple[pd.DataFrame, List[str]]:
+    """Iteratively drop the highest-VIF feature until all VIF <= threshold.
+
+    Returns:
+        Tuple of (pruned DataFrame, list of removed column names).
+    """
+    removed = []
+    X_work = X.copy()
+    for _ in range(max_iterations):
+        if X_work.shape[1] <= 2:
+            break
+        vif = compute_vif(X_work)
+        max_col = max(vif, key=lambda k: vif[k] if np.isfinite(vif[k]) else -1)
+        max_val = vif[max_col]
+        if not np.isfinite(max_val) or max_val <= threshold:
+            break
+        X_work = X_work.drop(columns=[max_col])
+        removed.append(max_col)
+    return X_work, removed
+
+
+def adaptive_feature_count(n_samples: int, default: int = 50) -> int:
+    """Compute feature count adapted to sample size.
+
+    Returns min(default, max(20, int(sqrt(n_samples)))).
+    Small positions (TE ~2000 rows) get ~45 features.
+    Large positions (WR ~5000+ rows) get 50 (capped at default).
+    """
+    return min(default, max(20, int(np.sqrt(n_samples))))
+
+
 def select_features_simple(X: pd.DataFrame, y: pd.Series,
                            n_features: int = 50,
                            correlation_threshold: float = 0.92) -> Tuple[pd.DataFrame, List[str]]:
     """
-    Lightweight feature selection: remove correlated features, keep top N by importance.
-    
+    Lightweight feature selection: remove correlated features, prune by VIF,
+    then keep top N by mutual information importance.
+
     Fits on X, y. Returns (X with selected columns only, list of selected feature names).
     """
+    from config.settings import MODEL_CONFIG
     X = X.copy().fillna(0).replace([np.inf, -np.inf], np.nan).fillna(0)
-    
+
     # Remove highly correlated features
     corr_matrix = X.corr().abs()
     upper = corr_matrix.where(
@@ -406,18 +440,24 @@ def select_features_simple(X: pd.DataFrame, y: pd.Series,
         if correlated:
             variances = X[[col] + correlated].var()
             to_remove.update(variances.drop(variances.idxmax()).index.tolist())
-    
+
     kept = [c for c in X.columns if c not in to_remove]
     X_reduced = X[kept]
-    
+
+    # VIF pruning: iteratively remove highest-VIF features
+    vif_thresh = MODEL_CONFIG.get("vif_threshold", 10.0)
+    if len(kept) > 5:
+        X_reduced, vif_removed = prune_by_vif(X_reduced, threshold=vif_thresh)
+        kept = [c for c in kept if c not in vif_removed]
+
     if len(kept) <= n_features:
         return X_reduced, kept
-    
+
     # Rank by mutual information
     mi_scores = mutual_info_regression(X_reduced, y, random_state=42)
     ranks = np.argsort(-mi_scores)
     selected = [kept[i] for i in ranks[:n_features]]
-    
+
     return X[selected], selected
 
 

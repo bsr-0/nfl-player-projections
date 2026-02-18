@@ -663,9 +663,14 @@ class DatabaseManager:
         with self._get_connection() as conn:
             return pd.read_sql_query(query, conn, params=[player_id])
     
-    def get_all_players_for_training(self, position: str = None, 
+    def get_all_players_for_training(self, position: str = None,
                                       min_games: int = 4) -> pd.DataFrame:
-        """Get all player data suitable for model training."""
+        """Get all player data suitable for model training.
+
+        NOTE: Opponent defense stats are joined from the PRIOR week to prevent
+        data leakage. Same-week opponent stats encode the target (the player's
+        own fantasy points contribute to the opponent's "points allowed").
+        """
         query = """
             SELECT pws.*, p.name, p.position,
                    us.utilization_score, us.snap_share as util_snap_share,
@@ -678,12 +683,12 @@ class DatabaseManager:
                    tds.fantasy_points_allowed_wr, tds.fantasy_points_allowed_te
             FROM player_weekly_stats pws
             JOIN players p ON pws.player_id = p.player_id
-            LEFT JOIN utilization_scores us ON pws.player_id = us.player_id 
+            LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
                 AND pws.season = us.season AND pws.week = us.week
-            LEFT JOIN team_stats ts ON pws.team = ts.team 
+            LEFT JOIN team_stats ts ON pws.team = ts.team
                 AND pws.season = ts.season AND pws.week = ts.week
-            LEFT JOIN team_defense_stats tds ON pws.opponent = tds.team 
-                AND pws.season = tds.season AND pws.week = tds.week
+            LEFT JOIN team_defense_stats tds ON pws.opponent = tds.team
+                AND tds.season = pws.season AND tds.week = pws.week - 1
         """
         params = []
         

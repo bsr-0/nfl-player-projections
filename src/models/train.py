@@ -254,14 +254,28 @@ def _create_horizon_targets(df: pd.DataFrame, n_weeks: List[int] = None) -> pd.D
         Aggregate future values x[t+1:t+window] for each row t.
         Uses reverse rolling to keep strict forward-looking targets.
 
-        Requires at least half the window to be available to avoid noisy
-        targets at season boundaries (e.g. week 17 with only 1 future game
-        for an 18-week window). Rows with insufficient future data become NaN
-        and are excluded during training.
+        Strict min_periods to avoid noisy/biased targets:
+        - For sum targets (fantasy points): require 75% of window to prevent
+          systematic underestimation for late-season rows. An 18-week sum
+          with only 9 games would be half the expected magnitude, teaching
+          the model that late-season == low production.
+        - For mean targets (utilization): require 60% of window since means
+          are scale-invariant, but very short windows produce high-variance
+          estimates.
+        - 1-week targets always require exactly 1 future game (no change).
+        Rows with insufficient future data become NaN and are excluded during
+        training.
         """
         shifted = series.shift(-1)
         rev = shifted.iloc[::-1]
-        min_p = max(window // 2, 1)
+        if window <= 1:
+            min_p = 1
+        elif agg == "sum":
+            # Require 75% of window for sums to prevent scale bias
+            min_p = max(int(np.ceil(window * 0.75)), 2)
+        else:
+            # Require 60% of window for means (less sensitive to count)
+            min_p = max(int(np.ceil(window * 0.60)), 2)
         if agg == "sum":
             return rev.rolling(window=window, min_periods=min_p).sum().iloc[::-1]
         return rev.rolling(window=window, min_periods=min_p).mean().iloc[::-1]
@@ -287,29 +301,44 @@ def _apply_with_temporal_context(
     **kwargs,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Apply a transformation to train+test together so test rows can use historical
-    context from prior train seasons while preserving split membership.
+    Apply a transformation so test rows can use historical context from prior
+    train seasons, but train rows are NEVER influenced by test data.
+
+    Strategy: transform train alone first, then transform train+test combined
+    and keep only the test rows from the combined result. This ensures:
+    - Train features are computed using train data only (no test leakage)
+    - Test features can see train-season history (expanding/rolling windows)
     """
     if train_df.empty and test_df.empty:
         return train_df, test_df
-    split_col = "__split_context_marker__"
-    train_in = train_df.copy()
-    test_in = test_df.copy()
-    train_in[split_col] = 0
-    test_in[split_col] = 1
-    combined = pd.concat([train_in, test_in], ignore_index=True, sort=False)
 
-    sort_cols = [c for c in ["season", "week", "player_id"] if c in combined.columns]
-    if sort_cols:
-        combined = combined.sort_values(sort_cols).reset_index(drop=True)
+    # Step 1: Transform train data alone — train features see only train data
+    train_out = transform_fn(train_df.copy(), **kwargs)
 
-    transformed = transform_fn(combined, **kwargs)
-    if split_col not in transformed.columns:
-        raise ValueError(f"{label}: split marker missing after transform")
+    # Step 2: Transform combined (train + test) — test rows benefit from
+    # train-season historical context in expanding/rolling windows
+    if test_df.empty:
+        test_out = test_df.copy()
+    else:
+        split_col = "__split_context_marker__"
+        train_in = train_df.copy()
+        test_in = test_df.copy()
+        train_in[split_col] = 0
+        test_in[split_col] = 1
+        combined = pd.concat([train_in, test_in], ignore_index=True, sort=False)
 
-    train_out = transformed[transformed[split_col] == 0].drop(columns=[split_col]).reset_index(drop=True)
-    test_out = transformed[transformed[split_col] == 1].drop(columns=[split_col]).reset_index(drop=True)
-    print(f"  Applied {label} with shared context: train={len(train_out)}, test={len(test_out)}")
+        sort_cols = [c for c in ["season", "week", "player_id"] if c in combined.columns]
+        if sort_cols:
+            combined = combined.sort_values(sort_cols).reset_index(drop=True)
+
+        transformed = transform_fn(combined, **kwargs)
+        if split_col not in transformed.columns:
+            raise ValueError(f"{label}: split marker missing after transform")
+
+        # Only keep test rows from the combined result
+        test_out = transformed[transformed[split_col] == 1].drop(columns=[split_col]).reset_index(drop=True)
+
+    print(f"  Applied {label} (train-only features, test with context): train={len(train_out)}, test={len(test_out)}")
     return train_out, test_out
 
 
@@ -590,9 +619,10 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         if len(pos_test) < 5:
             continue
         model = multi_model.models.get(1) or list(multi_model.models.values())[0]
+        medians = getattr(model, "feature_medians", {})
         for fn in getattr(model, "feature_names", []):
             if fn not in pos_test.columns:
-                test_data.loc[pos_mask, fn] = 0
+                test_data.loc[pos_mask, fn] = medians.get(fn, 0)
         pos_test = test_data.loc[pos_mask].copy()
         preds = multi_model.predict(pos_test, n_weeks=1)
         _n_predicted += len(pos_test)
@@ -986,9 +1016,10 @@ def _run_one_fold(
         if len(pos_test) < 5:
             continue
         base = multi_model.models.get(1) or list(multi_model.models.values())[0]
+        medians = getattr(base, "feature_medians", {})
         for fn in getattr(base, "feature_names", []):
             if fn not in pos_test.columns:
-                test_data.loc[pos_mask, fn] = 0
+                test_data.loc[pos_mask, fn] = medians.get(fn, 0)
         pos_test = test_data.loc[pos_mask].copy()
         preds = multi_model.predict(pos_test, n_weeks=1)
         test_data.loc[pos_mask, "predicted_utilization"] = preds

@@ -137,8 +137,8 @@ class EnsembleStack:
         # Get base models
         base_models = self._get_base_models()
 
-        # Store OOF predictions for meta-learner
-        oof_predictions = np.zeros((len(y), len(base_models)))
+        # Store OOF predictions for meta-learner (NaN = not yet predicted)
+        oof_predictions = np.full((len(y), len(base_models)), np.nan)
         model_scores = {}
 
         # Time-series split for proper validation
@@ -147,7 +147,7 @@ class EnsembleStack:
         for i, (name, model) in enumerate(base_models.items()):
             print(f"\nTraining {name}...")
 
-            oof_pred = np.zeros(len(y))
+            oof_pred = np.full(len(y), np.nan)
             fold_scores = []
 
             for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
@@ -173,17 +173,20 @@ class EnsembleStack:
             oof_predictions[:, i] = oof_pred
 
             # Calculate overall score
-            valid_mask = oof_pred != 0
+            valid_mask = ~np.isnan(oof_pred)
             if valid_mask.sum() > 0:
                 rmse = np.sqrt(mean_squared_error(y[valid_mask], oof_pred[valid_mask]))
                 model_scores[name] = rmse
                 print(f"  {name} OOF RMSE: {rmse:.3f}")
 
-            # Fit final model on all data with scaler fit on all data
-            X_scaled = self.scaler.fit_transform(X)
+        # Fit scaler once on all data for final models (outside the loop)
+        X_scaled = self.scaler.fit_transform(X)
+
+        # Retrain final base models on all scaled data
+        for name, model in base_models.items():
             model.fit(X_scaled, y)
             self.base_models[name] = model
-        
+
         # Calculate model weights (inverse of RMSE)
         total_inv_rmse = sum(1/v for v in model_scores.values())
         self.model_weights = {k: (1/v)/total_inv_rmse for k, v in model_scores.items()}
@@ -194,7 +197,7 @@ class EnsembleStack:
         
         # Train meta-learner on OOF predictions
         print("\nTraining meta-learner...")
-        valid_mask = oof_predictions.sum(axis=1) != 0
+        valid_mask = ~np.isnan(oof_predictions).any(axis=1)
         self.meta_model = Ridge(alpha=1.0)
         self.meta_model.fit(oof_predictions[valid_mask], y[valid_mask])
         

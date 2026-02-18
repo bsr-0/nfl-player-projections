@@ -368,17 +368,19 @@ class FeatureEngineer:
         
         for col in opp_cols:
             if col in df.columns:
-                # Normalize to z-score using expanding (causal) mean/std per
-                # season to avoid lookahead.  Sort by (season, week) first so
-                # expanding windows respect temporal order.
+                # Normalize to z-score using expanding (causal) mean/std.
+                # shift(1) excludes the current row to prevent self-referential leakage.
+                # Sort by (season, week) first so expanding windows respect temporal order.
                 if "season" in df.columns and "week" in df.columns:
                     sorted_df = df.sort_values(["season", "week"])
-                    expanding_mean = sorted_df[col].expanding(min_periods=1).mean()
-                    expanding_std = sorted_df[col].expanding(min_periods=2).std().clip(lower=1e-6)
+                    shifted = sorted_df[col].shift(1)
+                    expanding_mean = shifted.expanding(min_periods=1).mean()
+                    expanding_std = shifted.expanding(min_periods=2).std().clip(lower=1e-6)
                     df[f"{col}_zscore"] = ((sorted_df[col] - expanding_mean) / expanding_std).reindex(df.index)
                 else:
-                    expanding_mean = df[col].expanding(min_periods=1).mean()
-                    expanding_std = df[col].expanding(min_periods=2).std().clip(lower=1e-6)
+                    shifted = df[col].shift(1)
+                    expanding_mean = shifted.expanding(min_periods=1).mean()
+                    expanding_std = shifted.expanding(min_periods=2).std().clip(lower=1e-6)
                     df[f"{col}_zscore"] = (df[col] - expanding_mean) / expanding_std
         
         # Create position-specific opponent feature
@@ -538,13 +540,14 @@ class FeatureEngineer:
                     composite_parts.append(("_mom_to", 0.15))  # 15% ball security
 
                 # Normalize each component to z-scores using EXPANDING (causal)
-                # mean/std within each team-season so future data doesn't leak.
+                # mean/std within each team-season. shift(1) excludes the current
+                # row from its own z-score to prevent self-referential leakage.
                 for col, _ in composite_parts:
                     exp_mean = ts.groupby(['team', 'season'])[col].transform(
-                        lambda x: x.expanding(min_periods=1).mean()
+                        lambda x: x.shift(1).expanding(min_periods=1).mean()
                     )
                     exp_std = ts.groupby(['team', 'season'])[col].transform(
-                        lambda x: x.expanding(min_periods=2).std()
+                        lambda x: x.shift(1).expanding(min_periods=2).std()
                     ).clip(lower=1e-6)
                     ts[col + "_z"] = ((ts[col] - exp_mean) / exp_std).fillna(0.0)
 
@@ -554,12 +557,12 @@ class FeatureEngineer:
                     ts[col + "_z"] * (w / total_weight) for col, w in composite_parts
                 )
                 # Rescale from z-score space to interpretable ~0-44 range (mean ~22)
-                # Use expanding stats to avoid global lookahead.
+                # Use expanding stats with shift(1) to avoid self-referential leakage.
                 exp_mom_mean = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
-                    lambda x: x.expanding(min_periods=1).mean()
+                    lambda x: x.shift(1).expanding(min_periods=1).mean()
                 )
                 exp_mom_std = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
-                    lambda x: x.expanding(min_periods=2).std()
+                    lambda x: x.shift(1).expanding(min_periods=2).std()
                 ).clip(lower=1e-6)
                 ts["offensive_momentum_score"] = (
                     22.0 + 8.0 * (ts["offensive_momentum_score"] - exp_mom_mean) / exp_mom_std
@@ -975,16 +978,20 @@ class FeatureEngineer:
         # Use expanding mean/std to avoid future data leakage in z-score components.
         mqi_components = []
 
-        # Helper: compute causal z-scores using expanding mean/std (no future leakage)
+        # Helper: compute causal z-scores using expanding mean/std (no future leakage).
+        # shift(1) ensures the current row's value is excluded from its own z-score.
         def _causal_zscore(series: pd.Series) -> pd.Series:
             if "season" in df.columns and "week" in df.columns:
                 sorted_vals = series.reindex(df.sort_values(["season", "week"]).index)
-                exp_mean = sorted_vals.expanding(min_periods=1).mean()
-                exp_std = sorted_vals.expanding(min_periods=1).std().clip(lower=0.1)
+                shifted = sorted_vals.shift(1)
+                exp_mean = shifted.expanding(min_periods=1).mean()
+                exp_std = shifted.expanding(min_periods=2).std().clip(lower=0.1)
                 z = ((sorted_vals - exp_mean) / exp_std).reindex(df.index)
             else:
-                s_std = max(series.std(), 0.1) if pd.notna(series.std()) else 0.1
-                z = (series - series.mean()) / s_std
+                shifted = series.shift(1)
+                exp_mean = shifted.expanding(min_periods=1).mean()
+                exp_std = shifted.expanding(min_periods=2).std().clip(lower=0.1)
+                z = (series - exp_mean) / exp_std
             return z
 
         # Component 1: Opponent points allowed (position-specific when available)
@@ -1016,14 +1023,16 @@ class FeatureEngineer:
         
         if mqi_components:
             df["matchup_quality_indicator"] = sum(mqi_components)
-            # Normalize to 0-100 scale using expanding min/max to avoid future-data leakage
+            # Normalize to 0-100 scale using expanding min/max with shift(1)
+            # to exclude current row from its own normalization bounds
             mqi = df["matchup_quality_indicator"]
             if "season" in df.columns and "week" in df.columns:
                 # Sort by time FIRST so expanding windows are causal
                 sort_order = df.sort_values(["season", "week"]).index
                 mqi_sorted = mqi.reindex(sort_order)
-                expanding_min = mqi_sorted.expanding(min_periods=1).min()
-                expanding_max = mqi_sorted.expanding(min_periods=1).max()
+                shifted = mqi_sorted.shift(1)
+                expanding_min = shifted.expanding(min_periods=1).min()
+                expanding_max = shifted.expanding(min_periods=1).max()
                 denom = (expanding_max - expanding_min).replace(0, np.nan)
                 normalized = (((mqi_sorted - expanding_min) / denom) * 100).fillna(50.0).clip(0, 100)
                 df["matchup_quality_indicator"] = normalized.reindex(df.index)
@@ -1390,8 +1399,9 @@ class FeatureEngineer:
                 continue
             if has_temporal:
                 col_sorted = df[col].reindex(sort_idx)
-                mean_val = col_sorted.expanding(min_periods=10).mean().reindex(df.index)
-                std_val = col_sorted.expanding(min_periods=10).std().reindex(df.index)
+                shifted = col_sorted.shift(1)
+                mean_val = shifted.expanding(min_periods=10).mean().reindex(df.index)
+                std_val = shifted.expanding(min_periods=10).std().reindex(df.index)
             else:
                 mean_val = df[col].mean()
                 std_val = df[col].std()
@@ -1409,8 +1419,9 @@ class FeatureEngineer:
         if "injury_score" in df.columns and "fantasy_points" in df.columns:
             if has_temporal:
                 fp_sorted = df["fantasy_points"].reindex(sort_idx)
-                fp_mean = fp_sorted.expanding(min_periods=10).mean().reindex(df.index)
-                fp_std = fp_sorted.expanding(min_periods=10).std().reindex(df.index)
+                fp_shifted = fp_sorted.shift(1)
+                fp_mean = fp_shifted.expanding(min_periods=10).mean().reindex(df.index)
+                fp_std = fp_shifted.expanding(min_periods=10).std().reindex(df.index)
             else:
                 fp_mean = df["fantasy_points"].mean()
                 fp_std = df["fantasy_points"].std()
@@ -1464,8 +1475,14 @@ class FeatureEngineer:
         """
         Replace inf with nan and impute NaN in numeric columns so model never sees missing/inf.
         Root cause: LEFT JOINs (team_stats, utilization, defense), rolling/lag NaNs, failed schedule.
-        Imputation: column median (avoids distorting distribution), then 0. Per requirements,
-        features with >5% missing are flagged in _check_missing_rate; we still impute so pipelines run.
+
+        Imputation strategy (missingness-aware):
+        1. For rolling/lag features with >5% missing, add a binary ``_missing`` indicator
+           column so the model can distinguish "no prior data" from "low prior performance."
+        2. Impute with column median (avoids distorting distribution), fallback 0.
+
+        Per requirements, features with >5% missing are flagged in _check_missing_rate;
+        we still impute so pipelines run.
         """
         if df.empty:
             return df
@@ -1475,7 +1492,34 @@ class FeatureEngineer:
             if col not in df.columns:
                 continue
             df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+
+        # Add binary missing indicators for rolling/lag features with meaningful missingness.
+        # These let the model learn that early-season NaN != zero performance.
+        n_rows = len(df)
+        missing_indicator_cols = {}
+        rolling_lag_tokens = ("_roll", "_lag", "_ewm", "_trend")
+        for col in numeric_cols:
+            if col not in df.columns:
+                continue
+            if not any(tok in col for tok in rolling_lag_tokens):
+                continue
+            n_missing = int(df[col].isna().sum())
+            if n_missing == 0:
+                continue
+            miss_pct = n_missing / n_rows
+            # Only add indicator when missingness is structurally meaningful (>2%)
+            if miss_pct > 0.02:
+                indicator_name = f"{col}_missing"
+                if indicator_name not in df.columns:
+                    missing_indicator_cols[indicator_name] = df[col].isna().astype(np.int8)
+
+        if missing_indicator_cols:
+            indicator_df = pd.DataFrame(missing_indicator_cols, index=df.index)
+            df = pd.concat([df, indicator_df], axis=1)
+
         # Fill NaN: median per column (avoids distorting distribution), fallback 0
+        # Re-fetch numeric cols since we may have added indicator columns
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         for col in numeric_cols:
             if col not in df.columns or not df[col].isna().any():
                 continue

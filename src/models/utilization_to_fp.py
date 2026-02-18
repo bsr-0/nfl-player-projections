@@ -60,7 +60,19 @@ class UtilizationToFPConverter:
                 base.append(c)
         return base
 
-    def fit(self, df: pd.DataFrame, target_col: str = "fantasy_points") -> "UtilizationToFPConverter":
+    def fit(self, df: pd.DataFrame, target_col: str = "fantasy_points",
+            oof_utilization: Optional[np.ndarray] = None) -> "UtilizationToFPConverter":
+        """Fit the utilization-to-FP converter.
+
+        Args:
+            df: DataFrame with utilization_score, efficiency features, and target.
+            target_col: Column with actual fantasy points.
+            oof_utilization: Optional array of out-of-fold predicted utilization
+                scores (same length as df). When provided, training uses these
+                noisy predictions instead of actual utilization_score, which
+                reduces train/serve distribution mismatch (the converter will
+                see noisy inputs at serve time too).
+        """
         if not HAS_SKLEARN:
             self.is_fitted = False
             return self
@@ -69,6 +81,10 @@ class UtilizationToFPConverter:
             self.is_fitted = False
             return self
         work = df.copy()
+        # If OOF utilization provided, substitute it for actual utilization during training
+        # so the converter learns to handle noisy predicted inputs (reduces cascaded error)
+        if oof_utilization is not None and len(oof_utilization) == len(work):
+            work[self.util_col] = oof_utilization
         sort_cols = [c for c in ["season", "week"] if c in work.columns]
         if sort_cols:
             work = work.sort_values(sort_cols).reset_index(drop=True)
@@ -91,18 +107,19 @@ class UtilizationToFPConverter:
         y_val = y[split_idx:]
         Xs = self.scaler.fit_transform(X_train)
         # Per requirements: tree-based models (RF/XGBoost) for bounded 0-100 -> FP conversion
-        self.model = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42)
+        self.model = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42, n_jobs=1)
         self.model.fit(Xs, y_train)
         if HAS_XGB:
             try:
                 self.xgb_model = xgb.XGBRegressor(
                     n_estimators=200, max_depth=8, learning_rate=0.05,
-                    subsample=0.8, random_state=42,
+                    subsample=0.8, random_state=42, n_jobs=1,
                 )
                 self.xgb_model.fit(Xs, y_train)
             except Exception:
                 self.xgb_model = None
         self.calibration = None
+        self._conversion_conformal_q = None
         if len(X_val) >= 20:
             Xv = self.scaler.transform(X_val)
             raw_val = self._predict_raw_from_scaled(Xv)
@@ -113,6 +130,13 @@ class UtilizationToFPConverter:
                 self.calibration = {
                     "slope": float(calibrator.coef_[0]),
                     "intercept": float(calibrator.intercept_),
+                }
+                # Compute calibrated predictions for conformal residuals
+                cal_pred = self.calibration["slope"] * raw_val[finite] + self.calibration["intercept"]
+                conv_residuals = np.abs(y_val[finite] - cal_pred)
+                self._conversion_conformal_q = {
+                    0.80: float(np.quantile(conv_residuals, 0.80)),
+                    0.95: float(np.quantile(conv_residuals, 0.95)),
                 }
         self.is_fitted = True
         return self
@@ -155,6 +179,7 @@ class UtilizationToFPConverter:
             "feature_names": self.feature_names,
             "calibration": self.calibration,
             "is_fitted": self.is_fitted,
+            "_conversion_conformal_q": getattr(self, "_conversion_conformal_q", None),
         }, path)
 
     @classmethod
@@ -169,20 +194,78 @@ class UtilizationToFPConverter:
             c.feature_names = d.get("feature_names", [])
             c.calibration = d.get("calibration")
             c.is_fitted = d.get("is_fitted", False)
+            c._conversion_conformal_q = d.get("_conversion_conformal_q")
         return c
+
+
+def _generate_oof_utilization(subset: pd.DataFrame) -> Optional[np.ndarray]:
+    """Generate OOF utilization predictions via 5-fold time-series CV.
+
+    This lets us train the UtilizationToFPConverter on *noisy predicted*
+    utilization rather than actuals, reducing cascaded error at serve time.
+    """
+    if not HAS_SKLEARN:
+        return None
+    from sklearn.model_selection import TimeSeriesSplit
+    from sklearn.ensemble import GradientBoostingRegressor
+
+    if "utilization_score" not in subset.columns:
+        return None
+
+    # Use the same lag/rolling features available during training
+    feature_candidates = [c for c in subset.columns
+                          if c not in ("player_id", "name", "team", "position", "season",
+                                       "week", "fantasy_points", "utilization_score",
+                                       "opponent", "home_away")
+                          and not c.startswith("target_")
+                          and subset[c].dtype in ("int64", "float64", "int32", "float32")]
+    if len(feature_candidates) < 5:
+        return None
+
+    X = subset[feature_candidates].replace([np.inf, -np.inf], np.nan).fillna(0).values
+    y = subset["utilization_score"].values
+    valid = np.isfinite(y)
+    if valid.sum() < 100:
+        return None
+
+    oof = np.full(len(y), np.nan)
+    tscv = TimeSeriesSplit(n_splits=5)
+    for train_idx, val_idx in tscv.split(X):
+        if not valid[train_idx].any():
+            continue
+        t_mask = valid[train_idx]
+        model = GradientBoostingRegressor(
+            n_estimators=100, max_depth=5, learning_rate=0.05, random_state=42
+        )
+        model.fit(X[train_idx][t_mask], y[train_idx][t_mask])
+        oof[val_idx] = model.predict(X[val_idx])
+
+    # Fill early folds that have no OOF predictions with actual values
+    # (these rows are only used in training, not serving)
+    nan_mask = np.isnan(oof)
+    oof[nan_mask] = y[nan_mask]
+    return oof
 
 
 def train_utilization_to_fp_per_position(
     train_data: pd.DataFrame, positions: Optional[List[str]] = None
 ) -> Dict[str, UtilizationToFPConverter]:
-    """Train conversion model for requested positions (default RB/WR/TE)."""
+    """Train conversion model for requested positions (default RB/WR/TE).
+
+    Uses OOF-predicted utilization scores to train the converter, reducing
+    the train/serve distribution mismatch from cascaded prediction error.
+    """
     converters = {}
     for pos in (positions or ["RB", "WR", "TE"]):
-        subset = train_data[train_data["position"] == pos]
+        subset = train_data[train_data["position"] == pos].copy()
         if "utilization_score" not in subset.columns or "fantasy_points" not in subset.columns:
             continue
+        # Generate OOF utilization predictions for this position
+        oof_util = _generate_oof_utilization(subset)
+        if oof_util is not None:
+            print(f"  {pos}: Training converter on OOF-predicted utilization (reduces cascaded error)")
         conv = UtilizationToFPConverter(pos)
-        conv.fit(subset, target_col="fantasy_points")
+        conv.fit(subset, target_col="fantasy_points", oof_utilization=oof_util)
         if conv.is_fitted:
             conv.save()
             converters[pos] = conv
