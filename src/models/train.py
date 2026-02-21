@@ -1,6 +1,7 @@
 """Training script for NFL prediction models."""
 import argparse
 import json
+import logging
 import warnings
 from pathlib import Path
 from datetime import datetime
@@ -16,6 +17,8 @@ warnings.filterwarnings(
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -225,7 +228,8 @@ def _load_qb_target_choice() -> str:
     try:
         with open(qb_choice_path) as f:
             return json.load(f).get("qb_target", "util")
-    except Exception:
+    except Exception as e:
+        logger.warning("QB target choice load failed, defaulting to 'util': %s", e)
         return "util"
 
 
@@ -509,9 +513,9 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
             conv = UtilizationToFPConverter.load(pos)
             if getattr(conv, "is_fitted", False):
                 converters[pos] = conv
-        except Exception:
-            pass
-    
+        except Exception as e:
+            logger.warning("Converter load for %s in test metrics: %s", pos, e)
+
     for position in trainer.trained_models:
         multi_model = trainer.trained_models[position]
         pos_test = test_data[test_data["position"] == position]
@@ -552,7 +556,8 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
                         eff_df = pos_subset.copy()
                         eff_df["utilization_score"] = preds
                         preds_out = converters["QB"].predict(preds, efficiency_df=eff_df)
-                    except Exception:
+                    except Exception as e:
+                        logger.warning("QB FP conversion in metrics: %s", e)
                         preds_out = preds
                 _print_metrics(position, label, y_act[valid], preds_out)
             continue
@@ -578,7 +583,8 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
                         eff_df = pos_subset.copy()
                         eff_df["utilization_score"] = preds
                         preds_fp = converters[position].predict(preds, efficiency_df=eff_df)
-                    except Exception:
+                    except Exception as e:
+                        logger.warning("FP conversion for %s in metrics: %s", position, e)
                         preds_fp = preds
                 _print_metrics(position, "FP", y_test[valid], preds_fp)
 
@@ -604,9 +610,10 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 c = UtilizationToFPConverter.load(pos)
                 if getattr(c, "is_fitted", False):
                     converters[pos] = c
-            except Exception:
-                pass
-    except Exception:
+            except Exception as e:
+                logger.warning("Converter load for %s skipped: %s", pos, e)
+    except Exception as e:
+        logger.warning("UtilizationToFPConverter import failed: %s", e)
         converters = {}
     qb_target = _load_qb_target_choice()
     import time as _time
@@ -637,8 +644,8 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
             try:
                 fp_pred = converters[position].predict(preds, efficiency_df=eff_df)
                 test_data.loc[pos_mask, "predicted_points"] = fp_pred
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Backtest FP conversion for %s skipped: %s", position, e)
     _pred_elapsed = _time.perf_counter() - _pred_start
     if _n_predicted > 0:
         _per_player = _pred_elapsed / _n_predicted
@@ -763,8 +770,8 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                           f"Consider rollback (prev RMSE={prev_rmse}, current={curr_rmse}).")
                 else:
                     print(f"\n  Model drift: {drift_pct:+.1f}% vs previous (stable)")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Model drift detection skipped: %s", e)
 
     backtester.save_results(results)
 
@@ -882,52 +889,52 @@ def prepare_features(data: pd.DataFrame, position: str = None,
     return add_advanced_features(data)
 
 
-def _run_one_fold(
+def _prepare_training_data(
     train_data: pd.DataFrame,
     test_data: pd.DataFrame,
-    train_seasons: list,
-    actual_test_season: int,
     positions: list,
     tune_hyperparameters: bool,
     n_trials: int,
-):
-    """
-    Run one fold: prepare features, train models, run backtest.
-    Uses MODELS_DIR from config (patch for walk-forward). Returns (trainer, backtest_results).
+) -> Tuple[pd.DataFrame, pd.DataFrame, "ModelTrainer"]:
+    """Shared preprocessing pipeline used by both train_models() and _run_one_fold().
+
+    Handles: DVP, external features, season-long features, utilization scores,
+    horizon targets, util weight optimization, feature engineering, bounded scaling,
+    winsorization, model training, and util-to-fp conversion.
+
+    Returns (train_data, test_data, trainer).
     """
     from config.settings import MODELS_DIR
+
     # DVP
     try:
         from src.utils.database import DatabaseManager
         db = DatabaseManager()
         db.ensure_team_defense_stats()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Team defense stats (DVP) skipped: %s", e)
+
     # External (Vegas, injury, weather) with shared train/test temporal context.
     try:
         from src.data.external_data import add_external_features
         all_seasons = sorted(set(train_data["season"].dropna().astype(int)) | set(test_data["season"].dropna().astype(int)))
         train_data, test_data = _apply_with_temporal_context(
-            train_data,
-            test_data,
-            add_external_features,
-            "external features",
+            train_data, test_data, add_external_features, "external features",
             seasons=all_seasons,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("External features (weather/injury/Vegas) skipped: %s", e)
+
     # Season-long draft/rookie context with shared temporal context.
     try:
         from src.features.season_long_features import add_season_long_features
         train_data, test_data = _apply_with_temporal_context(
-            train_data,
-            test_data,
-            add_season_long_features,
-            "season-long features",
+            train_data, test_data, add_season_long_features, "season-long features",
         )
     except Exception as e:
-        print(f"  Season-long draft feature merge skipped: {e}")
-    # Util + bounds
+        logger.warning("Season-long features skipped: %s", e)
+
+    # Utilization scores with train-only percentile bounds
     team_df = pd.DataFrame()
     util_calc = UtilizationScoreCalculator(weights=None)
     train_data = util_calc.calculate_all_scores(train_data, team_df)
@@ -938,9 +945,12 @@ def _run_one_fold(
     train_data = util_calc.calculate_all_scores(train_data, team_df)
     loaded_bounds = load_percentile_bounds(bounds_path)
     test_data = calculate_utilization_scores(test_data, team_df=team_df, weights=None, percentile_bounds=loaded_bounds)
-    # Targets (season-bounded to avoid crossing off-season boundaries).
+
+    # Horizon targets (season-bounded)
     train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
     test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
+
+    # Data-driven utilization weight optimization
     util_weights = fit_utilization_weights(
         train_data,
         target_col="target_util_1w" if "target_util_1w" in train_data.columns else "target_1w",
@@ -948,23 +958,40 @@ def _run_one_fold(
     )
     train_data = recalculate_utilization_with_weights(train_data, util_weights)
     test_data = recalculate_utilization_with_weights(test_data, util_weights)
-    # Recompute utilization targets on the reweighted utilization scale for train/serve alignment.
+    # Recompute targets on reweighted utilization scale
     train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
     test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
     with open(MODELS_DIR / "utilization_weights.json", "w") as f:
         json.dump(util_weights, f, indent=2)
+
+    # Feature engineering
     train_data, test_data = _apply_with_temporal_context(
-        train_data,
-        test_data,
+        train_data, test_data,
         lambda d: add_advanced_features(add_engineered_features(d)),
         "feature engineering",
     )
     _apply_bounded_scaling(
-        train_data,
-        test_data,
-        MODELS_DIR / "feature_scaler_bounded.joblib",
+        train_data, test_data, MODELS_DIR / "feature_scaler_bounded.joblib",
     )
-    # Winsorize
+
+    # Player embeddings: PCA-based dense representations from aggregated train stats
+    try:
+        from src.models.advanced_techniques import PlayerEmbeddings
+        print("Computing player embeddings (PCA on aggregated stats)...")
+        emb = PlayerEmbeddings(embedding_dim=8)
+        emb.fit(train_data)  # Fit on train only to avoid leakage
+        # Add embedding columns to both train and test
+        for df_ref, label in [(train_data, "train"), (test_data, "test")]:
+            if "player_id" not in df_ref.columns:
+                continue
+            emb_matrix = np.array([emb.get_embedding(pid) for pid in df_ref["player_id"]])
+            for i in range(emb_matrix.shape[1]):
+                df_ref[f"player_emb_{i}"] = emb_matrix[:, i]
+        print(f"  Added {emb.embedding_dim} player embedding features")
+    except Exception as e:
+        logger.warning("Player embeddings skipped: %s", e)
+
+    # Winsorize targets at 1st/99th percentile per position (train only)
     for pos in ["QB", "RB", "WR", "TE"]:
         mask = train_data["position"] == pos
         for n_weeks in [1, 4, 18]:
@@ -984,12 +1011,41 @@ def _run_one_fold(
                 continue
             lo, hi = valid.quantile(0.01), valid.quantile(0.99)
             train_data.loc[mask, col] = train_data.loc[mask, col].clip(lo, hi)
+
+    # Train models
     trainer = ModelTrainer()
-    trainer.train_all_positions(train_data, positions=positions, tune_hyperparameters=tune_hyperparameters, n_weeks_list=[1, 4, 18], test_data=test_data)
+    trainer.train_all_positions(
+        train_data, positions=positions, tune_hyperparameters=tune_hyperparameters,
+        n_weeks_list=[1, 4, 18], test_data=test_data,
+    )
+
+    # Utilization -> FP conversion
     try:
         train_utilization_to_fp_per_position(train_data, positions=["RB", "WR", "TE", "QB"])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Utilization-to-FP conversion training skipped: %s", e)
+
+    return train_data, test_data, trainer
+
+
+def _run_one_fold(
+    train_data: pd.DataFrame,
+    test_data: pd.DataFrame,
+    train_seasons: list,
+    actual_test_season: int,
+    positions: list,
+    tune_hyperparameters: bool,
+    n_trials: int,
+):
+    """
+    Run one fold: prepare features, train models, run backtest.
+    Uses MODELS_DIR from config (patch for walk-forward). Returns (trainer, backtest_results).
+    """
+    train_data, test_data, trainer = _prepare_training_data(
+        train_data, test_data, positions, tune_hyperparameters, n_trials,
+    )
+
+    # Backtest prediction loop
     test_data = test_data.copy()
     test_data["predicted_points"] = np.nan
     test_data["predicted_utilization"] = np.nan
@@ -1002,10 +1058,12 @@ def _run_one_fold(
                 c = UtilizationToFPConverter.load(pos)
                 if getattr(c, "is_fitted", False):
                     converters[pos] = c
-            except Exception:
-                pass
-    except Exception:
+            except Exception as e:
+                logger.warning("Converter load for %s skipped: %s", pos, e)
+    except Exception as e:
+        logger.warning("UtilizationToFPConverter import failed: %s", e)
         converters = {}
+
     qb_target = _load_qb_target_choice()
     for position in positions:
         if position not in trainer.trained_models:
@@ -1031,10 +1089,9 @@ def _run_one_fold(
             try:
                 fp_pred = converters[position].predict(preds, efficiency_df=eff_df)
                 test_data.loc[pos_mask, "predicted_points"] = fp_pred
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("FP conversion for %s skipped: %s", position, e)
     test_data["actual_for_backtest"] = np.nan
-    # Backtest points: for non-QB we convert utilization->FP when possible, so compare to future FP.
     if "target_1w" in test_data.columns:
         test_data.loc[test_data["position"] != "QB", "actual_for_backtest"] = test_data.loc[
             test_data["position"] != "QB", "target_1w"
@@ -1133,92 +1190,15 @@ def train_models(positions: list = None,
             return None, train_data, test_data, actual_test_season
         settings.MODELS_DIR = old_models_dir
 
-    # Populate team_defense_stats from player data so DVP features are available
-    try:
-        from src.utils.database import DatabaseManager
-        db = DatabaseManager()
-        n_def = db.ensure_team_defense_stats()
-        if n_def > 0:
-            print(f"  Populated {n_def} team_defense_stats rows (DVP).")
-    except Exception as e:
-        print(f"  Team defense stats skip: {e}")
+    # Shared preprocessing: DVP, external, season-long, utilization, targets,
+    # feature engineering, bounded scaling, winsorization, model training, util-to-fp.
+    print("\n[2/5] Preparing features, engineering, and training...")
+    train_data, test_data, trainer = _prepare_training_data(
+        train_data, test_data, positions, tune_hyperparameters, n_trials,
+    )
 
-    # Integrate external + season-long features with shared temporal context so test rows
-    # can use prior-year history from train seasons.
-    try:
-        from src.data.external_data import add_external_features
-        all_seasons = sorted(set(train_data["season"].dropna().astype(int)) | set(test_data["season"].dropna().astype(int)))
-        train_data, test_data = _apply_with_temporal_context(
-            train_data,
-            test_data,
-            add_external_features,
-            "external features",
-            seasons=all_seasons,
-        )
-    except Exception as e:
-        print(f"  External features (weather/injury/Vegas) skip: {e}")
-    try:
-        from src.features.season_long_features import add_season_long_features
-        train_data, test_data = _apply_with_temporal_context(
-            train_data,
-            test_data,
-            add_season_long_features,
-            "season-long features",
-        )
-    except Exception as e:
-        print(f"  Season-long features (draft/rookie context) skip: {e}")
-
-    # Phase 1: Utilization scores with train-only percentile bounds (avoid test/serve leakage)
-    print("\n[2/5] Preparing features...")
-    team_df = pd.DataFrame()
-    util_calc = UtilizationScoreCalculator(weights=None)
-    train_data = util_calc.calculate_all_scores(train_data, team_df)
-    for pos in POSITIONS:
-        util_calc.fit_percentile_bounds(train_data, pos, UTIL_COMPONENTS.get(pos, []))
-    bounds_path = MODELS_DIR / "utilization_percentile_bounds.json"
-    save_percentile_bounds(util_calc.position_percentiles, bounds_path)
-    print(f"  Saved utilization percentile bounds to {bounds_path.name}")
-    train_data = util_calc.calculate_all_scores(train_data, team_df)
-    loaded_bounds = load_percentile_bounds(bounds_path)
-    test_data = calculate_utilization_scores(test_data, team_df=team_df, weights=None, percentile_bounds=loaded_bounds)
-    
-    # Create targets for different horizons (needed before utilization weight fitting)
-    print("\n[2b/5] Creating prediction targets...")
-    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
-    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
-    
-    # Data-driven utilization weight optimization (fit on train only; target = future utilization)
-    util_weights = fit_utilization_weights(
-        train_data,
-        target_col="target_util_1w" if "target_util_1w" in train_data.columns else "target_1w",
-        tune_alpha_cv=True,
-    )
-    train_data = recalculate_utilization_with_weights(train_data, util_weights)
-    test_data = recalculate_utilization_with_weights(test_data, util_weights)
-    # Recompute targets after utilization reweighting so util targets align to the served scale.
-    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
-    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
-    # Persist for train/serve consistency (predict pipeline loads these)
-    import json
-    weights_path = MODELS_DIR / "utilization_weights.json"
-    with open(weights_path, "w") as f:
-        json.dump(util_weights, f, indent=2)
-    print(f"  Applied data-driven utilization weights (saved to {weights_path.name})")
-    
-    # Phase 2: Feature engineering (uses utilization_score)
-    print("\n[2c/5] Engineering features...")
-    train_data, test_data = _apply_with_temporal_context(
-        train_data,
-        test_data,
-        lambda d: add_advanced_features(add_engineered_features(d)),
-        "feature engineering",
-    )
-    _apply_bounded_scaling(
-        train_data,
-        test_data,
-        MODELS_DIR / "feature_scaler_bounded.joblib",
-    )
-    print("\n[2d/5] Data quality checks...")
+    # Data quality checks (train_models-only, not needed in walk-forward folds)
+    print("\n[3/5] Data quality checks...")
     train_missing = _report_missingness(train_data, "train", threshold=0.05)
     test_missing = _report_missingness(test_data, "test", threshold=0.05)
     _validate_critical_missingness(train_data, "train", threshold=0.05)
@@ -1266,49 +1246,6 @@ def train_models(positions: list = None,
         },
     }
     _write_json_artifact(MODELS_DIR / "training_requirements_gate.json", requirement_gates, "requirements gate report")
-    
-    # Winsorize targets at 1st/99th percentile per position (train only)
-    print("\n[3/5] Winsorizing targets...")
-    for pos in ["QB", "RB", "WR", "TE"]:
-        mask = train_data["position"] == pos
-        for n_weeks in [1, 4, 18]:
-            col = f"target_{n_weeks}w"
-            if col not in train_data.columns:
-                continue
-            valid = train_data.loc[mask, col].dropna()
-            if len(valid) < 20:
-                continue
-            lo, hi = valid.quantile(0.01), valid.quantile(0.99)
-            train_data.loc[mask, col] = train_data.loc[mask, col].clip(lo, hi)
-        for col in ["target_util_1w", "target_util_4w", "target_util_18w"]:
-            if col not in train_data.columns:
-                continue
-            valid = train_data.loc[mask, col].dropna()
-            if len(valid) < 20:
-                continue
-            lo, hi = valid.quantile(0.01), valid.quantile(0.99)
-            train_data.loc[mask, col] = train_data.loc[mask, col].clip(lo, hi)
-    
-    # Train models on training data (pass test_data for QB target selection)
-    print("\n[4/5] Training models...")
-    trainer = ModelTrainer()
-    trainer.train_all_positions(
-        train_data,
-        positions=positions,
-        tune_hyperparameters=tune_hyperparameters,
-        n_weeks_list=[1, 4, 18],
-        test_data=test_data,
-    )
-
-    # Utilization -> Fantasy Points conversion layer for RB/WR/TE
-    print("\n[4b/5] Training utilization-to-FP conversion models...")
-    try:
-        converters = train_utilization_to_fp_per_position(train_data, positions=["RB", "WR", "TE", "QB"])
-        for pos, c in converters.items():
-            if c.is_fitted:
-                print(f"  {pos}: utilization->FP converter saved")
-    except Exception as e:
-        print(f"  Utilization->FP conversion skipped: {e}")
 
     # Horizon-specific models: 4-week LSTM+ARIMA hybrid, 18-week deep (when enabled)
     print("\n[4c/5] Training horizon-specific models (4w hybrid, 18w deep)...")
@@ -1507,7 +1444,8 @@ def train_models(positions: list = None,
                 try:
                     with open(history_path, encoding="utf-8") as f:
                         history = json.load(f)
-                except Exception:
+                except Exception as e:
+                    logger.warning("Feature importance history load failed: %s", e)
                     history = []
             # Compare to most recent previous snapshot
             stability_report = {}
@@ -1586,8 +1524,8 @@ def train_models(positions: list = None,
             try:
                 with open(metadata_path, encoding="utf-8") as f:
                     prev_metadata = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Previous metadata load failed: %s", e)
 
         # Collect per-position test metrics for the metadata
         pos_test_metrics = {}
@@ -1601,7 +1539,8 @@ def train_models(positions: list = None,
             try:
                 with open(version_history_path, encoding="utf-8") as f:
                     version_history = json.load(f)
-            except Exception:
+            except Exception as e:
+                logger.warning("Version history load failed: %s", e)
                 version_history = []
         if prev_metadata.get("training_date"):
             version_history.append(prev_metadata)
@@ -1642,7 +1581,8 @@ def train_models(positions: list = None,
             try:
                 with open(top10_path, encoding="utf-8") as f:
                     top10_payload = json.load(f)
-            except Exception:
+            except Exception as e:
+                logger.warning("Top-10 features load failed: %s", e)
                 top10_payload = {}
         # Load feature stability data if available
         feature_stability = {}
@@ -1653,8 +1593,8 @@ def train_models(positions: list = None,
                     hist = json.load(f)
                 if hist:
                     feature_stability = hist[-1].get("stability", {})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Feature stability data load failed: %s", e)
 
         monitoring_summary = {
             "generated_at": datetime.now().isoformat(),

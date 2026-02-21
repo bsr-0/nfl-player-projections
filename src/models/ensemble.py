@@ -345,7 +345,6 @@ class EnsemblePredictor:
                         _, std = base_model.predict_with_uncertainty(pos_data)
                         pred_pts = results.loc[mask, "predicted_points"].values
                         conformal_q = getattr(base_model, "_conformal_quantiles", None)
-                        hetero = getattr(base_model, "_conformal_hetero", None)
 
                         # Conversion uncertainty: if util->FP was applied, get converter residuals
                         conv_q = None
@@ -357,26 +356,11 @@ class EnsemblePredictor:
                         # role changes create correlated outcomes across weeks)
                         multi_week_scale = n_weeks ** 0.4
 
-                        if hetero is not None and 0.80 in hetero and 0.95 in hetero:
-                            # Heteroscedastic conformal: width scales with prediction magnitude
-                            abs_pred = np.abs(pred_pts)
-                            h80, h95 = hetero[0.80], hetero[0.95]
-                            q80 = np.maximum(h80["slope"] * abs_pred + h80["intercept"], 0.5) * multi_week_scale
-                            q95 = np.maximum(h95["slope"] * abs_pred + h95["intercept"], 0.5) * multi_week_scale
-                            # Propagate conversion uncertainty: combined_q = sqrt(util_q^2 + conv_q^2)
-                            if conv_q is not None:
-                                q80 = np.sqrt(q80**2 + conv_q.get(0.80, 0)**2)
-                                q95 = np.sqrt(q95**2 + conv_q.get(0.95, 0)**2)
-                            results.loc[mask, "prediction_std"] = std
-                            results.loc[mask, "prediction_ci80_lower"] = np.maximum(pred_pts - q80, 0)
-                            results.loc[mask, "prediction_ci80_upper"] = pred_pts + q80
-                            results.loc[mask, "prediction_ci95_lower"] = np.maximum(pred_pts - q95, 0)
-                            results.loc[mask, "prediction_ci95_upper"] = pred_pts + q95
-                        elif conformal_q and 0.80 in conformal_q and 0.95 in conformal_q:
-                            # Constant-width conformal intervals (fallback)
+                        if conformal_q and 0.80 in conformal_q and 0.95 in conformal_q:
+                            # Constant-width conformal intervals
                             q80 = conformal_q[0.80] * multi_week_scale
                             q95 = conformal_q[0.95] * multi_week_scale
-                            # Propagate conversion uncertainty
+                            # Propagate conversion uncertainty: combined_q = sqrt(util_q^2 + conv_q^2)
                             if conv_q is not None:
                                 q80 = np.sqrt(q80**2 + conv_q.get(0.80, 0)**2)
                                 q95 = np.sqrt(q95**2 + conv_q.get(0.95, 0)**2)
@@ -752,23 +736,47 @@ class ModelTrainer:
                 all_selected = set()
                 for cols in horizon_features.values():
                     all_selected.update(cols)
+
+                # Stability selection: boost features consistently selected across bootstrap Lasso
+                try:
+                    from src.models.feature_engineering_pipeline import StabilitySelector
+                    y_primary = y_dict.get(1, list(y_dict.values())[0])
+                    stability_sel = StabilitySelector(n_bootstrap=30, threshold=0.5)
+                    stable_features = stability_sel.fit(
+                        X.iloc[:fs_split], y_primary.iloc[:fs_split],
+                        n_features_to_select=n_features
+                    )
+                    if stable_features:
+                        # Add stability-selected features to the union
+                        pre_count = len(all_selected)
+                        all_selected.update(stable_features)
+                        n_added = len(all_selected) - pre_count
+                        if n_added > 0:
+                            print(f"  Stability selection added {n_added} features", flush=True)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("Stability selection skipped: %s", e)
+
                 X = X[sorted(all_selected)]
                 print(f"  Selected {len(X.columns)} features for {position} "
-                      f"(union across {len(y_dict)} horizons)", flush=True)
+                      f"(union across {len(y_dict)} horizons + stability)", flush=True)
 
             # Actionable VIF pruning: iteratively drop highest-VIF feature
+            # Compute VIF on training portion only to avoid val→train leakage
             try:
                 from src.features.dimensionality_reduction import prune_by_vif
                 vif_thresh = MODEL_CONFIG.get("vif_threshold", 10.0)
                 pre_vif_count = X.shape[1]
-                X, vif_removed = prune_by_vif(X, threshold=vif_thresh)
+                _, vif_removed = prune_by_vif(X.iloc[:fs_split], threshold=vif_thresh)
                 if vif_removed:
+                    X = X.drop(columns=vif_removed)
                     print(f"  VIF pruning: removed {len(vif_removed)} features (VIF>{vif_thresh}), "
                           f"{pre_vif_count} -> {X.shape[1]}", flush=True)
                 else:
                     print(f"  Multicollinearity: OK (all VIF <= {vif_thresh})", flush=True)
-            except Exception:
-                pass  # Non-critical
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("VIF pruning failed: %s", e)
 
             # Extract season labels for season-aware CV splits
             seasons_arr = None
@@ -779,7 +787,7 @@ class ModelTrainer:
             print(f"  Starting model training for {position}...", flush=True)
             multi_model.fit(X, y_dict, tune_hyperparameters=tune_hyperparameters,
                            sample_weight=sample_weight, seasons=seasons_arr)
-            
+
             # Save
             multi_model.save()
             

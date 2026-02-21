@@ -26,6 +26,33 @@ from config.settings import MODEL_CONFIG, MODELS_DIR, POSITIONS
 
 VALIDATION_PCT = MODEL_CONFIG.get("validation_pct", 0.2)
 EARLY_STOPPING_ROUNDS = MODEL_CONFIG.get("early_stopping_rounds", 25)
+
+
+class TargetTransformer:
+    """Log1p target transformation for right-skewed fantasy point distributions.
+
+    Applies log1p(y + shift) during training and expm1 - shift at prediction time.
+    The shift ensures all values are positive before log. Skewness is checked
+    before applying: if the target is already approximately symmetric (|skew| < 0.5),
+    no transformation is applied.
+    """
+    def __init__(self):
+        self.shift = 0.0
+        self.active = False  # Whether transformation is actually applied
+
+    def fit_transform(self, y: np.ndarray) -> np.ndarray:
+        skewness = float(np.nanmean(((y - np.nanmean(y)) / max(np.nanstd(y), 1e-8)) ** 3))
+        if abs(skewness) < 0.5:
+            self.active = False
+            return y.copy()
+        self.active = True
+        self.shift = max(0.0, -np.nanmin(y) + 1.0)
+        return np.log1p(y + self.shift)
+
+    def inverse_transform(self, y_transformed: np.ndarray) -> np.ndarray:
+        if not self.active:
+            return y_transformed
+        return np.expm1(y_transformed) - self.shift
 # Ensemble weights: 4-model when LightGBM available, else original 3-model
 if HAS_LIGHTGBM:
     ENSEMBLE_WEIGHTS_1W = {"random_forest": 0.20, "xgboost": 0.30, "lightgbm": 0.25, "ridge": 0.25}
@@ -105,6 +132,7 @@ class PositionModel:
         self.meta_learner = None
         self.feature_medians = {}  # Training medians for prediction-time imputation
         self._oof_metrics = None  # OOF evaluation metrics (honest, no data leakage)
+        self.target_transformer = TargetTransformer()
     
     def fit(self, X: pd.DataFrame, y: pd.Series,
             tune_hyperparameters: bool = True,
@@ -132,6 +160,12 @@ class PositionModel:
         self.feature_names = list(X.columns)
         X_raw = np.asarray(X.values, dtype=np.float64)
         y_np = np.asarray(y.values, dtype=np.float64)
+
+        # Apply target transformation for right-skewed distributions
+        self.target_transformer = TargetTransformer()
+        y_np = self.target_transformer.fit_transform(y_np)
+        if self.target_transformer.active:
+            print(f"  Target transformation: log1p applied (skewed distribution)")
 
         n = len(X_raw)
         split_idx = int(n * (1 - VALIDATION_PCT))
@@ -258,8 +292,24 @@ class PositionModel:
                 "r2": float(r2_score(oof_y, oof_ensemble)),
                 "n_samples": int(oof_valid.sum()),
             }
+
+            # Isotonic calibration: correct systematic biases in OOF predictions
+            try:
+                from sklearn.isotonic import IsotonicRegression
+                self.calibrator = IsotonicRegression(out_of_bounds='clip')
+                self.calibrator.fit(oof_ensemble, oof_y)
+                cal_pred = self.calibrator.predict(oof_ensemble)
+                cal_rmse = float(np.sqrt(mean_squared_error(oof_y, cal_pred)))
+                if cal_rmse < self._oof_metrics["rmse"] * 1.01:
+                    print(f"  Isotonic calibration: RMSE {self._oof_metrics['rmse']:.3f} -> {cal_rmse:.3f}")
+                else:
+                    self.calibrator = None
+                    print(f"  Isotonic calibration: no improvement, disabled")
+            except Exception:
+                self.calibrator = None
         else:
             self._oof_metrics = None
+            self.calibrator = None
 
         # Now train final base models on ALL training data for serving
         self.models["random_forest"] = self._train_random_forest(X_train_scaled, y_train_inner, sample_weight=sw_train)
@@ -270,17 +320,30 @@ class PositionModel:
 
         self._base_model_keys = list(self.models.keys())
 
+        # Overfitting diagnostic: compare train RMSE to OOF RMSE
+        if self._oof_metrics is not None:
+            train_preds_stack = np.column_stack([self.models[k].predict(X_train_scaled) for k in self._base_model_keys])
+            if self.meta_learner is not None:
+                train_pred = self.meta_learner.predict(train_preds_stack)
+            else:
+                weights = [self.ensemble_weights.get(k, 1.0 / len(self._base_model_keys)) for k in self._base_model_keys]
+                train_pred = np.average(train_preds_stack, axis=1, weights=weights)
+            train_rmse = float(np.sqrt(mean_squared_error(y_train_inner, train_pred)))
+            oof_rmse = self._oof_metrics["rmse"]
+            ratio = oof_rmse / train_rmse if train_rmse > 0 else float("inf")
+            self._oof_metrics["train_rmse"] = train_rmse
+            self._oof_metrics["overfit_ratio"] = ratio
+            if ratio > 1.3:
+                print(f"  WARNING: Possible overfitting — train RMSE={train_rmse:.3f}, OOF RMSE={oof_rmse:.3f} (ratio={ratio:.2f})")
+            else:
+                print(f"  Overfit check OK — train RMSE={train_rmse:.3f}, OOF RMSE={oof_rmse:.3f} (ratio={ratio:.2f})")
+
         # Conformal calibration: compute residual distribution from OOF predictions
         # (cross-validated, not from the retrained model) for well-calibrated intervals.
         #
         # Using OOF residuals avoids the bias of evaluating the final model on data
         # it was trained on. The OOF predictions come from models trained on fold
         # subsets, so residuals reflect true out-of-sample error.
-        #
-        # HETEROSCEDASTIC intervals: higher predictions have larger absolute
-        # residuals.  We fit a linear relationship  residual_quantile(pred) =
-        # slope * |pred| + intercept  so that interval width scales with
-        # prediction magnitude.
         if self.meta_learner is not None and oof_valid.sum() >= 20:
             oof_ensemble_pred = self.meta_learner.predict(oof_preds[oof_valid])
         elif oof_valid.sum() >= 20:
@@ -309,59 +372,7 @@ class PositionModel:
             0.95: float(np.quantile(cal_residuals, 0.95)),
         }
 
-        # Heteroscedastic calibration: fit QUANTILE regression of |residual|
-        # on |prediction| per quantile level so interval width scales with
-        # prediction magnitude AND each quantile has a genuinely different
-        # conditional distribution fit.
-        #
-        # Previously this loop fitted identical LinearRegression (mean of
-        # residuals) for all 3 quantiles and then rescaled, which made the
-        # 80/90/95 bands simple scalar multiples of each other.
-        self._conformal_hetero = None
-        if len(cal_pred) >= 30:
-            try:
-                abs_pred = np.abs(cal_pred).reshape(-1, 1)
-                hetero = {}
-                for q in [0.80, 0.90, 0.95]:
-                    # Quantile regression via pinball loss minimization.
-                    # QuantileRegressor is available in sklearn>=1.0.
-                    try:
-                        from sklearn.linear_model import QuantileRegressor
-                        qr = QuantileRegressor(
-                            quantile=q, alpha=0.01, solver="highs",
-                        )
-                        qr.fit(abs_pred, cal_residuals)
-                        slope = float(qr.coef_[0])
-                        intercept = float(qr.intercept_)
-                    except (ImportError, Exception):
-                        # Fallback: bin predictions into quartiles and compute
-                        # the q-th quantile of residuals per bin, then fit a
-                        # line through bin centres → bin quantile values.
-                        from sklearn.linear_model import LinearRegression
-                        n_bins = min(4, max(2, len(cal_pred) // 30))
-                        bin_edges = np.quantile(abs_pred.ravel(), np.linspace(0, 1, n_bins + 1))
-                        bin_edges[-1] += 1e-6  # ensure last bin includes max
-                        centres, q_vals = [], []
-                        for bi in range(n_bins):
-                            mask = (abs_pred.ravel() >= bin_edges[bi]) & (abs_pred.ravel() < bin_edges[bi + 1])
-                            if mask.sum() < 5:
-                                continue
-                            centres.append(float(abs_pred.ravel()[mask].mean()))
-                            q_vals.append(float(np.quantile(cal_residuals[mask], q)))
-                        if len(centres) >= 2:
-                            lr = LinearRegression()
-                            lr.fit(np.array(centres).reshape(-1, 1), np.array(q_vals))
-                            slope = float(lr.coef_[0])
-                            intercept = float(lr.intercept_)
-                        else:
-                            # Not enough bins; use constant quantile
-                            slope = 0.0
-                            intercept = self._conformal_quantiles[q]
-
-                    hetero[q] = {"slope": slope, "intercept": intercept}
-                self._conformal_hetero = hetero
-            except Exception:
-                self._conformal_hetero = None
+        self._conformal_hetero = None  # Removed: heteroscedastic conformal adds fitting complexity without clear generalization benefit
 
         self.is_fitted = True
         print(f"Model training complete. Meta-learner stacking {'enabled' if self.meta_learner else 'disabled (fixed weights)'}.")
@@ -372,23 +383,33 @@ class PositionModel:
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """
         Make predictions using the ensemble.
-        
+
         Args:
             X: Feature DataFrame
-            
+
         Returns:
-            Array of predictions
+            Array of predictions (inverse-transformed if target transform was applied)
         """
         if not self.is_fitted:
             raise ValueError("Model must be fitted before prediction")
-        
+
         X_np = self._prepare_input(X)
         keys = getattr(self, "_base_model_keys", list(self.models.keys()))
         preds_list = [self.models[k].predict(X_np) for k in keys]
         if self.meta_learner is not None:
-            return self.meta_learner.predict(np.column_stack(preds_list))
-        weights = [self.ensemble_weights.get(k, 1.0 / len(keys)) for k in keys]
-        return np.average(np.column_stack(preds_list), axis=1, weights=weights)
+            raw_pred = self.meta_learner.predict(np.column_stack(preds_list))
+        else:
+            weights = [self.ensemble_weights.get(k, 1.0 / len(keys)) for k in keys]
+            raw_pred = np.average(np.column_stack(preds_list), axis=1, weights=weights)
+        # Apply isotonic calibration if available (before inverse transform)
+        cal = getattr(self, "calibrator", None)
+        if cal is not None:
+            raw_pred = cal.predict(raw_pred)
+        # Inverse-transform predictions back to original scale
+        tt = getattr(self, "target_transformer", None)
+        if tt is not None:
+            return tt.inverse_transform(raw_pred)
+        return raw_pred
     
     def _prepare_input(self, X: pd.DataFrame) -> np.ndarray:
         """Prepare and scale input for prediction using training medians for imputation."""
@@ -407,9 +428,8 @@ class PositionModel:
         """
         Make predictions with uncertainty estimates.
 
-        Uses heteroscedastic conformal prediction (interval width scales with
-        prediction magnitude) when available, falling back to constant-width
-        conformal + ensemble disagreement blend.
+        Uses constant-width conformal residual std blended with ensemble
+        disagreement for calibrated uncertainty.
 
         Returns:
             Tuple of (predictions, standard deviations)
@@ -427,23 +447,20 @@ class PositionModel:
             weights = [self.ensemble_weights.get(k, 1.0 / len(keys)) for k in keys]
             mean_pred = np.average(preds, axis=0, weights=weights)
 
-        # Heteroscedastic uncertainty: scale std proportionally to prediction magnitude
+        # Inverse-transform mean prediction
+        tt = getattr(self, "target_transformer", None)
+        if tt is not None:
+            mean_pred = tt.inverse_transform(mean_pred)
+
         ensemble_std = np.std(preds, axis=0)
-        hetero = getattr(self, '_conformal_hetero', None)
+        # If target was log-transformed, scale std by the derivative of expm1
+        if tt is not None and tt.active:
+            raw_mean = mean_pred + tt.shift
+            ensemble_std = ensemble_std * np.maximum(raw_mean, 1.0)
+
         conformal_std = getattr(self, '_conformal_residual_std', None)
 
-        if hetero is not None and 0.80 in hetero:
-            # Use the 80th percentile hetero fit to derive a per-prediction std
-            h = hetero[0.80]
-            abs_pred = np.abs(mean_pred)
-            # predicted residual at 80th pctile ≈ slope * |pred| + intercept
-            hetero_std = h["slope"] * abs_pred + h["intercept"]
-            hetero_std = np.maximum(hetero_std, 0.5)  # floor to avoid zero-width intervals
-            # Blend: 60% heteroscedastic conformal, 10% constant conformal, 30% ensemble
-            const_part = conformal_std if (conformal_std is not None and conformal_std > 0) else 0.0
-            std_pred = 0.60 * hetero_std + 0.10 * const_part + 0.30 * ensemble_std
-        elif conformal_std is not None and conformal_std > 0:
-            # Fallback: constant-width conformal + ensemble disagreement
+        if conformal_std is not None and conformal_std > 0:
             std_pred = 0.7 * conformal_std + 0.3 * ensemble_std
         else:
             std_pred = ensemble_std
@@ -513,6 +530,7 @@ class PositionModel:
                       seasons: Optional[np.ndarray] = None) -> Dict:
         """Tune XGBoost hyperparameters with reduced search space.
 
+        Uses Pseudo-Huber loss (reg:pseudohubererror) for robustness to outlier games.
         Fixes subsample and gamma to reduce the search from 9D to 7D,
         allowing the TPE sampler to converge with the available trial budget.
         """
@@ -531,6 +549,8 @@ class PositionModel:
                 "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
                 "gamma": 0.0,
+                "objective": "reg:pseudohubererror",
+                "huber_slope": 1.0,
                 "random_state": MODEL_CONFIG["random_state"],
                 "tree_method": "hist",
                 "n_jobs": 1,
@@ -565,7 +585,7 @@ class PositionModel:
 
     def _tune_lightgbm(self, X: np.ndarray, y: np.ndarray, n_trials: int,
                         seasons: Optional[np.ndarray] = None) -> Dict:
-        """Tune LightGBM hyperparameters."""
+        """Tune LightGBM hyperparameters with Huber loss for outlier robustness."""
         X_tune, y_tune = self._subsample_for_tuning(X, y)
         seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
@@ -581,6 +601,8 @@ class PositionModel:
                 "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
                 "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+                "objective": "huber",
+                "alpha": 1.0,
                 "random_state": MODEL_CONFIG["random_state"],
                 "verbosity": -1,
                 "n_jobs": 1,
@@ -613,6 +635,8 @@ class PositionModel:
                 "subsample": 0.8,
                 "colsample_bytree": 0.8,
                 "gamma": 0.0,
+                "objective": "reg:pseudohubererror",
+                "huber_slope": 1.0,
                 "random_state": MODEL_CONFIG["random_state"],
                 "tree_method": "hist",
                 "n_jobs": 1,
@@ -631,6 +655,8 @@ class PositionModel:
                 "subsample": 0.8,
                 "colsample_bytree": 0.8,
                 "min_child_samples": 20,
+                "objective": "huber",
+                "alpha": 1.0,
                 "random_state": MODEL_CONFIG["random_state"],
                 "verbosity": -1,
                 "n_jobs": 1,
@@ -640,11 +666,13 @@ class PositionModel:
     def _train_xgboost(self, X: np.ndarray, y: np.ndarray,
                        X_val: np.ndarray = None, y_val: np.ndarray = None,
                        sample_weight: Optional[np.ndarray] = None) -> xgb.XGBRegressor:
-        """Train XGBoost with best params and early stopping."""
+        """Train XGBoost with best params, Huber loss, and early stopping."""
         params = self.best_params.get("xgboost", self._get_default_params()["xgboost"]).copy()
         params["random_state"] = MODEL_CONFIG["random_state"]
         params["tree_method"] = "hist"  # Much faster; equivalent quality
         params["n_jobs"] = 1  # Avoid macOS fork deadlock with sequential position training
+        params["objective"] = "reg:pseudohubererror"
+        params["huber_slope"] = 1.0
         model = xgb.XGBRegressor(**params)
         kw = {}
         if sample_weight is not None:
@@ -723,11 +751,13 @@ class PositionModel:
     def _train_lightgbm(self, X: np.ndarray, y: np.ndarray,
                          X_val: np.ndarray = None, y_val: np.ndarray = None,
                          sample_weight: Optional[np.ndarray] = None):
-        """Train LightGBM with best params and early stopping."""
+        """Train LightGBM with best params, Huber loss, and early stopping."""
         params = self.best_params.get("lightgbm", self._get_default_params().get("lightgbm", {})).copy()
         params["random_state"] = MODEL_CONFIG["random_state"]
         params["verbosity"] = -1
         params["n_jobs"] = 1
+        params["objective"] = "huber"
+        params["alpha"] = 1.0
         model = lgb.LGBMRegressor(**params)
         kw = {}
         if sample_weight is not None:
@@ -751,39 +781,6 @@ class PositionModel:
         else:
             model.fit(X, y)
         return model
-    
-    def _optimize_ensemble_weights(self, X: np.ndarray, y: np.ndarray):
-        """Optimize ensemble weights near the spec-mandated 30/40/30 baseline.
-        
-        Constrains weights so they stay close to the requirements
-        (RF >= 0.25, XGB >= 0.35, Ridge >= 0.20) while allowing small
-        data-driven adjustments.  Only adopts new weights when they
-        improve validation MSE over the current spec weights.
-        """
-        keys = list(self.models.keys())
-        preds = {k: self.models[k].predict(X) for k in keys}
-        
-        # Start from the spec weights as the baseline to beat
-        spec_weights = dict(ENSEMBLE_WEIGHTS_1W)
-        spec_pred = sum(spec_weights.get(k, 1 / len(keys)) * preds[k] for k in keys)
-        best_mse = float(mean_squared_error(y, spec_pred))
-        best_weights = spec_weights.copy()
-        
-        if len(keys) == 3:
-            k1, k2, k3 = keys
-            # Floor constraints per spec: RF >= 0.25, XGB >= 0.35, Ridge >= 0.20
-            min_w = {k1: 0.25, k2: 0.35, k3: 0.20}
-            for w1 in np.arange(min_w[k1], 0.40, 0.05):
-                for w2 in np.arange(min_w[k2], 0.50, 0.05):
-                    w3 = round(1 - w1 - w2, 2)
-                    if w3 < min_w[k3]:
-                        continue
-                    ensemble_pred = w1 * preds[k1] + w2 * preds[k2] + w3 * preds[k3]
-                    mse = mean_squared_error(y, ensemble_pred)
-                    if mse < best_mse:
-                        best_mse = mse
-                        best_weights = {k1: w1, k2: w2, k3: w3}
-        self.ensemble_weights = best_weights
     
     def get_feature_importance(self) -> pd.DataFrame:
         """Get feature importance from tree models (RF + XGBoost, or legacy XGB+LGB)."""
@@ -828,6 +825,8 @@ class PositionModel:
             "_conformal_hetero": getattr(self, "_conformal_hetero", None),
             "_oof_metrics": getattr(self, "_oof_metrics", None),
             "feature_medians": getattr(self, "feature_medians", {}),
+            "target_transformer": getattr(self, "target_transformer", None),
+            "calibrator": getattr(self, "calibrator", None),
         }
         
         joblib.dump(model_data, filepath)
@@ -854,6 +853,8 @@ class PositionModel:
         model._conformal_hetero = model_data.get("_conformal_hetero")
         model._oof_metrics = model_data.get("_oof_metrics")
         model.feature_medians = model_data.get("feature_medians", {})
+        model.target_transformer = model_data.get("target_transformer") or TargetTransformer()
+        model.calibrator = model_data.get("calibrator")
         model.is_fitted = True
         return model
 

@@ -691,7 +691,7 @@ def run_feature_engineering_pipeline():
         'historical_gpg', 'is_rookie', 'rookie_projected', 'rookie_weight',
         'position_rank', 'season_position_rank', 'estimated_adp', 'projected_adp',
         'adp_value', 'positional_scarcity', 'adjusted_adp',
-        'utilization_score', 'target_share', 'rush_share', 'snap_share',
+        'utilization_score_lag', 'utilization_score_roll', 'target_share', 'rush_share', 'snap_share',
         'air_yards_share', 'red_zone_share', 'wopr',
     ]
     

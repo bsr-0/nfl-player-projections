@@ -1,8 +1,8 @@
 """
-Horizon-specific models per requirements: 4-week LSTM+ARIMA hybrid, 18-week deep feedforward.
+Horizon-specific models: 4-week LSTM+ARIMA hybrid, 18-week deep residual feedforward.
 
 - 4-week: LSTM (60%) + ARIMA (40%); injury/workload/EWMA features.
-- 18-week: Deep feedforward (98+ layers); 70% deep + 30% traditional; regression-to-mean.
+- 18-week: Residual feedforward (2 stages, ~8 effective layers); 70% deep + 30% traditional.
 
 Uses PyTorch with MPS (Apple Silicon GPU) acceleration when available.
 """
@@ -88,17 +88,96 @@ class LSTM4WeekModel:
     def __init__(self,
                  sequence_length: int = None,
                  lstm_units: int = None,
-                 dropout: float = None):
+                 dropout: float = None,
+                 learning_rate: float = None):
         if not HAS_TORCH:
             raise ImportError("PyTorch required for 4-week LSTM. pip install torch")
         self.sequence_length = sequence_length or MODEL_CONFIG.get("lstm_sequence_length", 10)
         self.lstm_units = lstm_units or MODEL_CONFIG.get("lstm_units", 256)
         self.dropout = dropout if dropout is not None else MODEL_CONFIG.get("lstm_dropout", 0.25)
+        self.learning_rate = learning_rate or MODEL_CONFIG.get("lstm_learning_rate", 0.001)
         self.model = None
         self.scaler = None
         self.feature_names = []
         self.is_fitted = False
         self.device = _get_device("lstm")
+
+    @staticmethod
+    def tune_hyperparameters(X: np.ndarray, y: np.ndarray, player_ids: np.ndarray,
+                             feature_names: List[str], n_trials: int = 20) -> Dict:
+        """Tune LSTM hyperparameters with Optuna."""
+        try:
+            import optuna
+            from optuna.samplers import TPESampler
+        except ImportError:
+            print("  Optuna not available, using default LSTM hyperparameters")
+            return {}
+
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        device = _get_device("lstm")
+
+        def objective(trial):
+            seq_len = trial.suggest_int("sequence_length", 6, 14)
+            units = trial.suggest_categorical("lstm_units", [128, 192, 256])
+            dropout = trial.suggest_float("dropout", 0.15, 0.40)
+            lr = trial.suggest_float("learning_rate", 1e-4, 5e-3, log=True)
+
+            from sklearn.preprocessing import StandardScaler
+            scaler = StandardScaler()
+            Xs = scaler.fit_transform(X)
+
+            # Build sequences
+            X_seq, y_seq = [], []
+            for pid in np.unique(player_ids):
+                mask = player_ids == pid
+                Xi, yi = Xs[mask], y[mask]
+                for i in range(len(Xi) - seq_len):
+                    X_seq.append(Xi[i:i + seq_len])
+                    y_seq.append(yi[i + seq_len])
+            if len(X_seq) < 50:
+                return float("inf")
+            X_seq, y_seq = np.array(X_seq), np.array(y_seq)
+
+            # Train/val split
+            n = len(X_seq)
+            split = int(n * 0.8)
+            X_tr = torch.tensor(X_seq[:split], dtype=torch.float32)
+            y_tr = torch.tensor(y_seq[:split], dtype=torch.float32)
+            X_va = torch.tensor(X_seq[split:], dtype=torch.float32).to(device)
+            y_va = torch.tensor(y_seq[split:], dtype=torch.float32).to(device)
+
+            model = _LSTMNet(X_seq.shape[2], units, dropout).to(device)
+            optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+            criterion = nn.HuberLoss(delta=1.0)
+
+            best_val = float("inf")
+            patience, no_improve = 5, 0
+            loader = DataLoader(TensorDataset(X_tr, y_tr), batch_size=32, shuffle=False)
+
+            for _ in range(30):  # Reduced epochs for tuning speed
+                model.train()
+                for xb, yb in loader:
+                    xb, yb = xb.to(device), yb.to(device)
+                    optimizer.zero_grad()
+                    criterion(model(xb), yb).backward()
+                    optimizer.step()
+                model.eval()
+                with torch.no_grad():
+                    val_loss = criterion(model(X_va), y_va).item()
+                if val_loss < best_val:
+                    best_val = val_loss
+                    no_improve = 0
+                else:
+                    no_improve += 1
+                    if no_improve >= patience:
+                        break
+            return best_val
+
+        study = optuna.create_study(direction="minimize",
+                                    sampler=TPESampler(seed=42))
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+        print(f"  LSTM best params: {study.best_params} (val loss: {study.best_value:.4f})")
+        return study.best_params
 
     def _build(self, n_features: int) -> _LSTMNet:
         return _LSTMNet(n_features, self.lstm_units, self.dropout).to(self.device)
@@ -142,9 +221,8 @@ class LSTM4WeekModel:
         dataset = TensorDataset(X_train_t, y_train_t)
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-        lr = MODEL_CONFIG.get("lstm_learning_rate", 0.001)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        criterion = nn.MSELoss()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        criterion = nn.HuberLoss(delta=1.0)  # Robust to outlier games
 
         best_val_loss = float("inf")
         patience, patience_limit = 0, 10
@@ -266,7 +344,7 @@ class ARIMA4WeekModel:
 
 
 class Hybrid4WeekModel:
-    """60% LSTM + 40% ARIMA for 4-week horizon."""
+    """LSTM + ARIMA for 4-week horizon with fixed blend weights."""
     def __init__(self, position: str):
         self.position = position
         self.lstm = None
@@ -284,14 +362,24 @@ class Hybrid4WeekModel:
         return []
 
     def fit(self, X: pd.DataFrame, y: pd.Series, player_ids: np.ndarray,
-            feature_cols: List[str], epochs: int = 80) -> "Hybrid4WeekModel":
+            feature_cols: List[str], epochs: int = 80,
+            tune_lstm: bool = True) -> "Hybrid4WeekModel":
         X_np = X[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0).values
         y_np = y.values.astype(np.float64)
         try:
+            # Optuna-tune LSTM hyperparameters when enabled
+            tuned_params = {}
+            if tune_lstm:
+                n_trials = MODEL_CONFIG.get("lstm_optuna_trials", 15)
+                print(f"  Tuning LSTM hyperparameters ({n_trials} trials)...")
+                tuned_params = LSTM4WeekModel.tune_hyperparameters(
+                    X_np, y_np, player_ids, feature_cols, n_trials=n_trials
+                )
             self.lstm = LSTM4WeekModel(
-                sequence_length=int(MODEL_CONFIG.get("lstm_sequence_length", 10)),
-                lstm_units=int(MODEL_CONFIG.get("lstm_units", 256)),
-                dropout=float(MODEL_CONFIG.get("lstm_dropout", 0.25)),
+                sequence_length=int(tuned_params.get("sequence_length", MODEL_CONFIG.get("lstm_sequence_length", 10))),
+                lstm_units=int(tuned_params.get("lstm_units", MODEL_CONFIG.get("lstm_units", 256))),
+                dropout=float(tuned_params.get("dropout", MODEL_CONFIG.get("lstm_dropout", 0.25))),
+                learning_rate=float(tuned_params.get("learning_rate", MODEL_CONFIG.get("lstm_learning_rate", 0.001))),
             )
             self.lstm.fit(X_np, y_np, player_ids, feature_cols, epochs=epochs)
         except Exception:
@@ -302,6 +390,7 @@ class Hybrid4WeekModel:
         except Exception:
             self.arima = None
         self.is_fitted = self.lstm is not None or self.arima is not None
+
         return self
 
     def predict(self, X: pd.DataFrame, player_ids: np.ndarray, feature_cols: List[str],
@@ -352,30 +441,69 @@ class Hybrid4WeekModel:
 # -----------------------------------------------------------------------------
 
 if HAS_TORCH:
+    class _ResidualBlock(nn.Module):
+        """Single residual block: Linear -> BatchNorm -> ReLU -> Dropout + skip connection."""
+        def __init__(self, dim: int, dropout: float = 0.35):
+            super().__init__()
+            self.block = nn.Sequential(
+                nn.Linear(dim, dim),
+                nn.BatchNorm1d(dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+            )
+
+        def forward(self, x):
+            return x + self.block(x)
+
     class _DeepFeedforwardNet(nn.Module):
-        """98+ layer deep feedforward with decreasing widths: 512->256->128->64->32.
-        Each block = Linear + BatchNorm + ReLU + Dropout.
-        Uses residual connections within same-width blocks to enable gradient flow.
+        """Residual feedforward network with decreasing-width stages.
+
+        Architecture: input projection -> [stage1: 256 x N_blocks] ->
+        [stage2: 64 x N_blocks] -> output.
+
+        Each stage has a linear projection to change dimensionality, followed by
+        N residual blocks (skip connections within same-width layers). This enables
+        gradient flow without vanishing gradients.
+
+        Default: 2 stages with 2 residual blocks each (~50K parameters).
+        Sized for tabular NFL data (~3K-8K samples per position).
         """
         def __init__(self, n_features: int, hidden_units: List[int] = None, dropout: float = 0.35):
             super().__init__()
+            # Default architecture: 2 stages of residual blocks (right-sized for NFL data volume)
             if hidden_units is None:
-                hidden_units = (
-                    [512] * 25 +
-                    [256] * 25 +
-                    [128] * 20 +
-                    [64] * 18 +
-                    [32] * 12
-                )  # 100 hidden layers
-            layers = []
+                stage_configs = [(256, 2), (64, 2)]
+            else:
+                # Parse legacy hidden_units list into stages by grouping consecutive same-width layers
+                stage_configs = []
+                if hidden_units:
+                    current_width = hidden_units[0]
+                    count = 0
+                    for u in hidden_units:
+                        if u == current_width:
+                            count += 1
+                        else:
+                            stage_configs.append((current_width, max(count // 3, 1)))
+                            current_width = u
+                            count = 1
+                    stage_configs.append((current_width, max(count // 3, 1)))
+
+            stages = []
             in_dim = n_features
-            for u in hidden_units:
-                layers.append(nn.Linear(in_dim, u))
-                layers.append(nn.BatchNorm1d(u))
-                layers.append(nn.ReLU())
-                layers.append(nn.Dropout(dropout))
-                in_dim = u
-            self.hidden = nn.Sequential(*layers)
+            for width, n_blocks in stage_configs:
+                # Projection layer to change dimensionality
+                stages.append(nn.Sequential(
+                    nn.Linear(in_dim, width),
+                    nn.BatchNorm1d(width),
+                    nn.ReLU(),
+                    nn.Dropout(dropout),
+                ))
+                # Residual blocks at this width
+                for _ in range(n_blocks):
+                    stages.append(_ResidualBlock(width, dropout))
+                in_dim = width
+
+            self.hidden = nn.Sequential(*stages)
             self.output = nn.Linear(in_dim, 1)
 
         def forward(self, x):
@@ -383,8 +511,9 @@ if HAS_TORCH:
 
 
 class DeepSeasonLongModel:
-    """98+ layer deep feedforward for 18-week; blend 70% deep + 30% traditional; regression-to-mean."""
-    def __init__(self, position: str, n_features: int = None):
+    """Residual feedforward for 18-week horizon; blend 70% deep + 30% traditional."""
+    def __init__(self, position: str, n_features: int = None,
+                 dropout: float = None, learning_rate: float = None):
         if not HAS_TORCH:
             raise ImportError("PyTorch required for 18-week deep model. pip install torch")
         self.position = position
@@ -393,13 +522,80 @@ class DeepSeasonLongModel:
         self.scaler = None
         self.feature_names = []
         self.is_fitted = False
-        self.regression_to_mean_scale = MODEL_CONFIG.get("deep_regression_to_mean_scale", 0.95)
+        self.dropout = dropout or MODEL_CONFIG.get("deep_dropout", 0.35)
+        self.learning_rate = learning_rate or MODEL_CONFIG.get("deep_learning_rate", 0.0005)
         self.device = _get_device()
+
+    @staticmethod
+    def tune_hyperparameters(X: np.ndarray, y: np.ndarray, n_trials: int = 15) -> Dict:
+        """Tune deep feedforward hyperparameters with Optuna."""
+        try:
+            import optuna
+            from optuna.samplers import TPESampler
+        except ImportError:
+            print("  Optuna not available, using default deep model hyperparameters")
+            return {}
+
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        device = _get_device()
+
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        Xs = scaler.fit_transform(X)
+        n = len(Xs)
+        split = int(n * 0.8)
+
+        X_tr = torch.tensor(Xs[:split], dtype=torch.float32)
+        y_tr = torch.tensor(y[:split], dtype=torch.float32)
+        X_va = torch.tensor(Xs[split:], dtype=torch.float32).to(device)
+        y_va = torch.tensor(y[split:], dtype=torch.float32).to(device)
+
+        def objective(trial):
+            dropout = trial.suggest_float("dropout", 0.20, 0.50)
+            lr = trial.suggest_float("learning_rate", 1e-4, 3e-3, log=True)
+            n_blocks = trial.suggest_int("n_blocks_per_stage", 1, 3)
+            stage_widths = [(256, n_blocks), (64, n_blocks)]
+
+            hidden_units_flat = []
+            for w, nb in stage_widths:
+                hidden_units_flat.extend([w] * (nb * 3))  # Approx legacy format
+
+            model = _DeepFeedforwardNet(X.shape[1], hidden_units=hidden_units_flat, dropout=dropout).to(device)
+            optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+            criterion = nn.HuberLoss(delta=1.0)
+
+            loader = DataLoader(TensorDataset(X_tr, y_tr), batch_size=64, shuffle=True)
+            best_val = float("inf")
+            patience, no_improve = 5, 0
+
+            for _ in range(25):
+                model.train()
+                for xb, yb in loader:
+                    xb, yb = xb.to(device), yb.to(device)
+                    optimizer.zero_grad()
+                    criterion(model(xb), yb).backward()
+                    optimizer.step()
+                model.eval()
+                with torch.no_grad():
+                    val_loss = criterion(model(X_va), y_va).item()
+                if val_loss < best_val:
+                    best_val = val_loss
+                    no_improve = 0
+                else:
+                    no_improve += 1
+                    if no_improve >= patience:
+                        break
+            return best_val
+
+        study = optuna.create_study(direction="minimize",
+                                    sampler=TPESampler(seed=42))
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+        print(f"  Deep model best params: {study.best_params} (val loss: {study.best_value:.4f})")
+        return study.best_params
 
     def _build(self) -> _DeepFeedforwardNet:
         hidden_units = MODEL_CONFIG.get("deep_hidden_units", None)
-        dropout = MODEL_CONFIG.get("deep_dropout", 0.35)
-        return _DeepFeedforwardNet(self.n_features, hidden_units=hidden_units, dropout=dropout).to(self.device)
+        return _DeepFeedforwardNet(self.n_features, hidden_units=hidden_units, dropout=self.dropout).to(self.device)
 
     def fit(self, X: np.ndarray, y: np.ndarray, feature_names: List[str],
             epochs: int = None, batch_size: int = None) -> "DeepSeasonLongModel":
@@ -423,9 +619,8 @@ class DeepSeasonLongModel:
         dataset = TensorDataset(X_train_t, y_train_t)
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        lr = MODEL_CONFIG.get("deep_learning_rate", 0.0005)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        criterion = nn.MSELoss()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        criterion = nn.HuberLoss(delta=1.0)  # Robust to outlier games
 
         best_val_loss = float("inf")
         patience, patience_limit = 0, 15
@@ -459,7 +654,7 @@ class DeepSeasonLongModel:
         return self
 
     def predict(self, X: np.ndarray, traditional_pred: np.ndarray, blend_traditional: float = None) -> np.ndarray:
-        blend_traditional = blend_traditional if blend_traditional is not None else MODEL_CONFIG.get("deep_blend_traditional", 0.3)
+        blend_traditional = blend_traditional if blend_traditional is not None else getattr(self, '_learned_blend_traditional', MODEL_CONFIG.get("deep_blend_traditional", 0.3))
         if not self.is_fitted or self.model is None:
             return traditional_pred
         X_in = X[:, :self.n_features] if X.shape[1] >= self.n_features else np.hstack([X, np.zeros((X.shape[0], self.n_features - X.shape[1]))])
@@ -468,10 +663,31 @@ class DeepSeasonLongModel:
         with torch.no_grad():
             t = torch.tensor(Xs, dtype=torch.float32).to(self.device)
             deep_pred = self.model(t).cpu().numpy()
-        blended = (1 - blend_traditional) * deep_pred + blend_traditional * traditional_pred
-        mean_val = np.nanmean(blended)
-        regression_adjusted = mean_val + self.regression_to_mean_scale * (blended - mean_val)
-        return regression_adjusted
+        return (1 - blend_traditional) * deep_pred + blend_traditional * traditional_pred
+
+    def learn_blend_weight(self, X: np.ndarray, y: np.ndarray, traditional_pred: np.ndarray):
+        """Learn the optimal deep/traditional blend weight on validation data."""
+        if not self.is_fitted or self.model is None:
+            return
+        try:
+            X_in = X[:, :self.n_features] if X.shape[1] >= self.n_features else np.hstack([X, np.zeros((X.shape[0], self.n_features - X.shape[1]))])
+            Xs = self.scaler.transform(X_in)
+            self.model.eval()
+            with torch.no_grad():
+                t = torch.tensor(Xs, dtype=torch.float32).to(self.device)
+                deep_pred = self.model(t).cpu().numpy()
+            valid = np.isfinite(deep_pred) & np.isfinite(traditional_pred) & np.isfinite(y)
+            if valid.sum() < 10:
+                return
+            from scipy.optimize import minimize_scalar
+            def loss(w):
+                blend = (1 - w) * deep_pred[valid] + w * traditional_pred[valid]
+                return np.mean((blend - y[valid]) ** 2)
+            result = minimize_scalar(loss, bounds=(0.05, 0.95), method='bounded')
+            self._learned_blend_traditional = float(result.x)
+            print(f"    Learned 18w blend: deep={1 - self._learned_blend_traditional:.2f}, traditional={self._learned_blend_traditional:.2f}")
+        except Exception:
+            pass
 
     def save(self, path: Path = None):
         path = path or MODELS_DIR / f"deep_18w_{self.position.lower()}"
@@ -483,7 +699,8 @@ class DeepSeasonLongModel:
             self.model.to(self.device)
         joblib.dump({"scaler": self.scaler, "feature_names": self.feature_names, "n_features": self.n_features,
                      "is_fitted": self.is_fitted, "position": self.position,
-                     "regression_to_mean_scale": self.regression_to_mean_scale}, path / "config.joblib")
+                     "regression_to_mean_scale": self.regression_to_mean_scale,
+                     "_learned_blend_traditional": getattr(self, "_learned_blend_traditional", None)}, path / "config.joblib")
 
     @classmethod
     def load(cls, position: str, path: Path = None) -> "DeepSeasonLongModel":
@@ -498,6 +715,9 @@ class DeepSeasonLongModel:
         m.n_features = cfg.get("n_features", 150)
         m.is_fitted = cfg.get("is_fitted", False)
         m.regression_to_mean_scale = cfg.get("regression_to_mean_scale", 0.95)
+        learned_blend = cfg.get("_learned_blend_traditional")
+        if learned_blend is not None:
+            m._learned_blend_traditional = learned_blend
         if (path / "model.pt").exists() and HAS_TORCH:
             m.model = _DeepFeedforwardNet(m.n_features).to(m.device)
             m.model.load_state_dict(torch.load(path / "model.pt", map_location=m.device))

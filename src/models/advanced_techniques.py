@@ -18,7 +18,13 @@ from pathlib import Path
 from dataclasses import dataclass, field
 import json
 import warnings
-warnings.filterwarnings('ignore')
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Suppress only specific noisy warnings instead of blanket suppression
+warnings.filterwarnings('ignore', category=FutureWarning, module='sklearn')
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
@@ -29,6 +35,8 @@ from scipy import stats
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from config.settings import CURRENT_NFL_SEASON
 
 
 # =============================================================================
@@ -102,16 +110,18 @@ class SHAPExplainer:
         else:
             return {'error': 'SHAP not available'}
     
-    def _permutation_importance(self, X: np.ndarray, n_repeats: int = 10) -> np.ndarray:
+    def _permutation_importance(self, X: np.ndarray, n_repeats: int = 10,
+                                random_state: int = 42) -> np.ndarray:
         """Fallback permutation importance."""
+        rng = np.random.RandomState(random_state)
         baseline_pred = self.model.predict(X)
         importance = np.zeros(X.shape[1])
-        
+
         for i in range(X.shape[1]):
             scores = []
             for _ in range(n_repeats):
                 X_permuted = X.copy()
-                np.random.shuffle(X_permuted[:, i])
+                rng.shuffle(X_permuted[:, i])
                 permuted_pred = self.model.predict(X_permuted)
                 score = np.mean((baseline_pred - permuted_pred) ** 2)
                 scores.append(score)
@@ -295,9 +305,11 @@ class BacktestingFramework:
             if len(train_df) < 100 or len(test_df) < 50:
                 continue
             
-            X_train = train_df[feature_cols].fillna(0).values
+            train_features = train_df[feature_cols]
+            train_medians = train_features.median()
+            X_train = train_features.fillna(train_medians).values
             y_train = train_df[target_col].values
-            X_test = test_df[feature_cols].fillna(0).values
+            X_test = test_df[feature_cols].fillna(train_medians).values
             y_test = test_df[target_col].values
             
             scaler = StandardScaler()
@@ -573,12 +585,14 @@ def run_comprehensive_validation():
     ]) and df[c].dtype in ['int64', 'float64']][:20]
     
     # Split data
-    train_df = df[df['season'] < 2024]
-    test_df = df[df['season'] == 2024]
-    
-    X_train = train_df[feature_cols].fillna(0).values
+    train_df = df[df['season'] < CURRENT_NFL_SEASON]
+    test_df = df[df['season'] == CURRENT_NFL_SEASON]
+
+    train_features = train_df[feature_cols]
+    train_medians = train_features.median()
+    X_train = train_features.fillna(train_medians).values
     y_train = train_df['fantasy_points'].values
-    X_test = test_df[feature_cols].fillna(0).values
+    X_test = test_df[feature_cols].fillna(train_medians).values
     y_test = test_df['fantasy_points'].values
     
     print(f"   Train: {len(X_train)}, Test: {len(X_test)}, Features: {len(feature_cols)}")

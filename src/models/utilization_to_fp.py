@@ -4,6 +4,7 @@ Conversion layer: Utilization Score -> Fantasy Points.
 Primary usage is RB/WR/TE (required), with optional QB support when QB is trained
 on utilization and needs owner-facing fantasy-point projections.
 """
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 import numpy as np
@@ -12,12 +13,16 @@ import joblib
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config.settings import MODELS_DIR, POSITIONS
+from config.settings import MODELS_DIR, POSITIONS, CONVERTER_TUNING_MIN_SAMPLES
+
+logger = logging.getLogger(__name__)
 
 try:
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.linear_model import Ridge
     from sklearn.preprocessing import StandardScaler
+    from sklearn.model_selection import TimeSeriesSplit
+    from sklearn.metrics import mean_squared_error
     HAS_SKLEARN = True
 except ImportError:
     HAS_SKLEARN = False
@@ -36,6 +41,99 @@ EFFICIENCY_FEATURES = {
     "WR": ["yards_per_reception", "yards_per_target", "catch_rate", "targets", "snap_share"],
     "TE": ["yards_per_reception", "yards_per_target", "catch_rate", "targets", "snap_share"],
 }
+
+
+def _find_season_split(work: pd.DataFrame, target_pct: float = 0.8) -> int:
+    """Find the split index at a season boundary closest to target_pct of data.
+
+    Returns the index where the last complete season in the training portion ends.
+    Falls back to simple percentage split if season info is unavailable.
+    """
+    if "season" not in work.columns:
+        return int(len(work) * target_pct)
+    seasons = sorted(work["season"].unique())
+    if len(seasons) < 2:
+        return int(len(work) * target_pct)
+    target_n = int(len(work) * target_pct)
+    best_idx = target_n
+    best_dist = float("inf")
+    for s in seasons[:-1]:  # try each season as boundary (exclude last)
+        idx = int((work["season"] <= s).sum())
+        dist = abs(idx - target_n)
+        if dist < best_dist and idx >= 30 and (len(work) - idx) >= 20:
+            best_dist = dist
+            best_idx = idx
+    return best_idx
+
+
+def _tune_converter_hyperparams(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+) -> Dict[str, dict]:
+    """Lightweight grid search for RF and XGBoost converter hyperparameters.
+
+    Uses 3-fold time-series CV on the training portion. Returns best params
+    for RF and XGBoost. Falls back to defaults if tuning fails.
+    """
+    rf_defaults = {"n_estimators": 200, "max_depth": 10}
+    xgb_defaults = {"n_estimators": 200, "max_depth": 8, "learning_rate": 0.05}
+
+    if len(X_train) < CONVERTER_TUNING_MIN_SAMPLES:
+        return {"rf": rf_defaults, "xgb": xgb_defaults}
+
+    tscv = TimeSeriesSplit(n_splits=3)
+    # Small grid: 27 combinations
+    param_grid = [
+        (ne, md, lr)
+        for ne in [100, 200, 300]
+        for md in [6, 8, 10]
+        for lr in [0.03, 0.05, 0.1]
+    ]
+
+    # Tune RF (n_estimators, max_depth only)
+    best_rf_score = float("inf")
+    best_rf = rf_defaults.copy()
+    for ne in [100, 200, 300]:
+        for md in [6, 8, 10]:
+            scores = []
+            try:
+                for tr_idx, va_idx in tscv.split(X_train):
+                    m = RandomForestRegressor(
+                        n_estimators=ne, max_depth=md, random_state=42, n_jobs=1
+                    )
+                    m.fit(X_train[tr_idx], y_train[tr_idx])
+                    pred = m.predict(X_train[va_idx])
+                    scores.append(mean_squared_error(y_train[va_idx], pred))
+                avg = np.mean(scores)
+                if avg < best_rf_score:
+                    best_rf_score = avg
+                    best_rf = {"n_estimators": ne, "max_depth": md}
+            except Exception:
+                continue
+
+    # Tune XGBoost (n_estimators, max_depth, learning_rate)
+    best_xgb_score = float("inf")
+    best_xgb = xgb_defaults.copy()
+    if HAS_XGB:
+        for ne, md, lr in param_grid:
+            scores = []
+            try:
+                for tr_idx, va_idx in tscv.split(X_train):
+                    m = xgb.XGBRegressor(
+                        n_estimators=ne, max_depth=md, learning_rate=lr,
+                        subsample=0.8, random_state=42, n_jobs=1,
+                    )
+                    m.fit(X_train[tr_idx], y_train[tr_idx])
+                    pred = m.predict(X_train[va_idx])
+                    scores.append(mean_squared_error(y_train[va_idx], pred))
+                avg = np.mean(scores)
+                if avg < best_xgb_score:
+                    best_xgb_score = avg
+                    best_xgb = {"n_estimators": ne, "max_depth": md, "learning_rate": lr}
+            except Exception:
+                continue
+
+    return {"rf": best_rf, "xgb": best_xgb}
 
 
 class UtilizationToFPConverter:
@@ -95,28 +193,45 @@ class UtilizationToFPConverter:
             self.is_fitted = False
             return self
         X, y = X[valid], y[valid]
+        # Rebuild work for season-aware splitting (only valid rows)
+        work_valid = work[valid].reset_index(drop=True)
         self.feature_names = cols
         self.scaler = StandardScaler()
         n = len(X)
-        split_idx = int(n * 0.8)
+
+        # Season-aware split: find season boundary closest to 80%
+        split_idx = _find_season_split(work_valid, target_pct=0.8)
         if split_idx < 30 or n - split_idx < 20:
             split_idx = max(30, n - 20)
+
         X_train = X[:split_idx]
         y_train = y[:split_idx]
         X_val = X[split_idx:]
         y_val = y[split_idx:]
         Xs = self.scaler.fit_transform(X_train)
-        # Per requirements: tree-based models (RF/XGBoost) for bounded 0-100 -> FP conversion
-        self.model = RandomForestRegressor(n_estimators=200, max_depth=10, random_state=42, n_jobs=1)
+
+        # Lightweight hyperparameter tuning via 3-fold time-series CV
+        tuned = _tune_converter_hyperparams(Xs, y_train)
+        rf_params = tuned["rf"]
+        xgb_params = tuned["xgb"]
+
+        self.model = RandomForestRegressor(
+            n_estimators=rf_params["n_estimators"],
+            max_depth=rf_params["max_depth"],
+            random_state=42, n_jobs=1,
+        )
         self.model.fit(Xs, y_train)
         if HAS_XGB:
             try:
                 self.xgb_model = xgb.XGBRegressor(
-                    n_estimators=200, max_depth=8, learning_rate=0.05,
+                    n_estimators=xgb_params["n_estimators"],
+                    max_depth=xgb_params["max_depth"],
+                    learning_rate=xgb_params.get("learning_rate", 0.05),
                     subsample=0.8, random_state=42, n_jobs=1,
                 )
                 self.xgb_model.fit(Xs, y_train)
-            except Exception:
+            except Exception as e:
+                logger.warning("XGBoost converter fit failed: %s", e)
                 self.xgb_model = None
         self.calibration = None
         self._conversion_conformal_q = None
@@ -201,13 +316,11 @@ class UtilizationToFPConverter:
 def _generate_oof_utilization(subset: pd.DataFrame) -> Optional[np.ndarray]:
     """Generate OOF utilization predictions via 5-fold time-series CV.
 
-    This lets us train the UtilizationToFPConverter on *noisy predicted*
-    utilization rather than actuals, reducing cascaded error at serve time.
+    Uses a lightweight RF+XGBoost blend (matching production ensemble composition)
+    so the noise distribution better approximates what the converter sees at serve time.
     """
     if not HAS_SKLEARN:
         return None
-    from sklearn.model_selection import TimeSeriesSplit
-    from sklearn.ensemble import GradientBoostingRegressor
 
     if "utilization_score" not in subset.columns:
         return None
@@ -234,16 +347,31 @@ def _generate_oof_utilization(subset: pd.DataFrame) -> Optional[np.ndarray]:
         if not valid[train_idx].any():
             continue
         t_mask = valid[train_idx]
-        model = GradientBoostingRegressor(
-            n_estimators=100, max_depth=5, learning_rate=0.05, random_state=42
+        # Use RF+XGBoost blend matching production ensemble composition
+        rf = RandomForestRegressor(
+            n_estimators=100, max_depth=8, random_state=42, n_jobs=1
         )
-        model.fit(X[train_idx][t_mask], y[train_idx][t_mask])
-        oof[val_idx] = model.predict(X[val_idx])
+        rf.fit(X[train_idx][t_mask], y[train_idx][t_mask])
+        rf_pred = rf.predict(X[val_idx])
 
-    # Fill early folds that have no OOF predictions with actual values
-    # (these rows are only used in training, not serving)
-    nan_mask = np.isnan(oof)
-    oof[nan_mask] = y[nan_mask]
+        if HAS_XGB:
+            try:
+                xgb_model = xgb.XGBRegressor(
+                    n_estimators=100, max_depth=6, learning_rate=0.05,
+                    random_state=42, n_jobs=1,
+                )
+                xgb_model.fit(X[train_idx][t_mask], y[train_idx][t_mask])
+                xgb_pred = xgb_model.predict(X[val_idx])
+                oof[val_idx] = 0.5 * rf_pred + 0.5 * xgb_pred
+            except Exception:
+                oof[val_idx] = rf_pred
+        else:
+            oof[val_idx] = rf_pred
+
+    # Drop rows without OOF predictions instead of backfilling with actuals.
+    # Backfilling with clean values would create a mixture of noisy/clean inputs
+    # during converter training, partially defeating the OOF strategy.
+    # Rows without OOF predictions are returned as NaN; the caller filters them.
     return oof
 
 
@@ -263,7 +391,14 @@ def train_utilization_to_fp_per_position(
         # Generate OOF utilization predictions for this position
         oof_util = _generate_oof_utilization(subset)
         if oof_util is not None:
-            print(f"  {pos}: Training converter on OOF-predicted utilization (reduces cascaded error)")
+            # Drop rows without OOF predictions (early folds)
+            has_oof = ~np.isnan(oof_util)
+            if has_oof.sum() >= 100:
+                subset = subset[has_oof].reset_index(drop=True)
+                oof_util = oof_util[has_oof]
+                print(f"  {pos}: Training converter on OOF-predicted utilization ({has_oof.sum()}/{len(has_oof)} rows)")
+            else:
+                oof_util = None  # Too few OOF rows, fall back to actual utilization
         conv = UtilizationToFPConverter(pos)
         conv.fit(subset, target_col="fantasy_points", oof_utilization=oof_util)
         if conv.is_fitted:

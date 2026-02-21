@@ -21,7 +21,13 @@ from pathlib import Path
 import json
 import time
 import warnings
-warnings.filterwarnings('ignore')
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Suppress only specific noisy warnings instead of blanket suppression
+warnings.filterwarnings('ignore', category=FutureWarning, module='sklearn')
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
@@ -35,6 +41,8 @@ from scipy.stats import spearmanr
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from config.settings import CURRENT_NFL_SEASON
 
 # Optional imports
 try:
@@ -314,11 +322,11 @@ class SeasonHoldoutCV:
     """
     Season-based holdout validation.
     
-    Train on seasons 2020-2023, test on 2024.
+    Train on prior seasons, test on the current season.
     """
-    
+
     def __init__(self, test_seasons: List[int] = None):
-        self.test_seasons = test_seasons or [2024]
+        self.test_seasons = test_seasons or [CURRENT_NFL_SEASON]
     
     def split(self, X: pd.DataFrame, y: pd.Series = None,
               groups: pd.Series = None) -> Tuple[np.ndarray, np.ndarray]:
@@ -747,16 +755,23 @@ class AdvancedFeatureEngineer:
     def add_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add key interaction features."""
         result = df.copy()
-        
+
+        # Use lagged utilization to avoid current-week leakage
+        util_col = None
+        for candidate in ['utilization_score_lag_1', 'utilization_score_roll3_mean']:
+            if candidate in result.columns:
+                util_col = candidate
+                break
+
         # Usage * matchup interaction
-        if 'utilization_score' in result.columns and 'opp_matchup_score' in result.columns:
+        if util_col and 'opp_matchup_score' in result.columns:
             result['usage_matchup_interaction'] = (
-                result['utilization_score'] * result['opp_matchup_score']
+                result[util_col] * result['opp_matchup_score']
             )
-        
+
         # Age * usage interaction (older players with high usage = injury risk)
-        if 'age' in result.columns and 'utilization_score' in result.columns:
-            result['age_usage_interaction'] = result['age'] * result['utilization_score']
+        if 'age' in result.columns and util_col:
+            result['age_usage_interaction'] = result['age'] * result[util_col]
         
         # Consistency * matchup (consistent players benefit more from good matchups)
         if 'consistency_score' in result.columns and 'opp_matchup_score' in result.columns:
@@ -992,7 +1007,7 @@ class AdvancedMLEvaluator:
     def evaluate_all(self, df: pd.DataFrame, 
                      feature_cols: List[str],
                      target_col: str = 'fantasy_points',
-                     test_season: int = 2024) -> Dict[str, Any]:
+                     test_season: int = CURRENT_NFL_SEASON) -> Dict[str, Any]:
         """
         Evaluate all model configurations and select the best.
         
@@ -1287,7 +1302,7 @@ def run_comprehensive_evaluation():
         'position_rank', 'season_position_rank', 'estimated_adp', 'projected_adp',
         'adp_value', 'positional_scarcity', 'adjusted_adp',
         # Utilization features (from previous games)
-        'utilization_score', 'target_share', 'rush_share', 'snap_share',
+        'utilization_score_lag', 'utilization_score_roll', 'target_share', 'rush_share', 'snap_share',
         'air_yards_share', 'red_zone_share', 'wopr',
     ]
     
@@ -1305,7 +1320,7 @@ def run_comprehensive_evaluation():
                     'first_season']
     
     # Use only training data for correlation-based feature filtering (avoid test leakage)
-    train_only = df[df['season'] < 2024] if 'season' in df.columns else df
+    train_only = df[df['season'] < CURRENT_NFL_SEASON] if 'season' in df.columns else df
 
     feature_cols = []
     for c in df.columns:
@@ -1334,7 +1349,7 @@ def run_comprehensive_evaluation():
     
     # Run evaluation
     evaluator = AdvancedMLEvaluator()
-    results = evaluator.evaluate_all(df, feature_cols, test_season=2024)
+    results = evaluator.evaluate_all(df, feature_cols, test_season=CURRENT_NFL_SEASON)
     
     # Save results
     results_path = Path(__file__).parent.parent.parent / 'data' / 'ml_evaluation_results.json'
