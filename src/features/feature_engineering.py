@@ -24,7 +24,11 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config.settings import ROLLING_WINDOWS, LAG_WEEKS, POSITIONS, MOMENTUM_WEIGHTS
+from config.settings import (
+    ROLLING_WINDOWS, LAG_WEEKS, POSITIONS, MOMENTUM_WEIGHTS,
+    BOOM_BUST_THRESHOLDS, BOOM_BUST_DEFAULT,
+    AGE_CURVE_PARAMS, AGE_CURVE_DEFAULT,
+)
 from src.utils.helpers import (
     rolling_average, exponential_weighted_average,
     create_lag_features, safe_divide
@@ -432,23 +436,23 @@ class FeatureEngineer:
             team_a_cols = {col: f'team_a_{col}' for col in team_metrics if col in team_avgs.columns}
             team_a_avgs = team_avgs.rename(columns=team_a_cols)
             team_a_avgs = team_a_avgs.rename(columns={'team': 'team', 'season': 'season'})
-            
-            # Merge TeamA stats
+
+            # Merge TeamA prior-season stats
             if 'team' in df.columns and 'season' in df.columns:
                 merge_cols = ['team', 'season']
                 df = df.merge(
-                    team_a_avgs, 
-                    on=merge_cols, 
+                    team_a_avgs,
+                    on=merge_cols,
                     how='left',
                     suffixes=('', '_team_a')
                 )
-            
+
             # Create TeamB (opponent) averages
             team_b_cols = {col: f'team_b_{col}' for col in team_metrics if col in team_avgs.columns}
             team_b_avgs = team_avgs.rename(columns=team_b_cols)
             team_b_avgs = team_b_avgs.rename(columns={'team': 'opponent', 'season': 'season'})
-            
-            # Merge TeamB stats (opponent)
+
+            # Merge TeamB prior-season stats (opponent)
             if 'opponent' in df.columns and 'season' in df.columns:
                 merge_cols = ['opponent', 'season']
                 df = df.merge(
@@ -457,7 +461,36 @@ class FeatureEngineer:
                     how='left',
                     suffixes=('', '_team_b')
                 )
-            
+
+            # In-season rolling team averages (4-week causal window) to supplement
+            # stale prior-season averages.  shift(1) excludes current week.
+            # Blend: 60% in-season / 40% prior-season when week >= 5, else prior-season only.
+            if 'team' in df.columns and 'season' in df.columns and 'week' in df.columns:
+                avail_metrics = [m for m in team_metrics if m in all_team_stats.columns]
+                if avail_metrics:
+                    ts_sorted = all_team_stats.sort_values(['team', 'season', 'week'])
+                    for metric in avail_metrics:
+                        ts_sorted[f'_inseason_{metric}'] = ts_sorted.groupby(
+                            ['team', 'season']
+                        )[metric].transform(
+                            lambda x: x.shift(1).rolling(4, min_periods=2).mean()
+                        )
+                    inseason_cols = ['team', 'season', 'week'] + [f'_inseason_{m}' for m in avail_metrics]
+                    inseason_df = ts_sorted[inseason_cols].drop_duplicates()
+                    df = df.merge(inseason_df, on=['team', 'season', 'week'], how='left')
+                    # Blend in-season rolling with prior-season for TeamA columns
+                    for metric in avail_metrics:
+                        ta_col = f'team_a_{metric}'
+                        is_col = f'_inseason_{metric}'
+                        if ta_col in df.columns and is_col in df.columns:
+                            has_inseason = df[is_col].notna() & (df['week'] >= 5)
+                            df.loc[has_inseason, ta_col] = (
+                                0.6 * df.loc[has_inseason, is_col] +
+                                0.4 * df.loc[has_inseason, ta_col]
+                            )
+                    # Drop temporary in-season columns
+                    df = df.drop(columns=[f'_inseason_{m}' for m in avail_metrics], errors='ignore')
+
             # Create matchup differential features
             matchup_pairs = [
                 ('team_a_points_scored', 'team_b_points_allowed', 'matchup_scoring_edge'),
@@ -696,6 +729,18 @@ class FeatureEngineer:
             lambda x: (x.diff().fillna(1).clip(lower=1) * 7).astype(float)
         )
         df["days_since_last_game"] = df["days_since_last_game"].fillna(7.0)
+
+        # Short week indicator: Thursday games after Sunday (3 rest days vs 6-7 normal)
+        # Detectable from game_time if available, or inferred from week spacing
+        df["short_week"] = (df["days_since_last_game"] <= 4.0).astype(int)
+        # Rest advantage: positive = more rest than typical 7 days, negative = short week
+        df["rest_advantage"] = (df["days_since_last_game"] - 7.0).clip(-4.0, 7.0)
+        # Post-bye boost interaction: bye week * recent production trend
+        if "fantasy_points_roll3_mean" in df.columns:
+            df["post_bye_x_recent_form"] = df["post_bye"] * df["fantasy_points_roll3_mean"].fillna(0)
+        # Short week penalty interaction
+        if "fantasy_points_roll3_mean" in df.columns:
+            df["short_week_x_recent_form"] = df["short_week"] * df["fantasy_points_roll3_mean"].fillna(0)
 
         # Add schedule-based features if available
         df = self._add_schedule_features(df)
@@ -958,11 +1003,19 @@ class FeatureEngineer:
     def _create_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create interaction features between key metrics."""
         # Utilization x Efficiency interactions
-        if "utilization_score" in df.columns:
+        # Use LAGGED utilization (not current-week) to avoid leakage.
+        # The raw utilization_score is excluded from features, so derived
+        # features from it would carry the same leakage risk.
+        util_lagged = None
+        if "utilization_score_lag_1" in df.columns:
+            util_lagged = df["utilization_score_lag_1"]
+        elif "utilization_score_roll3_mean" in df.columns:
+            util_lagged = df["utilization_score_roll3_mean"]
+        if util_lagged is not None:
             if "yards_per_carry" in df.columns:
-                df["util_x_ypc"] = df["utilization_score"] * df["yards_per_carry"]
+                df["util_x_ypc"] = util_lagged * df["yards_per_carry"]
             if "yards_per_target" in df.columns:
-                df["util_x_ypt"] = df["utilization_score"] * df["yards_per_target"]
+                df["util_x_ypt"] = util_lagged * df["yards_per_target"]
         
         # Volume x Efficiency
         df["touches_x_ypc"] = df["total_touches"] * df.get("yards_per_carry", 0)
@@ -1065,10 +1118,21 @@ class FeatureEngineer:
         new_cols = {}
 
         # --- Boom / Bust rates (rolling window, shifted to avoid leakage) ---
+        # Position-specific thresholds: QB scores higher so needs higher boom threshold, etc.
         if "fantasy_points" in df.columns:
             shifted_fp = df.groupby("player_id")["fantasy_points"].shift(1)
-            boom_flag = (shifted_fp >= 20).astype(float)
-            bust_flag = (shifted_fp < 5).astype(float)
+            if "position" in df.columns:
+                boom_thresh = df["position"].map(
+                    {p: t["boom"] for p, t in BOOM_BUST_THRESHOLDS.items()}
+                ).fillna(BOOM_BUST_DEFAULT["boom"])
+                bust_thresh = df["position"].map(
+                    {p: t["bust"] for p, t in BOOM_BUST_THRESHOLDS.items()}
+                ).fillna(BOOM_BUST_DEFAULT["bust"])
+            else:
+                boom_thresh = BOOM_BUST_DEFAULT["boom"]
+                bust_thresh = BOOM_BUST_DEFAULT["bust"]
+            boom_flag = (shifted_fp >= boom_thresh).astype(float)
+            bust_flag = (shifted_fp < bust_thresh).astype(float)
             for window in [4, 8]:
                 new_cols[f"boom_rate_roll{window}"] = boom_flag.groupby(
                     df["player_id"]
@@ -1089,13 +1153,25 @@ class FeatureEngineer:
             new_cols["nfl_experience_years"] = (df["season"] - first_season).clip(lower=0)
 
         # --- Age-adjusted performance curve ---
+        # Position-specific: RBs peak earlier (~25) and decline faster; QBs/TEs peak later (~28).
         if "age" in df.columns:
-            # Quadratic age curve: peak ~27 for skill positions
             age = df["age"].fillna(26)
-            new_cols["age_curve"] = 1.0 - 0.005 * ((age - 27) ** 2)
         elif "season" in df.columns and "birth_year" in df.columns:
             age = df["season"] - df["birth_year"]
-            new_cols["age_curve"] = 1.0 - 0.005 * ((age - 27) ** 2)
+        else:
+            age = None
+        if age is not None:
+            if "position" in df.columns:
+                peak = df["position"].map(
+                    {p: c["peak"] for p, c in AGE_CURVE_PARAMS.items()}
+                ).fillna(AGE_CURVE_DEFAULT["peak"])
+                coeff = df["position"].map(
+                    {p: c["coefficient"] for p, c in AGE_CURVE_PARAMS.items()}
+                ).fillna(AGE_CURVE_DEFAULT["coefficient"])
+            else:
+                peak = AGE_CURVE_DEFAULT["peak"]
+                coeff = AGE_CURVE_DEFAULT["coefficient"]
+            new_cols["age_curve"] = 1.0 - coeff * ((age - peak) ** 2)
 
         # --- Player usage classification (RB: workhorse/committee; WR: WR1/2/3) ---
         if "position" in df.columns and "total_touches" in df.columns:

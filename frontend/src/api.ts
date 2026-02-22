@@ -1,7 +1,35 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+const API_MODE = import.meta.env.VITE_API_MODE || 'live'
+const IS_STATIC = API_MODE === 'static'
+
+function mapStaticPath(path: string): string {
+  if (path.startsWith('/hero')) return '/hero.json'
+  if (path.startsWith('/data-pipeline')) return '/data-pipeline.json'
+  if (path.startsWith('/training-years')) return '/training-years.json'
+  if (path.startsWith('/eda')) return '/eda.json'
+  if (path.startsWith('/utilization-weights')) return '/utilization-weights.json'
+  if (path.startsWith('/model-config')) return '/model-config.json'
+  if (path.startsWith('/advanced-results')) return '/advanced-results.json'
+  if (path.startsWith('/backtest/')) {
+    const season = path.split('/').pop()
+    return `/backtest-${season}.json`
+  }
+  if (path.startsWith('/backtest')) return '/backtest.json'
+  if (path.startsWith('/predictions')) return '/predictions.json'
+  if (path.startsWith('/ts-backtest/')) {
+    const parts = path.split('/')
+    const season = parts[2]
+    const tail = parts[3]
+    if (tail === 'predictions') return `/ts-backtest-${season}-predictions.json`
+    return `/ts-backtest-${season}.json`
+  }
+  if (path.startsWith('/ts-backtest')) return '/ts-backtest.json'
+  return path
+}
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`)
+  const finalPath = IS_STATIC ? mapStaticPath(path) : path
+  const res = await fetch(`${API_BASE}${finalPath}`)
   if (!res.ok) throw new Error(`API ${path}: ${res.status}`)
   return res.json()
 }
@@ -12,10 +40,16 @@ export const api = {
     get<{ row_count: number; seasons: number[]; season_range: string; n_features: number; health: string }>('/data-pipeline'),
   trainingYears: () =>
     get<Array<{ train_years?: number; train_range?: string; position: string; test_correlation: number; n_train?: number }>>('/training-years'),
-  eda: (maxRows = 5000) =>
-    get<{ sample: Record<string, unknown>[]; stats: { row_count: number; seasons: number[]; n_features: number } }>(
+  eda: (maxRows = 5000) => {
+    if (IS_STATIC) {
+      return get<{ sample: Record<string, unknown>[]; stats: { row_count: number; seasons: number[]; n_features: number } }>(
+        '/eda'
+      )
+    }
+    return get<{ sample: Record<string, unknown>[]; stats: { row_count: number; seasons: number[]; n_features: number } }>(
       `/eda?max_rows=${maxRows}`
-    ),
+    )
+  },
   utilizationWeights: () =>
     get<Record<string, Record<string, number>>>('/utilization-weights'),
   modelConfig: () =>
@@ -23,20 +57,60 @@ export const api = {
   advancedResults: () => get<AdvancedResults>('/advanced-results'),
   backtest: () => get<BacktestResponse>('/backtest'),
   backtestSeason: (season: number) => get<BacktestSeasonResponse>(`/backtest/${season}`),
-  predictions: (position?: string, name?: string, horizon?: 1 | 4 | 18 | 'all') => {
-    const params = new URLSearchParams()
-    if (position) params.set('position', position)
-    if (name) params.set('name', name)
-    if (horizon !== undefined) params.set('horizon', String(horizon))
-    return get<PredictionsResponse>(`/predictions?${params}`)
+  predictions: async (position?: string, name?: string, horizon?: 1 | 4 | 18 | 'all') => {
+    if (!IS_STATIC) {
+      const params = new URLSearchParams()
+      if (position) params.set('position', position)
+      if (name) params.set('name', name)
+      if (horizon !== undefined) params.set('horizon', String(horizon))
+      return get<PredictionsResponse>(`/predictions?${params}`)
+    }
+
+    const payload = await get<PredictionsResponse>('/predictions')
+    let rows = payload.rows || []
+    if (position) {
+      rows = rows.filter((r) => String(r.position || '').toUpperCase() === position.toUpperCase())
+    }
+    if (name && name.trim()) {
+      const q = name.trim().toLowerCase()
+      rows = rows.filter((r) => String(r.name || '').toLowerCase().includes(q))
+    }
+
+    let projectedCol: keyof PredictionRow | undefined
+    if (horizon === 1 || horizon === 4 || horizon === 18) {
+      const col = `projection_${horizon}w` as keyof PredictionRow
+      const hasCol = rows.some((r) => r[col] !== undefined)
+      if (horizon === 1 && !hasCol) {
+        projectedCol = 'predicted_points'
+      } else if (hasCol) {
+        projectedCol = col
+      }
+    }
+
+    if (projectedCol !== undefined) {
+      rows = rows.map((r) => ({
+        ...r,
+        projected_points: r[projectedCol] as number | undefined,
+      }))
+    }
+
+    return { ...payload, rows }
   },
   tsBacktest: () => get<TSBacktestListResponse>('/ts-backtest'),
   tsBacktestSeason: (season: number) => get<TSBacktestResult>(`/ts-backtest/${season}`),
-  tsBacktestPredictions: (season: number, position?: string, week?: number) => {
-    const params = new URLSearchParams()
-    if (position) params.set('position', position)
-    if (week !== undefined) params.set('week', String(week))
-    return get<TSBacktestPredictionsResponse>(`/ts-backtest/${season}/predictions?${params}`)
+  tsBacktestPredictions: async (season: number, position?: string, week?: number) => {
+    if (!IS_STATIC) {
+      const params = new URLSearchParams()
+      if (position) params.set('position', position)
+      if (week !== undefined) params.set('week', String(week))
+      return get<TSBacktestPredictionsResponse>(`/ts-backtest/${season}/predictions?${params}`)
+    }
+
+    const payload = await get<TSBacktestPredictionsResponse>(`/ts-backtest/${season}/predictions`)
+    let rows = payload.rows || []
+    if (position) rows = rows.filter((r) => String(r.position || '').toUpperCase() === position.toUpperCase())
+    if (week !== undefined) rows = rows.filter((r) => r.week === week)
+    return { ...payload, rows }
   },
 }
 

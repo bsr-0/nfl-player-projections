@@ -1,0 +1,107 @@
+[
+  {
+    "train_years": 1,
+    "train_range": "2023-2023",
+    "position": "RB",
+    "test_correlation": 0.505769866418627,
+    "n_train": 1403
+  },
+  {
+    "train_years": 1,
+    "train_range": "2023-2023",
+    "position": "WR",
+    "test_correlation": 0.4450905117488969,
+    "n_train": 2322
+  },
+  {
+    "train_years": 1,
+    "train_range": "2023-2023",
+    "position": "TE",
+    "test_correlation": 0.4347461815807841,
+    "n_train": 1122
+  },
+  {
+    "train_years": 2,
+    "train_range": "2022-2023",
+    "position": "RB",
+    "test_correlation": 0.5026604951692619,
+    "n_train": 2855
+  },
+  {
+    "train_years": 2,
+    "train_range": "2022-2023",
+    "position": "WR",
+    "test_correlation": 0.4458067038852672,
+    "n_train": 4551
+  },
+  {
+    "train_years": 2,
+    "train_range": "2022-2023",
+    "position": "TE",
+    "test_correlation": 0.4346911717602913,
+    "n_train": 2270
+  },
+  {
+    "train_years": 3,
+    "train_range": "2021-2023",
+    "position": "RB",
+    "test_correlation": 0.4990734669728031,
+    "n_train": 4283
+  },
+  {
+    "train_years": 3,
+    "train_range": "2021-2023",
+    "position": "WR",
+    "test_correlation": 0.4454048485514414,
+    "n_train": 6859
+  },
+  {
+    "train_years": 3,
+    "train_range": "2021-2023",
+    "position": "TE",
+    "test_correlation": 0.4345549161663812,
+    "n_train": 3381
+  },
+  {
+    "train_years": 4,
+    "train_range": "2020-2023",
+    "position": "RB",
+    "test_correlation": 0.4997828959368325,
+    "n_train": 5683
+  },
+  {
+    "train_years": 4,
+    "train_range": "2020-2023",
+    "position": "WR",
+    "test_correlation": 0.4455777580667084,
+    "n_train": 9024
+  },
+  {
+    "train_years": 4,
+    "train_range": "2020-2023",
+    "position": "TE",
+    "test_correlation": 0.4352104796477251,
+    "n_train": 4462
+  },
+  {
+    "train_years": 5,
+    "train_range": "2019-2023",
+    "position": "RB",
+    "test_correlation": 0.4997828959368325,
+    "n_train": 5683
+  },
+  {
+    "train_years": 5,
+    "train_range": "2019-2023",
+    "position": "WR",
+    "test_correlation": 0.4455777580667084,
+    "n_train": 9024
+  },
+  {
+    "train_years": 5,
+    "train_range": "2019-2023",
+    "position": "TE",
+    "test_correlation": 0.4352104796477251,
+    "n_train": 4462
+  }
+]

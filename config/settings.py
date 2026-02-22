@@ -185,17 +185,18 @@ MODEL_CONFIG = {
     "lstm_batch_size": 32,             # Batch size (32-64)
     "lstm_weight": 0.6,               # LSTM component weight in hybrid (60%)
     "arima_weight": 0.4,              # ARIMA component weight in hybrid (40%)
+    "lstm_optuna_trials": 15,         # Optuna trials for LSTM hyperparameter tuning
     "arima_order": (2, 1, 2),         # ARIMA (p, d, q) order
     
-    # 18-week deep feedforward hyperparameters (Section IV.A of requirements)
+    # 18-week residual feedforward hyperparameters
     "deep_n_features": 150,            # Expected input features (150-200)
-    "deep_hidden_units": None,         # None = auto-generate 100 Dense layers (512→256→128→64→32)
+    "deep_hidden_units": None,         # None = auto-generate 2-stage residual net (256→64)
     "deep_dropout": 0.35,              # Dropout per layer (0.3-0.5)
     "deep_learning_rate": 0.0005,      # Adam learning rate (0.0001-0.01)
     "deep_epochs": 100,                # Training epochs
     "deep_batch_size": 64,             # Batch size (16-128)
     "deep_blend_traditional": 0.3,     # 30% traditional + 70% deep
-    "deep_regression_to_mean_scale": 0.95,  # Regression-to-mean pull strength
+    "deep_optuna_trials": 15,          # Optuna trials for deep model hyperparameter tuning
     # Training gate policy: when True, fail-fast on requirement minimums
     # (training seasons and per-position player counts) instead of warning only.
     "strict_requirements_default": False,
@@ -237,10 +238,10 @@ TRAINING_WINDOW_PRESETS = {
     "full": {"start_year": 2000, "end_year": TRAINING_END_YEAR_DEFAULT},
 }
 
-# Feature engineering (requirements: 3, 4, 5, 8 week windows for temporal features)
-# Additional 6, 12 week windows capture differentiated medium/long timescales;
-# VIF pruning removes redundant near-collinear features downstream.
-ROLLING_WINDOWS = [3, 4, 5, 6, 8, 12]
+# Feature engineering: 3 rolling windows capture short/medium/long timescales.
+# Previously [3,4,5,6,8,12] but windows 4,5 overlap heavily with 3 and 6;
+# VIF pruning was removing most redundant features anyway.
+ROLLING_WINDOWS = [3, 6, 12]
 LAG_WEEKS = [1, 2, 3, 4]  # Lag features
 
 # Prediction settings
@@ -290,7 +291,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "5"  # v5: LightGBM ensemble, VIF pruning, adaptive features, median imputation, wider rolling windows
+FEATURE_VERSION = "7"  # v7: Residual deep net, Huber loss, target transforms, stability selection, bye/short-week features, learned blend weights, isotonic calibration, player embeddings
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================
@@ -331,3 +332,27 @@ MOMENTUM_WEIGHTS = {
     "mid_5_8w": 0.30,    # Weeks 5-8 = 30%
     "early_9_plus": 0.10, # Weeks 9+ = 10%
 }
+
+# Position-specific boom/bust thresholds (fantasy points)
+# QB scores higher on average, so boom/bust thresholds are higher.
+# TE scores lower, so thresholds are lower.
+BOOM_BUST_THRESHOLDS = {
+    "QB": {"boom": 25, "bust": 10},
+    "RB": {"boom": 20, "bust": 5},
+    "WR": {"boom": 20, "bust": 5},
+    "TE": {"boom": 15, "bust": 3},
+}
+BOOM_BUST_DEFAULT = {"boom": 20, "bust": 5}
+
+# Position-specific age curve parameters
+# RBs peak earlier and decline faster; QBs/TEs peak later with gentler decline.
+AGE_CURVE_PARAMS = {
+    "QB": {"peak": 28, "coefficient": 0.003},
+    "RB": {"peak": 25, "coefficient": 0.008},
+    "WR": {"peak": 27, "coefficient": 0.005},
+    "TE": {"peak": 28, "coefficient": 0.004},
+}
+AGE_CURVE_DEFAULT = {"peak": 27, "coefficient": 0.005}
+
+# Minimum samples required to enable converter hyperparameter tuning
+CONVERTER_TUNING_MIN_SAMPLES = 200

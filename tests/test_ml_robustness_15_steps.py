@@ -161,13 +161,12 @@ class TestStep6_CrossValidation:
 class TestStep7_ValidationSetUsage:
     """Step 7: Validation set for hyperparameter and ensemble decisions."""
 
-    def test_ensemble_weights_use_validation(self):
-        """_optimize_ensemble_weights receives X_val, y_val."""
-        from src.models.position_models import PositionModel
-        import inspect
-        
-        source = inspect.getsource(PositionModel.fit)
-        assert "_optimize_ensemble_weights(X_val" in source or "_optimize_ensemble_weights(X_val_scaled" in source
+    def test_ensemble_weights_are_spec_mandated(self):
+        """Ensemble weights use spec-mandated constants (30/40/30)."""
+        from config.settings import ENSEMBLE_WEIGHTS_1W
+        assert ENSEMBLE_WEIGHTS_1W["random_forest"] == 0.30
+        assert ENSEMBLE_WEIGHTS_1W["xgboost"] == 0.40
+        assert ENSEMBLE_WEIGHTS_1W["ridge"] == 0.30
 
     def test_meta_learner_trained_on_validation(self):
         """Meta-learner uses validation predictions."""

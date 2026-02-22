@@ -74,6 +74,8 @@ Examples:
                         help='Always regenerate predictions (ignore cache age); implies --with-predictions')
     parser.add_argument('--max-prediction-cache-hours', type=float, default=24,
                         help='Use cached predictions if parquet is newer than this many hours (default: 24)')
+    parser.add_argument('--export-gh-pages', action='store_true',
+                        help='Generate static JSON snapshot + build frontend for GitHub Pages, then exit')
     
     args = parser.parse_args()
     if args.force_predictions:
@@ -81,6 +83,7 @@ Examples:
     
     # Parse seasons from either format
     seasons = parse_seasons(args)
+    project_root = Path(__file__).parent
     
     print("=" * 60)
     print("🏈 NFL Fantasy Predictor")
@@ -137,7 +140,6 @@ Examples:
     
     # Step 2: Generate ML predictions for app (optional); use cache if fresh
     if args.with_predictions:
-        project_root = Path(__file__).parent
         data_dir = project_root / "data"
         cache_paths = [data_dir / "daily_predictions.parquet", data_dir / "cached_features.parquet"]
         use_cache = False
@@ -167,7 +169,44 @@ Examples:
                 print(f"⚠️ Prediction generation failed: {e}")
                 print("   App will use fallback projections (fantasy_points, fp_rolling)")
     
-    # Step 3: Build frontend if needed, then launch FastAPI app
+    # Step 3: Optional GH Pages export (static snapshot + build)
+    if args.export_gh_pages:
+        print("\n📦 Exporting static JSON snapshot for GitHub Pages...")
+        try:
+            subprocess.run(
+                [sys.executable, "scripts/export_static_api.py"],
+                cwd=project_root,
+                check=True,
+                capture_output=False,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"⚠️ Static export failed: {e}")
+            sys.exit(1)
+
+        print("\n📦 Building frontend for GitHub Pages...")
+        try:
+            import os
+            env = os.environ.copy()
+            env.update({
+                "VITE_API_MODE": "static",
+                "VITE_API_BASE": "./api",
+                "VITE_BASE": "/nfl-player-projections/",
+            })
+            subprocess.run(
+                ["npm", "run", "build"],
+                cwd=project_root / "frontend",
+                check=True,
+                capture_output=False,
+                env=env,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"⚠️ Frontend build failed: {e}")
+            sys.exit(1)
+
+        print("\n✅ GitHub Pages build ready in frontend/dist")
+        return
+
+    # Step 4: Build frontend if needed, then launch FastAPI app
     project_root = Path(__file__).parent
     frontend_dist = project_root / "frontend" / "dist"
     if not frontend_dist.exists():
