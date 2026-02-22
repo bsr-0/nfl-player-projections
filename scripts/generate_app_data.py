@@ -201,6 +201,7 @@ def generate_app_data(save_daily: bool = False) -> bool:
                 "season": pred_season,
                 "week": pred_week,
                 "label": upcoming_label,
+                "schedule_available": schedule_available_for_pred,
             }, f, indent=2)
     except Exception:
         pass

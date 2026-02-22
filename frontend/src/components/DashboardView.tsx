@@ -49,9 +49,10 @@ interface DashboardViewProps {
   allData: Record<string, PredictionRow[]>
   weekLabel: string
   loading: boolean
+  scheduleAvailable?: boolean
 }
 
-export function DashboardView({ allData, weekLabel, loading }: DashboardViewProps) {
+export function DashboardView({ allData, weekLabel, loading, scheduleAvailable }: DashboardViewProps) {
   const windowWidth = useWindowWidth()
   const isMobile = windowWidth < 768
   const [heroData, setHeroData] = useState<{ record_count: number; correlation?: number } | null>(null)
@@ -74,7 +75,7 @@ export function DashboardView({ allData, weekLabel, loading }: DashboardViewProp
       const players = sorted.slice(0, 5).map((x, i) => {
         const opp = x.r.upcoming_opponent ?? ''
         const ha = x.r.upcoming_home_away ?? ''
-        let matchup = '—'
+        let matchup = scheduleAvailable === false ? 'TBD' : '—'
         if (opp) matchup = ha === 'home' ? `vs ${opp}` : ha === 'away' ? `@ ${opp}` : opp
         return {
           name: String(x.r.name ?? 'Unknown'),
@@ -87,7 +88,7 @@ export function DashboardView({ allData, weekLabel, loading }: DashboardViewProp
       picks.push({ pos, players })
     }
     return picks
-  }, [allData])
+  }, [allData, scheduleAvailable])
 
   const overallTop10 = useMemo(() => {
     const all: { r: PredictionRow; pts: number }[] = []
@@ -139,11 +140,20 @@ export function DashboardView({ allData, weekLabel, loading }: DashboardViewProp
         </div>
       </div>
 
+      {/* Schedule pending notice */}
+      {scheduleAvailable === false && (
+        <div className="section-card" style={{ padding: '0.75rem 1rem', borderColor: 'rgba(251,191,36,0.3)', background: 'rgba(251,191,36,0.05)' }}>
+          <p style={{ color: '#fbbf24', fontSize: 'var(--text-small)', margin: 0 }}>
+            The upcoming schedule has not been released yet. Projections are based on historical performance and trends. Matchup-specific adjustments will be applied once the schedule is announced.
+          </p>
+        </div>
+      )}
+
       {/* Overall Top 10 Chart */}
       {overallTop10.length > 0 && (
         <div className="section-card dashboard__top10">
           <h2 className="section-heading">
-            Top 10 Overall — This Week
+            Top 10 Overall — {scheduleAvailable === false ? 'Upcoming' : 'This Week'}
             {weekLabel && <span className="section-heading__sub">{weekLabel}</span>}
           </h2>
           <div style={{ height: isMobile ? 380 : 340 }}>

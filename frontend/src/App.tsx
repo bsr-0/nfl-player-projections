@@ -30,6 +30,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [weekLabel, setWeekLabel] = useState('')
+  const [scheduleAvailable, setScheduleAvailable] = useState<boolean>(true)
   const [qbTarget, setQbTarget] = useState<'util' | 'fp'>('fp')
 
   const fetchPredictions = useCallback(() => {
@@ -40,6 +41,7 @@ function App() {
       .then((d) => {
         setData(d)
         setWeekLabel(d.week_label ?? '')
+        setScheduleAvailable(d.schedule_available ?? true)
       })
       .catch((err) => {
         setData(null)
@@ -118,6 +120,7 @@ function App() {
             allData={allData}
             weekLabel={weekLabel}
             loading={loading && Object.keys(allData).length === 0}
+            scheduleAvailable={scheduleAvailable}
           />
         )}
         {activeTab === 'rankings' && (

@@ -64,10 +64,10 @@ function getProjectedPoints(r: PredictionRow, horizon: HorizonValue): number | n
   return v != null && !Number.isNaN(Number(v)) ? Number(v) : null
 }
 
-function formatMatchup(row: PredictionRow): string {
+function formatMatchup(row: PredictionRow, scheduleAvailable?: boolean): string {
   const opp = row.upcoming_opponent ?? ''
   const ha = row.upcoming_home_away ?? ''
-  if (!opp) return '—'
+  if (!opp) return scheduleAvailable === false ? 'TBD' : '—'
   if (ha === 'home') return `vs ${opp}`
   if (ha === 'away') return `@ ${opp}`
   return opp
@@ -126,7 +126,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
         const util = r.utilization_score != null ? Number(r.utilization_score) : null
         const std = r.prediction_std != null ? Number(r.prediction_std) : (r.weekly_volatility != null ? Number(r.weekly_volatility) : null)
         const chartVal = isFPPosition ? pts : (util ?? pts)
-        return { r, pts, util, std, chartVal, matchup: formatMatchup(r) }
+        return { r, pts, util, std, chartVal, matchup: formatMatchup(r, data?.schedule_available) }
       })
       .filter((x) => x.chartVal != null)
       .sort((a, b) => b.chartVal! - a.chartVal!)
@@ -144,7 +144,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
       floor: x.pts != null && x.std != null ? Math.max(0, x.pts - 1.5 * x.std) : null,
       ceiling: x.pts != null && x.std != null ? x.pts + 1.5 * x.std : null,
     }))
-  }, [rows, horizon, isFPPosition, searchName])
+  }, [rows, horizon, isFPPosition, searchName, data?.schedule_available])
 
   const chartData = useMemo(
     () =>
@@ -312,9 +312,23 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
             ? `Historical Backtest · ${selectedBtSeason}/${(selectedBtSeason ?? 0) + 1} · Predicted vs Actual`
             : `${isFPPosition ? 'Ranked by Fantasy Points' : 'Ranked by Utilization Score'} · ${horizonLabel}`}
         </span>
-        {!isBacktest && data?.schedule_available && <span className="pill pill--success" style={{ fontSize: 12 }}>Schedule ✓</span>}
+        {!isBacktest && data?.schedule_available === true && <span className="pill pill--success" style={{ fontSize: 12 }}>Schedule ✓</span>}
+        {!isBacktest && data?.schedule_available === false && (
+          data?.schedule_by_horizon?.[String(horizon)] === true
+            ? <span className="pill pill--success" style={{ fontSize: 12 }}>Schedule ✓</span>
+            : <span className="pill" style={{ fontSize: 12, background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>Schedule Pending</span>
+        )}
         {isBacktest && <span className="pill" style={{ fontSize: 12, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}>Backtest</span>}
       </div>
+
+      {/* Schedule pending banner */}
+      {!isBacktest && data?.schedule_available === false && data?.schedule_note && (
+        <div className="section-card" style={{ padding: '0.75rem 1rem', borderColor: 'rgba(251,191,36,0.3)', background: 'rgba(251,191,36,0.05)' }}>
+          <p style={{ color: '#fbbf24', fontSize: 'var(--text-small)', margin: 0 }}>
+            {data.schedule_note} Matchup-specific projections will update once the schedule is released.
+          </p>
+        </div>
+      )}
 
       {/* Start/Sit Quick Summary — shown on 1-week horizon for lineup decisions */}
       {horizon === 1 && !loading && enriched.length > 0 && (
@@ -330,7 +344,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
                   <span className="rankings__startsit-rank">#{x.rank}</span>
                   <span className="rankings__startsit-name">{x.r.name}</span>
                   <span className="rankings__startsit-matchup">
-                    {x.r.upcoming_home_away === 'home' ? '🏠' : x.r.upcoming_home_away === 'away' ? '✈️' : ''}{' '}
+                    {x.matchup !== 'TBD' && (x.r.upcoming_home_away === 'home' ? '🏠' : x.r.upcoming_home_away === 'away' ? '✈️' : '')}{' '}
                     {x.matchup}
                   </span>
                   <span className="rankings__startsit-pts" style={{ color: '#10b981' }}>{x.chartVal!.toFixed(1)}</span>
@@ -344,7 +358,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
                   <span className="rankings__startsit-rank">#{x.rank}</span>
                   <span className="rankings__startsit-name">{x.r.name}</span>
                   <span className="rankings__startsit-matchup">
-                    {x.r.upcoming_home_away === 'home' ? '🏠' : x.r.upcoming_home_away === 'away' ? '✈️' : ''}{' '}
+                    {x.matchup !== 'TBD' && (x.r.upcoming_home_away === 'home' ? '🏠' : x.r.upcoming_home_away === 'away' ? '✈️' : '')}{' '}
                     {x.matchup}
                   </span>
                   <span className="rankings__startsit-pts" style={{ color: '#94a3b8' }}>{x.chartVal!.toFixed(1)}</span>
@@ -507,7 +521,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
                   <th className="rankings__th rankings__th--tier">Tier</th>
                   <th className="rankings__th rankings__th--name">Player</th>
                   <th className="rankings__th rankings__th--team">Team</th>
-                  <th className="rankings__th rankings__th--matchup">Matchup</th>
+                  <th className="rankings__th rankings__th--matchup">{data?.schedule_available === false && !data?.schedule_by_horizon?.[String(horizon)] ? 'Matchup (TBD)' : 'Matchup'}</th>
                   <th className="rankings__th rankings__th--pts">{isFPPosition ? 'Proj Pts' : 'Util Score'}</th>
                   {enriched.some((x) => x.floor != null) && (
                     <th className="rankings__th rankings__th--range">Floor / Ceiling</th>
