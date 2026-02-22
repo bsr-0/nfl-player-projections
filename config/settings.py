@@ -238,10 +238,9 @@ TRAINING_WINDOW_PRESETS = {
     "full": {"start_year": 2000, "end_year": TRAINING_END_YEAR_DEFAULT},
 }
 
-# Feature engineering: 3 rolling windows capture short/medium/long timescales.
-# Previously [3,4,5,6,8,12] but windows 4,5 overlap heavily with 3 and 6;
-# VIF pruning was removing most redundant features anyway.
-ROLLING_WINDOWS = [3, 6, 12]
+# Feature engineering rolling windows (rubric-required windows included).
+# Keep required 3,4,5,8 and include 12 for longer-term trends.
+ROLLING_WINDOWS = [3, 4, 5, 8, 12]
 LAG_WEEKS = [1, 2, 3, 4]  # Lag features
 
 # Prediction settings
