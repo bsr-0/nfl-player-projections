@@ -212,8 +212,7 @@ def check_drift() -> dict:
     # Tie-break on filename to avoid same-second mtime collisions in tests/fast filesystems.
     files = sorted(
         BACKTEST_RESULTS_DIR.glob("*.json"),
-        key=lambda p: (p.stat().st_mtime, p.name),
-        reverse=True,
+        key=lambda p: (-p.stat().st_mtime, p.name),
     )
     if len(files) < 2:
         return {"drift_detected": False, "current_rmse": None, "previous_rmse": None}
