@@ -86,18 +86,16 @@ def test_schedule_map_2025_week_22_super_bowl_seahawks_patriots():
 
 def test_get_prediction_target_week_returns_tuple():
     """Returns (season, week) tuple."""
-    with patch("src.predict.get_current_nfl_week", return_value={"season": 2025, "week_num": 3}):
-        with patch("src.predict.get_current_nfl_season", return_value=2025):
-            s, w = get_prediction_target_week()
+    with patch("src.predict.get_next_n_nfl_weeks", return_value=[(2025, 3)]):
+        s, w = get_prediction_target_week()
     assert s == 2025
     assert w == 3
 
 
 def test_get_prediction_target_week_preseason_week_1():
     """When week_num < 1 (preseason), use week 1."""
-    with patch("src.predict.get_current_nfl_week", return_value={"season": 2025, "week_num": 0}):
-        with patch("src.predict.get_current_nfl_season", return_value=2025):
-            s, w = get_prediction_target_week()
+    with patch("src.predict.get_next_n_nfl_weeks", return_value=[(2025, 1)]):
+        s, w = get_prediction_target_week()
     assert w == 1
 
 

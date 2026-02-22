@@ -18,7 +18,7 @@ from src.utils.database import DatabaseManager
 from src.features.feature_engineering import FeatureEngineer
 from src.features.utilization_score import UtilizationScoreCalculator
 from src.models.ensemble import EnsemblePredictor
-from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week
+from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week, get_next_n_nfl_weeks
 # Note: This system only uses real NFL data from nfl-data-py
 
 
@@ -27,6 +27,12 @@ def get_prediction_target_week() -> Tuple[int, int]:
     Return (season, week_num) for the upcoming game week we are predicting.
     Uses current NFL season and current week (or week 1 if preseason).
     """
+    upcoming = get_next_n_nfl_weeks(None, 1)
+    if upcoming:
+        season, week_num = upcoming[0]
+        if week_num < 1:
+            week_num = 1
+        return season, week_num
     info = get_current_nfl_week()
     season = info.get("season", get_current_nfl_season())
     week_num = info.get("week_num", 0)

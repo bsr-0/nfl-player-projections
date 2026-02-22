@@ -141,6 +141,29 @@ def get_current_nfl_week(today: Optional[datetime] = None) -> Dict[str, Any]:
     }
 
 
+def get_week_label(week_num: int, season: Optional[int] = None) -> str:
+    """
+    Human-readable label for a week number.
+
+    week_num: 1-18 regular season, 19-22 playoffs, 0 preseason.
+    If season is provided, Super Bowl label includes roman numeral.
+    """
+    if week_num <= 0:
+        return "Preseason"
+    if week_num == 19:
+        return "Wild Card"
+    if week_num == 20:
+        return "Divisional Round"
+    if week_num == 21:
+        return "Conference Championships"
+    if week_num == 22:
+        if season is not None:
+            sb_number = season - 1966  # SB I = 1967 season
+            return f"Super Bowl {_roman(sb_number)}"
+        return "Super Bowl"
+    return f"Week {week_num}"
+
+
 def get_next_n_nfl_weeks(today: Optional[datetime] = None, n: int = 1) -> List[Tuple[int, int]]:
     """
     Return the next n NFL weeks as (season, week_num), starting from the next week to be played.

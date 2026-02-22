@@ -189,9 +189,8 @@ def generate_app_data(save_daily: bool = False) -> bool:
         full_df["predicted_points"] = full_df["projection_1w"]
     
     # Optional: upcoming week label for app (e.g. "Super Bowl")
-    from src.utils.nfl_calendar import get_current_nfl_week
-    week_info = get_current_nfl_week()
-    upcoming_label = week_info.get("week") or f"Week {pred_week}"
+    from src.utils.nfl_calendar import get_week_label
+    upcoming_label = get_week_label(pred_week, pred_season)
     data_dir.mkdir(parents=True, exist_ok=True)
     meta_path = data_dir / "upcoming_week_meta.json"
     import json
