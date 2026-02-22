@@ -88,9 +88,10 @@ export const api = {
     }
 
     if (projectedCol !== undefined) {
+      const col = projectedCol as keyof PredictionRow
       rows = rows.map((r) => ({
         ...r,
-        projected_points: r[projectedCol] as number | undefined,
+        projected_points: r[col] as number | undefined,
       }))
     }
 
