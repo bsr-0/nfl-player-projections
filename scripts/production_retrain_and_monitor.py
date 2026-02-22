@@ -209,7 +209,12 @@ def check_drift() -> dict:
     """
     if not BACKTEST_RESULTS_DIR.exists():
         return {"drift_detected": False, "error": "No backtest results dir"}
-    files = sorted(BACKTEST_RESULTS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Tie-break on filename to avoid same-second mtime collisions in tests/fast filesystems.
+    files = sorted(
+        BACKTEST_RESULTS_DIR.glob("*.json"),
+        key=lambda p: (p.stat().st_mtime, p.name),
+        reverse=True,
+    )
     if len(files) < 2:
         return {"drift_detected": False, "current_rmse": None, "previous_rmse": None}
     try:
