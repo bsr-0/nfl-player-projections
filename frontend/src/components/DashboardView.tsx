@@ -2,6 +2,18 @@ import { useEffect, useState, useMemo } from 'react'
 import { api, type PredictionRow } from '../api'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
+function useWindowWidth() {
+  const [width, setWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1024
+  )
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return width
+}
+
 const POSITION_COLORS: Record<string, string> = {
   QB: '#00f5ff',
   RB: '#a78bfa',
@@ -40,6 +52,8 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ allData, weekLabel, loading }: DashboardViewProps) {
+  const windowWidth = useWindowWidth()
+  const isMobile = windowWidth < 768
   const [heroData, setHeroData] = useState<{ record_count: number; correlation?: number } | null>(null)
   const [pipelineData, setPipelineData] = useState<{ row_count: number; seasons: number[]; season_range: string; n_features: number; health: string } | null>(null)
 
@@ -132,19 +146,41 @@ export function DashboardView({ allData, weekLabel, loading }: DashboardViewProp
             Top 10 Overall — This Week
             {weekLabel && <span className="section-heading__sub">{weekLabel}</span>}
           </h2>
-          <div style={{ height: 340 }}>
+          <div style={{ height: isMobile ? 380 : 340 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={overallTop10.map((x) => ({
-                  name: `${x.r.name} (${x.r.position})`,
-                  value: x.pts,
-                  position: x.r.position,
-                }))}
+                data={overallTop10.map((x) => {
+                  const fullName = String(x.r.name)
+                  const pos = String(x.r.position)
+                  let label: string
+                  if (isMobile) {
+                    // Abbreviate: "Justin Jefferson" -> "J. Jefferson"
+                    const parts = fullName.split(' ')
+                    label = parts.length > 1
+                      ? `${parts[0][0]}. ${parts.slice(1).join(' ')}`
+                      : fullName
+                    label = `${label} (${pos})`
+                    if (label.length > 18) label = label.slice(0, 17) + '\u2026'
+                  } else {
+                    label = `${fullName} (${pos})`
+                  }
+                  return { name: label, value: x.pts, position: pos }
+                })}
                 layout="vertical"
-                margin={{ top: 8, right: 50, left: 160, bottom: 8 }}
+                margin={isMobile
+                  ? { top: 8, right: 16, left: 8, bottom: 8 }
+                  : { top: 8, right: 50, left: 160, bottom: 8 }
+                }
               >
-                <XAxis type="number" stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
-                <YAxis type="category" dataKey="name" stroke="#94a3b8" width={150} tick={{ fontSize: 12, fill: '#cbd5e1' }} interval={0} />
+                <XAxis type="number" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: isMobile ? 10 : 12 }} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  stroke="#94a3b8"
+                  width={isMobile ? 110 : 150}
+                  tick={{ fontSize: isMobile ? 10 : 12, fill: '#cbd5e1' }}
+                  interval={0}
+                />
                 <Tooltip
                   contentStyle={{ background: '#1a1f3a', border: '1px solid #334155', borderRadius: 8, color: '#cbd5e1' }}
                   formatter={(value: number) => [value.toFixed(1), 'Projected Pts']}

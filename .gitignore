@@ -57,6 +57,7 @@ data/improvement_results/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/tsconfig.tsbuildinfo
 *.local
 
 # IDE and OS

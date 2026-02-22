@@ -469,15 +469,19 @@ def _get_predictions_impl(
         df = df.drop_duplicates(subset=["_player_key"], keep="first")
         df = df.drop(columns=["_player_key"], errors="ignore")
 
-    # Week label: prefer upcoming label from meta
+    # Week label: prefer upcoming label from meta, always include season year
     if upcoming_label:
-        week_label = upcoming_label
+        # Include season year if not already present in the label
+        if pred_season is not None and str(pred_season) not in upcoming_label:
+            week_label = f"{pred_season} Season \u00b7 {upcoming_label}"
+        else:
+            week_label = upcoming_label
     elif pred_season is not None and pred_week is not None:
-        week_label = f"Season {pred_season}, Week {pred_week}"
+        week_label = f"{pred_season} Season \u00b7 Week {pred_week}"
     elif "season" in df.columns and "week" in df.columns and not df.empty:
         latest_season = int(df["season"].max())
         latest_week = int(df[df["season"] == latest_season]["week"].max())
-        week_label = f"Season {latest_season}, Week {latest_week}"
+        week_label = f"{latest_season} Season \u00b7 Week {latest_week}"
     else:
         week_label = ""
 

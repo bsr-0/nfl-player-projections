@@ -2,6 +2,29 @@ import { useEffect, useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList, CartesianGrid } from 'recharts'
 import { api, type PredictionsResponse, type PredictionRow, type TSBacktestPredictionRow } from '../api'
 
+function useWindowWidth() {
+  const [width, setWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1024
+  )
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return width
+}
+
+function truncateName(name: string, maxLen: number): string {
+  if (name.length <= maxLen) return name
+  const parts = name.split(' ')
+  if (parts.length > 1) {
+    const short = `${parts[0][0]}. ${parts.slice(1).join(' ')}`
+    if (short.length <= maxLen) return short
+    return short.slice(0, maxLen - 1) + '\u2026'
+  }
+  return name.slice(0, maxLen - 1) + '\u2026'
+}
+
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
 type HorizonValue = 1 | 4 | 18
 const HORIZONS: { value: HorizonValue; label: string }[] = [
@@ -63,6 +86,8 @@ interface RankingsViewProps {
 type DataMode = 'live' | 'backtest'
 
 export function RankingsView({ data, position, horizon, loading, error, onPositionChange, onHorizonChange }: RankingsViewProps) {
+  const windowWidth = useWindowWidth()
+  const isMobile = windowWidth < 768
   const [searchName, setSearchName] = useState('')
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table')
   const [dataMode, setDataMode] = useState<DataMode>('live')
@@ -123,13 +148,12 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
 
   const chartData = useMemo(
     () =>
-      enriched.slice(0, 30).map((x) => ({
-        name: `${x.r.name ?? 'Unknown'} — ${x.r.team ?? '—'}`,
-        value: Number(x.chartVal),
-        position: x.r.position,
-        tier: x.tier,
-      })),
-    [enriched],
+      enriched.slice(0, 30).map((x) => {
+        const fullName = `${x.r.name ?? 'Unknown'} — ${x.r.team ?? '—'}`
+        const name = isMobile ? truncateName(String(x.r.name ?? 'Unknown'), 14) + ` · ${x.r.team ?? '—'}` : fullName
+        return { name, value: Number(x.chartVal), position: x.r.position, tier: x.tier }
+      }),
+    [enriched, isMobile],
   )
 
   const downloadCsv = () => {
@@ -358,17 +382,21 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
             <div style={{ height: Math.max(400, Math.min(btEnriched.length, 30) * 28), maxHeight: 700, overflowY: 'auto' }}>
               <ResponsiveContainer width="100%" height={Math.max(400, Math.min(btEnriched.length, 30) * 28)}>
                 <BarChart
-                  data={btEnriched.slice(0, 30).map((x) => ({
-                    name: `${x.r.name ?? 'Unknown'} (W${x.week})`,
-                    predicted: x.predicted,
-                    actual: x.actual,
-                  }))}
+                  data={btEnriched.slice(0, 30).map((x) => {
+                    const name = isMobile
+                      ? truncateName(String(x.r.name ?? 'Unknown'), 12) + ` W${x.week}`
+                      : `${x.r.name ?? 'Unknown'} (W${x.week})`
+                    return { name, predicted: x.predicted, actual: x.actual }
+                  })}
                   layout="vertical"
-                  margin={{ top: 8, right: 50, left: 200, bottom: 8 }}
+                  margin={isMobile
+                    ? { top: 8, right: 16, left: 8, bottom: 8 }
+                    : { top: 8, right: 50, left: 200, bottom: 8 }
+                  }
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal vertical={false} />
-                  <XAxis type="number" stroke="#94a3b8" />
-                  <YAxis type="category" dataKey="name" stroke="#94a3b8" width={190} interval={0} tick={{ fontSize: 11, fill: '#cbd5e1' }} />
+                  <XAxis type="number" stroke="#94a3b8" tick={{ fontSize: isMobile ? 10 : 12 }} />
+                  <YAxis type="category" dataKey="name" stroke="#94a3b8" width={isMobile ? 100 : 190} interval={0} tick={{ fontSize: isMobile ? 9 : 11, fill: '#cbd5e1' }} />
                   <Tooltip
                     contentStyle={{ background: '#1a1f3a', border: '1px solid #334155', borderRadius: 8, color: '#cbd5e1' }}
                     formatter={(value: number, name: string) => [value.toFixed(1), name === 'predicted' ? 'Predicted' : 'Actual']}
@@ -443,10 +471,17 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
           <h2 className="section-heading">{position} Rankings — {horizonLabel}</h2>
           <div style={{ height: Math.max(400, chartData.length * 28), maxHeight: 700, overflowY: 'auto' }}>
             <ResponsiveContainer width="100%" height={Math.max(400, chartData.length * 28)}>
-              <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 50, left: 200, bottom: 8 }}>
+              <BarChart
+                data={chartData}
+                layout="vertical"
+                margin={isMobile
+                  ? { top: 8, right: 16, left: 8, bottom: 8 }
+                  : { top: 8, right: 50, left: 200, bottom: 8 }
+                }
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal vertical={false} />
-                <XAxis type="number" stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
-                <YAxis type="category" dataKey="name" stroke="#94a3b8" width={190} interval={0} tick={{ fontSize: 11, fill: '#cbd5e1' }} />
+                <XAxis type="number" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: isMobile ? 10 : 12 }} />
+                <YAxis type="category" dataKey="name" stroke="#94a3b8" width={isMobile ? 100 : 190} interval={0} tick={{ fontSize: isMobile ? 9 : 11, fill: '#cbd5e1' }} />
                 <Tooltip
                   contentStyle={{ background: '#1a1f3a', border: '1px solid #334155', borderRadius: 8, color: '#cbd5e1' }}
                   formatter={(value: number) => [value.toFixed(1), isFPPosition ? 'Fantasy Pts' : 'Util Score']}
