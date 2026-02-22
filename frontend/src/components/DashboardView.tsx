@@ -41,7 +41,7 @@ function getTier(rank: number, total: number): { label: string; color: string; b
 }
 
 function getProjectedPoints(r: PredictionRow): number | null {
-  const v = r.projected_points ?? r.predicted_points ?? r.projection_1w
+  const v = r.projection_18w ?? r.projected_points ?? r.predicted_points ?? r.projection_1w
   return v != null && !Number.isNaN(Number(v)) ? Number(v) : null
 }
 
@@ -153,7 +153,7 @@ export function DashboardView({ allData, weekLabel, loading, scheduleAvailable }
       {overallTop10.length > 0 && (
         <div className="section-card dashboard__top10">
           <h2 className="section-heading">
-            Top 10 Overall — {scheduleAvailable === false ? 'Upcoming' : 'This Week'}
+            Top 10 Overall — Full Season Projections
             {weekLabel && <span className="section-heading__sub">{weekLabel}</span>}
           </h2>
           <div style={{ height: isMobile ? 380 : 340 }}>
@@ -193,7 +193,7 @@ export function DashboardView({ allData, weekLabel, loading, scheduleAvailable }
                 />
                 <Tooltip
                   contentStyle={{ background: '#1a1f3a', border: '1px solid #334155', borderRadius: 8, color: '#cbd5e1' }}
-                  formatter={(value: number) => [value.toFixed(1), 'Projected Pts']}
+                  formatter={(value: number) => [value.toFixed(1), 'Season Projected Pts']}
                 />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]}>
                   {overallTop10.map((x, i) => (
@@ -233,7 +233,7 @@ export function DashboardView({ allData, weekLabel, loading, scheduleAvailable }
                       <span className="position-card__team">{p.team} · {p.matchup}</span>
                     </div>
                     <div className="position-card__right">
-                      <span className="position-card__pts">{p.pts.toFixed(1)}</span>
+                      <span className="position-card__pts" title="Full season projected points">{p.pts.toFixed(1)}</span>
                       <span className="tier-badge" style={{ color: p.tier.color, background: p.tier.bg }}>{p.tier.label}</span>
                     </div>
                   </div>
