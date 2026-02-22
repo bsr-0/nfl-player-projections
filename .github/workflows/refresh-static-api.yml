@@ -1,0 +1,53 @@
+name: Refresh Static API Snapshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "refresh-static-api"
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-web.txt
+
+      - name: Generate app data
+        run: |
+          python scripts/generate_app_data.py --parquet
+
+      - name: Export static API
+        run: |
+          python scripts/export_static_api.py
+
+      - name: Commit and push if needed
+        run: |
+          git add frontend/public/api
+          if git diff --cached --quiet; then
+            echo "No static API changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh static API snapshot"
+          git push
