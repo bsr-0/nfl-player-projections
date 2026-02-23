@@ -75,8 +75,12 @@ export function EDA() {
   const corrMatrix = useMemo(() => computeCorrelationMatrix(sample, numericCols), [sample, numericCols])
   const positions = useMemo(() => {
     if (!data?.sample.length || !('position' in data.sample[0])) return []
+    const allowed = new Set(['QB', 'RB', 'WR', 'TE'])
     const set = new Set<string>()
-    data.sample.forEach((r) => set.add(String((r as Record<string, unknown>).position || '')))
+    data.sample.forEach((r) => {
+      const pos = String((r as Record<string, unknown>).position || '')
+      if (allowed.has(pos)) set.add(pos)
+    })
     return Array.from(set).filter(Boolean).sort()
   }, [data?.sample])
 

@@ -409,7 +409,7 @@ class EnsemblePredictor:
                 results.loc[mask, "prediction_ci95_upper"] = scaled + z95 * std_scaled
 
         # Prediction sanity bounds: clip to reasonable fantasy point ranges per position per week
-        _BOUNDS_PER_WEEK = {"QB": (0, 65), "RB": (0, 55), "WR": (0, 55), "TE": (0, 45), "K": (0, 25), "DST": (-5, 35)}
+        _BOUNDS_PER_WEEK = {"QB": (0, 65), "RB": (0, 55), "WR": (0, 55), "TE": (0, 45)}
         for position in POSITIONS:
             mask = results["position"] == position
             if not mask.any():

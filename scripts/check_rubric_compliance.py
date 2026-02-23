@@ -46,7 +46,7 @@ def check_config_contract() -> List[CheckResult]:
 
     # Position-specific modeling contract
     positions = list(getattr(settings, "POSITIONS", []))
-    expected_positions = ["QB", "RB", "WR", "TE", "K", "DST"]
+    expected_positions = ["QB", "RB", "WR", "TE"]
     out.append(
         CheckResult(
             name="positions_all",

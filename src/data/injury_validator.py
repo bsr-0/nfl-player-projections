@@ -70,7 +70,7 @@ class InjuryDataValidator:
     }
     
     # Valid positions
-    VALID_POSITIONS = {'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'OL', 'DL', 'LB', 'DB', 'S', 'CB'}
+    VALID_POSITIONS = {'QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'S', 'CB'}
     
     # NFL teams
     VALID_TEAMS = {
@@ -242,7 +242,7 @@ class InjuryDataValidator:
             return warnings
         
         # Check for fantasy-relevant positions only
-        fantasy_positions = {'QB', 'RB', 'WR', 'TE', 'K', 'DEF'}
+        fantasy_positions = {'QB', 'RB', 'WR', 'TE'}
         position_counts = df['position'].value_counts()
         
         for pos in fantasy_positions:

@@ -183,16 +183,6 @@ class NFLDataLoader:
         df = pd.concat(all_dfs, ignore_index=True)
         print(f"  Loaded {len(df)} offensive records total")
         
-        # Append K/DST data from PBP aggregation
-        try:
-            from src.data.kicker_dst_aggregator import load_kicker_dst_data
-            kd_df = load_kicker_dst_data(seasons)
-            if not kd_df.empty:
-                df = pd.concat([df, kd_df], ignore_index=True)
-                print(f"  Added {len(kd_df)} K/DST records from PBP")
-        except Exception as e:
-            print(f"  K/DST load skipped: {e}")
-        
         print(f"  Total: {len(df)} records for {POSITIONS}")
         
         if store_in_db:

@@ -16,7 +16,7 @@ function App() {
     api.predictions(undefined, undefined, 'all')
       .then((d) => {
         const map: Record<string, PredictionRow[]> = {}
-        const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
+        const positions = ['QB', 'RB', 'WR', 'TE']
         positions.forEach((p) => {
           map[p] = (d.rows || []).filter((r) => String(r.position || '').toUpperCase() === p)
         })

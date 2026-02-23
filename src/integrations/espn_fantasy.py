@@ -209,7 +209,7 @@ class ESPNFantasyConnector:
         position_counts = roster_df['position'].value_counts().to_dict()
         
         # Ideal roster composition (standard league)
-        ideal_counts = {'QB': 2, 'RB': 4, 'WR': 4, 'TE': 2, 'K': 1, 'D/ST': 1}
+        ideal_counts = {'QB': 2, 'RB': 4, 'WR': 4, 'TE': 2}
         
         # Identify needs
         needs = []
@@ -276,7 +276,7 @@ class ESPNFantasyConnector:
         Get available free agents.
         
         Args:
-            position: Filter by position (QB, RB, WR, TE, K, D/ST)
+            position: Filter by position (QB, RB, WR, TE)
             limit: Maximum number of players to return
             
         Returns:
