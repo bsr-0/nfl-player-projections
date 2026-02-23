@@ -11,8 +11,14 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import xgboost as xgb
-import optuna
-from optuna.samplers import TPESampler
+try:
+    import optuna
+    from optuna.samplers import TPESampler
+    HAS_OPTUNA = True
+except ImportError:
+    optuna = None
+    TPESampler = None
+    HAS_OPTUNA = False
 
 try:
     import lightgbm as lgb
@@ -156,6 +162,9 @@ class PositionModel:
                 and hyperparameter tuning respect season boundaries.
         """
         n_trials = n_trials or MODEL_CONFIG["n_optuna_trials"]
+        if tune_hyperparameters and not HAS_OPTUNA:
+            print("Optuna not installed; skipping hyperparameter tuning and using defaults.")
+            tune_hyperparameters = False
 
         self.feature_names = list(X.columns)
         X_raw = np.asarray(X.values, dtype=np.float64)
@@ -501,6 +510,8 @@ class PositionModel:
         Tunes n_estimators jointly with structural params so that the
         interaction between tree count and depth/leaf settings is captured.
         """
+        if not HAS_OPTUNA:
+            return self._get_default_params().get("random_forest", {})
         X_tune, y_tune = self._subsample_for_tuning(X, y)
         seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
@@ -534,6 +545,8 @@ class PositionModel:
         Fixes subsample and gamma to reduce the search from 9D to 7D,
         allowing the TPE sampler to converge with the available trial budget.
         """
+        if not HAS_OPTUNA:
+            return self._get_default_params().get("xgboost", {})
         X_tune, y_tune = self._subsample_for_tuning(X, y)
         seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
@@ -570,6 +583,8 @@ class PositionModel:
     def _tune_ridge(self, X: np.ndarray, y: np.ndarray, n_trials: int,
                     seasons: Optional[np.ndarray] = None) -> Dict:
         """Tune Ridge alpha using RidgeCV (analytically exact for 1D)."""
+        if not HAS_OPTUNA:
+            return self._get_default_params().get("ridge", {})
         from sklearn.linear_model import RidgeCV as _RidgeCV
         X_tune, y_tune = self._subsample_for_tuning(X, y)
         seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
@@ -586,6 +601,8 @@ class PositionModel:
     def _tune_lightgbm(self, X: np.ndarray, y: np.ndarray, n_trials: int,
                         seasons: Optional[np.ndarray] = None) -> Dict:
         """Tune LightGBM hyperparameters with Huber loss for outlier robustness."""
+        if not HAS_OPTUNA:
+            return self._get_default_params().get("lightgbm", {})
         X_tune, y_tune = self._subsample_for_tuning(X, y)
         seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
