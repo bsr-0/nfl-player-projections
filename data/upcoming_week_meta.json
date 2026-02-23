@@ -2,5 +2,7 @@
   "season": 2026,
   "week": 1,
   "label": "Week 1",
-  "schedule_available": false
+  "schedule_available": false,
+  "default_horizon": 18,
+  "default_horizon_label": "2026 Season \u00b7 Full Season Projections"
 }
