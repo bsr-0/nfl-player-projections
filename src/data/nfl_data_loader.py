@@ -72,7 +72,7 @@ class NFLDataLoader:
     """
     Load NFL data from nfl-data-py package and store in database.
     
-    This replaces the Pro Football Reference scraper with a more
+    This replaces the Pro Football Reference data source with a more
     reliable data source.
     """
     

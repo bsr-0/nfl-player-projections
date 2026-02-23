@@ -11,7 +11,7 @@ From the perspective of a senior machine learning engineer, here are observed li
 **Solution**: 
 - **Dynamic optimization**: `--optimize-years` runs `select_optimal_training_years()` which evaluates windows (3, 5, 7, 10, 15, all) via time-series CV and selects the window that minimizes test RMSE per position.
 - **Use all available by default**: `n_train_seasons=None` uses ALL seasons before the test season (no artificial cap).
-- **DB fallback**: When schedule scraper returns empty, `get_available_seasons_from_db()` falls back to database to determine available seasons.
+- **DB fallback**: When schedule loading returns empty, `get_available_seasons_from_db()` falls back to database to determine available seasons.
 - **Caching**: Optimal years saved to `data/models/optimal_training_years.json`.
 
 ---

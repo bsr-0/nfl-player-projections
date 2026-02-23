@@ -51,7 +51,7 @@ Our implementation aligns with the **FantasyLife Utilization Score** methodology
 | Cross-Validation | Random splits | Walk-forward time-series CV |
 | Training Window | Fixed | Auto-optimized (1-10 years) |
 | Uncertainty | Point predictions only | Floor/ceiling, confidence intervals |
-| Data Source | PFR scraper (broken) | nfl-data-py (reliable) |
+| Data Source | nfl-data-py (reliable) | nfl-data-py (reliable) |
 
 ### NFL Analytics Improvements
 

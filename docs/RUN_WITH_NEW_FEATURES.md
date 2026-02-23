@@ -11,7 +11,7 @@ This guide covers how to run the NFL predictor app using the new features: **mat
   cd nfl_predictor_claude
   pip install -r requirements.txt
   ```
-- For **player and schedule data** the app uses **nfl-data-py** (and optionally scrapers). No extra API keys are required for the main pipeline.
+- For **player and schedule data** the app uses **nfl-data-py**. No extra API keys are required for the main pipeline.
 
 ---
 
@@ -37,7 +37,7 @@ Use this when you want to control each stage (data → train → predictions →
 
 ### 1. Load historical data (nfl-data-py)
 
-Load player weekly stats and schedules from nfl-data-py. Schedules are used for matchup-aware prediction; team stats can be derived from players (no separate scrapers required).
+Load player weekly stats and schedules from nfl-data-py. Schedules are used for matchup-aware prediction; team stats can be derived from players (no separate loaders required).
 
 ```bash
 # Default: config range (e.g. 2020 through current NFL season)
@@ -49,7 +49,7 @@ python -m src.data.nfl_data_loader --seasons 2022 2023 2024 2025
 
 ### 2. (Optional) Auto-refresh and backfill team stats
 
-Ensures the current season’s completed weeks and schedule are present, and **backfills team_stats** from player data so team tendency features (pass rate, red zone, etc.) are available even without scrapers.
+Ensures the current season’s completed weeks and schedule are present, and **backfills team_stats** from player data so team tendency features (pass rate, red zone, etc.) are available even without extra loaders.
 
 ```bash
 python -m src.data.auto_refresh
@@ -129,9 +129,9 @@ For frontend development with hot reload, run the Vite dev server (e.g. `cd fron
 
 | Feature | When it runs | What you see |
 |--------|----------------|--------------|
-| **Matchup-aware prediction** | `predict()` and `generate_app_data.py` | Predictions use the **next game’s** opponent and home/away (from schedule). Schedule is loaded via nfl-data-py first, scraper fallback. |
+| **Matchup-aware prediction** | `predict()` and `generate_app_data.py` | Predictions use the **next game’s** opponent and home/away (from schedule). Schedule is loaded via nfl-data-py. |
 | **Upcoming matchup in app** | App reads `cached_features` / `daily_predictions` | “Matchup” column in Live and Upcoming week: “vs KC”, “@ SF”, or “TBD” when no schedule. |
-| **Team stats from players** | `auto_refresh` or when DB has no team_stats | `ensure_team_stats_from_players` backfills so team tendency features exist without scrapers. |
+| **Team stats from players** | `auto_refresh` or when DB has no team_stats | `ensure_team_stats_from_players` backfills so team tendency features exist without extra loaders. |
 | **Injury/rookie features** | `FeatureEngineer.create_features()` | `injury_score`, `is_injured`, `is_rookie` added with safe defaults; used in training and prediction. |
 | **Missing-data imputation** | End of `create_features()` | No NaN/inf in numeric features; median (or 0) fill so pipelines don’t break on sparse data. |
 

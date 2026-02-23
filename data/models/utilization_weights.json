@@ -28,16 +28,5 @@
     "rush_attempt_share": 0.23200973524263774,
     "redzone_opportunity": 0.1917201763385411,
     "play_volume": 0.2914815051249182
-  },
-  "K": {
-    "fg_attempts": 0.5,
-    "xp_attempts": 0.3,
-    "team_scoring": 0.2
-  },
-  "DST": {
-    "sacks": 0.25,
-    "turnovers": 0.3,
-    "points_allowed_inv": 0.25,
-    "defensive_tds": 0.2
   }
 }

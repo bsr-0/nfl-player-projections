@@ -18,7 +18,17 @@ DB_PATH = DATA_DIR / "nfl_data.db"
 
 # Scraping settings
 SCRAPER_DELAY = 2.0  # Seconds between requests
+SCRAPER_DELAY_JITTER = 1.5  # Max random jitter added to delay (seconds)
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+USER_AGENT_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6; rv:122.0) Gecko/20100101 Firefox/122.0",
+]
+SCRAPER_CACHE_TTL_HOURS = 24  # Reuse cached HTTP responses within this window
+SCRAPER_CACHE_SUBDIR = "http_cache"
 from datetime import datetime
 
 def _current_nfl_season():

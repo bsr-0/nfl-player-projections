@@ -92,7 +92,7 @@ Examples:
     print(f"🔄 Refresh: {args.refresh}")
     print(f"🌐 Port: {args.port}")
     
-    # Step 1: Load/refresh data if needed (prefer nfl-data-py; do not scrape PFR when data already exists)
+    # Step 1: Load/refresh data if needed (nfl-data-py only)
     if not args.skip_data:
         print("\n📊 Checking data...")
         try:
@@ -104,7 +104,7 @@ Examples:
             if not needs_seasons:
                 # All requested seasons already have data in DB
                 if args.refresh:
-                    print("⏳ Refreshing from nfl-data-py (skipping PFR scrapers)...")
+                    print("⏳ Refreshing from nfl-data-py...")
                     from src.utils.data_manager import auto_refresh_data
                     auto_refresh_data(force_check=True)
                     print("✅ Data refreshed from nfl-data-py.")
@@ -117,7 +117,7 @@ Examples:
                     else:
                         print("✅ Data already in database.")
             else:
-                # Missing one or more seasons: try nfl-data-py first, then PFR only if needed
+                # Missing one or more seasons: load from nfl-data-py
                 print("⏳ Loading data (this may take a moment)...")
                 try:
                     from src.data.nfl_data_loader import NFLDataLoader
@@ -128,9 +128,7 @@ Examples:
                 existing_after = db.get_seasons_with_data()
                 still_needs = [s for s in seasons if s not in existing_after]
                 if still_needs:
-                    print(f"   Loading missing seasons {still_needs} from PFR (fallback)...")
-                    from src.scrapers.run_scrapers import run_all_scrapers
-                    run_all_scrapers(seasons=still_needs, force_rescrape=False)
+                    print(f"⚠️ Still missing seasons after nfl-data-py load: {still_needs}")
                 else:
                     print("✅ Data loaded from nfl-data-py.")
                 print("✅ Data loaded successfully!")

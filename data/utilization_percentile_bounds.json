@@ -25,7 +25,7 @@
   ],
   "RB|target_share_pct": [
     0.0,
-    30.76923076923077
+    31.03448275862069
   ],
   "RB|redzone_share_pct": [
     0.0,
@@ -41,7 +41,7 @@
   ],
   "WR|target_share_pct": [
     0.0,
-    43.47826086956522
+    43.75
   ],
   "WR|air_yards_share_pct": [
     0.0,
@@ -65,7 +65,7 @@
   ],
   "TE|target_share_pct": [
     1.8867924528301887,
-    37.03703703703704
+    37.5
   ],
   "TE|snap_share_pct": [
     0.0,

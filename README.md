@@ -6,12 +6,10 @@ A machine learning workflow that predicts NFL player fantasy performance for 1-1
 
 ## Features
 
-- **6-position support**: ML models for QB, RB, WR, TE plus statistical models for K (Kicker) and DST (Defense/Special Teams)
+- **4-position support**: ML models for QB, RB, WR, TE
 - **Flexible prediction window**: Predict performance for next week or entire season (1-18 weeks)
 - **Utilization Score integration**: Incorporates opportunity-based metrics for offensive position predictions
-- **Kicker projections**: Aggregated from play-by-play field goal and extra point data with distance-based scoring
-- **DST projections**: Team defense stats (sacks, INTs, fumble recoveries, TDs, points allowed) from play-by-play data
-- **Automated data pipelines**: Scrapers to refresh historical data to latest results (back to 2006)
+- **Automated data pipelines**: Loaders to refresh historical data to latest results (back to 2006)
 - **Team context**: Includes team stats for every team a player has been on
 - **Model optimization**: Hyperparameter tuning with Optuna, dimensionality reduction
 
@@ -24,14 +22,13 @@ pip install -r requirements.txt
 
 ## Usage
 
-### 1. Refresh Data
+### 1. Load Data
 ```bash
 python -m src.scrapers.run_scrapers --seasons 2020-2024
 ```
 
 ### 2. Train Models
 ```bash
-# Train ML models for offensive positions (K/DST use statistical models automatically)
 python -m src.models.train --positions QB RB WR TE
 ```
 
@@ -49,7 +46,7 @@ python -m src.predict --player "Patrick Mahomes" --weeks 4
 
 ## Web app (FastAPI + React SPA)
 
-A dark-theme single-page app with 5 tabs: **Dashboard**, **Rankings**, **Draft Assistant**, **Player Lookup**, and **Model Insights**. Supports all 6 positions (QB, RB, WR, TE, K, DST) with time horizon filters (1-week, 4-week, rest-of-season).
+A dark-theme single-page app with 5 tabs: **Dashboard**, **Rankings**, **Draft Assistant**, **Player Lookup**, and **Model Insights**. Supports QB, RB, WR, TE with time horizon filters (1-week, 4-week, rest-of-season).
 
 **Recommended: one command** (builds frontend if needed, starts server):
    ```bash
@@ -67,11 +64,11 @@ See `docs/RUN_WITH_NEW_FEATURES.md`, `api/README.md`, and `frontend/README.md` f
 ```
 nfl-predictor/
 ├── data/
-│   ├── raw/              # Raw scraped data
+│   ├── raw/              # Raw source data
 │   ├── processed/        # Cleaned and feature-engineered data
 │   └── models/           # Trained model artifacts
 ├── src/
-│   ├── scrapers/         # Data collection modules
+│   ├── scrapers/         # Data collection utilities (nfl-data-py loaders)
 │   ├── features/         # Feature engineering and utilization score
 │   ├── models/           # ML model definitions and training
 │   ├── evaluation/       # Model evaluation and testing
