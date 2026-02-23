@@ -17357,9 +17357,9 @@
     }
   ],
   "qb_target": "fp",
-  "week_label": "2026 Season \u00b7 Week 1",
-  "default_horizon": null,
-  "default_horizon_label": null,
+  "week_label": "2026 Season \u00b7 Full Season Projections",
+  "default_horizon": 18,
+  "default_horizon_label": "2026 Season \u00b7 Full Season Projections",
   "schedule_available": false,
   "schedule_note": "1w: includes next season (not yet released) or missing; 4w: includes next season (not yet released) or missing; 18w: includes next season (not yet released) or missing.",
   "schedule_by_horizon": {
