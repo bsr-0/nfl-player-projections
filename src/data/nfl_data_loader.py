@@ -626,6 +626,55 @@ class NFLDataLoader:
         
         return changes[['name', 'position', 'previous_team', 'current_team', 'depth_chart_position', 'change_type']]
     
+    def load_roster_statuses(self, seasons: List[int], store_in_db: bool = True) -> pd.DataFrame:
+        """
+        Load roster status data from nfl-data-py and optionally store in DB.
+
+        Extracts the ``status`` column (ACT, RET, CUT, RES, DEV, INA, etc.)
+        that was previously loaded but discarded.  Storing it allows
+        ``filter_to_eligible_players`` to exclude explicitly retired players.
+
+        Args:
+            seasons: Seasons to load roster statuses for.
+            store_in_db: Whether to persist to player_roster_status table.
+
+        Returns:
+            DataFrame with player_id, season, status, team, position,
+            jersey_number, depth_chart_position.
+        """
+        roster_df = self.load_rosters(seasons)
+        if roster_df.empty:
+            return pd.DataFrame()
+
+        # Keep one row per (player_id, season) — last team/status wins
+        keep_cols = [c for c in [
+            'player_id', 'player_name', 'position', 'team', 'season',
+            'status', 'jersey_number', 'depth_chart_position',
+        ] if c in roster_df.columns]
+        df = roster_df[keep_cols].copy()
+        df = df.rename(columns={'player_name': 'name'})
+        df = df[df['position'].isin(POSITIONS)]
+        df = df.sort_values(['player_id', 'season']).drop_duplicates(
+            subset=['player_id', 'season'], keep='last',
+        )
+
+        if store_in_db:
+            count = 0
+            for _, row in df.iterrows():
+                self.db.upsert_player_roster_status({
+                    'player_id': str(row['player_id']),
+                    'season': int(row['season']),
+                    'status': str(row.get('status', '')) if pd.notna(row.get('status')) else None,
+                    'team': str(row.get('team', '')) if pd.notna(row.get('team')) else None,
+                    'position': str(row.get('position', '')) if pd.notna(row.get('position')) else None,
+                    'jersey_number': int(row['jersey_number']) if pd.notna(row.get('jersey_number')) else None,
+                    'depth_chart_position': str(row['depth_chart_position']) if pd.notna(row.get('depth_chart_position')) else None,
+                })
+                count += 1
+            print(f"  Stored {count} roster status records")
+
+        return df
+
     def load_depth_charts(self, season: int = None) -> pd.DataFrame:
         """
         Load depth chart data for utilization modeling.
@@ -709,26 +758,78 @@ def get_eligible_seasons(lookback: int = None) -> List[int]:
     return sorted(all_seasons)[-lookback:]
 
 
+# Roster statuses that indicate a player should be excluded from projections.
+INACTIVE_ROSTER_STATUSES = ["RET"]
+
+
 def filter_to_eligible_players(df: pd.DataFrame, eligible_player_ids: List[str] = None) -> pd.DataFrame:
     """Filter a player DataFrame to only include eligible (active) players.
+
+    Eligibility is determined by combining two signals:
+
+    1. **Game-data presence** (original logic): a player must have at least one
+       ``player_weekly_stats`` row in the recent lookback seasons
+       (``ELIGIBLE_SEASONS_LOOKBACK``).
+    2. **Roster status** (new): if ``player_roster_status`` data is available,
+       players whose most recent status is in ``INACTIVE_ROSTER_STATUSES``
+       (e.g. ``RET`` for retired) are excluded even if they have recent game data.
+
+    The two signals are intersected: a player must pass *both* checks to be
+    eligible.  If roster-status data is not yet loaded the function gracefully
+    falls back to the game-data-only approach.
 
     If *eligible_player_ids* is not provided it is computed from the database
     using the configured lookback window.
     """
     if df.empty or "player_id" not in df.columns:
         return df
+
+    db = DatabaseManager()
+
+    # --- Signal 1: game-data presence in recent seasons ---
     if eligible_player_ids is None:
-        db = DatabaseManager()
         eligible_seasons = get_eligible_seasons()
         eligible_player_ids = db.get_eligible_player_ids(eligible_seasons)
     if not eligible_player_ids:
         return df  # Safety: don't filter everything out if DB has no data
     eligible_set = set(eligible_player_ids)
-    filtered = df[df["player_id"].isin(eligible_set)]
+
+    # --- Signal 2: roster-status exclusion ---
+    # Only exclude players who *explicitly* have a retired status in the DB.
+    # Players with no roster status entry at all are NOT excluded (they pass
+    # through on game-data alone).
+    roster_excluded: set = set()
+    try:
+        eligible_seasons = get_eligible_seasons()
+        if eligible_seasons and db.has_roster_status_data(max(eligible_seasons)):
+            # Get all players with roster entries (including retired)
+            all_rostered = set(db.get_players_with_roster_status(
+                eligible_seasons, exclude_statuses=None,
+            ))
+            # Get players with roster entries excluding retired
+            non_retired_rostered = set(db.get_players_with_roster_status(
+                eligible_seasons, exclude_statuses=INACTIVE_ROSTER_STATUSES,
+            ))
+            # Players explicitly marked retired = in roster table but excluded
+            # by the status filter
+            roster_excluded = (all_rostered - non_retired_rostered) & eligible_set
+    except Exception:
+        pass  # Roster status table may not exist yet; fall back to game-data only
+
+    combined_eligible = eligible_set - roster_excluded
+
+    filtered = df[df["player_id"].isin(combined_eligible)]
     n_removed = len(df) - len(filtered)
     if n_removed > 0:
-        n_unique_removed = df[~df["player_id"].isin(eligible_set)]["player_id"].nunique()
-        print(f"  Filtered out {n_unique_removed} ineligible (retired/inactive) players ({n_removed} rows)")
+        n_unique_removed = df[~df["player_id"].isin(combined_eligible)]["player_id"].nunique()
+        detail_parts = []
+        if roster_excluded:
+            detail_parts.append(f"{len(roster_excluded)} by roster status")
+        game_only_removed = n_unique_removed - len(roster_excluded & set(df["player_id"].unique()))
+        if game_only_removed > 0:
+            detail_parts.append(f"{game_only_removed} by game-data absence")
+        detail = f" ({', '.join(detail_parts)})" if detail_parts else ""
+        print(f"  Filtered out {n_unique_removed} ineligible (retired/inactive) players ({n_removed} rows){detail}")
     return filtered
 
 
@@ -757,13 +858,19 @@ def load_all_historical_data(seasons: List[int] = None):
     # Load schedules
     schedule_df = loader.load_schedules(seasons)
     
-    # Load rosters
-    print("\nLoading rosters...")
+    # Load rosters and persist roster status (ACT/RET/CUT/etc.)
+    print("\nLoading rosters and roster statuses...")
     try:
-        roster_df = loader.load_rosters(seasons)
-        print(f"  Loaded rosters: {len(roster_df) if roster_df is not None else 0} records")
+        roster_status_df = loader.load_roster_statuses(seasons, store_in_db=True)
+        print(f"  Loaded roster statuses: {len(roster_status_df) if roster_status_df is not None else 0} records")
     except Exception as e:
-        print(f"  Warning: Could not load rosters: {e}")
+        print(f"  Warning: Could not load roster statuses: {e}")
+        # Fallback: load rosters without storing status
+        try:
+            roster_df = loader.load_rosters(seasons)
+            print(f"  Loaded rosters (no status): {len(roster_df) if roster_df is not None else 0} records")
+        except Exception as e2:
+            print(f"  Warning: Could not load rosters: {e2}")
     
     # Load snap counts
     print("\nLoading snap counts...")

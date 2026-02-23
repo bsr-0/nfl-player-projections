@@ -216,6 +216,15 @@ class NFLDataRefresher:
                 except Exception as e:
                     results['errors'].append(f"Error loading schedule: {e}")
         
+        # Refresh roster statuses for recent seasons (for eligibility filtering)
+        try:
+            roster_seasons = [s for s in [current - 1, current] if s > 0]
+            for s in roster_seasons:
+                if not self.db.has_roster_status_data(s):
+                    self.loader.load_roster_statuses([s], store_in_db=True)
+        except Exception as e:
+            results['errors'].append(f"Roster status refresh: {e}")
+
         # Backfill team_stats from player_weekly_stats when missing (no scrapers required)
         try:
             n_backfill = self.db.ensure_team_stats_from_players(season=None)

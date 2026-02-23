@@ -175,6 +175,23 @@ class DatabaseManager:
                 )
             """)
             
+            # Player roster status (from nfl-data-py rosters)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS player_roster_status (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id TEXT NOT NULL,
+                    season INTEGER NOT NULL,
+                    status TEXT,
+                    team TEXT,
+                    position TEXT,
+                    jersey_number INTEGER,
+                    depth_chart_position TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(player_id, season),
+                    FOREIGN KEY (player_id) REFERENCES players(player_id)
+                )
+            """)
+
             # Utilization scores
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS utilization_scores (
@@ -727,6 +744,66 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute(query, eligible_seasons)
             return [row[0] for row in cursor.fetchall()]
+
+    def upsert_player_roster_status(self, data: Dict[str, Any]) -> bool:
+        """Insert or update a player's roster status for a season."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO player_roster_status
+                (player_id, season, status, team, position, jersey_number, depth_chart_position)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data.get("player_id"),
+                data.get("season"),
+                data.get("status"),
+                data.get("team"),
+                data.get("position"),
+                data.get("jersey_number"),
+                data.get("depth_chart_position"),
+            ))
+            conn.commit()
+            return True
+
+    def get_players_with_roster_status(self, seasons: List[int],
+                                        exclude_statuses: List[str] = None) -> List[str]:
+        """Return player_ids that have a roster entry in the given seasons,
+        optionally excluding specific statuses (e.g. 'RET' for retired).
+
+        Args:
+            seasons: Seasons to check for roster presence.
+            exclude_statuses: Status codes to exclude (e.g. ['RET']).
+
+        Returns:
+            List of eligible player_ids.
+        """
+        if not seasons:
+            return []
+        placeholders = ",".join("?" for _ in seasons)
+        query = f"""
+            SELECT DISTINCT player_id
+            FROM player_roster_status
+            WHERE season IN ({placeholders})
+        """
+        params: list = list(seasons)
+        if exclude_statuses:
+            status_ph = ",".join("?" for _ in exclude_statuses)
+            query += f" AND (status IS NULL OR status NOT IN ({status_ph}))"
+            params.extend(exclude_statuses)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            return [row[0] for row in cursor.fetchall()]
+
+    def has_roster_status_data(self, season: int) -> bool:
+        """Check if roster status data exists for a season."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM player_roster_status WHERE season = ?",
+                (season,),
+            )
+            return cursor.fetchone()[0] > 0
 
     def bulk_insert_dataframe(self, df: pd.DataFrame, table_name: str) -> int:
         """Bulk insert a DataFrame into a table."""
