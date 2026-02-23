@@ -18,7 +18,17 @@ DB_PATH = DATA_DIR / "nfl_data.db"
 
 # Scraping settings
 SCRAPER_DELAY = 2.0  # Seconds between requests
+SCRAPER_DELAY_JITTER = 1.5  # Max random jitter added to delay (seconds)
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+USER_AGENT_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6; rv:122.0) Gecko/20100101 Firefox/122.0",
+]
+SCRAPER_CACHE_TTL_HOURS = 24  # Reuse cached HTTP responses within this window
+SCRAPER_CACHE_SUBDIR = "http_cache"
 from datetime import datetime
 
 def _current_nfl_season():
@@ -42,8 +52,8 @@ CURRENT_NFL_SEASON = _current_nfl_season()
 # Default range for scraping/loading: MIN_HISTORICAL_YEAR through current NFL season (inclusive).
 SEASONS_TO_SCRAPE = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
 
-# Positions (offensive skill + kicker + defense/special teams)
-POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"]
+# Positions (offensive skill positions only)
+POSITIONS = ["QB", "RB", "WR", "TE"]
 # Offensive skill positions used by the utilization-based ML pipeline
 OFFENSIVE_POSITIONS = ["QB", "RB", "WR", "TE"]
 
@@ -143,17 +153,6 @@ UTILIZATION_WEIGHTS = {
         "redzone_opportunity": 0.25,
         "play_volume": 0.30,
     },
-    "K": {
-        "fg_attempts": 0.50,
-        "xp_attempts": 0.30,
-        "team_scoring": 0.20,
-    },
-    "DST": {
-        "sacks": 0.25,
-        "turnovers": 0.30,
-        "points_allowed_inv": 0.25,
-        "defensive_tds": 0.20,
-    },
 }
 
 # Model settings
@@ -228,7 +227,7 @@ MIN_TRAINING_SEASONS_1W = 3   # 1-week model: min 3, optimal 5+
 MIN_TRAINING_SEASONS_18W = 8  # 18-week model: min 8, optimal 10+
 MIN_TRAINING_SEASONS_4W = 5  # 4-week horizon (LSTM+ARIMA): min 5, optimal 8+
 # Per-position minimum players for training (requirements: ~30 QB, 60 RB, 70 WR, 30 TE)
-MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30, "K": 20, "DST": 32}
+MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30}
 
 # Alternative training windows (end_year = CURRENT_NFL_SEASON; start_year explicit)
 TRAINING_WINDOW_PRESETS = {
@@ -306,9 +305,9 @@ FEATURE_VERSION_FILENAME = "feature_version.txt"
 # PERFORMANCE TARGETS (from requirements)
 # =============================================================================
 # Position-specific RMSE targets by horizon
-RMSE_TARGETS_1W = {"QB": 7.5, "RB": 8.5, "WR": 8.0, "TE": 7.0, "K": 4.0, "DST": 5.0}
-RMSE_TARGETS_4W = {"QB": 10.0, "RB": 11.0, "WR": 10.0, "TE": 9.0, "K": 6.0, "DST": 8.0}
-RMSE_TARGETS_18W = {"QB": 15.0, "RB": 15.0, "WR": 15.0, "TE": 15.0, "K": 10.0, "DST": 12.0}
+RMSE_TARGETS_1W = {"QB": 7.5, "RB": 8.5, "WR": 8.0, "TE": 7.0}
+RMSE_TARGETS_4W = {"QB": 10.0, "RB": 11.0, "WR": 10.0, "TE": 9.0}
+RMSE_TARGETS_18W = {"QB": 15.0, "RB": 15.0, "WR": 15.0, "TE": 15.0}
 
 # MAPE targets by horizon
 MAPE_TARGETS = {"1w": 25.0, "4w": 35.0, "18w": 45.0}

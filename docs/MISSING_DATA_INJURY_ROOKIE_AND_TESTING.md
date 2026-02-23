@@ -20,8 +20,8 @@
 
 ### How we fix or handle it
 
-- **Team stats**: Backfill from player-level aggregates when `team_stats` is empty (`ensure_team_stats_from_players` in `database.py`), run from `auto_refresh` so pipelines work without scrapers.
-- **Schedule**: nfl-data-py first, scraper fallback; matchup features use neutral defaults when schedule is missing.
+- **Team stats**: Backfill from player-level aggregates when `team_stats` is empty (`ensure_team_stats_from_players` in `database.py`), run from `auto_refresh` so pipelines work without extra loaders.
+- **Schedule**: nfl-data-py first; matchup features use neutral defaults when schedule is missing.
 - **Final imputation**: In `FeatureEngineer.create_features`, after all feature steps we run:
   - `_ensure_injury_rookie_features`: adds injury/rookie columns with safe defaults if missing.
   - `_check_missing_rate`: logs a warning for any numeric feature with >5% missing (requirement: max 5% per feature acceptable). Does not drop columns.

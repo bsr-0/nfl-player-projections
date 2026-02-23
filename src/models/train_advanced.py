@@ -60,7 +60,7 @@ def load_and_prepare_data(positions: list = None, min_games: int = 4) -> pd.Data
     df = db.get_all_players_for_training(min_games=min_games)
     
     if df.empty:
-        raise ValueError("No data found in database. Run scrapers first.")
+        raise ValueError("No data found in database. Run data loader first.")
     
     positions = positions or POSITIONS
     df = df[df['position'].isin(positions)]

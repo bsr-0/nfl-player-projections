@@ -7,8 +7,6 @@ const POSITION_COLORS: Record<string, string> = {
   RB: '#a78bfa',
   WR: '#10b981',
   TE: '#fbbf24',
-  K: '#f472b6',
-  DST: '#fb923c',
 }
 
 function getProjectedPoints(r: PredictionRow): number | null {
@@ -50,7 +48,7 @@ export function PlayerLookup({ allData }: PlayerLookupProps) {
 
   const allPlayers = useMemo(() => {
     const map = new Map<string, EnrichedPlayer>()
-    for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
+    for (const pos of ['QB', 'RB', 'WR', 'TE']) {
       const rows = allData[pos] ?? []
       const sorted = rows
         .map((r) => ({ r, pts: getProjectedPoints(r) }))

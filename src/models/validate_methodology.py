@@ -304,7 +304,7 @@ def main():
     df = db.get_all_players_for_training(min_games=4)
     
     if df.empty:
-        print("❌ No data available. Run scrapers first.")
+        print("❌ No data available. Run data loader first.")
         return
     
     df = engineer_all_features(df)

@@ -19,7 +19,7 @@ class NFLPredictionPipeline:
     End-to-end pipeline for NFL player performance prediction.
     
     Stages:
-    1. Data Collection: Scrape latest player and team stats
+    1. Data Collection: Load latest player and team stats
     2. Data Processing: Calculate utilization scores, engineer features
     3. Model Training: Train position-specific models with tuning
     4. Prediction: Generate predictions for specified timeframe
@@ -38,7 +38,7 @@ class NFLPredictionPipeline:
         Run the complete pipeline from data collection to prediction.
         
         Args:
-            seasons: Seasons to scrape (default: 2020-2024)
+            seasons: Seasons to load (default: 2020-current season)
             positions: Positions to train (default: all)
             tune_hyperparameters: Whether to tune model hyperparameters
             prediction_weeks: Weeks to predict after training
@@ -93,7 +93,7 @@ class NFLPredictionPipeline:
     
     def _run_data_collection(self, seasons: List[int]):
         """Run data collection stage."""
-        print(f"Scraping data for seasons: {seasons}")
+        print(f"Loading data for seasons: {seasons}")
         run_all_scrapers(seasons=seasons, refresh_only=False)
     
     def _run_training(self, positions: List[str], tune_hyperparameters: bool):
@@ -189,9 +189,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Commands:
-  full      Run complete pipeline (scrape, train, predict)
+  full      Run complete pipeline (load, train, predict)
   refresh   Refresh data and predict with existing models
-  scrape    Only run data scrapers
+  load      Only run data loader
   train     Only train models
   predict   Only make predictions
   evaluate  Run backtesting and evaluation on trained models
@@ -213,7 +213,7 @@ Examples:
     
     parser.add_argument(
         "command",
-        choices=["full", "refresh", "scrape", "train", "predict", "evaluate"],
+        choices=["full", "refresh", "load", "train", "predict", "evaluate"],
         help="Pipeline command to run"
     )
     
@@ -275,7 +275,7 @@ Examples:
     elif args.command == "refresh":
         pipeline.run_refresh_and_predict(prediction_weeks=args.weeks)
     
-    elif args.command == "scrape":
+    elif args.command == "load":
         run_all_scrapers(seasons=seasons, refresh_only=False)
     
     elif args.command == "train":

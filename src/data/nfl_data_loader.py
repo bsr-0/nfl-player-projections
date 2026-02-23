@@ -72,7 +72,7 @@ class NFLDataLoader:
     """
     Load NFL data from nfl-data-py package and store in database.
     
-    This replaces the Pro Football Reference scraper with a more
+    This replaces the Pro Football Reference data source with a more
     reliable data source.
     """
     
@@ -182,16 +182,6 @@ class NFLDataLoader:
         all_dfs = [_unique_columns(d) for d in all_dfs]
         df = pd.concat(all_dfs, ignore_index=True)
         print(f"  Loaded {len(df)} offensive records total")
-        
-        # Append K/DST data from PBP aggregation
-        try:
-            from src.data.kicker_dst_aggregator import load_kicker_dst_data
-            kd_df = load_kicker_dst_data(seasons)
-            if not kd_df.empty:
-                df = pd.concat([df, kd_df], ignore_index=True)
-                print(f"  Added {len(kd_df)} K/DST records from PBP")
-        except Exception as e:
-            print(f"  K/DST load skipped: {e}")
         
         print(f"  Total: {len(df)} records for {POSITIONS}")
         

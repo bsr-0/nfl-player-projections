@@ -25,7 +25,7 @@ function truncateName(name: string, maxLen: number): string {
   return name.slice(0, maxLen - 1) + '\u2026'
 }
 
-const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
+const POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
 type HorizonValue = 1 | 4 | 18
 const HORIZONS: { value: HorizonValue; label: string }[] = [
   { value: 1, label: '1 Week' },
@@ -38,8 +38,6 @@ const POSITION_COLORS: Record<string, string> = {
   RB: '#a78bfa',
   WR: '#10b981',
   TE: '#fbbf24',
-  K: '#f472b6',
-  DST: '#fb923c',
 }
 
 function getTier(rank: number, total: number): { label: string; color: string; bg: string; num: number } {
@@ -95,7 +93,7 @@ export function RankingsView({ data, position, horizon, loading, error, onPositi
   const [selectedBtSeason, setSelectedBtSeason] = useState<number | null>(null)
   const [btRows, setBtRows] = useState<TSBacktestPredictionRow[]>([])
   const [btLoading, setBtLoading] = useState(false)
-  const isFPPosition = position === 'QB' || position === 'K' || position === 'DST'
+  const isFPPosition = position === 'QB'
 
   // Fetch available backtest seasons once
   useEffect(() => {

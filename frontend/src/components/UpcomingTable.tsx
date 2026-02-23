@@ -16,8 +16,12 @@ export function UpcomingTable() {
   const proj1w = 'projection_1w' in (rows[0] || {}) ? 'projection_1w' : 'predicted_points'
 
   const positions = useMemo(() => {
+    const allowed = new Set(['QB', 'RB', 'WR', 'TE'])
     const set = new Set<string>()
-    rows.forEach((r) => r.position && set.add(String(r.position)))
+    rows.forEach((r) => {
+      const pos = r.position ? String(r.position) : ''
+      if (allowed.has(pos)) set.add(pos)
+    })
     return Array.from(set).sort()
   }, [rows])
 
