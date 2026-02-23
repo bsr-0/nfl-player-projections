@@ -235,6 +235,12 @@ def load_eda_sample(max_rows: int = 5000) -> Tuple[Optional[pd.DataFrame], Dict[
         db = DatabaseManager()
         df = db.get_all_players_for_training(min_games=1)
         if df is not None and not df.empty:
+            # Filter to eligible (active) players so retired players don't appear
+            try:
+                from src.data.nfl_data_loader import filter_to_eligible_players
+                df = filter_to_eligible_players(df)
+            except Exception:
+                pass
             if len(df) > max_rows:
                 df = df.sample(n=max_rows, random_state=42).reset_index(drop=True)
             stats["row_count"] = len(df)
