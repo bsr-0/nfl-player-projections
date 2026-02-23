@@ -157,6 +157,8 @@ export interface PredictionsResponse {
   rows: PredictionRow[]
   qb_target?: 'util' | 'fp'
   week_label: string
+  default_horizon?: number | null
+  default_horizon_label?: string | null
   upcoming_week_label?: string | null
   schedule_available?: boolean
   schedule_note?: string

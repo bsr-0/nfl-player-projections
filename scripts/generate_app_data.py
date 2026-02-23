@@ -80,8 +80,17 @@ def generate_app_data(save_daily: bool = False) -> bool:
         print(f"Could not load predictor: {e}")
         return False
     
-    # Get predictions for multiple horizons (1w, 4w, 18w)
+    # Get predictions for multiple horizons (1w, 4w, 18w, plus dynamic default)
+    from src.utils.nfl_calendar import get_current_nfl_week, is_offseason
+    week_info = get_current_nfl_week()
+    cur_week_num = int(week_info.get("week_num", pred_week or 1) or 1)
+    if cur_week_num < 1:
+        cur_week_num = 1
+    # Default horizon: full season if offseason, else remaining weeks in season
+    default_horizon = 18 if is_offseason() else max(1, 18 - min(cur_week_num, 18) + 1)
     horizons = [1, 4, 18]
+    if default_horizon not in horizons:
+        horizons.append(default_horizon)
     pred_dfs = {}
     
     for n_weeks in horizons:
@@ -191,6 +200,13 @@ def generate_app_data(save_daily: bool = False) -> bool:
     # Optional: upcoming week label for app (e.g. "Super Bowl")
     from src.utils.nfl_calendar import get_week_label
     upcoming_label = get_week_label(pred_week, pred_season)
+    if is_offseason():
+        default_label = "Full Season Projections"
+    else:
+        start_wk = int(pred_week or cur_week_num or 1)
+        start_wk = max(1, min(start_wk, 18))
+        default_label = f"Rest of Season (Weeks {start_wk}\u201318)"
+    default_horizon_label = f"{pred_season} Season \u00b7 {default_label}"
     data_dir.mkdir(parents=True, exist_ok=True)
     meta_path = data_dir / "upcoming_week_meta.json"
     import json
@@ -201,6 +217,8 @@ def generate_app_data(save_daily: bool = False) -> bool:
                 "week": pred_week,
                 "label": upcoming_label,
                 "schedule_available": schedule_available_for_pred,
+                "default_horizon": int(default_horizon),
+                "default_horizon_label": default_horizon_label,
             }, f, indent=2)
     except Exception:
         pass

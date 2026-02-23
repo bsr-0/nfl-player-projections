@@ -40,8 +40,9 @@ function getTier(rank: number, total: number): { label: string; color: string; b
   return { label: 'Sit', color: '#94a3b8', bg: 'rgba(148,163,184,0.08)' }
 }
 
-function getProjectedPoints(r: PredictionRow): number | null {
-  const v = r.projection_18w ?? r.projected_points ?? r.predicted_points ?? r.projection_1w
+function getProjectedPoints(r: PredictionRow, defaultHorizon: number): number | null {
+  const dynamicKey = `projection_${defaultHorizon}w` as keyof PredictionRow
+  const v = r[dynamicKey] ?? r.projection_18w ?? r.projected_points ?? r.predicted_points ?? r.projection_1w
   return v != null && !Number.isNaN(Number(v)) ? Number(v) : null
 }
 
@@ -50,9 +51,10 @@ interface DashboardViewProps {
   weekLabel: string
   loading: boolean
   scheduleAvailable?: boolean
+  defaultHorizon: number
 }
 
-export function DashboardView({ allData, weekLabel, loading, scheduleAvailable }: DashboardViewProps) {
+export function DashboardView({ allData, weekLabel, loading, scheduleAvailable, defaultHorizon }: DashboardViewProps) {
   const windowWidth = useWindowWidth()
   const isMobile = windowWidth < 768
   const [heroData, setHeroData] = useState<{ record_count: number; correlation?: number } | null>(null)
@@ -68,7 +70,7 @@ export function DashboardView({ allData, weekLabel, loading, scheduleAvailable }
     for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
       const rows = allData[pos] ?? []
       const sorted = rows
-        .map((r) => ({ r, pts: getProjectedPoints(r) }))
+        .map((r) => ({ r, pts: getProjectedPoints(r, defaultHorizon) }))
         .filter((x) => x.pts != null)
         .sort((a, b) => b.pts! - a.pts!)
       const total = sorted.length
@@ -94,12 +96,12 @@ export function DashboardView({ allData, weekLabel, loading, scheduleAvailable }
     const all: { r: PredictionRow; pts: number }[] = []
     for (const pos of ['QB', 'RB', 'WR', 'TE', 'K', 'DST']) {
       (allData[pos] ?? []).forEach((r) => {
-        const pts = getProjectedPoints(r)
+        const pts = getProjectedPoints(r, defaultHorizon)
         if (pts != null) all.push({ r, pts })
       })
     }
     return all.sort((a, b) => b.pts - a.pts).slice(0, 10)
-  }, [allData])
+  }, [allData, defaultHorizon])
 
   const hasData = Object.keys(allData).length > 0
 

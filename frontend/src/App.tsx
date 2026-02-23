@@ -9,23 +9,21 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [weekLabel, setWeekLabel] = useState('')
   const [scheduleAvailable, setScheduleAvailable] = useState<boolean>(true)
+  const [defaultHorizon, setDefaultHorizon] = useState<number | null>(null)
 
-  // Fetch all positions with 18-week (full season) horizon
+  // Fetch all positions with dynamic default horizon (full season in offseason, remaining weeks mid-season)
   useEffect(() => {
-    const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
-    Promise.all(positions.map((p) => api.predictions(p, undefined, 18)))
-      .then((results) => {
+    api.predictions(undefined, undefined, 'all')
+      .then((d) => {
         const map: Record<string, PredictionRow[]> = {}
-        results.forEach((d, i) => {
-          map[positions[i]] = d.rows
+        const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
+        positions.forEach((p) => {
+          map[p] = (d.rows || []).filter((r) => String(r.position || '').toUpperCase() === p)
         })
         setAllData(map)
-        // Use metadata from first successful response
-        const first = results.find((d) => d.week_label)
-        if (first) {
-          setWeekLabel(first.week_label ?? '')
-          setScheduleAvailable(first.schedule_available ?? true)
-        }
+        setWeekLabel(d.default_horizon_label ?? d.week_label ?? '')
+        setScheduleAvailable(d.schedule_available ?? true)
+        setDefaultHorizon(d.default_horizon ?? null)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -50,6 +48,7 @@ function App() {
           weekLabel={weekLabel}
           loading={loading}
           scheduleAvailable={scheduleAvailable}
+          defaultHorizon={defaultHorizon ?? 18}
         />
       </main>
 

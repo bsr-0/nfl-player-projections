@@ -393,6 +393,8 @@ def _get_predictions_impl(
     pred_season = None
     pred_week = None
     upcoming_label = None
+    default_horizon = None
+    default_horizon_label = None
     if meta_path.exists():
         try:
             import json
@@ -401,6 +403,8 @@ def _get_predictions_impl(
             pred_season = meta.get("season")
             pred_week = meta.get("week")
             upcoming_label = meta.get("label")
+            default_horizon = meta.get("default_horizon")
+            default_horizon_label = meta.get("default_horizon_label")
         except Exception:
             pass
 
@@ -470,7 +474,9 @@ def _get_predictions_impl(
         df = df.drop(columns=["_player_key"], errors="ignore")
 
     # Week label: prefer upcoming label from meta, always include season year
-    if upcoming_label:
+    if default_horizon_label:
+        week_label = default_horizon_label
+    elif upcoming_label:
         # Include season year if not already present in the label
         if pred_season is not None and str(pred_season) not in upcoming_label:
             week_label = f"{pred_season} Season \u00b7 {upcoming_label}"
@@ -484,6 +490,15 @@ def _get_predictions_impl(
         week_label = f"{latest_season} Season \u00b7 Week {latest_week}"
     else:
         week_label = ""
+
+    # Offseason + 18w horizon: show full-season label for draft context.
+    if horizon_int == 18 and not default_horizon_label:
+        try:
+            from src.utils.nfl_calendar import is_offseason
+            if pred_season is not None and is_offseason():
+                week_label = f"{pred_season} Season \u00b7 Full Season Projections"
+        except Exception:
+            pass
 
     # Column for projected_points by horizon (do not fall back to 1w when user chose 4w/18w). When "all", no single proj_col; frontend uses projection_1w/4w/18w.
     proj_col = None
@@ -553,6 +568,8 @@ def _get_predictions_impl(
         "rows": records,
         "qb_target": load_qb_target_choice(),
         "week_label": week_label,
+        "default_horizon": default_horizon,
+        "default_horizon_label": default_horizon_label,
         "schedule_available": schedule_available,
         "schedule_note": schedule_note,
         "schedule_by_horizon": schedule_by_horizon,

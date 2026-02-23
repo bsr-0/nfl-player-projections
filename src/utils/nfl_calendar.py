@@ -210,6 +210,18 @@ def current_season_has_weeks_played(today: Optional[datetime] = None) -> bool:
     return (info.get("week_num", 0) >= 1)
 
 
+def is_offseason(today: Optional[datetime] = None) -> bool:
+    """
+    True if today is after the Super Bowl and before the next season start.
+    """
+    t = today if today is not None else datetime.now()
+    season = get_current_nfl_season(t)
+    sb_date = _playoff_dates(season)["super_bowl"]
+    sb_end = sb_date + timedelta(days=1)
+    season_start = _season_start(season + 1)
+    return sb_end < t < season_start
+
+
 def _roman(n: int) -> str:
     """Roman numeral for Super Bowl number (e.g. 60 -> LX)."""
     val = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
