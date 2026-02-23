@@ -396,14 +396,9 @@ class StackedEnsemble(BaseEstimator, RegressorMixin):
         }
         
         self.ridge_alpha = ridge_alpha
-        self.meta_learner_type = meta_learner
+        self.meta_learner = meta_learner
         self.use_cv_predictions = use_cv_predictions
         self.n_cv_folds = n_cv_folds
-        
-        self.base_models = {}
-        self.meta_learner = None
-        self.scaler = StandardScaler()
-        self.is_fitted = False
     
     def _init_base_models(self):
         """Initialize base models."""
@@ -460,9 +455,10 @@ class StackedEnsemble(BaseEstimator, RegressorMixin):
         """
         X_array = X.values if isinstance(X, pd.DataFrame) else X
         y_array = y.values if isinstance(y, pd.Series) else y
-        
+
         # Scale features
-        X_scaled = self.scaler.fit_transform(X_array)
+        self.scaler_ = StandardScaler()
+        X_scaled = self.scaler_.fit_transform(X_array)
         
         # Initialize base models
         self.base_models = self._init_base_models()
@@ -482,26 +478,26 @@ class StackedEnsemble(BaseEstimator, RegressorMixin):
             model.fit(X_scaled, y_array)
         
         # Fit meta-learner
-        if self.meta_learner_type == 'ridge':
-            self.meta_learner = Ridge(alpha=1.0)
-        elif self.meta_learner_type == 'xgb' and HAS_XGBOOST:
-            self.meta_learner = xgb.XGBRegressor(n_estimators=50, max_depth=3)
+        if self.meta_learner == 'ridge':
+            self.meta_learner_ = Ridge(alpha=1.0)
+        elif self.meta_learner == 'xgb' and HAS_XGBOOST:
+            self.meta_learner_ = xgb.XGBRegressor(n_estimators=50, max_depth=3)
         else:
-            self.meta_learner = None  # Use simple average
+            self.meta_learner_ = None  # Use simple average
+
+        if self.meta_learner_ is not None:
+            self.meta_learner_.fit(meta_features, y_array)
         
-        if self.meta_learner is not None:
-            self.meta_learner.fit(meta_features, y_array)
-        
-        self.is_fitted = True
+        self.is_fitted_ = True
         return self
-    
+
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """Make predictions using the stacked ensemble."""
-        if not self.is_fitted:
+        if not getattr(self, 'is_fitted_', False):
             raise ValueError("Model must be fitted before prediction")
-        
+
         X_array = X.values if isinstance(X, pd.DataFrame) else X
-        X_scaled = self.scaler.transform(X_array)
+        X_scaled = self.scaler_.transform(X_array)
         
         # Get base model predictions
         meta_features = np.zeros((len(X_scaled), len(self.base_models)))
@@ -509,28 +505,11 @@ class StackedEnsemble(BaseEstimator, RegressorMixin):
             meta_features[:, idx] = model.predict(X_scaled)
         
         # Combine with meta-learner
-        if self.meta_learner is not None:
-            return self.meta_learner.predict(meta_features)
+        if self.meta_learner_ is not None:
+            return self.meta_learner_.predict(meta_features)
         else:
             # Simple average
             return meta_features.mean(axis=1)
-    
-    def get_params(self, deep=True):
-        """Get parameters for sklearn compatibility."""
-        return {
-            'xgb_params': self.xgb_params,
-            'lgb_params': self.lgb_params,
-            'ridge_alpha': self.ridge_alpha,
-            'meta_learner': self.meta_learner_type,
-            'use_cv_predictions': self.use_cv_predictions,
-            'n_cv_folds': self.n_cv_folds
-        }
-    
-    def set_params(self, **params):
-        """Set parameters for sklearn compatibility."""
-        for key, value in params.items():
-            setattr(self, key, value)
-        return self
     
     def get_feature_importance(self) -> Dict[str, np.ndarray]:
         """Get feature importance from base models."""
@@ -551,8 +530,8 @@ class StackedEnsemble(BaseEstimator, RegressorMixin):
         
         joblib.dump({
             'base_models': self.base_models,
-            'meta_learner': self.meta_learner,
-            'scaler': self.scaler,
+            'meta_learner_': self.meta_learner_,
+            'scaler_': self.scaler_,
             'params': self.get_params()
         }, path / 'stacked_ensemble.joblib')
     
@@ -564,9 +543,9 @@ class StackedEnsemble(BaseEstimator, RegressorMixin):
         
         model = cls(**data['params'])
         model.base_models = data['base_models']
-        model.meta_learner = data['meta_learner']
-        model.scaler = data['scaler']
-        model.is_fitted = True
+        model.meta_learner_ = data.get('meta_learner_', data.get('meta_learner'))
+        model.scaler_ = data.get('scaler_', data.get('scaler'))
+        model.is_fitted_ = True
         
         return model
 
