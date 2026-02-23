@@ -741,7 +741,8 @@ class ModelTrainer:
                 try:
                     from src.models.feature_engineering_pipeline import StabilitySelector
                     y_primary = y_dict.get(1, list(y_dict.values())[0])
-                    stability_sel = StabilitySelector(n_bootstrap=30, threshold=0.5)
+                    stability_n_bootstrap = MODEL_CONFIG.get("stability_n_bootstrap", 30)
+                    stability_sel = StabilitySelector(n_bootstrap=stability_n_bootstrap, threshold=0.5)
                     stable_features = stability_sel.fit(
                         X.iloc[:fs_split], y_primary.iloc[:fs_split],
                         n_features_to_select=n_features

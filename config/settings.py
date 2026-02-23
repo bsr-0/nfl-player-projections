@@ -199,6 +199,25 @@ MODEL_CONFIG = {
     # Training gate policy: when True, fail-fast on requirement minimums
     # (training seasons and per-position player counts) instead of warning only.
     "strict_requirements_default": False,
+    # Stability selection bootstrap iterations (per position)
+    "stability_n_bootstrap": 30,
+    # SHAP/PDP explainability (can be slow on large models)
+    "enable_shap_pdp": True,
+}
+
+# Fast training overrides: ~8-10x faster with minimal accuracy loss.
+# Applied via `python -m src.models.train --fast`.
+# Reduces Optuna trials, CV folds, stability bootstrap, horizon model
+# epochs, and skips expensive optional steps (SHAP, robust CV, QB dual-target).
+FAST_MODEL_CONFIG = {
+    "n_optuna_trials": 15,          # 15 vs 100 (6.7x fewer)
+    "cv_folds": 3,                  # 3 vs 5 (1.7x fewer OOF folds)
+    "stability_n_bootstrap": 10,    # 10 vs 30 (3x fewer)
+    "lstm_optuna_trials": 5,        # 5 vs 15
+    "lstm_epochs": 40,              # 40 vs 80
+    "deep_optuna_trials": 5,        # 5 vs 15
+    "deep_epochs": 50,              # 50 vs 100
+    "enable_shap_pdp": False,       # Skip SHAP/PDP
 }
 
 # =============================================================================
