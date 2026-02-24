@@ -720,14 +720,18 @@ class ModelTrainer:
 
             if len(X.columns) > n_features:
                 # Select features separately per horizon for better horizon-specific modeling
+                # skip_vif=True here because a final VIF prune runs on the union below
                 horizon_features = {}
                 for n_weeks, y_horizon in y_dict.items():
+                    print(f"  Feature selection for {n_weeks}w horizon ({len(X.columns)} candidates)...",
+                          flush=True)
                     y_fs = y_horizon.iloc[:fs_split]
                     X_fs = X.iloc[:fs_split]
                     _, sel_cols = select_features_simple(
                         X_fs, y_fs,
                         n_features=n_features,
-                        correlation_threshold=corr_thresh
+                        correlation_threshold=corr_thresh,
+                        skip_vif=True,
                     )
                     horizon_features[n_weeks] = sel_cols if sel_cols else list(X.columns)
 
@@ -764,6 +768,7 @@ class ModelTrainer:
 
             # Actionable VIF pruning: iteratively drop highest-VIF feature
             # Compute VIF on training portion only to avoid val→train leakage
+            print(f"  Running final VIF pruning on {X.shape[1]} features...", flush=True)
             try:
                 from src.features.dimensionality_reduction import prune_by_vif
                 vif_thresh = MODEL_CONFIG.get("vif_threshold", 10.0)
