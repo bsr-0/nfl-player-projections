@@ -489,7 +489,10 @@ class PositionModel:
             mean_pred = tt.inverse_transform(mean_pred)
 
         ensemble_std = np.std(preds, axis=0)
-        conformal_std = getattr(self, '_conformal_residual_std', None)
+        conformal_std = getattr(self, "_conformal_residual_std", None)
+        conformal_std_arr = None
+        if conformal_std is not None and np.isfinite(conformal_std) and conformal_std > 0:
+            conformal_std_arr = np.full_like(ensemble_std, float(conformal_std))
 
         # Optional heteroscedastic uncertainty model (trained on OOF residuals)
         hetero_std = None
@@ -506,18 +509,18 @@ class PositionModel:
             raw_mean = mean_pred + tt.shift
             scale = np.maximum(raw_mean, 1.0)
             ensemble_std = ensemble_std * scale
-            if conformal_std is not None:
-                conformal_std = conformal_std * scale
+            if conformal_std_arr is not None:
+                conformal_std_arr = conformal_std_arr * scale
             if hetero_std is not None:
                 hetero_std = hetero_std * scale
 
         # Blend uncertainties: heteroscedastic (if available) + conformal + ensemble spread
-        if hetero_std is not None and conformal_std is not None and conformal_std > 0:
-            std_pred = 0.5 * hetero_std + 0.3 * conformal_std + 0.2 * ensemble_std
+        if hetero_std is not None and conformal_std_arr is not None:
+            std_pred = 0.5 * hetero_std + 0.3 * conformal_std_arr + 0.2 * ensemble_std
         elif hetero_std is not None:
             std_pred = 0.7 * hetero_std + 0.3 * ensemble_std
-        elif conformal_std is not None and conformal_std > 0:
-            std_pred = 0.7 * conformal_std + 0.3 * ensemble_std
+        elif conformal_std_arr is not None:
+            std_pred = 0.7 * conformal_std_arr + 0.3 * ensemble_std
         else:
             std_pred = ensemble_std
 
@@ -615,10 +618,20 @@ class PositionModel:
                 "tree_method": "hist",
                 "n_jobs": 1,
             }
-            model = xgb.XGBRegressor(**params)
             cv = SeasonAwareTimeSeriesSplit(n_splits=tune_folds, seasons=seasons_tune, gap_seasons=gap)
-            scores = cross_val_score(model, X_tune, y_tune, cv=cv, scoring="neg_mean_squared_error", n_jobs=1)
-            return -scores.mean()
+            # Avoid sklearn get_tags() path that breaks with xgboost's estimator MRO
+            # under sklearn>=1.6 by running manual CV.
+            fold_mse = []
+            for train_idx, test_idx in cv.split(X_tune, y_tune):
+                model = xgb.XGBRegressor(**params)
+                X_train, y_train = X_tune[train_idx], y_tune[train_idx]
+                X_test, y_test = X_tune[test_idx], y_tune[test_idx]
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                fold_mse.append(mean_squared_error(y_test, preds))
+            if not fold_mse:
+                return float("inf")
+            return float(np.mean(fold_mse))
 
         study = optuna.create_study(
             direction="minimize",
@@ -986,7 +999,12 @@ class MultiWeekModel:
             if not np.isfinite(max_season) or max_season <= min_season:
                 return sample_weight
             decay = np.power(0.5, (max_season - seasons_arr) / float(halflife))
-            return decay / decay.max()
+            w = decay / decay.max()
+            if sample_weight is not None and len(sample_weight) == len(w):
+                # Combine provided weights with horizon-specific decay.
+                w = w * sample_weight
+                w = w / np.nanmax(w) if np.nanmax(w) > 0 else w
+            return w
 
         representative_weeks = {
             "short": _pick_available(1, self.horizon_groups["short"] + [1]),

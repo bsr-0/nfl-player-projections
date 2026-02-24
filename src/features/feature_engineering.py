@@ -125,6 +125,23 @@ class FeatureEngineer:
             df["receiving_yards"], df["receptions"]
         )
         df["catch_rate"] = safe_divide(df["receptions"], df["targets"]) * 100
+
+        # Advanced PBP efficiency (EPA/WPA per opportunity)
+        pass_plays = df.get("pass_plays", df.get("passing_attempts", pd.Series(0, index=df.index)))
+        rush_plays = df.get("rush_plays", df.get("rushing_attempts", pd.Series(0, index=df.index)))
+        recv_targets = df.get("recv_targets", df.get("targets", pd.Series(0, index=df.index)))
+        if "pass_epa" in df.columns:
+            df["pass_epa_per_play"] = safe_divide(df["pass_epa"], pass_plays)
+        if "rush_epa" in df.columns:
+            df["rush_epa_per_play"] = safe_divide(df["rush_epa"], rush_plays)
+        if "recv_epa" in df.columns:
+            df["recv_epa_per_target"] = safe_divide(df["recv_epa"], recv_targets)
+        if "pass_wpa" in df.columns:
+            df["pass_wpa_per_play"] = safe_divide(df["pass_wpa"], pass_plays)
+        if "rush_wpa" in df.columns:
+            df["rush_wpa_per_play"] = safe_divide(df["rush_wpa"], rush_plays)
+        if "recv_wpa" in df.columns:
+            df["recv_wpa_per_target"] = safe_divide(df["recv_wpa"], recv_targets)
         
         # QB-specific (only if columns exist)
         if "passing_completions" in df.columns and "passing_attempts" in df.columns:
@@ -423,9 +440,13 @@ class FeatureEngineer:
                 return df
             
             # Calculate rolling team averages (last 3 games)
-            team_metrics = ['points_scored', 'points_allowed', 'total_yards', 
+            team_metrics = ['points_scored', 'points_allowed', 'total_yards',
                            'passing_yards', 'rushing_yards', 'turnovers',
-                           'pass_attempts', 'rush_attempts', 'redzone_scores']
+                           'pass_attempts', 'rush_attempts', 'redzone_scores',
+                           'neutral_pass_plays', 'neutral_run_plays',
+                           'neutral_pass_rate', 'neutral_pass_rate_lg', 'neutral_pass_rate_oe',
+                           'drive_count', 'drive_success_rate', 'avg_drive_epa',
+                           'points_per_drive', 'pace_sec_per_play']
             
             # Create team averages lookup using PRIOR season's data to avoid
             # lookahead bias (current season avg includes future weeks).
@@ -699,6 +720,12 @@ class FeatureEngineer:
             'expected_game_total': 44.0, 'expected_point_diff': 0.0,
             'team_a_plays_per_game': 65.0, 'team_b_plays_per_game': 65.0,
             'team_a_pass_rate': 0.55,
+            'team_a_neutral_pass_rate': 0.55, 'team_a_neutral_pass_rate_oe': 0.0,
+            'team_b_neutral_pass_rate': 0.55, 'team_b_neutral_pass_rate_oe': 0.0,
+            'team_a_drive_success_rate': 0.50, 'team_b_drive_success_rate': 0.50,
+            'team_a_points_per_drive': 1.8, 'team_b_points_per_drive': 1.8,
+            'team_a_avg_drive_epa': 0.0, 'team_b_avg_drive_epa': 0.0,
+            'team_a_pace_sec_per_play': 28.0, 'team_b_pace_sec_per_play': 28.0,
         }
         
         for col, default_val in team_feature_defaults.items():
@@ -722,6 +749,31 @@ class FeatureEngineer:
                 df["team_pass_attempts"], 
                 df.get("team_plays", df["team_pass_attempts"] + df.get("team_rush_attempts", 0))
             )
+
+        # Situation-specific usage rates (advanced PBP)
+        neutral_targets = df.get("neutral_targets", pd.Series(0, index=df.index))
+        team_neutral_pass_plays = df.get("team_neutral_pass_plays", pd.Series(0, index=df.index))
+        df["neutral_target_share"] = safe_divide(neutral_targets, team_neutral_pass_plays)
+
+        df["third_down_target_rate"] = safe_divide(
+            df.get("third_down_targets", pd.Series(0, index=df.index)),
+            df.get("targets", pd.Series(0, index=df.index))
+        )
+        df["short_yardage_touch_rate"] = safe_divide(
+            df.get("short_yardage_rushes", pd.Series(0, index=df.index)),
+            df.get("rushing_attempts", pd.Series(0, index=df.index))
+        )
+        df["two_minute_target_rate"] = safe_divide(
+            df.get("two_minute_targets", pd.Series(0, index=df.index)),
+            df.get("targets", pd.Series(0, index=df.index))
+        )
+        total_touches = df.get("rushing_attempts", pd.Series(0, index=df.index)) + df.get(
+            "targets", pd.Series(0, index=df.index)
+        )
+        df["high_leverage_touch_rate"] = safe_divide(
+            df.get("high_leverage_touches", pd.Series(0, index=df.index)),
+            total_touches
+        )
         
         # Bye week indicator (no game previous week)
         df["post_bye"] = df.groupby("player_id")["week"].transform(

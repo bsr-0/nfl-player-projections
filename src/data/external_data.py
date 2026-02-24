@@ -231,7 +231,6 @@ class DefenseRankingsLoader:
         if df.empty:
             return df
         result = df.copy()
-        result['vegas_data_available'] = 0
 
         # Calculate defense rankings
         defense_rankings = self.calculate_defense_rankings(df)
@@ -243,8 +242,6 @@ class DefenseRankingsLoader:
             pos_defaults = {'QB': 18.0, 'RB': 12.0, 'WR': 12.0, 'TE': 10.0}
             result['opp_pts_allowed'] = result['position'].map(pos_defaults).fillna(12.0)
             return result
-        result['defense_data_available'] = 1
-        
         # Shift rankings by 1 week (use last week's data for this week's prediction)
         defense_rankings['week'] = defense_rankings['week'] + 1
         
@@ -264,6 +261,14 @@ class DefenseRankingsLoader:
             'matchup_score': 'opp_matchup_score',
             'defense_pts_allowed_roll4': 'opp_pts_allowed'
         })
+
+        # Availability signal before filling defaults
+        avail_mask = (
+            result['opp_defense_rank'].notna()
+            & result['opp_matchup_score'].notna()
+            & result['opp_pts_allowed'].notna()
+        )
+        result['defense_data_available'] = avail_mask.astype(int)
         
         # Fill missing with fixed defaults (avoid leakage: do NOT use fantasy_points)
         result['opp_defense_rank'] = result['opp_defense_rank'].fillna(16)

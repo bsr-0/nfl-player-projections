@@ -52,6 +52,25 @@ CURRENT_NFL_SEASON = _current_nfl_season()
 # Default range for scraping/loading: MIN_HISTORICAL_YEAR through current NFL season (inclusive).
 SEASONS_TO_SCRAPE = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
 
+# -----------------------------------------------------------------------------
+# PBP ADVANCED FEATURE SETTINGS
+# -----------------------------------------------------------------------------
+# Enable advanced PBP-derived features (EPA/WPA/success, neutral pass rate, drive metrics).
+PBP_ADVANCED_FEATURES_ENABLED = True
+# Seasons to compute advanced PBP features for (all since MIN_HISTORICAL_YEAR).
+PBP_ADVANCED_SEASONS = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
+# Neutral script threshold (score diff)
+NEUTRAL_SCORE_DIFF = 7
+# Short-yardage threshold
+SHORT_YARDAGE_YDSTOGO = 2
+# Red zone and goal line yardline_100 thresholds
+RED_ZONE_YARDLINE = 20
+GOAL_LINE_YARDLINE = 5
+# Two-minute warning window (seconds)
+TWO_MINUTE_SECONDS = 120
+# Fallback league neutral pass rate when insufficient data
+PROE_FALLBACK_LG_NEUTRAL_RATE = 0.56
+
 # Positions (offensive skill positions only)
 POSITIONS = ["QB", "RB", "WR", "TE"]
 # Offensive skill positions used by the utilization-based ML pipeline
@@ -208,6 +227,18 @@ MODEL_CONFIG = {
     # SHAP/PDP explainability (can be slow on large models)
     "enable_shap_pdp": True,
 }
+
+# -----------------------------------------------------------------------------
+# PBP ADVANCED FEATURE SETTINGS
+# -----------------------------------------------------------------------------
+PBP_ADVANCED_FEATURES_ENABLED = True
+PBP_ADVANCED_SEASONS = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
+NEUTRAL_SCORE_DIFF = 7
+SHORT_YARDAGE_YDSTOGO = 2
+RED_ZONE_YARDLINE = 20
+GOAL_LINE_YARDLINE = 5
+TWO_MINUTE_SECONDS = 120
+PROE_FALLBACK_LG_NEUTRAL_RATE = 0.56
 
 # Fast training overrides: ~8-10x faster with minimal accuracy loss.
 # Applied via `python -m src.models.train --fast`.

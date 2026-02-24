@@ -35,7 +35,13 @@ import nfl_data_py as nfl
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config.settings import POSITIONS, OFFENSIVE_POSITIONS, SCORING
+from config.settings import (
+    POSITIONS,
+    OFFENSIVE_POSITIONS,
+    SCORING,
+    PBP_ADVANCED_FEATURES_ENABLED,
+    PBP_ADVANCED_SEASONS,
+)
 from src.utils.database import DatabaseManager
 from src.utils.helpers import calculate_fantasy_points
 from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week, current_season_has_weeks_played
@@ -101,13 +107,29 @@ class NFLDataLoader:
         all_dfs = []
         for season in seasons:
             df = pd.DataFrame()
+            pbp_adv_df = None
+            if use_pbp_fallback and PBP_ADVANCED_FEATURES_ENABLED and season in PBP_ADVANCED_SEASONS:
+                try:
+                    from src.data.pbp_stats_aggregator import get_weekly_stats_from_pbp
+                    pbp_adv_df = get_weekly_stats_from_pbp(
+                        season, include_advanced=True, use_cache=True
+                    )
+                    if pbp_adv_df is not None and not pbp_adv_df.empty:
+                        pbp_adv_df = self._standardize_pbp_columns(pbp_adv_df.copy())
+                except Exception as e:
+                    pbp_adv_df = None
+                    print(f"  PBP advanced for {season}: {e}")
             # Current season with at least one week played: try PBP first (weekly often empty for in-progress season)
             if use_pbp_fallback and season == current_season and in_season_current:
                 try:
-                    from src.data.pbp_stats_aggregator import get_weekly_stats_from_pbp
-                    pbp_df = get_weekly_stats_from_pbp(season)
-                    if not pbp_df.empty:
-                        df = self._standardize_pbp_columns(pbp_df.copy())
+                    pbp_df = pbp_adv_df
+                    if pbp_df is None or pbp_df.empty:
+                        from src.data.pbp_stats_aggregator import get_weekly_stats_from_pbp
+                        pbp_df = get_weekly_stats_from_pbp(season)
+                        if not pbp_df.empty:
+                            pbp_df = self._standardize_pbp_columns(pbp_df.copy())
+                    if pbp_df is not None and not pbp_df.empty:
+                        df = pbp_df.copy()
                         print(f"  Current season {season}: loaded from PBP ({len(df)} records)")
                         # Optionally merge with weekly if available (prefer weekly for same player/week)
                         try:
@@ -142,10 +164,13 @@ class NFLDataLoader:
                         need_pbp = True
             if need_pbp and use_pbp_fallback:
                 try:
-                    from src.data.pbp_stats_aggregator import get_weekly_stats_from_pbp
-                    pbp_df = get_weekly_stats_from_pbp(season)
-                    if not pbp_df.empty:
-                        pbp_df = self._standardize_pbp_columns(pbp_df)
+                    pbp_df = pbp_adv_df
+                    if pbp_df is None or pbp_df.empty:
+                        from src.data.pbp_stats_aggregator import get_weekly_stats_from_pbp
+                        pbp_df = get_weekly_stats_from_pbp(season)
+                        if not pbp_df.empty:
+                            pbp_df = self._standardize_pbp_columns(pbp_df)
+                    if pbp_df is not None and not pbp_df.empty:
                         if not df.empty:
                             # Merge: prefer weekly when both have same player_id, season, week
                             key_cols = ["player_id", "season", "week"]
@@ -163,6 +188,12 @@ class NFLDataLoader:
                 continue
             
             if not df.empty:
+                # Merge advanced PBP-derived columns into weekly data (if available)
+                if (
+                    pbp_adv_df is not None and not pbp_adv_df.empty
+                    and df is not pbp_adv_df
+                ):
+                    df = self._merge_advanced_pbp_features(df, pbp_adv_df)
                 df = self._standardize_weekly_columns(df)
                 # nfl_data_py weekly data only has offensive positions
                 df = df[df['position'].isin(OFFENSIVE_POSITIONS)]
@@ -170,6 +201,19 @@ class NFLDataLoader:
                     lambda row: self._calculate_fantasy_points(row), axis=1
                 )
                 all_dfs.append(df)
+
+                # Persist team-level advanced PBP stats when enabled
+                if (
+                    store_in_db and use_pbp_fallback and PBP_ADVANCED_FEATURES_ENABLED
+                    and season in PBP_ADVANCED_SEASONS
+                ):
+                    try:
+                        from src.data.pbp_stats_aggregator import get_team_stats_from_pbp
+                        team_df = get_team_stats_from_pbp(season, use_cache=True)
+                        if team_df is not None and not team_df.empty:
+                            self._store_team_stats_dataframe(team_df)
+                    except Exception as e:
+                        print(f"  Team PBP stats for {season}: {e}")
         
         if not all_dfs:
             return pd.DataFrame()
@@ -197,6 +241,12 @@ class NFLDataLoader:
         for col in ['opponent', 'home_away', 'fumbles_lost']:
             if col not in df.columns:
                 df[col] = "" if col == "opponent" else ("unknown" if col == "home_away" else 0)
+        if 'pass_plays' not in df.columns and 'passing_attempts' in df.columns:
+            df['pass_plays'] = df['passing_attempts']
+        if 'rush_plays' not in df.columns and 'rushing_attempts' in df.columns:
+            df['rush_plays'] = df['rushing_attempts']
+        if 'recv_targets' not in df.columns and 'targets' in df.columns:
+            df['recv_targets'] = df['targets']
         return df
     
     def _standardize_weekly_columns(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -250,8 +300,20 @@ class NFLDataLoader:
         numeric_cols = [
             'passing_attempts', 'passing_completions', 'passing_yards', 'passing_tds',
             'interceptions', 'rushing_attempts', 'rushing_yards', 'rushing_tds',
-            'targets', 'receptions', 'receiving_yards', 'receiving_tds', 'fumbles_lost'
+            'targets', 'receptions', 'receiving_yards', 'receiving_tds', 'fumbles_lost',
+            'pass_plays', 'rush_plays', 'recv_targets',
+            'pass_epa', 'rush_epa', 'recv_epa',
+            'pass_wpa', 'rush_wpa', 'recv_wpa',
+            'pass_success_rate', 'rush_success_rate', 'recv_success_rate',
+            'neutral_targets', 'neutral_rushes', 'third_down_targets', 'short_yardage_rushes',
+            'redzone_targets', 'goal_line_touches', 'two_minute_targets', 'high_leverage_touches'
         ]
+        if 'pass_plays' not in df.columns and 'passing_attempts' in df.columns:
+            df['pass_plays'] = df['passing_attempts']
+        if 'rush_plays' not in df.columns and 'rushing_attempts' in df.columns:
+            df['rush_plays'] = df['rushing_attempts']
+        if 'recv_targets' not in df.columns and 'targets' in df.columns:
+            df['recv_targets'] = df['targets']
         for col in numeric_cols:
             if col not in df.columns:
                 df[col] = 0
@@ -265,6 +327,35 @@ class NFLDataLoader:
             df['home_away'] = 'unknown'
         
         return df
+
+    def _merge_advanced_pbp_features(self, df: pd.DataFrame, pbp_df: pd.DataFrame) -> pd.DataFrame:
+        """Merge advanced PBP-derived columns into weekly data (keyed by player_id/season/week)."""
+        key_cols = ["player_id", "season", "week"]
+        if not all(c in df.columns for c in key_cols) or not all(c in pbp_df.columns for c in key_cols):
+            return df
+        adv_cols = [
+            "pass_plays", "rush_plays", "recv_targets",
+            "pass_epa", "rush_epa", "recv_epa",
+            "pass_wpa", "rush_wpa", "recv_wpa",
+            "pass_success_rate", "rush_success_rate", "recv_success_rate",
+            "neutral_targets", "neutral_rushes", "third_down_targets", "short_yardage_rushes",
+            "redzone_targets", "goal_line_touches", "two_minute_targets", "high_leverage_touches",
+            "rush_inside_10", "rush_inside_5", "targets_15_plus", "air_yards",
+        ]
+        pbp_subset_cols = [c for c in adv_cols if c in pbp_df.columns]
+        if not pbp_subset_cols:
+            return df
+        pbp_subset = pbp_df[key_cols + pbp_subset_cols].drop_duplicates(subset=key_cols)
+        merged = df.merge(pbp_subset, on=key_cols, how="left", suffixes=("", "_pbp"))
+        for col in pbp_subset_cols:
+            pbp_col = f"{col}_pbp"
+            if pbp_col in merged.columns:
+                if col in merged.columns:
+                    merged[col] = merged[col].fillna(merged[pbp_col])
+                    merged = merged.drop(columns=[pbp_col])
+                else:
+                    merged = merged.rename(columns={pbp_col: col})
+        return merged
     
     def _calculate_fantasy_points(self, row: pd.Series) -> float:
         """Calculate PPR fantasy points for a player."""
@@ -335,12 +426,83 @@ class NFLDataLoader:
                 'receiving_yards': _to_scalar_int(row.get('receiving_yards', 0), 0),
                 'receiving_tds': _to_scalar_int(row.get('receiving_tds', 0), 0),
                 'fumbles_lost': _to_scalar_int(row.get('fumbles_lost', 0), 0),
+                'pass_plays': _to_scalar_int(row.get('pass_plays', row.get('passing_attempts', 0)), 0),
+                'rush_plays': _to_scalar_int(row.get('rush_plays', row.get('rushing_attempts', 0)), 0),
+                'recv_targets': _to_scalar_int(row.get('recv_targets', row.get('targets', 0)), 0),
+                'pass_epa': _to_scalar_float(row.get('pass_epa', 0.0), 0.0),
+                'rush_epa': _to_scalar_float(row.get('rush_epa', 0.0), 0.0),
+                'recv_epa': _to_scalar_float(row.get('recv_epa', 0.0), 0.0),
+                'pass_wpa': _to_scalar_float(row.get('pass_wpa', 0.0), 0.0),
+                'rush_wpa': _to_scalar_float(row.get('rush_wpa', 0.0), 0.0),
+                'recv_wpa': _to_scalar_float(row.get('recv_wpa', 0.0), 0.0),
+                'pass_success_rate': _to_scalar_float(row.get('pass_success_rate', 0.0), 0.0),
+                'rush_success_rate': _to_scalar_float(row.get('rush_success_rate', 0.0), 0.0),
+                'recv_success_rate': _to_scalar_float(row.get('recv_success_rate', 0.0), 0.0),
+                'neutral_targets': _to_scalar_int(row.get('neutral_targets', 0), 0),
+                'neutral_rushes': _to_scalar_int(row.get('neutral_rushes', 0), 0),
+                'third_down_targets': _to_scalar_int(row.get('third_down_targets', 0), 0),
+                'short_yardage_rushes': _to_scalar_int(row.get('short_yardage_rushes', 0), 0),
+                'redzone_targets': _to_scalar_int(row.get('redzone_targets', 0), 0),
+                'goal_line_touches': _to_scalar_int(row.get('goal_line_touches', 0), 0),
+                'two_minute_targets': _to_scalar_int(row.get('two_minute_targets', 0), 0),
+                'high_leverage_touches': _to_scalar_int(row.get('high_leverage_touches', 0), 0),
                 'fantasy_points': _to_scalar_float(row.get('fantasy_points', 0), 0.0),
             }
             self.db.insert_player_weekly_stats(stats_data)
             stats_inserted += 1
         
         print(f"  Stored {players_inserted} players, {stats_inserted} weekly records")
+
+    def _store_team_stats_dataframe(self, df: pd.DataFrame):
+        """Store team-level stats in the database."""
+        if df.empty:
+            return
+        if df.columns.duplicated().any():
+            df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+        def _opt_int(row, col):
+            if col not in row or pd.isna(row.get(col)):
+                return None
+            return _to_scalar_int(row.get(col), 0)
+
+        def _opt_float(row, col):
+            if col not in row or pd.isna(row.get(col)):
+                return None
+            return _to_scalar_float(row.get(col), 0.0)
+
+        for _, row in df.iterrows():
+            team_data = {
+                "team": _to_scalar_str(row.get("team", ""), ""),
+                "season": _to_scalar_int(row.get("season", 0), 0),
+                "week": _to_scalar_int(row.get("week", 0), 0),
+                "opponent": _to_scalar_str(row.get("opponent", ""), "") if "opponent" in row else None,
+                "home_away": _to_scalar_str(row.get("home_away", ""), "") if "home_away" in row else None,
+                "points_scored": _opt_int(row, "points_scored"),
+                "points_allowed": _opt_int(row, "points_allowed"),
+                "total_yards": _opt_int(row, "total_yards"),
+                "passing_yards": _opt_int(row, "passing_yards"),
+                "rushing_yards": _opt_int(row, "rushing_yards"),
+                "turnovers": _opt_int(row, "turnovers"),
+                "time_of_possession": _opt_float(row, "time_of_possession"),
+                "total_plays": _opt_int(row, "total_plays"),
+                "pass_attempts": _opt_int(row, "pass_attempts"),
+                "rush_attempts": _opt_int(row, "rush_attempts"),
+                "redzone_attempts": _opt_int(row, "redzone_attempts"),
+                "redzone_scores": _opt_int(row, "redzone_scores"),
+                "third_down_conv": _opt_float(row, "third_down_conv"),
+                "sacks_allowed": _opt_int(row, "sacks_allowed"),
+                "neutral_pass_plays": _opt_int(row, "neutral_pass_plays"),
+                "neutral_run_plays": _opt_int(row, "neutral_run_plays"),
+                "neutral_pass_rate": _opt_float(row, "neutral_pass_rate"),
+                "neutral_pass_rate_lg": _opt_float(row, "neutral_pass_rate_lg"),
+                "neutral_pass_rate_oe": _opt_float(row, "neutral_pass_rate_oe"),
+                "drive_count": _opt_int(row, "drive_count"),
+                "drive_success_rate": _opt_float(row, "drive_success_rate"),
+                "avg_drive_epa": _opt_float(row, "avg_drive_epa"),
+                "points_per_drive": _opt_float(row, "points_per_drive"),
+                "pace_sec_per_play": _opt_float(row, "pace_sec_per_play"),
+            }
+            self.db.insert_team_stats(team_data)
 
     def store_weekly_dataframe(self, df: pd.DataFrame) -> None:
         """
