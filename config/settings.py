@@ -168,6 +168,10 @@ MODEL_CONFIG = {
     "vif_threshold": 10,  # Iteratively drop features with VIF above this
     "adaptive_feature_count": True,  # Scale n_features_per_position by sqrt(n_samples)
     "recency_decay_halflife": 2.0,  # Seasons: weight halves every 2 seasons (None = no weighting)
+    # Horizon-aware recency: longer horizons should decay more slowly.
+    # Defaults: 1w=2 seasons, 4w=3 seasons, 18w=4 seasons.
+    # If a horizon is missing, falls back to recency_decay_halflife.
+    "horizon_recency_halflife": {1: 2.0, 4: 3.0, 18: 4.0},
     "cv_gap_seasons": 1,  # Gap between train and val for purged CV (1 = purge last season before test)
     # Horizon-specific models (per requirements): 4w LSTM+ARIMA, 18w deep feedforward
     "use_4w_hybrid": True,   # Use Hybrid4WeekModel for n_weeks in 4w band when TF available

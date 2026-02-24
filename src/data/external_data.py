@@ -230,22 +230,26 @@ class DefenseRankingsLoader:
         """
         if df.empty:
             return df
-        
+        result = df.copy()
+        result['vegas_data_available'] = 0
+
         # Calculate defense rankings
         defense_rankings = self.calculate_defense_rankings(df)
         
         if defense_rankings.empty:
-            df['opp_defense_rank'] = 16  # Average
-            df['opp_matchup_score'] = 0.5
+            result['defense_data_available'] = 0
+            result['opp_defense_rank'] = 16  # Average
+            result['opp_matchup_score'] = 0.5
             pos_defaults = {'QB': 18.0, 'RB': 12.0, 'WR': 12.0, 'TE': 10.0}
-            df['opp_pts_allowed'] = df['position'].map(pos_defaults).fillna(12.0)
-            return df
+            result['opp_pts_allowed'] = result['position'].map(pos_defaults).fillna(12.0)
+            return result
+        result['defense_data_available'] = 1
         
         # Shift rankings by 1 week (use last week's data for this week's prediction)
         defense_rankings['week'] = defense_rankings['week'] + 1
         
         # Merge with player data
-        result = df.merge(
+        result = result.merge(
             defense_rankings[['team', 'season', 'week', 'position', 
                             'defense_rank', 'matchup_score', 'defense_pts_allowed_roll4']],
             left_on=['opponent', 'season', 'week', 'position'],
@@ -337,6 +341,7 @@ class WeatherDataLoader:
             return df
         
         result = df.copy()
+        result['weather_data_available'] = 0
         
         # Determine if game is in dome based on home team
         if 'team' in result.columns:
@@ -413,11 +418,13 @@ class WeatherDataLoader:
                         )
                         
                         # Derive is_cold_game from temperature (< 35F)
-                        if has_temp:
-                            temp_col = 'temp_sched' if 'temp_sched' in result.columns else 'temp'
-                            if temp_col in result.columns:
+                            if has_temp:
+                                temp_col = 'temp_sched' if 'temp_sched' in result.columns else 'temp'
+                                if temp_col in result.columns:
                                 temp_vals = pd.to_numeric(result[temp_col], errors='coerce')
                                 result.loc[temp_vals.notna(), 'weather_temp_f'] = temp_vals[temp_vals.notna()]
+                                if temp_vals.notna().any():
+                                    result.loc[temp_vals.notna(), 'weather_data_available'] = 1
                                 result['is_cold_game'] = np.where(
                                     (temp_vals < 35) & (result['is_dome'] == 0),
                                     1, 0
@@ -456,6 +463,8 @@ class WeatherDataLoader:
                                     (result['is_dome'] == 0),
                                     1, 0
                                 )
+                                if weather_str.notna().any():
+                                    result.loc[weather_str.notna(), 'weather_data_available'] = 1
                                 if weather_desc_col != 'weather':
                                     result = result.drop(columns=[weather_desc_col], errors='ignore')
                         
@@ -628,9 +637,10 @@ class VegasLinesLoader:
                             if vegas_col in result.columns:
                                 mask = result[vegas_col].notna()
                                 result.loc[mask, col] = result.loc[mask, vegas_col]
+                                result.loc[mask, 'vegas_data_available'] = 1
                                 result = result.drop(columns=[vegas_col])
                                 merged_count = int(mask.sum())
-                        
+
                         print(f"  Merged Vegas lines for {merged_count} player-game rows")
         
         # Derive is_favorite and blowout_risk from spread
@@ -698,6 +708,10 @@ class ExternalDataIntegrator:
         
         seasons = seasons or list(df['season'].unique())
         result = df.copy()
+        result['injury_data_available'] = 0
+        result['defense_data_available'] = 0
+        result['weather_data_available'] = 0
+        result['vegas_data_available'] = 0
         
         # 1. Add injury features
         print("\n1. Injury Status...")
@@ -706,6 +720,7 @@ class ExternalDataIntegrator:
             if not injuries.empty:
                 injury_status = self.injury_loader.get_player_injury_status(injuries)
                 if not injury_status.empty:
+                    result['injury_data_available'] = 1
                     result = result.merge(
                         injury_status[['player_id', 'season', 'week', 'injury_score', 'is_injured']],
                         on=['player_id', 'season', 'week'],
@@ -806,10 +821,25 @@ class ExternalDataIntegrator:
         # Summary
         new_cols = ['injury_score', 'is_injured', 'opp_defense_rank', 'opp_matchup_score',
                    'opp_pts_allowed', 'is_dome', 'is_outdoor', 'weather_score',
-                   'implied_team_total', 'game_total', 'spread']
+                   'implied_team_total', 'game_total', 'spread',
+                   'injury_data_available', 'defense_data_available',
+                   'weather_data_available', 'vegas_data_available',
+                   'external_data_quality']
         
         added = [c for c in new_cols if c in result.columns]
         print(f"\n✅ Added {len(added)} external features: {added}")
+
+        # Aggregate data-quality indicator (0-1)
+        if all(c in result.columns for c in [
+            "injury_data_available", "defense_data_available",
+            "weather_data_available", "vegas_data_available"
+        ]):
+            result["external_data_quality"] = (
+                result["injury_data_available"]
+                + result["defense_data_available"]
+                + result["weather_data_available"]
+                + result["vegas_data_available"]
+            ) / 4.0
         
         return result
 

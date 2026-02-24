@@ -80,6 +80,9 @@ class FeatureEngineer:
         
         # Create situational features
         df = self._create_situational_features(df)
+
+        # Team-change and scheme-fit features (proactive context adjustment)
+        df = self._create_team_change_features(df)
         
         # Create interaction features
         df = self._create_interaction_features(df)
@@ -748,6 +751,82 @@ class FeatureEngineer:
         # Add game script / garbage time adjustment
         df = self._add_game_script_adjustment(df)
         
+        return df
+
+    def _create_team_change_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create features to proactively adjust for team changes and scheme fit.
+
+        Captures:
+        - team_changed: whether player changed teams since last appearance
+        - weeks_on_team: number of weeks since joining current team (resets on change or season boundary)
+        - team_change_pass_rate_delta: change in team pass rate vs previous team context
+        - scheme_fit_score: positional fit to team pass rate (higher = better fit)
+        - scheme_mismatch_on_change: mismatch severity when team_changed
+        - team_change_recent_util: recent utilization prior to change (lagged)
+        """
+        if df.empty or "player_id" not in df.columns or "team" not in df.columns:
+            return df
+
+        df = df.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
+        grp = df.groupby("player_id", sort=False)
+        prev_team = grp["team"].shift(1)
+        prev_season = grp["season"].shift(1)
+
+        season_changed = (df["season"] != prev_season) & prev_season.notna()
+        team_changed = (df["team"] != prev_team) & prev_team.notna()
+
+        df["team_changed"] = team_changed.astype(int)
+        df["new_season"] = season_changed.astype(int)
+
+        # Weeks on current team (reset on team change or season boundary)
+        change_flag = (team_changed | season_changed).astype(int)
+        df["_team_change_flag"] = change_flag
+        df["_team_stint_id"] = grp["_team_change_flag"].cumsum()
+        df["weeks_on_team"] = df.groupby(["player_id", "_team_stint_id"]).cumcount() + 1
+
+        # Team pass rate delta (use prior row for same player as a proxy)
+        if "team_a_pass_rate" in df.columns:
+            prev_pass = grp["team_a_pass_rate"].shift(1)
+            delta = (df["team_a_pass_rate"] - prev_pass).fillna(0.0)
+            df["team_pass_rate_delta"] = delta
+            df["team_change_pass_rate_delta"] = (delta * df["team_changed"]).fillna(0.0)
+        else:
+            df["team_pass_rate_delta"] = 0.0
+            df["team_change_pass_rate_delta"] = 0.0
+
+        # Scheme fit: position-specific preferred pass rate
+        if "team_a_pass_rate" in df.columns and "position" in df.columns:
+            pass_pref = df["position"].map({
+                "QB": 0.60,
+                "WR": 0.60,
+                "TE": 0.58,
+                "RB": 0.45,
+            }).fillna(0.52)
+            mismatch = (df["team_a_pass_rate"] - pass_pref).abs()
+            # Normalize mismatch to [0, 1] with 0.6 as a wide max band
+            mismatch_norm = (mismatch / 0.6).clip(0.0, 1.0)
+            df["scheme_fit_score"] = (1.0 - mismatch_norm).fillna(0.5)
+            df["scheme_mismatch"] = mismatch_norm.fillna(0.5)
+            df["scheme_mismatch_on_change"] = (df["scheme_mismatch"] * df["team_changed"]).fillna(0.0)
+        else:
+            df["scheme_fit_score"] = 0.5
+            df["scheme_mismatch"] = 0.5
+            df["scheme_mismatch_on_change"] = 0.0
+
+        # Recent utilization prior to change (lagged utilization only)
+        util_col = None
+        for cand in ["utilization_score_roll4_mean", "utilization_score_lag1", "utilization_score_roll3_mean"]:
+            if cand in df.columns:
+                util_col = cand
+                break
+        if util_col:
+            df["team_change_recent_util"] = np.where(df["team_changed"] == 1,
+                                                     df[util_col].fillna(0.0), 0.0)
+        else:
+            df["team_change_recent_util"] = 0.0
+
+        df = df.drop(columns=["_team_change_flag", "_team_stint_id"], errors="ignore")
         return df
     
     def _add_game_script_adjustment(self, df: pd.DataFrame) -> pd.DataFrame:
