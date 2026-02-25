@@ -589,32 +589,21 @@ def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
-# Serve frontend: static build if present, else a fallback page
-_dist = _PROJECT_ROOT / "frontend" / "dist"
+# Serve frontend: static files (index.html, app.js, style.css) from project root
+_static_index = _PROJECT_ROOT / "index.html"
 
-if _dist.exists():
-    app.mount("/", StaticFiles(directory=str(_dist), html=True), name="frontend")
-else:
-    _FALLBACK_HTML = """
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"><title>NFL Predictor API</title></head>
-    <body style="font-family: system-ui; max-width: 600px; margin: 2rem auto; padding: 1rem; background: #0a0e1f; color: #cbd5e1;">
-    <h1 style="color: #00f5ff;">NFL Predictor API</h1>
-    <p>API is running. To use the web app:</p>
-    <ol>
-    <li>Run the frontend dev server: <code>cd frontend && npm install && npm run dev</code></li>
-    <li>Open the URL Vite prints (e.g. <a href="http://localhost:5173" style="color: #a78bfa;">http://localhost:5173</a>)</li>
-    <li>Or build and serve from here: <code>cd frontend && npm run build</code>, then restart this server</li>
-    </ol>
-    <p><a href="/api/health" style="color: #a78bfa;">/api/health</a> &middot; <a href="/api/hero" style="color: #a78bfa;">/api/hero</a></p>
-    </body>
-    </html>
-    """
-
+if _static_index.exists():
     @app.get("/", response_class=HTMLResponse)
     def root() -> str:
-        return _FALLBACK_HTML
+        return _static_index.read_text(encoding="utf-8")
+
+    # Serve app.js, style.css, and data/ files from project root
+    app.mount("/data", StaticFiles(directory=str(_PROJECT_ROOT / "data")), name="data")
+    app.mount("/", StaticFiles(directory=str(_PROJECT_ROOT)), name="static-root")
+else:
+    @app.get("/", response_class=HTMLResponse)
+    def root() -> str:
+        return "<h1>NFL Predictor API</h1><p>API running. <a href='/api/health'>/api/health</a></p>"
 
     @app.get("/favicon.ico")
     def favicon():
