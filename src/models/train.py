@@ -829,8 +829,17 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     return results
 
 
-def _run_robust_cv_report(train_data: pd.DataFrame):
-    """Run RobustTimeSeriesCV and report per-fold metrics."""
+def _run_robust_cv_report(train_data: pd.DataFrame) -> dict:
+    """Run rolling-origin CV and report per-fold stability metrics.
+
+    Uses expanding-window cross-validation with season-aware splits and a
+    purge gap.  Reports fold-wise variance, worst-fold degradation, and a
+    complexity comparison (Ridge vs GBM) to verify that ensemble complexity
+    is justified.
+
+    Returns:
+        Dict with per-position CV results and complexity comparison.
+    """
     gap = MODEL_CONFIG.get("cv_gap_seasons", 0)
     validator = RobustTimeSeriesCV(
         n_splits=3, min_train_seasons=1, scale_features=True, gap_seasons=gap
@@ -841,7 +850,12 @@ def _run_robust_cv_report(train_data: pd.DataFrame):
         "created_at", "updated_at", "id", "birth_date", "college",
         "game_id", "game_time"
     ]
-    
+
+    from sklearn.ensemble import GradientBoostingRegressor
+    from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+
+    cv_report: dict = {}
+
     for position in ["QB", "RB", "WR", "TE"]:
         pos_df = train_data[train_data["position"] == position].copy()
         if len(pos_df) < 200 or "season" not in pos_df.columns:
@@ -850,22 +864,68 @@ def _run_robust_cv_report(train_data: pd.DataFrame):
         pos_df = pos_df.dropna(subset=[target_col])
         if len(pos_df) < 100:
             continue
-        feature_cols = [c for c in pos_df.columns 
+        feature_cols = [c for c in pos_df.columns
                        if c not in exclude_cols and not c.startswith("target_")
                        and pos_df[c].dtype in ['int64', 'float64', 'int32', 'float32']]
-        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
         feature_cols = filter_feature_columns(feature_cols)
         assert_no_leakage_columns(feature_cols, context=f"cv features ({position})")
         if len(feature_cols) < 5:
             continue
+
+        pos_report: dict = {}
+
+        # --- Ridge (simple baseline) ---
         try:
-            result = validator.validate(
+            ridge_result = validator.validate(
                 pos_df, Ridge, {"alpha": 1.0},
                 feature_cols, target_col=target_col, position=position
             )
-            print(f"  {position} CV: RMSE={result.rmse:.2f} ± {np.std([f['rmse'] for f in result.fold_results]):.2f}, R²={result.r2:.3f}")
+            fold_rmses = [f["rmse"] for f in ridge_result.fold_results]
+            fold_std = float(np.std(fold_rmses))
+            worst_fold = max(fold_rmses)
+            pos_report["ridge"] = {
+                "rmse_mean": round(ridge_result.rmse, 3),
+                "rmse_std": round(fold_std, 3),
+                "rmse_worst_fold": round(worst_fold, 3),
+                "r2": round(ridge_result.r2, 3),
+                "n_folds": len(ridge_result.fold_results),
+                "fold_rmses": [round(r, 3) for r in fold_rmses],
+            }
+            print(f"  {position} Ridge CV: RMSE={ridge_result.rmse:.2f} "
+                  f"± {fold_std:.2f} (worst={worst_fold:.2f}), R²={ridge_result.r2:.3f}")
         except Exception as e:
-            print(f"  {position} CV: skipped ({e})")
+            print(f"  {position} Ridge CV: skipped ({e})")
+
+        # --- GBM (complex model) for complexity comparison ---
+        try:
+            gbm_result = validator.validate(
+                pos_df, GradientBoostingRegressor,
+                {"n_estimators": 100, "max_depth": 5, "random_state": 42},
+                feature_cols, target_col=target_col, position=position
+            )
+            gbm_fold_rmses = [f["rmse"] for f in gbm_result.fold_results]
+            gbm_fold_std = float(np.std(gbm_fold_rmses))
+            ridge_rmse = pos_report.get("ridge", {}).get("rmse_mean")
+            improvement = None
+            if ridge_rmse and ridge_rmse > 0:
+                improvement = round((1 - gbm_result.rmse / ridge_rmse) * 100, 1)
+            pos_report["gbm"] = {
+                "rmse_mean": round(gbm_result.rmse, 3),
+                "rmse_std": round(gbm_fold_std, 3),
+                "r2": round(gbm_result.r2, 3),
+                "improvement_over_ridge_pct": improvement,
+            }
+            marker = "justified" if (improvement or 0) > 5 else "marginal"
+            print(f"  {position} GBM  CV: RMSE={gbm_result.rmse:.2f} "
+                  f"± {gbm_fold_std:.2f}, improvement over Ridge: "
+                  f"{improvement:+.1f}% ({marker})")
+        except Exception as e:
+            print(f"  {position} GBM CV: skipped ({e})")
+
+        if pos_report:
+            cv_report[position] = pos_report
+
+    return cv_report
 
 
 def add_utilization_scores(data: pd.DataFrame, weights: dict = None) -> pd.DataFrame:

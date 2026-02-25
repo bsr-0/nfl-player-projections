@@ -799,39 +799,63 @@ class RobustnessChecker:
         self.adversarial_auc = None
         self.calibration_error = None
     
-    def adversarial_validation(self, X_train: pd.DataFrame, 
-                                X_test: pd.DataFrame) -> float:
+    def adversarial_validation(self, X_train: pd.DataFrame,
+                                X_test: pd.DataFrame) -> Dict:
         """
         Adversarial validation to detect train/test distribution shift.
-        
+
         Trains a classifier to distinguish train from test.
         AUC close to 0.5 = similar distributions (good)
         AUC close to 1.0 = different distributions (bad)
+
+        Returns:
+            Dict with AUC, top shift-driving features, and mitigation advice.
         """
         print("\nAdversarial Validation...")
-        
+
         # Create labels
-        y_train = np.zeros(len(X_train))
-        y_test = np.ones(len(X_test))
-        
+        y_train_lbl = np.zeros(len(X_train))
+        y_test_lbl = np.ones(len(X_test))
+
         X_combined = pd.concat([X_train, X_test], axis=0).fillna(0)
-        y_combined = np.concatenate([y_train, y_test])
-        
+        y_combined = np.concatenate([y_train_lbl, y_test_lbl])
+
         # Train classifier
         from sklearn.ensemble import RandomForestClassifier
         from sklearn.model_selection import cross_val_score
-        
+
         clf = RandomForestClassifier(n_estimators=50, max_depth=4, random_state=42)
         scores = cross_val_score(clf, X_combined, y_combined, cv=5, scoring='roc_auc')
-        
+
         self.adversarial_auc = scores.mean()
-        
+
+        # Fit on all data to extract feature importances driving the shift
+        clf.fit(X_combined, y_combined)
+        feat_imp = pd.Series(clf.feature_importances_, index=X_combined.columns)
+        top_shift_features = feat_imp.nlargest(10)
+
+        result: Dict = {
+            "auc": round(self.adversarial_auc, 4),
+            "cv_scores": [round(s, 4) for s in scores.tolist()],
+            "top_shift_features": {k: round(v, 4) for k, v in top_shift_features.items()},
+            "shift_severity": "low" if self.adversarial_auc < 0.6
+                             else "moderate" if self.adversarial_auc < 0.75
+                             else "high",
+        }
+
         if self.adversarial_auc > 0.7:
-            print(f"  ⚠️ WARNING: AUC = {self.adversarial_auc:.3f} - Significant distribution shift detected!")
+            print(f"  WARNING: AUC = {self.adversarial_auc:.3f} - Significant distribution shift detected!")
+            print(f"  Top features driving shift:")
+            for feat, imp in top_shift_features.head(5).items():
+                print(f"    {feat}: {imp:.4f}")
+            result["mitigation"] = (
+                "Consider: (1) remove or normalize top shift-driving features, "
+                "(2) increase recency weighting, (3) use season-standardized features."
+            )
         else:
-            print(f"  ✅ AUC = {self.adversarial_auc:.3f} - Train/test distributions are similar")
-        
-        return self.adversarial_auc
+            print(f"  AUC = {self.adversarial_auc:.3f} - Train/test distributions are similar")
+
+        return result
     
     def detect_ood_samples(self, X_train: np.ndarray, 
                            X_test: np.ndarray,
