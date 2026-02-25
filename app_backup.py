@@ -759,8 +759,8 @@ def render_dashboard():
                     <div style="font-size: 0.85rem; color: #64748b;">Only historical data used for predictions</div>
                 </div>
                 <div>
-                    <div style="font-weight: 600; color: #1e293b; margin-bottom: 0.25rem;">📈 Utilization-Based</div>
-                    <div style="font-size: 0.85rem; color: #64748b;">Advanced opportunity-based analysis</div>
+                    <div style="font-weight: 600; color: #1e293b; margin-bottom: 0.25rem;">📈 Utilization-Driven</div>
+                    <div style="font-size: 0.85rem; color: #64748b;">RB/WR/TE predictions built on opportunity scores (targets, touches, snap share)</div>
                 </div>
                 <div>
                     <div style="font-weight: 600; color: #1e293b; margin-bottom: 0.25rem;">🎯 Uncertainty Quantified</div>
@@ -828,13 +828,31 @@ def render_utilization():
     """Render utilization analysis page."""
     st.markdown('<h1 class="hero-title">📊 Utilization Analysis</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-subtitle">Opportunity-based player analysis using advanced metrics</p>', unsafe_allow_html=True)
-    
+
+    # Explainer banner: how utilization drives the model
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+                border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; color: #e2e8f0;">
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+            <span style="font-size: 1.5rem;">🔬</span>
+            <span style="font-size: 1.1rem; font-weight: 600; color: #00f5ff;">Why Utilization Score Matters</span>
+        </div>
+        <p style="font-size: 0.9rem; margin: 0; line-height: 1.6;">
+            For <strong>RB, WR, and TE</strong>, our model predicts future utilization first, then converts
+            it to fantasy points — making this score the <strong>primary prediction target</strong> for 3 of 4 positions.
+            For <strong>QB</strong>, the system evaluates a utilization model against a direct fantasy-points model
+            and automatically selects whichever performs better.
+            See the <em>Methodology</em> page for the full pipeline breakdown.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
     df = load_player_data_with_features()
-    
+
     if df.empty:
         st.warning("No data available. Load data first.")
         return
-    
+
     # Filters
     col1, col2, col3 = st.columns(3)
     
@@ -934,25 +952,70 @@ def render_utilization():
     # Utilization explanation
     st.markdown("---")
     st.markdown('<div class="section-title">📖 Understanding Utilization Score</div>', unsafe_allow_html=True)
-    
-    calc = UtilizationCalculator()
-    weights = calc.WEIGHTS.get(position, {})
-    
+
+    from src.app_data import get_utilization_weights_merged
+    util_weights_all = get_utilization_weights_merged()
+    weights = util_weights_all.get(position, {})
+
+    # Component descriptions lookup
+    _comp_desc = {
+        "snap_share": "Percentage of the team's offensive snaps played",
+        "rush_share": "Share of team rushing attempts",
+        "target_share": "Share of team passing targets",
+        "redzone_share": "Share of team red-zone opportunities",
+        "touch_share": "Combined carries + receptions as share of team touches",
+        "high_value_touch": "Rushes inside the 10-yard line and targets with 15+ air yards",
+        "air_yards_share": "Share of team total air yards (route depth)",
+        "redzone_targets": "Red-zone target involvement",
+        "route_participation": "Routes run as share of team pass plays",
+        "inline_rate": "Usage as inline blocker vs. pass-catching role",
+        "dropback_rate": "Pass attempts as share of total team plays",
+        "rush_attempt_share": "Designed runs and scrambles",
+        "redzone_opportunity": "Red-zone scoring opportunity (TD proxy)",
+        "play_volume": "Total plays (pass + rush) normalized across the league",
+    }
+
+    is_primary = position != "QB"
+    role_note = (
+        "This score is the <strong>primary prediction target</strong> for our model — "
+        "the ensemble predicts future utilization, then converts it to fantasy points."
+        if is_primary else
+        "For QBs, the model evaluates a utilization-based approach against a direct fantasy-points "
+        "approach and automatically selects whichever performs better on held-out data."
+    )
+
     st.markdown(f"""
     <div style="background: #f8fafc; border-radius: 12px; padding: 1.25rem; border: 1px solid #e2e8f0;">
-        <div style="font-weight: 600; color: #1e293b; margin-bottom: 0.75rem;">{position} Utilization Formula</div>
-        <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+        <div style="font-weight: 600; color: #1e293b; margin-bottom: 0.5rem;">{position} Utilization Formula</div>
+        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem;">{role_note}</div>
     """, unsafe_allow_html=True)
-    
-    for metric, weight in weights.items():
+
+    sorted_weights = sorted(weights.items(), key=lambda x: x[1], reverse=True)
+    for metric, weight in sorted_weights:
+        pct = weight * 100
+        desc = _comp_desc.get(metric, metric.replace("_", " ").title())
         st.markdown(f"""
-            <div style="background: white; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <span style="font-weight: 600; color: #667eea;">{weight:.0%}</span>
-                <span style="color: #64748b; margin-left: 0.25rem;">{metric.replace('_', ' ').title()}</span>
+        <div style="margin-bottom: 0.6rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-weight: 600; color: #1e293b;">{metric.replace('_', ' ').title()}</span>
+                    <span style="color: #667eea; font-weight: 700; margin-left: 0.5rem;">{pct:.0f}%</span>
+                </div>
             </div>
+            <div style="background: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden; margin: 0.2rem 0;">
+                <div style="background: #667eea; width: {pct * 3.33}%; height: 100%; border-radius: 4px;"></div>
+            </div>
+            <div style="font-size: 0.78rem; color: #94a3b8;">{desc}</div>
+        </div>
         """, unsafe_allow_html=True)
-    
-    st.markdown("</div></div>", unsafe_allow_html=True)
+
+    st.markdown("""
+        <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 0.75rem; border-top: 1px solid #e2e8f0; padding-top: 0.5rem;">
+            Weights shown are defaults. During model training, weights are optimized per position
+            using non-negative least squares to maximize correlation with future production.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -2566,29 +2629,170 @@ def render_methodology():
     """, unsafe_allow_html=True)
     
     st.markdown("---")
-    
+
+    # Utilization Score: Role in the Prediction Pipeline
+    st.markdown("## 🔬 How Utilization Score Powers Predictions")
+
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+                border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem; color: #e2e8f0;">
+        <h3 style="color: #00f5ff; margin-bottom: 0.75rem;">Utilization Score: The Prediction Engine for RB, WR & TE</h3>
+        <p style="font-size: 1rem; margin-bottom: 0.75rem;">
+            For <strong>Running Backs</strong>, <strong>Wide Receivers</strong>, and <strong>Tight Ends</strong>,
+            our model doesn't predict fantasy points directly.  Instead, it first predicts each player's
+            <strong>future Utilization Score</strong> (a 0-100 measure of opportunity), then converts
+            that predicted utilization into fantasy points using a separate position-specific model.
+        </p>
+        <p style="font-size: 0.9rem; opacity: 0.85;">
+            This two-step approach captures the insight that <em>opportunity drives production</em> —
+            a player who commands a large share of their team's touches, targets, and red-zone work
+            is likely to score fantasy points regardless of week-to-week efficiency variance.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Pipeline diagram
+    st.markdown("### Prediction Pipeline by Position")
+
+    col_pipe1, col_pipe2 = st.columns(2)
+
+    with col_pipe1:
+        st.markdown("""
+        <div style="background: #f0fdf4; border-radius: 12px; padding: 1.25rem; border: 2px solid #22c55e;">
+            <h4 style="color: #166534; margin-bottom: 0.75rem;">RB / WR / TE — Utilization-First Pipeline</h4>
+            <div style="font-family: monospace; font-size: 0.85rem; color: #1e293b; line-height: 1.8;">
+                <div style="background: #dcfce7; padding: 0.4rem 0.75rem; border-radius: 6px; margin-bottom: 0.4rem;">1. Calculate player's historical utilization components</div>
+                <div style="text-align: center; color: #22c55e; font-weight: bold;">&#8595;</div>
+                <div style="background: #dcfce7; padding: 0.4rem 0.75rem; border-radius: 6px; margin-bottom: 0.4rem;">2. Build lagged & rolling utilization features (lag1-4, roll3/5/8)</div>
+                <div style="text-align: center; color: #22c55e; font-weight: bold;">&#8595;</div>
+                <div style="background: #bbf7d0; padding: 0.4rem 0.75rem; border-radius: 6px; margin-bottom: 0.4rem; font-weight: 600;">3. Ensemble model predicts <em>future utilization</em> (1w, 4w, 18w)</div>
+                <div style="text-align: center; color: #22c55e; font-weight: bold;">&#8595;</div>
+                <div style="background: #bbf7d0; padding: 0.4rem 0.75rem; border-radius: 6px; font-weight: 600;">4. Conversion model maps predicted utilization &#8594; fantasy points</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_pipe2:
+        st.markdown("""
+        <div style="background: #eff6ff; border-radius: 12px; padding: 1.25rem; border: 2px solid #3b82f6;">
+            <h4 style="color: #1e40af; margin-bottom: 0.75rem;">QB — Dual-Track Selection</h4>
+            <div style="font-family: monospace; font-size: 0.85rem; color: #1e293b; line-height: 1.8;">
+                <div style="background: #dbeafe; padding: 0.4rem 0.75rem; border-radius: 6px; margin-bottom: 0.4rem;">1. Train <strong>both</strong> a utilization model and a direct fantasy-points model</div>
+                <div style="text-align: center; color: #3b82f6; font-weight: bold;">&#8595;</div>
+                <div style="background: #dbeafe; padding: 0.4rem 0.75rem; border-radius: 6px; margin-bottom: 0.4rem;">2. Evaluate each on held-out validation data</div>
+                <div style="text-align: center; color: #3b82f6; font-weight: bold;">&#8595;</div>
+                <div style="background: #bfdbfe; padding: 0.4rem 0.75rem; border-radius: 6px; font-weight: 600;">3. Automatically select whichever model performs better</div>
+            </div>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.75rem;">
+                QB play volume and rushing involvement make utilization less reliable as the sole
+                predictor, so the system picks the best approach per training run.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("")
+
+    # Position-specific component breakdowns
+    st.markdown("### What Goes Into Each Position's Utilization Score")
+    st.markdown("*Each component is normalized to a 0-100 scale. Weights are optimized from training data.*")
+
+    from src.app_data import get_utilization_weights_merged
+    util_weights = get_utilization_weights_merged()
+
+    # Human-readable descriptions for each component
+    component_descriptions = {
+        "snap_share": "Percentage of the team's offensive snaps played",
+        "rush_share": "Share of team rushing attempts",
+        "target_share": "Share of team passing targets",
+        "redzone_share": "Share of team red-zone opportunities",
+        "touch_share": "Combined carries + receptions as share of team touches",
+        "high_value_touch": "Rushes inside the 10-yard line and targets 15+ air yards",
+        "air_yards_share": "Share of team total air yards (route depth)",
+        "redzone_targets": "Red-zone target involvement",
+        "route_participation": "Routes run as share of team pass plays",
+        "inline_rate": "Usage as inline blocker vs. pass-catching role",
+        "dropback_rate": "Pass attempts as share of total team plays",
+        "rush_attempt_share": "Designed runs and scrambles",
+        "redzone_opportunity": "Red-zone scoring opportunity (TD proxy)",
+        "play_volume": "Total plays (pass + rush) normalized across the league",
+    }
+
+    pos_colors = {
+        "RB": ("#22c55e", "#f0fdf4", "#166534", "#dcfce7"),
+        "WR": ("#8b5cf6", "#f5f3ff", "#5b21b6", "#ede9fe"),
+        "TE": ("#f59e0b", "#fffbeb", "#92400e", "#fef3c7"),
+        "QB": ("#3b82f6", "#eff6ff", "#1e40af", "#dbeafe"),
+    }
+
+    tab_rb, tab_wr, tab_te, tab_qb = st.tabs(["RB", "WR", "TE", "QB"])
+
+    for tab, pos in zip([tab_rb, tab_wr, tab_te, tab_qb], ["RB", "WR", "TE", "QB"]):
+        with tab:
+            accent, bg_light, text_dark, bg_bar = pos_colors[pos]
+            weights = util_weights.get(pos, {})
+            is_primary = pos != "QB"
+
+            role_label = "Primary prediction target" if is_primary else "Dual-track (selected automatically)"
+            role_icon = "&#9679;" if is_primary else "&#9675;"
+
+            st.markdown(f"""
+            <div style="background: {bg_light}; border-radius: 12px; padding: 1.25rem; border-left: 4px solid {accent}; margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <h4 style="color: {text_dark}; margin: 0;">{pos} Utilization Score</h4>
+                    <span style="background: {bg_bar}; color: {text_dark}; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                        {role_icon} {role_label}
+                    </span>
+                </div>
+                <div style="font-size: 0.85rem; color: {text_dark}; margin-bottom: 1rem;">
+                    {"The ensemble predicts future utilization, then a dedicated conversion model translates that into fantasy points." if is_primary else "The system trains both a utilization model and a direct fantasy-points model, then picks whichever validates better."}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Show each component as a weighted bar
+            sorted_weights = sorted(weights.items(), key=lambda x: x[1], reverse=True)
+            for comp, w in sorted_weights:
+                pct = w * 100
+                desc = component_descriptions.get(comp, comp.replace("_", " ").title())
+                st.markdown(f"""
+                <div style="margin-bottom: 0.6rem;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.2rem;">
+                        <span style="font-weight: 600; color: #1e293b;">{comp.replace('_', ' ').title()}</span>
+                        <span style="color: {accent}; font-weight: 700;">{pct:.0f}%</span>
+                    </div>
+                    <div style="background: #e2e8f0; border-radius: 4px; height: 8px; overflow: hidden;">
+                        <div style="background: {accent}; width: {pct * 3.33}%; height: 100%; border-radius: 4px;"></div>
+                    </div>
+                    <div style="font-size: 0.78rem; color: #64748b; margin-top: 0.15rem;">{desc}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
     # Key Takeaways
     st.markdown("## 💡 Key Takeaways")
-    
+
     if approach_results and 'key_findings' in approach_results:
         for finding in approach_results['key_findings']:
             st.markdown(f"- {finding}")
-    
+
     st.markdown("""
     ### Bottom Line
-    
+
     **Don't rely on any single approach.** The best fantasy predictions come from combining:
-    
+
     1. **Who the player is** (position rank, historical production)
     2. **How they're being used** (utilization, opportunity share)
     3. **What's the context** (matchup, weather, Vegas lines)
     4. **What's the outlook** (age, injury risk, games projection)
-    
+
     Our system integrates all of these factors, weighted by their empirical predictive power.
+    For RB, WR, and TE, the utilization score is the **primary prediction target** — the model
+    first forecasts how a player will be used, then translates that usage into fantasy points.
     """)
-    
+
     st.markdown("---")
-    
+
     # Technical Details
     with st.expander("🔧 Technical Details"):
         st.markdown("""
