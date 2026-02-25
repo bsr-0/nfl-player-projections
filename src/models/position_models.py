@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import joblib
 
-from sklearn.model_selection import cross_val_score, cross_val_predict, TimeSeriesSplit
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
@@ -78,12 +78,16 @@ class SeasonAwareTimeSeriesSplit:
         seasons: Array of season labels per row (aligned with X).
         gap_seasons: Number of seasons to skip between train and test
             to prevent feature leakage from rolling/lag features.
+        min_train_samples: Minimum training samples per fold. Folds with
+            fewer training rows are skipped to avoid numeric instability
+            in native C/Fortran model backends.
     """
     def __init__(self, n_splits: int = 5, seasons: np.ndarray = None,
-                 gap_seasons: int = 0):
+                 gap_seasons: int = 0, min_train_samples: int = 30):
         self.n_splits = n_splits
         self.seasons = seasons
         self.gap_seasons = gap_seasons
+        self.min_train_samples = min_train_samples
 
     def split(self, X, y=None, groups=None):
         if self.seasons is None or len(self.seasons) != len(X):
@@ -107,7 +111,7 @@ class SeasonAwareTimeSeriesSplit:
             train_seasons = set(unique_seasons[:train_end_idx])
             train_idx = np.where(np.isin(self.seasons, list(train_seasons)))[0]
             test_idx = np.where(self.seasons == test_season)[0]
-            if len(train_idx) > 0 and len(test_idx) > 0:
+            if len(train_idx) >= self.min_train_samples and len(test_idx) > 0:
                 yield train_idx, test_idx
 
     def get_n_splits(self, X=None, y=None, groups=None):
@@ -630,10 +634,19 @@ class PositionModel:
                 "random_state": MODEL_CONFIG["random_state"],
                 "n_jobs": 1,
             }
-            model = RandomForestRegressor(**params)
+            # Manual CV to match _tune_xgboost/_tune_lightgbm pattern
             cv = SeasonAwareTimeSeriesSplit(n_splits=tune_folds, seasons=seasons_tune, gap_seasons=gap)
-            scores = cross_val_score(model, X_tune, y_tune, cv=cv, scoring="neg_mean_squared_error", n_jobs=1)
-            return -scores.mean()
+            fold_mse = []
+            for train_idx, test_idx in cv.split(X_tune, y_tune):
+                model = RandomForestRegressor(**params)
+                X_train, y_train = X_tune[train_idx], y_tune[train_idx]
+                X_test, y_test = X_tune[test_idx], y_tune[test_idx]
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                fold_mse.append(mean_squared_error(y_test, preds))
+            if not fold_mse:
+                return float("inf")
+            return float(np.mean(fold_mse))
         study = optuna.create_study(
             direction="minimize",
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])

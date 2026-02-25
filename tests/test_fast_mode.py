@@ -284,3 +284,66 @@ class TestFastModePositionModelFit:
         preds = model.predict(X.iloc[:5])
         assert len(preds) == 5
         assert np.all(np.isfinite(preds))
+
+
+# ---------------------------------------------------------------------------
+# Random Forest tuning consistency
+# ---------------------------------------------------------------------------
+
+class TestRandomForestTuningManualCV:
+    """Verify Random Forest tuning uses manual CV for consistency."""
+
+    def test_source_does_not_use_cross_val_score(self):
+        """_tune_random_forest should not call cross_val_score."""
+        import inspect
+        from src.models.position_models import PositionModel
+
+        source = inspect.getsource(PositionModel._tune_random_forest)
+        assert "cross_val_score" not in source
+
+
+# ---------------------------------------------------------------------------
+# SeasonAwareTimeSeriesSplit minimum fold size guard
+# ---------------------------------------------------------------------------
+
+class TestSeasonAwareTimeSeriesSplitSafety:
+    """Verify CV splitter enforces minimum fold sizes."""
+
+    def test_minimum_train_size_enforcement(self):
+        """Folds with fewer than min_train_samples training rows are skipped."""
+        from src.models.position_models import SeasonAwareTimeSeriesSplit
+
+        # 4 seasons with 10 samples each, gap=1, 3 folds
+        # First fold would have only 10 training samples (1 season)
+        seasons = np.repeat([2020, 2021, 2022, 2023], 10)
+        X = np.random.randn(40, 5)
+
+        cv = SeasonAwareTimeSeriesSplit(
+            n_splits=3, seasons=seasons, gap_seasons=1,
+            min_train_samples=15,
+        )
+        folds = list(cv.split(X))
+
+        for train_idx, test_idx in folds:
+            assert len(train_idx) >= 15
+
+    def test_default_min_train_samples(self):
+        """Default min_train_samples should be 30."""
+        from src.models.position_models import SeasonAwareTimeSeriesSplit
+
+        cv = SeasonAwareTimeSeriesSplit(n_splits=3)
+        assert cv.min_train_samples == 30
+
+    def test_fast_mode_fold_count(self):
+        """With enough data, 3 folds and gap=1 should produce reasonable folds."""
+        from src.models.position_models import SeasonAwareTimeSeriesSplit
+
+        seasons = np.repeat(np.arange(2014, 2025), 200)
+        X = np.random.randn(len(seasons), 10)
+
+        cv = SeasonAwareTimeSeriesSplit(n_splits=3, seasons=seasons, gap_seasons=1)
+        folds = list(cv.split(X))
+
+        assert len(folds) == 3
+        for train_idx, _ in folds:
+            assert len(train_idx) >= 200
