@@ -248,7 +248,7 @@ FAST_MODEL_CONFIG = {
     "n_optuna_trials": 15,          # 15 vs 100 (6.7x fewer)
     "cv_folds": 3,                  # 3 vs 5 (1.7x fewer OOF folds)
     "stability_n_bootstrap": 10,    # 10 vs 30 (3x fewer)
-    "lstm_optuna_trials": 5,        # 5 vs 15
+    "lstm_optuna_trials": 0,        # 0 vs 15 (skip LSTM tuning in fast mode for stability)
     "lstm_epochs": 40,              # 40 vs 80
     "deep_optuna_trials": 5,        # 5 vs 15
     "deep_epochs": 50,              # 50 vs 100

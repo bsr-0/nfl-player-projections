@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-02-22T07:26:47.355448",
+  "generated_at": "2026-02-24T16:40:11.862629",
   "strict_requirements": false,
   "missingness_above_5pct": {
     "train": {
-      "util_redzone_share": 0.7348346456692914
+      "util_redzone_share": 0.7348395766840249
     },
     "test": {
       "util_redzone_share": 0.7889355486580245
@@ -12,32 +12,32 @@
   "train_outliers_3sigma": {
     "fantasy_points": {
       "n_outliers": 1028,
-      "n_samples": 95250,
+      "n_samples": 95248,
       "pct_outliers": 1.079
     },
     "target_1w": {
       "n_outliers": 1243,
-      "n_samples": 95250,
+      "n_samples": 95248,
       "pct_outliers": 1.305
     },
     "target_4w": {
       "n_outliers": 836,
-      "n_samples": 95250,
+      "n_samples": 95248,
       "pct_outliers": 0.878
     },
     "target_18w": {
-      "n_outliers": 3509,
-      "n_samples": 95250,
-      "pct_outliers": 3.684
+      "n_outliers": 3508,
+      "n_samples": 95248,
+      "pct_outliers": 3.683
     },
     "target_util_1w": {
       "n_outliers": 0,
-      "n_samples": 95250,
+      "n_samples": 95248,
       "pct_outliers": 0.0
     },
     "utilization_score": {
       "n_outliers": 0,
-      "n_samples": 95250,
+      "n_samples": 95248,
       "pct_outliers": 0.0
     }
   }

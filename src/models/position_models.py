@@ -766,7 +766,8 @@ class PositionModel:
                     kw["callbacks"] = [early_stop]
                 except (AttributeError, TypeError):
                     use_callbacks = False
-            fit_kw = dict(eval_set=[(X_val, y_val)], verbose=False, **kw)
+            # Ensure eval history includes the metric used by early stopping.
+            fit_kw = dict(eval_set=[(X_val, y_val)], eval_metric="rmse", verbose=False, **kw)
             if not use_callbacks:
                 fit_kw["early_stopping_rounds"] = EARLY_STOPPING_ROUNDS
             try:
