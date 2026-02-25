@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Generate static JSON data files for the fantasy draft web app.
 
-Reads 2025 season data from daily_predictions.parquet and creates
-per-position JSON files with player estimates for the draft board.
+Reads the most recently completed regular season from
+daily_predictions.parquet and creates per-position JSON files for the
+draft board.
 
-These estimates are 2025 actual per-game fantasy points extrapolated
-to a 17-game season.  They are NOT ML model predictions.  The ML model
-(trained 2014-2024, validated on the 2025 held-out season) produces
-separate predictions via the API / generate_app_data.py pipeline.
+When ML predictions are available (cached_features.parquet with
+projection_18w for the upcoming season), the draft board uses those as
+the primary values.  Otherwise it falls back to extrapolating per-game
+actuals to a 17-game season.  In both cases the basis-season actuals
+(games played, total FP, PPG) are kept as reference fields.
 
 Usage:
     python scripts/generate_draft_data.py
@@ -24,17 +26,25 @@ import numpy as np
 DATA_DIR = Path(__file__).parent.parent / "data"
 MODELS_DIR = DATA_DIR / "models"
 
+# Season detected at load time and shared across functions
+_BASIS_SEASON: int = 0
+
 
 def load_season_data():
-    """Load the most recent full regular season data (weeks 1-18) from parquet."""
+    """Load the most recently completed regular season (weeks 1-18).
+
+    Dynamically picks the latest season with week-18 data in the
+    parquet rather than hardcoding a specific year.  Sets the module-
+    level _BASIS_SEASON so other functions can reference it.
+    """
+    global _BASIS_SEASON
     df = pd.read_parquet(DATA_DIR / "daily_predictions.parquet")
-    # Use 2025 regular season for QB/RB/WR/TE
-    mask = (
-        (df["season"] == 2025)
-        & (df["week"] <= 18)
-        & (df["position"].isin(["QB", "RB", "WR", "TE"]))
-    )
-    return df[mask]
+    reg = df[(df["week"] <= 18) & (df["position"].isin(["QB", "RB", "WR", "TE"]))]
+    # Pick the latest season that has at least 1 week of data
+    _BASIS_SEASON = int(reg["season"].max())
+    mask = reg["season"] == _BASIS_SEASON
+    print(f"  Basis season detected: {_BASIS_SEASON}")
+    return reg[mask]
 
 
 def aggregate_player_stats(season_df):
@@ -73,10 +83,60 @@ def aggregate_player_stats(season_df):
     return agg
 
 
+def _try_load_ml_predictions() -> pd.DataFrame:
+    """Try loading ML predictions (projection_18w) from cached_features.parquet.
+
+    Returns a DataFrame with player_id and projection_18w if available,
+    otherwise an empty DataFrame.
+    """
+    cached_path = DATA_DIR / "cached_features.parquet"
+    if not cached_path.exists():
+        return pd.DataFrame()
+    try:
+        cdf = pd.read_parquet(cached_path)
+        if "projection_18w" not in cdf.columns:
+            return pd.DataFrame()
+        # Keep only rows for the prediction-target season (latest season in file)
+        latest = int(cdf["season"].max())
+        cdf = cdf[cdf["season"] == latest]
+        valid = cdf[cdf["projection_18w"].notna() & (cdf["projection_18w"] > 0)]
+        if valid.empty:
+            return pd.DataFrame()
+        return valid[["player_id", "projection_18w"]].drop_duplicates("player_id")
+    except Exception:
+        return pd.DataFrame()
+
+
 def compute_projections(agg):
-    """Compute estimated totals from 2025 actuals extrapolated to 17 games (not ML)."""
-    agg["projection_points_total"] = (agg["ppg"] * 17).round(1)
-    agg["projection_points_per_game"] = agg["ppg"].round(1)
+    """Compute projected totals for the draft board.
+
+    Uses ML predictions (projection_18w) when available; otherwise
+    falls back to extrapolating per-game actuals to 17 games.
+    Always keeps the basis-season actuals as reference fields.
+    """
+    # Always compute extrapolation-based values as reference / fallback
+    agg["extrap_points_total"] = (agg["ppg"] * 17).round(1)
+    agg["extrap_points_per_game"] = agg["ppg"].round(1)
+
+    ml_preds = _try_load_ml_predictions()
+    if not ml_preds.empty:
+        agg = agg.merge(ml_preds, on="player_id", how="left")
+        has_ml = agg["projection_18w"].notna()
+        agg.loc[has_ml, "projection_points_total"] = agg.loc[has_ml, "projection_18w"].round(1)
+        agg.loc[has_ml, "projection_points_per_game"] = (agg.loc[has_ml, "projection_18w"] / 17).round(1)
+        # Fall back to extrapolation for players missing ML predictions
+        agg.loc[~has_ml, "projection_points_total"] = agg.loc[~has_ml, "extrap_points_total"]
+        agg.loc[~has_ml, "projection_points_per_game"] = agg.loc[~has_ml, "extrap_points_per_game"]
+        agg["data_source"] = np.where(has_ml, "ml_model", "extrapolation")
+        agg = agg.drop(columns=["projection_18w"], errors="ignore")
+        n_ml = int(has_ml.sum())
+        print(f"  Using ML predictions for {n_ml}/{len(agg)} players (rest: extrapolation)")
+    else:
+        agg["projection_points_total"] = agg["extrap_points_total"]
+        agg["projection_points_per_game"] = agg["extrap_points_per_game"]
+        agg["data_source"] = "extrapolation"
+        print("  No ML predictions available; using extrapolation")
+
     agg["projection_floor"] = (
         (agg["ppg"] - 1.5 * agg["fp_std"]).clip(lower=0) * 17
     ).round(1)
@@ -192,6 +252,12 @@ def output_position_files(agg):
                 "key_features": row["key_features"],
                 "feature_importance_rank": row["feature_importance_rank"],
                 "uses_schedule": False,
+                # Dynamic basis-season reference fields
+                "basis_season": _BASIS_SEASON,
+                "games_played_basis": int(row["games_played"]),
+                "total_fp_basis": round(float(row["total_fp"]), 1),
+                "ppg_basis": round(float(row["ppg"]), 1),
+                # Legacy aliases so older frontend code doesn't break
                 "games_played_2025": int(row["games_played"]),
                 "total_fp_2025": round(float(row["total_fp"]), 1),
             })
@@ -209,15 +275,16 @@ def generate_schedule_impact():
         with open(meta_path) as f:
             meta = json.load(f)
 
+    target_season = _BASIS_SEASON + 1
     payload = {
         "schedule_incorporated": False,
         "reason": (
-            "The 2026 NFL schedule has not been released. All projections are "
-            "based on 2025 season performance without opponent-specific "
+            f"The {target_season} NFL schedule has not been released. All projections are "
+            f"based on {_BASIS_SEASON} season performance without opponent-specific "
             "adjustments. Once the schedule is released, matchup quality, "
             "home/away splits, and defensive rankings will be incorporated."
         ),
-        "season": meta.get("season", 2026),
+        "season": meta.get("season", target_season),
         "schedule_available": meta.get("schedule_available", False),
     }
     out_path = DATA_DIR / "schedule_impact.json"
@@ -226,8 +293,13 @@ def generate_schedule_impact():
     print(f"  Wrote {out_path.name}")
 
 
-def generate_model_metadata_frontend():
-    """Create draft_model_metadata.json for the frontend methodology section."""
+def generate_model_metadata_frontend(data_source: str = "extrapolation"):
+    """Create draft_model_metadata.json for the frontend methodology section.
+
+    Args:
+        data_source: "ml_model" when ML predictions are the primary draft
+            board values, "extrapolation" when using basis-season PPG * 17.
+    """
     meta_path = MODELS_DIR / "model_metadata.json"
     backtest_path = DATA_DIR / "advanced_model_results.json"
     features_path = MODELS_DIR / "top10_features_per_position.json"
@@ -252,18 +324,51 @@ def generate_model_metadata_frontend():
     if train_seasons:
         training_window = f"{train_seasons[0]}-{train_seasons[-1]}"
 
+    target_season = _BASIS_SEASON + 1  # e.g. 2026 when basis is 2025
+
+    if data_source == "ml_model":
+        target_def = (
+            f"PPR fantasy points projected via ML model for the "
+            f"{target_season} season (trained on {training_window or '2006-' + str(_BASIS_SEASON)}). "
+            f"{_BASIS_SEASON} actuals retained as reference."
+        )
+        data_basis_note = (
+            f"Draft board values are ML model predictions for the "
+            f"{target_season} season. The model was trained on "
+            f"{training_window or '2006-' + str(_BASIS_SEASON)} historical data. "
+            f"{_BASIS_SEASON} actual performance (games played, total FP, PPG) "
+            f"is shown in the player detail panel for reference."
+        )
+    else:
+        target_def = (
+            f"PPR fantasy points per game ({_BASIS_SEASON} actuals projected "
+            f"to 17 games for draft board; ML model targets {target_season} season)"
+        )
+        data_basis_note = (
+            f"Draft board values are {_BASIS_SEASON} actual PPR points per "
+            f"game projected over 17 games. They are not ML model outputs. "
+            f"The ML model (trained {training_window or '2006-' + str(_BASIS_SEASON - 1)}, "
+            f"validated on the {_BASIS_SEASON} held-out season) is available "
+            f"via the prediction API; its backtest metrics are shown in the "
+            f"Methodology section."
+        )
+
     payload = {
-        "target_definition": "PPR fantasy points per game (2025 actuals projected to 17 games for draft board; ML model targets 2026 season)",
-        "training_data_range": training_window or "2006-2024",
+        "data_source": data_source,
+        "basis_season": _BASIS_SEASON,
+        "target_season": target_season,
+        "target_definition": target_def,
+        "training_data_range": training_window or f"2006-{_BASIS_SEASON - 1}",
         "positions": ["QB", "RB", "WR", "TE"],
         "schedule_incorporated": False,
         "schedule_release_status": (
-            "2026 schedule not released yet; draft board estimates use "
-            "schedule-neutral assumptions based on 2025 actual performance."
+            f"{target_season} schedule not released yet; draft board estimates use "
+            f"schedule-neutral assumptions based on {_BASIS_SEASON} actual performance."
         ),
         "version": "v1.0.0",
-        "last_updated": meta.get("training_date", "2026-02-25"),
+        "last_updated": meta.get("training_date", ""),
         "training_date": meta.get("training_date"),
+        "training_mode": meta.get("training_mode", "backtest"),
         "test_season": meta.get("test_season"),
         "n_features_per_position": meta.get("n_features_per_position", {}),
         "training_metrics": meta.get("training_metrics", {}),
@@ -271,8 +376,8 @@ def generate_model_metadata_frontend():
         "top_features": features,
         "methodology": {
             "model_type": "LightGBM ensemble with XGBoost and Ridge regression",
-            "training_window": training_window or "2006-2024",
-            "test_season": str(meta.get("test_season", 2025)),
+            "training_window": training_window or f"2006-{_BASIS_SEASON - 1}",
+            "test_season": str(meta.get("test_season", _BASIS_SEASON)),
             "scoring_format": "PPR (1 point per reception)",
             "features_description": (
                 "50 features per position including utilization scores, "
@@ -294,13 +399,7 @@ def generate_model_metadata_frontend():
                 "calibration": ["Within 7-point accuracy", "Within 10-point accuracy"],
             },
         },
-        "data_basis_note": (
-            "Draft board values are 2025 actual PPR points per game projected "
-            "over 17 games. They are not ML model outputs. The ML model "
-            "(trained 2014\u20132024, validated on the 2025 held-out season) "
-            "is available via the prediction API; its backtest metrics are "
-            "shown in the Methodology section."
-        ),
+        "data_basis_note": data_basis_note,
     }
     out_path = DATA_DIR / "draft_model_metadata.json"
     with open(out_path, "w") as f:
@@ -309,10 +408,10 @@ def generate_model_metadata_frontend():
 
 
 def main():
-    print("Generating draft board data (2025 actuals extrapolated to 17 games)...")
+    print("Generating draft board data...")
 
     season_df = load_season_data()
-    print(f"  Loaded {len(season_df)} weekly records")
+    print(f"  Loaded {len(season_df)} weekly records (basis season: {_BASIS_SEASON})")
 
     agg = aggregate_player_stats(season_df)
     print(f"  Aggregated {len(agg)} unique players")
@@ -322,11 +421,18 @@ def main():
     agg = add_feature_importance(agg)
     agg = add_adp_proxy(agg)
 
+    # Determine dominant data source for metadata
+    data_source = "extrapolation"
+    if "data_source" in agg.columns:
+        ml_count = (agg["data_source"] == "ml_model").sum()
+        if ml_count > len(agg) * 0.5:
+            data_source = "ml_model"
+
     output_position_files(agg)
     generate_schedule_impact()
-    generate_model_metadata_frontend()
+    generate_model_metadata_frontend(data_source=data_source)
 
-    print("\nDone! JSON files ready for the draft web app.")
+    print(f"\nDone! JSON files ready (data_source={data_source}, basis={_BASIS_SEASON}).")
 
 
 if __name__ == "__main__":

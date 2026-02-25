@@ -238,7 +238,12 @@
       var schedText = scheduleImpact && !scheduleImpact.schedule_incorporated
         ? 'Schedule not yet incorporated.'
         : 'Schedule incorporated.';
-      summaryEl.textContent = '2025 actuals extrapolated to 17 games (not ML predictions) \u00b7 ' +
+      var draftSrc = modelMetadata.data_source || 'extrapolation';
+      var draftBasis = modelMetadata.basis_season || 2025;
+      var srcLabel = draftSrc === 'ml_model'
+        ? 'ML model predictions for ' + (modelMetadata.target_season || draftBasis + 1) + ' season'
+        : draftBasis + ' actuals extrapolated to 17 games';
+      summaryEl.textContent = srcLabel + ' \u00b7 ' +
         (modelMetadata.methodology ? modelMetadata.methodology.scoring_format : 'PPR scoring') +
         ' \u00b7 ' + schedText +
         ' \u00b7 Last updated: ' + (modelMetadata.last_updated || 'N/A').split('T')[0];
@@ -382,15 +387,18 @@
         '</span>' +
         '<p style="margin-top:0.5rem;font-size:0.8rem;color:#94a3b8">' +
           (player.uses_schedule
-            ? 'These estimates include the 2026 schedule, including bye weeks and matchup strength.'
-            : 'These estimates are schedule-neutral; the NFL 2026 schedule is not yet available.') +
+            ? 'These estimates include the schedule, including bye weeks and matchup strength.'
+            : 'These estimates are schedule-neutral; the NFL schedule is not yet available.') +
         '</p>' +
       '</div>' +
 
       '<div class="detail-actuals">' +
-        '<p class="detail-actuals__note">Basis: 2025 actual performance (' +
-          player.games_played_2025 + ' games, ' +
-          num(player.total_fp_2025) + ' total PPR points) extrapolated to 17 games</p>' +
+        '<p class="detail-actuals__note">' +
+          (player.basis_season || 2025) + ' season reference: ' +
+          (player.games_played_basis || player.games_played_2025) + ' games, ' +
+          num(player.total_fp_basis || player.total_fp_2025) + ' total PPR points' +
+          (player.ppg_basis ? ' (' + num(player.ppg_basis) + ' PPG)' : '') +
+        '</p>' +
       '</div>';
 
     panel.hidden = false;
@@ -445,15 +453,26 @@
     html += '</div>';
 
     // Training & Evaluation
+    var methSrc = modelMetadata.data_source || 'extrapolation';
+    var methBasis = modelMetadata.basis_season || 2025;
     html += '<div class="content-section">' +
-      '<h3>ML Model Training &amp; Evaluation</h3>' +
-      '<div class="notice notice--warning" style="margin-bottom:0.75rem">' +
-        '<strong>Note:</strong> The metrics below reflect the ML model validated against the ' +
-        (modelMetadata.test_season || 2025) + ' season (held-out test set). ' +
-        'The Draft Board tab currently shows 2025 actuals extrapolated to 17 games, ' +
-        'not these ML model outputs. ML-driven forward projections will replace the ' +
-        'extrapolations when available.' +
+      '<h3>ML Model Training &amp; Evaluation</h3>';
+    if (methSrc === 'ml_model') {
+      html += '<div class="notice notice--info" style="margin-bottom:0.75rem">' +
+        '<strong>Draft Board uses ML predictions.</strong> The model was trained on ' +
+        (modelMetadata.training_data_range || '') + ' and is predicting ' +
+        (modelMetadata.target_season || methBasis + 1) + ' season performance. ' +
+        'The backtest metrics below show how the model performed on the ' +
+        (modelMetadata.test_season || methBasis) + ' held-out validation season.' +
       '</div>';
+    } else {
+      html += '<div class="notice notice--warning" style="margin-bottom:0.75rem">' +
+        '<strong>Note:</strong> The metrics below reflect the ML model validated against the ' +
+        (modelMetadata.test_season || methBasis) + ' season (held-out test set). ' +
+        'The Draft Board tab currently shows ' + methBasis + ' actuals extrapolated to 17 games, ' +
+        'not these ML model outputs. Run <code>python scripts/prepare_new_season.py</code> to generate ML predictions.' +
+      '</div>';
+    }
 
     var bt = modelMetadata.backtest_results || {};
     var posKeys = Object.keys(bt).filter(function (k) { return POSITIONS.indexOf(k) !== -1; });
@@ -500,11 +519,15 @@
     var container = document.getElementById('data-content');
     if (!container) return;
 
+    var dataBasis = (modelMetadata && modelMetadata.basis_season) || 2025;
+    var dataTarget = (modelMetadata && modelMetadata.target_season) || (dataBasis + 1);
+    var dataSrc = (modelMetadata && modelMetadata.data_source) || 'extrapolation';
+
     var html = '<div class="content-section">' +
       '<h3>Data Sources</h3>' +
       '<ul>' +
         '<li><strong>Player Statistics:</strong> Weekly player performance data from nfl-data-py (official NFL play-by-play and boxscore data)</li>' +
-        '<li><strong>Time Range:</strong> ' + (modelMetadata ? modelMetadata.training_data_range : '2006-2024') + ' for ML model training; 2025 season actuals for draft board estimates</li>' +
+        '<li><strong>Time Range:</strong> ' + (modelMetadata ? modelMetadata.training_data_range : '2006-2024') + ' for ML model training; ' + dataBasis + ' season actuals for draft board ' + (dataSrc === 'ml_model' ? 'reference' : 'estimates') + '</li>' +
         '<li><strong>Play-by-Play:</strong> Advanced metrics including EPA (Expected Points Added), WPA (Win Probability Added), and success rate derived from play-by-play data</li>' +
         '<li><strong>Team Context:</strong> Team-level offensive stats, play volume, pass/rush ratios, and scoring tendencies</li>' +
       '</ul>' +
@@ -530,8 +553,8 @@
       '<h3>Handling of Edge Cases</h3>' +
       '<ul>' +
         '<li><strong>Missing Games:</strong> Players with fewer than 4 games of data in a season are included but flagged with higher risk scores due to small sample size.</li>' +
-        '<li><strong>Team Changes:</strong> Team assignments reflect the player\'s most recent 2025 team. 2026 free agency moves and trades are not yet reflected.</li>' +
-        '<li><strong>Rookies:</strong> 2026 rookies (draft class) are not included since they have no NFL data to extrapolate from.</li>' +
+        '<li><strong>Team Changes:</strong> Team assignments reflect the player\'s most recent ' + dataBasis + ' team. ' + dataTarget + ' free agency moves and trades may not yet be reflected.</li>' +
+        '<li><strong>Rookies:</strong> ' + dataTarget + ' rookies (draft class) are not included since they have no NFL data to extrapolate from.</li>' +
         '<li><strong>Injuries:</strong> No injury model is currently incorporated. Injury history is not factored into projections or risk scores.</li>' +
       '</ul>' +
     '</div>';
@@ -540,7 +563,9 @@
       '<h3>Key Assumptions</h3>' +
       '<ul>' +
         '<li>Draft board values assume a 17-game regular season</li>' +
-        '<li>Each player\'s 2025 per-game average is projected to 17 games (no regression, no ML adjustment)</li>' +
+        (dataSrc === 'ml_model'
+          ? '<li>ML model predicts ' + dataTarget + ' season performance using ' + dataBasis + ' data as features</li>'
+          : '<li>Each player\'s ' + dataBasis + ' per-game average is projected to 17 games (no regression, no ML adjustment)</li>') +
         '<li>Floor and ceiling are calculated as PPG &plusmn; 1.5 standard deviations over 17 games</li>' +
         '<li>ADP values are proxy rankings based on projected total points (not actual draft data)</li>' +
         '<li>Risk scores are relative within each position group and reflect week-to-week consistency, not injury risk</li>' +
@@ -588,7 +613,7 @@
 
       html += '<div class="content-section">' +
         '<h3>When the Schedule Is Available</h3>' +
-        '<p>Once the NFL releases the 2026 schedule (typically in May), the following adjustments will be incorporated:</p>' +
+        '<p>Once the NFL releases the schedule (typically in May), the following adjustments will be incorporated:</p>' +
         '<ul>' +
           '<li><strong>Matchup Quality:</strong> Opponent defense strength adjustments per position (e.g., how many fantasy points allowed to QBs/RBs/WRs/TEs)</li>' +
           '<li><strong>Home/Away Splits:</strong> Historical performance differences when playing at home vs. away</li>' +
@@ -616,25 +641,33 @@
     if (!container) return;
 
     var isScheduleUsed = scheduleImpact && scheduleImpact.schedule_incorporated;
+    var faqSrc = (modelMetadata && modelMetadata.data_source) || 'extrapolation';
+    var faqBasis = (modelMetadata && modelMetadata.basis_season) || 2025;
+    var faqTarget = (modelMetadata && modelMetadata.target_season) || (faqBasis + 1);
+    var faqRange = (modelMetadata && modelMetadata.training_data_range) || '';
 
     var faqs = [
       {
         q: 'How should I use these projections?',
-        a: 'The Draft Board shows each player\'s 2025 per-game average projected over 17 games. Use it as a data-driven starting point alongside your own research, expert rankings, and league-specific scoring rules. Because these are straight extrapolations (not ML forecasts), factors like regression to the mean, coaching changes, offseason moves, and age curves are not accounted for.'
+        a: faqSrc === 'ml_model'
+          ? 'The Draft Board shows ML model predictions for the ' + faqTarget + ' season, trained on ' + faqRange + ' historical data. ' + faqBasis + ' actual performance is shown in the player detail panel for reference. Use these as a data-driven starting point alongside your own research, expert rankings, and league-specific scoring rules.'
+          : 'The Draft Board shows each player\'s ' + faqBasis + ' per-game average projected over 17 games. Use it as a data-driven starting point alongside your own research, expert rankings, and league-specific scoring rules. Because these are straight extrapolations (not ML forecasts), factors like regression to the mean, coaching changes, offseason moves, and age curves are not accounted for.'
       },
       {
         q: 'Are these actual ML model predictions?',
-        a: 'No. The Draft Board currently shows 2025 actual fantasy points extrapolated to a 17-game season &mdash; essentially assuming each player repeats their 2025 performance. A separate ML pipeline (LightGBM ensemble trained on 2006\u20132024, validated against the 2025 held-out test set) exists and powers the prediction API, but its forward 2026 projections have not yet replaced the draft board extrapolations. The Methodology tab shows the ML model\'s backtest accuracy on the 2025 season.'
+        a: faqSrc === 'ml_model'
+          ? 'Yes. The Draft Board uses predictions from the ML pipeline (LightGBM ensemble trained on ' + faqRange + ') to project ' + faqTarget + ' season performance. The Methodology tab shows the model\'s backtest accuracy on the ' + faqBasis + ' held-out validation season.'
+          : 'No. The Draft Board currently shows ' + faqBasis + ' actual fantasy points extrapolated to a 17-game season &mdash; essentially assuming each player repeats their ' + faqBasis + ' performance. A separate ML pipeline (LightGBM ensemble trained on ' + faqRange + ') exists and powers the prediction API, but its forward ' + faqTarget + ' projections have not yet replaced the draft board extrapolations. Run <code>python scripts/prepare_new_season.py</code> to generate them.'
       },
       {
-        q: 'What do "trained on 2014\u20132024" and "tested on 2025" mean?',
-        a: 'The ML model learned patterns from 11 seasons of historical data (2014\u20132024). It was then evaluated against the 2025 season, which the model had never seen during training. The backtest metrics (RMSE, R\u00b2, etc.) in the Methodology tab measure how well the model would have predicted 2025 outcomes. This is a standard validation step &mdash; it does not mean the Draft Board numbers come from this model.'
+        q: 'What do the training/validation seasons mean?',
+        a: 'The ML model learned patterns from historical data (' + faqRange + '). It was evaluated against the ' + faqBasis + ' season, which the model had never seen during training. The backtest metrics (RMSE, R\u00b2, etc.) in the Methodology tab measure how well the model predicted ' + faqBasis + ' outcomes. ' + (faqSrc === 'ml_model' ? 'For forward prediction, all available data (including ' + faqBasis + ') is used for training.' : 'This is a standard validation step &mdash; it does not mean the Draft Board numbers come from this model.')
       },
       {
         q: 'Are these projections schedule-adjusted?',
         a: isScheduleUsed
-          ? 'Yes. The 2026 NFL schedule has been incorporated, including opponent defensive strength, home/away adjustments, and bye week identification.'
-          : 'No. The 2026 NFL schedule has not yet been released. All estimates are schedule-neutral, treating each week as an average matchup. Once the schedule is available (typically May), matchup-quality adjustments can be applied.'
+          ? 'Yes. The ' + faqTarget + ' NFL schedule has been incorporated, including opponent defensive strength, home/away adjustments, and bye week identification.'
+          : 'No. The ' + faqTarget + ' NFL schedule has not yet been released. All estimates are schedule-neutral, treating each week as an average matchup. Once the schedule is available (typically May), matchup-quality adjustments can be applied.'
       },
       {
         q: 'What do the risk scores mean?',
@@ -646,11 +679,13 @@
       },
       {
         q: 'Why are some players missing?',
-        a: 'Players must have at least one game of 2025 NFL data to appear. This excludes: (1) 2026 rookies who haven\'t played an NFL game, (2) Players who missed the entire 2025 season, (3) Retired players. Free agents and players who changed teams in the 2026 offseason still show their 2025 team.'
+        a: 'Players must have at least one game of ' + faqBasis + ' NFL data to appear. This excludes: (1) ' + faqTarget + ' rookies who haven\'t played an NFL game, (2) Players who missed the entire ' + faqBasis + ' season, (3) Retired players. Free agents and players who changed teams in the ' + faqTarget + ' offseason still show their ' + faqBasis + ' team.'
       },
       {
         q: 'What are the known limitations?',
-        a: 'Key limitations: (1) Draft board uses 2025 extrapolations, not ML forward predictions, (2) No regression-to-the-mean or age adjustments, (3) No injury model, (4) ADP values are rank-based proxies (not actual draft data), (5) No 2026 roster updates (free agency, trades not reflected), (6) No schedule adjustments (waiting for NFL schedule release), (7) Rookies excluded (no historical data).'
+        a: faqSrc === 'ml_model'
+          ? 'Key limitations: (1) No injury model, (2) ADP values are rank-based proxies (not actual draft data), (3) ' + faqTarget + ' roster updates may not be fully reflected, (4) No schedule adjustments (waiting for NFL schedule release), (5) Rookies excluded (no historical data), (6) ML model does not account for coaching changes or scheme shifts.'
+          : 'Key limitations: (1) Draft board uses ' + faqBasis + ' extrapolations, not ML forward predictions, (2) No regression-to-the-mean or age adjustments, (3) No injury model, (4) ADP values are rank-based proxies (not actual draft data), (5) No ' + faqTarget + ' roster updates (free agency, trades not reflected), (6) No schedule adjustments (waiting for NFL schedule release), (7) Rookies excluded (no historical data).'
       }
     ];
 
@@ -662,10 +697,64 @@
     }).join('');
   }
 
+  // ========== DYNAMIC CHROME (subtitle, notice, footer) ==========
+  function updateDynamicChrome() {
+    var src = (modelMetadata && modelMetadata.data_source) || 'extrapolation';
+    var basis = (modelMetadata && modelMetadata.basis_season) || 2025;
+    var target = (modelMetadata && modelMetadata.target_season) || (basis + 1);
+    var trainingRange = (modelMetadata && modelMetadata.training_data_range) || '';
+
+    // Subtitle
+    var subtitleEl = document.getElementById('header-subtitle');
+    if (subtitleEl) {
+      if (src === 'ml_model') {
+        subtitleEl.textContent = target + ' ML projections trained on ' + trainingRange;
+      } else {
+        subtitleEl.textContent = target + ' projections based on ' + basis + ' season performance';
+      }
+    }
+
+    // Badge
+    var badgeEl = document.getElementById('header-badge');
+    if (badgeEl) {
+      badgeEl.textContent = 'Pre-Draft ' + target;
+    }
+
+    // Notice
+    var noticeEl = document.getElementById('data-notice');
+    if (noticeEl) {
+      if (src === 'ml_model') {
+        noticeEl.innerHTML =
+          '<strong>ML-powered projections:</strong> Player values are generated by the ML model ' +
+          '(trained on ' + escapeHtml(trainingRange) + ' historical data) predicting ' + target +
+          ' season performance. ' + basis + ' actual stats shown in the player detail panel for reference.';
+      } else {
+        noticeEl.innerHTML =
+          '<strong>How to read this board:</strong> Player values are estimated by taking their ' +
+          'actual ' + basis + ' per-game fantasy points and projecting over a 17-game season. These are ' +
+          '<em>not</em> ML model predictions &mdash; they assume ' + target + ' performance will match ' + basis +
+          '. The ML model\'s backtest metrics are shown in the Methodology tab.';
+      }
+    }
+
+    // Footer
+    var footerEl = document.getElementById('app-footer-text');
+    if (footerEl) {
+      if (src === 'ml_model') {
+        footerEl.textContent = 'NFL Fantasy Draft Board \u00b7 ML model: trained ' +
+          trainingRange + ', predicting ' + target + ' season';
+      } else {
+        footerEl.textContent = 'NFL Fantasy Draft Board \u00b7 Draft board: ' +
+          basis + ' actuals extrapolated to 17 games \u00b7 ML model backtest available in Methodology';
+      }
+    }
+  }
+
   // ========== INITIALIZATION ==========
   function init() {
     loadAllData()
       .then(function () {
+        updateDynamicChrome();
         initTabs();
         renderOverview();
         initDraftBoard();

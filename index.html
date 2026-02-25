@@ -17,7 +17,7 @@
       <span class="app-header__logo" aria-hidden="true">&#127944;</span>
       <div>
         <h1 class="app-header__title">NFL Fantasy Draft Board</h1>
-        <p class="app-header__subtitle">2026 projections based on 2025 season performance</p>
+        <p class="app-header__subtitle" id="header-subtitle">Loading projections&hellip;</p>
       </div>
     </div>
     <div class="app-header__badge" id="header-badge">Pre-Draft 2026</div>
@@ -55,12 +55,9 @@
         </div>
       </div>
 
+      <!-- JS overwrites this with data-source-aware text after loading metadata -->
       <div class="notice notice--info" id="data-notice">
-        <strong>How to read this board:</strong> Player values are estimated by taking their
-        actual 2025 per-game fantasy points and projecting over a 17-game season. These are
-        <em>not</em> ML model predictions &mdash; they assume 2026 performance will match 2025.
-        The ML model (trained 2014&ndash;2024, validated on 2025) is available for the API;
-        its backtest metrics are shown in the Methodology tab.
+        <strong>Loading&hellip;</strong>
       </div>
 
       <div class="section-card" id="overview-top10">
@@ -165,7 +162,7 @@
   </main>
 
   <footer class="app-footer">
-    <p>NFL Fantasy Draft Board &middot; Draft board: 2025 actuals extrapolated to 17 games &middot; ML model: trained 2006&ndash;2024, validated on 2025</p>
+    <p id="app-footer-text">NFL Fantasy Draft Board</p>
   </footer>
 
   <script src="app.js"></script>

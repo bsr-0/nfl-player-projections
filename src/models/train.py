@@ -64,26 +64,32 @@ from sklearn.linear_model import Ridge
 from sklearn.preprocessing import MinMaxScaler
 
 
-def load_training_data(positions: list = None, min_games: int = 4, 
+def load_training_data(positions: list = None, min_games: int = 4,
                        test_season: int = None,
                        n_train_seasons: int = None,
                        optimize_training_years: bool = False,
-                       strict_requirements: bool = False) -> tuple:
+                       strict_requirements: bool = False,
+                       forward: bool = False) -> tuple:
     """
     Load and prepare training data with automatic train/test split.
-    
+
     Uses the latest available season as test set for out-of-sample evaluation.
     When n_train_seasons is None, uses ALL available training seasons.
-    
+
     Args:
         positions: List of positions to load
         min_games: Minimum games for player inclusion
         test_season: Override test season (None = auto-select latest)
         n_train_seasons: Max training seasons (None = use all available)
         optimize_training_years: If True, dynamically select optimal years per position
-        
+        forward: If True, use ALL available seasons for training (no held-out
+            test set).  Used for forward prediction when there is no future
+            season to validate against (e.g. training on 2014-2025 to predict
+            2026).  Time-series CV is still used for hyperparameter tuning.
+
     Returns:
         Tuple of (train_data, test_data, train_seasons, test_season)
+        When forward=True, test_data is empty and test_season is None.
     """
     # Auto-refresh and check data availability
     print("Checking data availability...")
@@ -157,32 +163,43 @@ def load_training_data(positions: list = None, min_games: int = 4,
                         len(leaked), sorted(leaked)[:10])
         combined = combined.drop(columns=leaked, errors="ignore")
     
-    # Split into train/test (strict unseen test: test season must not be in train)
-    assert auto_test_season not in train_seasons, (
-        f"Test season {auto_test_season} must not be in train seasons {train_seasons}"
-    )
-    train_data = combined[combined['season'].isin(train_seasons)]
-    test_data = combined[combined['season'] == auto_test_season]
-    
-    # In-season: pipeline requires current season as test and non-empty test set
-    from src.utils.nfl_calendar import get_current_nfl_season, current_season_has_weeks_played
-    current_season = get_current_nfl_season()
-    in_season = current_season_has_weeks_played()
-    if in_season and auto_test_season != current_season:
-        raise ValueError(
-            "The pipeline requires the current season as test when it has started. "
-            f"Expected test_season={current_season}, got {auto_test_season}. "
-            "Run auto_refresh or load current season from PBP and re-run."
+    # Forward mode: all seasons become training data, no test set
+    if forward:
+        all_seasons = sorted(set(train_seasons) | {auto_test_season})
+        train_data = combined[combined['season'].isin(all_seasons)]
+        test_data = pd.DataFrame(columns=combined.columns)
+        train_seasons = all_seasons
+        auto_test_season = None
+        print(f"\nData split (FORWARD mode — no held-out test set):")
+        print(f"  Training: {len(train_data)} records from seasons {train_seasons}")
+        print(f"  Testing: none (forward prediction)")
+    else:
+        # Split into train/test (strict unseen test: test season must not be in train)
+        assert auto_test_season not in train_seasons, (
+            f"Test season {auto_test_season} must not be in train seasons {train_seasons}"
         )
-    if in_season and len(test_data) == 0:
-        raise ValueError(
-            "Current season is in progress but test set is empty. "
-            "Load current season from play-by-play (e.g. python -m src.data.auto_refresh) and re-run."
-        )
-    
-    print(f"\nData split:")
-    print(f"  Training: {len(train_data)} records from seasons {train_seasons}")
-    print(f"  Testing: {len(test_data)} records from season {auto_test_season}")
+        train_data = combined[combined['season'].isin(train_seasons)]
+        test_data = combined[combined['season'] == auto_test_season]
+
+        # In-season: pipeline requires current season as test and non-empty test set
+        from src.utils.nfl_calendar import get_current_nfl_season, current_season_has_weeks_played
+        current_season = get_current_nfl_season()
+        in_season = current_season_has_weeks_played()
+        if in_season and auto_test_season != current_season:
+            raise ValueError(
+                "The pipeline requires the current season as test when it has started. "
+                f"Expected test_season={current_season}, got {auto_test_season}. "
+                "Run auto_refresh or load current season from PBP and re-run."
+            )
+        if in_season and len(test_data) == 0:
+            raise ValueError(
+                "Current season is in progress but test set is empty. "
+                "Load current season from play-by-play (e.g. python -m src.data.auto_refresh) and re-run."
+            )
+
+        print(f"\nData split:")
+        print(f"  Training: {len(train_data)} records from seasons {train_seasons}")
+        print(f"  Testing: {len(test_data)} records from season {auto_test_season}")
     n_seasons = len(train_seasons)
     # Requirement-derived minimums: warn (or fail in strict mode) when below
     # (1w min 3, 4w min 5, 18w min 8)
@@ -1385,7 +1402,8 @@ def train_models(positions: list = None,
                  optimize_training_years: bool = False,
                  walk_forward: bool = False,
                  strict_requirements: bool = None,
-                 fast: bool = False):
+                 fast: bool = False,
+                 forward: bool = False):
     """
     Main training function with automatic train/test split.
 
@@ -1397,6 +1415,9 @@ def train_models(positions: list = None,
         walk_forward: If True, run walk-forward validation (train on 1..N-1, test on N) for last 4 seasons and report mean +/- std RMSE/MAE.
         fast: If True, apply FAST_MODEL_CONFIG overrides for ~8-10x faster training
               with minimal accuracy loss.
+        forward: If True, train on ALL available seasons (no held-out test).
+              Used for forward prediction (e.g. train on 2014-2025 to predict 2026).
+              Skips backtest evaluation (no test data to compare against).
     """
     # Apply fast-mode overrides before reading any config values
     if fast:
@@ -1432,12 +1453,15 @@ def train_models(positions: list = None,
     
     # Load data with automatic train/test split (test = latest season)
     print("\n[1/5] Loading training data...")
+    if forward:
+        print("  [FORWARD MODE] All seasons used for training; no held-out test set.")
     train_data, test_data, train_seasons, actual_test_season = load_training_data(
         positions,
         test_season=test_season,
         n_train_seasons=None,  # Use all available by default
         optimize_training_years=optimize_training_years,
         strict_requirements=strict_requirements,
+        forward=forward,
     )
     print(f"Training records: {len(train_data)}")
     print(f"Test records: {len(test_data)}")
@@ -1851,8 +1875,15 @@ def train_models(positions: list = None,
                 json.dump(version_history, f, indent=2, default=str)
             print(f"  Archived previous model version ({len(version_history)} versions available for rollback)")
 
+        # Determine target season for forward mode
+        _target_season = None
+        if forward and train_seasons:
+            _target_season = max(train_seasons) + 1
+
         metadata = {
             "training_date": datetime.now().isoformat(),
+            "training_mode": "forward" if forward else "backtest",
+            "target_season": _target_season,
             "feature_version": FEATURE_VERSION.strip(),
             "train_seasons": train_seasons,
             "test_season": actual_test_season,
@@ -1984,6 +2015,14 @@ def main():
              "Reduces Optuna trials, CV folds, stability bootstrap, LSTM/deep epochs, "
              "and skips SHAP/PDP and robust CV report."
     )
+    parser.add_argument(
+        "--forward",
+        action="store_true",
+        help="Forward prediction mode: train on ALL available seasons (no held-out "
+             "test set). Use when predicting a future season that hasn't happened yet "
+             "(e.g. train on 2014-2025 to predict 2026). Time-series CV is still used "
+             "for hyperparameter tuning. Skips backtest evaluation."
+    )
 
     args = parser.parse_args()
 
@@ -1996,6 +2035,7 @@ def main():
         walk_forward=args.walk_forward,
         strict_requirements=args.strict_requirements,
         fast=args.fast,
+        forward=args.forward,
     )
 
 
