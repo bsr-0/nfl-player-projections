@@ -579,7 +579,35 @@ class PositionModel:
             std_pred = std_pred * scale_factor
 
         return mean_pred, std_pred
-    
+
+    def predict_distributional(self, X: pd.DataFrame,
+                               boom_threshold: float = 20.0,
+                               bust_threshold: float = 5.0) -> Dict[str, np.ndarray]:
+        """Predict point estimates plus boom/bust probabilities.
+
+        Uses the Gaussian assumption from ``predict_with_uncertainty`` to
+        estimate the probability of exceeding ``boom_threshold`` (boom) and
+        falling below ``bust_threshold`` (bust).
+
+        Returns:
+            Dict with keys: 'prediction', 'std', 'boom_prob', 'bust_prob'.
+        """
+        from scipy.stats import norm as _norm
+
+        mean_pred, std_pred = self.predict_with_uncertainty(X)
+        # Ensure positive std
+        std_safe = np.maximum(std_pred, 1e-6)
+
+        boom_prob = 1.0 - _norm.cdf(boom_threshold, loc=mean_pred, scale=std_safe)
+        bust_prob = _norm.cdf(bust_threshold, loc=mean_pred, scale=std_safe)
+
+        return {
+            "prediction": mean_pred,
+            "std": std_pred,
+            "boom_prob": np.clip(boom_prob, 0, 1),
+            "bust_prob": np.clip(bust_prob, 0, 1),
+        }
+
     @staticmethod
     def _subsample_for_tuning(X: np.ndarray, y: np.ndarray,
                               max_samples: int = 8000) -> Tuple[np.ndarray, np.ndarray]:

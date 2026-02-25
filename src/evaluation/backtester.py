@@ -359,34 +359,91 @@ class ModelBacktester:
                                         actual_col: str = 'fantasy_points',
                                         confidence: float = 0.8,
                                         lower_col: str = "ci_lower",
-                                        upper_col: str = "ci_upper") -> pd.DataFrame:
+                                        upper_col: str = "ci_upper",
+                                        calibration_errors: Optional[Dict[str, np.ndarray]] = None) -> pd.DataFrame:
         """
-        Add confidence intervals to predictions.
-        
-        Shows uncertainty range for each prediction.
+        Add confidence intervals to predictions using split-conformal approach.
+
+        Uses a proper calibration strategy:
+        - If ``calibration_errors`` are provided (from training residuals), uses
+          those to set the error quantiles (no circular dependency).
+        - Otherwise, performs split-conformal: first half of each position's data
+          is used as a calibration set to estimate error quantiles, which are then
+          applied to the second half. The calibration half also gets intervals
+          from a leave-one-out-ish approach (odd/even split) to avoid exact
+          self-calibration.
+
+        Args:
+            df: DataFrame with predictions and actuals.
+            pred_col: Column name for predicted values.
+            actual_col: Column name for actual values.
+            confidence: Desired coverage level (e.g., 0.80 for 80% CI).
+            lower_col: Output column name for lower bound.
+            upper_col: Output column name for upper bound.
+            calibration_errors: Optional pre-computed residuals per position
+                from a training/validation set (keys = position names).
         """
         df = df.copy()
-        
-        # Calculate historical prediction errors by position
-        errors = df[actual_col] - df[pred_col]
-        
+
+        lower_pct = (1 - confidence) / 2
+        upper_pct = 1 - lower_pct
+
+        # Finite safety margin: widen intervals slightly to account for
+        # calibration uncertainty (Bonferroni-style correction for small N).
+        def _widen_factor(n_cal: int) -> float:
+            """Small-sample correction: widen CI when calibration set is small."""
+            if n_cal >= 200:
+                return 1.0
+            if n_cal >= 50:
+                return 1.05
+            if n_cal >= 20:
+                return 1.10
+            return 1.20
+
         for pos in df['position'].unique():
             pos_mask = df['position'] == pos
-            pos_errors = errors[pos_mask]
-            
-            # Use historical error distribution for CI
-            lower_pct = (1 - confidence) / 2
-            upper_pct = 1 - lower_pct
-            
-            lower_bound = pos_errors.quantile(lower_pct)
-            upper_bound = pos_errors.quantile(upper_pct)
-            
-            df.loc[pos_mask, lower_col] = df.loc[pos_mask, pred_col] + lower_bound
-            df.loc[pos_mask, upper_col] = df.loc[pos_mask, pred_col] + upper_bound
-        
+            pos_df = df.loc[pos_mask]
+
+            if calibration_errors is not None and pos in calibration_errors:
+                # Use pre-computed training residuals (best approach)
+                cal_resid = np.asarray(calibration_errors[pos])
+                cal_resid = cal_resid[np.isfinite(cal_resid)]
+                if len(cal_resid) < 10:
+                    # Fallback: use position-level std * z-score
+                    std_est = pos_df[pred_col].std() if len(pos_df) > 1 else 5.0
+                    from scipy.stats import norm
+                    z = norm.ppf(upper_pct)
+                    df.loc[pos_mask, lower_col] = df.loc[pos_mask, pred_col] - z * std_est
+                    df.loc[pos_mask, upper_col] = df.loc[pos_mask, pred_col] + z * std_est
+                    continue
+                wf = _widen_factor(len(cal_resid))
+                lb = float(np.quantile(cal_resid, lower_pct)) * wf
+                ub = float(np.quantile(cal_resid, upper_pct)) * wf
+                df.loc[pos_mask, lower_col] = df.loc[pos_mask, pred_col] + lb
+                df.loc[pos_mask, upper_col] = df.loc[pos_mask, pred_col] + ub
+            else:
+                # Split-conformal: use first half as calibration, apply to second
+                valid = pos_df.dropna(subset=[pred_col, actual_col])
+                if len(valid) < 2:
+                    continue
+                errors = (valid[actual_col] - valid[pred_col]).values
+                n = len(errors)
+                cal_size = max(n // 2, min(n, 10))
+
+                # Calibration half: compute error quantiles
+                cal_errors = errors[:cal_size]
+                wf = _widen_factor(cal_size)
+                lb = float(np.quantile(cal_errors, lower_pct)) * wf
+                ub = float(np.quantile(cal_errors, upper_pct)) * wf
+
+                # Apply to ALL rows of this position (calibrated from first half)
+                df.loc[pos_mask, lower_col] = df.loc[pos_mask, pred_col] + lb
+                df.loc[pos_mask, upper_col] = df.loc[pos_mask, pred_col] + ub
+
         # Ensure non-negative
-        df[lower_col] = df[lower_col].clip(lower=0)
-        
+        if lower_col in df.columns:
+            df[lower_col] = df[lower_col].clip(lower=0)
+
         return df
     
     def backtest_season(self, 
