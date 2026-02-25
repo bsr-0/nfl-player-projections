@@ -373,28 +373,56 @@ def compute_vif(X: pd.DataFrame) -> Dict[str, float]:
     X_clean = X.copy().fillna(0).replace([np.inf, -np.inf], 0)
     cols = list(X_clean.columns)
 
+    # Drop zero-variance features before computing correlations.
+    # np.corrcoef returns NaN for constant columns, and np.linalg.inv
+    # on a matrix with NaN values causes a LAPACK segfault (the except
+    # handler never fires because LAPACK crashes before Python can raise).
+    variances = X_clean.var()
+    zero_var_cols = variances[variances < 1e-12].index.tolist()
+    if zero_var_cols:
+        X_clean = X_clean.drop(columns=zero_var_cols)
+    if X_clean.shape[1] < 2:
+        # Not enough features to compute VIF; zero-var → inf, others → 1.0
+        return {col: (np.inf if col in zero_var_cols else 1.0) for col in cols}
+
+    kept_cols = list(X_clean.columns)
+
+    def _safe_corr(arr):
+        """Compute correlation matrix, replacing any NaN/Inf from numerical edge cases."""
+        corr = np.corrcoef(arr, rowvar=False)
+        if not np.all(np.isfinite(corr)):
+            corr = np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
+            np.fill_diagonal(corr, 1.0)
+        return corr
+
     # Fast path: use correlation matrix inverse
     try:
-        corr = np.corrcoef(X_clean.values, rowvar=False)
+        corr = _safe_corr(X_clean.values)
         # Regularise slightly to avoid singular matrix on perfectly collinear features
         corr += np.eye(corr.shape[0]) * 1e-10
         inv_corr = np.linalg.inv(corr)
         vif_values = np.diag(inv_corr)
-        return {
+        result = {
             col: float(v) if np.isfinite(v) and v > 0 else np.inf
-            for col, v in zip(cols, vif_values)
+            for col, v in zip(kept_cols, vif_values)
         }
+        for col in zero_var_cols:
+            result[col] = np.inf
+        return result
     except np.linalg.LinAlgError:
         # Fallback: pseudo-inverse for near-singular matrices
         try:
-            corr = np.corrcoef(X_clean.values, rowvar=False)
+            corr = _safe_corr(X_clean.values)
             corr += np.eye(corr.shape[0]) * 1e-6
             inv_corr = np.linalg.pinv(corr)
             vif_values = np.diag(inv_corr)
-            return {
+            result = {
                 col: float(v) if np.isfinite(v) and v > 0 else np.inf
-                for col, v in zip(cols, vif_values)
+                for col, v in zip(kept_cols, vif_values)
             }
+            for col in zero_var_cols:
+                result[col] = np.inf
+            return result
         except Exception:
             # Last resort: return inf for all (will be pruned)
             return {col: np.inf for col in cols}
@@ -416,9 +444,10 @@ def prune_by_vif(X: pd.DataFrame, threshold: float = 10.0,
         if X_work.shape[1] <= 2:
             break
         vif = compute_vif(X_work)
-        max_col = max(vif, key=lambda k: vif[k] if np.isfinite(vif[k]) else -1)
+        # Use a large sentinel so inf-VIF features are removed first
+        max_col = max(vif, key=lambda k: vif[k] if np.isfinite(vif[k]) else 1e18)
         max_val = vif[max_col]
-        if not np.isfinite(max_val) or max_val <= threshold:
+        if max_val <= threshold:
             break
         X_work = X_work.drop(columns=[max_col])
         removed.append(max_col)
