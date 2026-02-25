@@ -659,12 +659,9 @@ class ModelTrainer:
                           if c not in exclude_cols 
                           and not c.startswith("target_")
                           and pos_data[c].dtype in ['int64', 'float64', 'int32', 'float32']]
-            try:
-                from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-                feature_cols = filter_feature_columns(feature_cols)
-                assert_no_leakage_columns(feature_cols, context=f"ensemble features ({position})")
-            except Exception:
-                pass
+            from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+            feature_cols = filter_feature_columns(feature_cols)
+            assert_no_leakage_columns(feature_cols, context=f"ensemble features ({position})")
             
             assert "fantasy_points" not in feature_cols, "LEAKAGE: fantasy_points must not be a feature"
             assert "utilization_score" not in feature_cols, "LEAKAGE: utilization_score (current week) must not be a feature"

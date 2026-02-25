@@ -42,6 +42,7 @@ _FORWARD_SUBSTRINGS: Tuple[str, ...] = (
     "_future",
     "_next",
     "_forward",
+    "_upcoming",
 )
 
 # Identifier / row-index columns that must never be features (memorization risk).

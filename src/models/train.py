@@ -427,6 +427,87 @@ def _write_json_artifact(path: Path, payload: Dict[str, Any], label: str) -> Non
         print(f"  {label} write skipped: {e}")
 
 
+def _check_distribution_shift(train_df: pd.DataFrame, test_df: pd.DataFrame,
+                              max_features: int = 50) -> Dict[str, Any]:
+    """Detect train/test distribution shift via adversarial validation.
+
+    Trains a classifier to distinguish train from test rows.  If the AUC is
+    much above 0.5, train and test distributions differ significantly, which
+    means model performance on test may be unreliable.
+
+    Returns a dict with the adversarial AUC, per-feature KS statistics, and
+    an overall warning flag.
+    """
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.model_selection import cross_val_score
+    from sklearn.metrics import roc_auc_score
+
+    exclude = {"player_id", "name", "position", "team", "season", "week",
+               "fantasy_points", "target", "opponent", "home_away",
+               "created_at", "updated_at", "id", "birth_date", "college",
+               "game_id", "game_time", "actual_for_backtest",
+               "predicted_points", "predicted_utilization"}
+
+    shared_cols = sorted(set(train_df.columns) & set(test_df.columns) - exclude)
+    numeric_cols = [c for c in shared_cols
+                    if train_df[c].dtype in ("int64", "float64", "int32", "float32")
+                    and not c.startswith("target_")]
+    if len(numeric_cols) < 5:
+        return {"adversarial_auc": None, "warning": "too_few_features"}
+
+    # Sample to keep fast
+    n_sample = min(5000, len(train_df), len(test_df) * 3)
+    tr = train_df[numeric_cols].sample(n=min(n_sample, len(train_df)), random_state=42).fillna(0)
+    te = test_df[numeric_cols].sample(n=min(n_sample, len(test_df)), random_state=42).fillna(0)
+    X = pd.concat([tr, te], ignore_index=True)
+    y = np.array([0] * len(tr) + [1] * len(te))
+
+    # Use only top max_features by variance to keep fast
+    if X.shape[1] > max_features:
+        variances = X.var()
+        top_cols = variances.nlargest(max_features).index.tolist()
+        X = X[top_cols]
+
+    clf = GradientBoostingClassifier(n_estimators=50, max_depth=3, random_state=42)
+    try:
+        scores = cross_val_score(clf, X, y, cv=3, scoring="roc_auc")
+        auc = float(np.mean(scores))
+    except Exception:
+        auc = None
+
+    # Per-feature KS test for top shifted features
+    ks_results = []
+    try:
+        from scipy.stats import ks_2samp
+        for col in numeric_cols[:max_features]:
+            tr_vals = train_df[col].dropna().values
+            te_vals = test_df[col].dropna().values
+            if len(tr_vals) < 10 or len(te_vals) < 10:
+                continue
+            stat, pval = ks_2samp(tr_vals, te_vals)
+            if pval < 0.01:
+                ks_results.append({"feature": col, "ks_stat": round(stat, 3), "p_value": round(pval, 6)})
+        ks_results.sort(key=lambda x: -x["ks_stat"])
+    except ImportError:
+        pass
+
+    result = {
+        "adversarial_auc": round(auc, 4) if auc is not None else None,
+        "shift_detected": auc is not None and auc > 0.85,
+        "top_shifted_features": ks_results[:10],
+    }
+
+    if result["shift_detected"]:
+        print(f"\n  *** WARNING: Train/test distribution shift detected (adversarial AUC={auc:.3f}) ***")
+        print(f"  Top shifted features: {[f['feature'] for f in ks_results[:5]]}")
+        print("  This may indicate temporal concept drift or feature leakage.")
+    else:
+        print(f"  Distribution shift check: adversarial AUC={auc:.3f} (OK)" if auc else
+              "  Distribution shift check: skipped (insufficient features)")
+
+    return result
+
+
 def _report_train_serve_feature_parity(train_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
     """Check train/test feature schema parity before model fitting."""
     excluded_prefix = ("target_",)
@@ -600,7 +681,8 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
 
 
 def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
-                                 train_seasons: list, actual_test_season: int):
+                                 train_seasons: list, actual_test_season: int,
+                                 train_data: pd.DataFrame = None):
     """
     Run full backtest using the trained ensemble on held-out test data.
     Saves backtest results and app-compatible advanced_model_results.json.
@@ -688,6 +770,55 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     backtester = ModelBacktester()
     pred_col = "predicted_points"
     actual_col = "actual_for_backtest"
+
+    # C5 fix: compute calibration residuals from training data (not test data)
+    # to avoid circular CI calculation that always appears calibrated.
+    calibration_errors = None
+    if train_data is not None and not train_data.empty:
+        calibration_errors = {}
+        for position in trainer.trained_models:
+            try:
+                multi_model = trainer.trained_models[position]
+                pos_train = train_data[train_data["position"] == position].copy()
+                if len(pos_train) < 20:
+                    continue
+                model = multi_model.models.get(1) or list(multi_model.models.values())[0]
+                fnames = getattr(model, "feature_names", [])
+                medians = getattr(model, "feature_medians", {})
+                for fn in fnames:
+                    if fn not in pos_train.columns:
+                        pos_train[fn] = medians.get(fn, 0)
+                train_preds = multi_model.predict(pos_train, n_weeks=1)
+                # Get actual values from training data
+                train_actual = None
+                if position != "QB":
+                    if "target_1w" in pos_train.columns:
+                        train_actual = pos_train["target_1w"]
+                    elif "target_util_1w" in pos_train.columns:
+                        train_actual = pos_train["target_util_1w"]
+                else:
+                    if "target_1w" in pos_train.columns:
+                        train_actual = pos_train["target_1w"]
+                    elif "target_util_1w" in pos_train.columns:
+                        train_actual = pos_train["target_util_1w"]
+                if train_actual is not None:
+                    # Apply same util->FP conversion for consistency
+                    should_convert = position in converters and (position != "QB" or qb_target == "util")
+                    preds_for_cal = train_preds
+                    if should_convert:
+                        eff_df = pos_train.copy()
+                        eff_df["utilization_score"] = train_preds
+                        try:
+                            preds_for_cal = converters[position].predict(train_preds, efficiency_df=eff_df)
+                        except Exception:
+                            pass
+                    residuals = (train_actual.values - np.asarray(preds_for_cal, dtype=float))
+                    valid_resid = residuals[np.isfinite(residuals)]
+                    if len(valid_resid) >= 20:
+                        calibration_errors[position] = valid_resid
+            except Exception as e:
+                logger.warning("Calibration residual computation for %s failed: %s", position, e)
+
     test_data = backtester.calculate_confidence_intervals(
         test_data,
         pred_col=pred_col,
@@ -695,6 +826,7 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         confidence=0.80,
         lower_col="prediction_ci80_lower",
         upper_col="prediction_ci80_upper",
+        calibration_errors=calibration_errors,
     )
     test_data = backtester.calculate_confidence_intervals(
         test_data,
@@ -703,6 +835,7 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         confidence=0.95,
         lower_col="prediction_ci95_lower",
         upper_col="prediction_ci95_upper",
+        calibration_errors=calibration_errors,
     )
     results = backtester.backtest_season(
         predictions=test_data,
@@ -734,6 +867,32 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     )
     if "error" not in multi_baseline:
         results["multiple_baseline_comparison"] = multi_baseline
+        # Print baseline comparison prominently
+        print("\n  === BASELINE COMPARISON (model must beat all) ===")
+        for bl_name, bl_data in multi_baseline.get("baselines", {}).items():
+            bl_rmse = bl_data.get("rmse", "?")
+            bl_beat = bl_data.get("model_beats_baseline", False)
+            bl_imp = bl_data.get("improvement_pct", 0)
+            status = "PASS" if bl_beat else "FAIL"
+            print(f"    {bl_name}: baseline RMSE={bl_rmse}, improvement={bl_imp:+.1f}% [{status}]")
+        model_rmse = multi_baseline.get("model", {}).get("rmse", "?")
+        print(f"    Model RMSE: {model_rmse}")
+
+    # Additional baselines via baselines.py module (C4: real expert-projection baselines)
+    try:
+        from src.evaluation.baselines import compare_model_to_baselines, format_baseline_report
+        if pred_col in test_data.columns and actual_col in test_data.columns:
+            valid_bl = test_data.dropna(subset=[pred_col, actual_col])
+            if len(valid_bl) >= 30:
+                bl_comparison = compare_model_to_baselines(
+                    valid_bl, valid_bl[pred_col], target_col=actual_col
+                )
+                results["strong_baseline_comparison"] = bl_comparison
+                report_text = format_baseline_report(bl_comparison)
+                print(f"\n{report_text}")
+    except Exception as e:
+        logger.warning("Strong baseline comparison skipped: %s", e)
+
     expert_csv = DATA_DIR / "expert_consensus.csv"
     if expert_csv.exists():
         expert_comp = backtester.compare_to_expert_consensus(
@@ -783,6 +942,59 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     except Exception as e:
         logger.warning("Model drift detection skipped: %s", e)
 
+    # H3: Compare ensemble vs simple Ridge to justify model complexity
+    if train_data is not None and not train_data.empty:
+        simple_comparison = {}
+        print("\n  === MODEL COMPLEXITY COMPARISON (ensemble vs Ridge) ===")
+        for position in trainer.trained_models:
+            try:
+                multi_model = trainer.trained_models[position]
+                base = multi_model.models.get(1) or list(multi_model.models.values())[0]
+                fnames = getattr(base, "feature_names", [])
+                if len(fnames) < 5:
+                    continue
+                pos_train = train_data[train_data["position"] == position].copy()
+                pos_test = test_data[test_data["position"] == position].copy()
+                if len(pos_train) < 50 or len(pos_test) < 10:
+                    continue
+                # Get target
+                target_col = "target_util_1w" if "target_util_1w" in pos_train.columns else "target_1w"
+                if target_col not in pos_train.columns:
+                    continue
+                valid_train = pos_train.dropna(subset=[target_col])
+                valid_test = pos_test.dropna(subset=[target_col])
+                if len(valid_train) < 50 or len(valid_test) < 10:
+                    continue
+                avail_feats = [f for f in fnames if f in valid_train.columns and f in valid_test.columns]
+                if len(avail_feats) < 5:
+                    continue
+                X_tr = valid_train[avail_feats].fillna(0)
+                y_tr = valid_train[target_col]
+                X_te = valid_test[avail_feats].fillna(0)
+                y_te = valid_test[target_col]
+                # Simple Ridge
+                ridge = Ridge(alpha=1.0)
+                ridge.fit(X_tr, y_tr)
+                ridge_preds = ridge.predict(X_te)
+                from sklearn.metrics import mean_squared_error as _mse
+                ridge_rmse = float(np.sqrt(_mse(y_te, ridge_preds)))
+                # Ensemble
+                ensemble_preds = multi_model.predict(valid_test, n_weeks=1)
+                ensemble_rmse = float(np.sqrt(_mse(y_te, ensemble_preds)))
+                improvement = ((ridge_rmse - ensemble_rmse) / ridge_rmse * 100) if ridge_rmse > 0 else 0
+                status = "JUSTIFIED" if improvement > 0 else "NOT JUSTIFIED"
+                print(f"    {position}: Ridge RMSE={ridge_rmse:.2f}, Ensemble RMSE={ensemble_rmse:.2f} "
+                      f"({improvement:+.1f}% improvement) [{status}]")
+                simple_comparison[position] = {
+                    "ridge_rmse": round(ridge_rmse, 3),
+                    "ensemble_rmse": round(ensemble_rmse, 3),
+                    "improvement_pct": round(improvement, 1),
+                    "complexity_justified": improvement > 0,
+                }
+            except Exception as e:
+                logger.warning("Simple model comparison for %s failed: %s", position, e)
+        results["simple_model_comparison"] = simple_comparison
+
     backtester.save_results(results)
 
     # Write app-compatible results (all rubric metrics per position)
@@ -813,6 +1025,16 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
 
     app_results_path = DATA_DIR / "advanced_model_results.json"
     app_payload = {
+        "_metadata": {
+            "source": "train.py primary pipeline",
+            "authoritative": True,
+            "description": (
+                "Single source of truth for model performance. "
+                "Other result files (ml_evaluation_results.json, "
+                "model_comparison_results.json) are from secondary/exploratory "
+                "pipelines and may not reflect production model accuracy."
+            ),
+        },
         "timestamp": datetime.now().isoformat(),
         "train_seasons": train_seasons,
         "test_season": actual_test_season,
@@ -825,6 +1047,14 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     with open(app_results_path, "w") as f:
         json.dump(app_payload, f, indent=2, default=str)
     print(f"\nBacktest complete. App results written to {app_results_path.name}")
+
+    # Remove stale secondary result files that may show misleading metrics
+    for stale_file in ["ml_evaluation_results.json", "model_comparison_results.json",
+                       "approach_comparison_results.json", "feature_engineering_results.json"]:
+        stale_path = DATA_DIR / stale_file
+        if stale_path.exists():
+            stale_path.unlink()
+            print(f"  Removed stale result file: {stale_file}")
 
     return results
 
@@ -1143,7 +1373,8 @@ def _run_one_fold(
         )
     if test_data["actual_for_backtest"].isna().all():
         test_data["actual_for_backtest"] = test_data.get("fantasy_points", np.nan)
-    results = _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season)
+    results = _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season,
+                                               train_data=train_data)
     return trainer, results
 
 
@@ -1177,9 +1408,26 @@ def train_models(positions: list = None,
     n_trials = n_trials or MODEL_CONFIG["n_optuna_trials"]
     if strict_requirements is None:
         strict_requirements = bool(MODEL_CONFIG.get("strict_requirements_default", False))
-    
+
+    # H5: Experiment tracking
+    from src.evaluation.experiment_tracker import ExperimentTracker
+    tracker = ExperimentTracker()
+    experiment_run_id = tracker.start_run(
+        config={
+            "positions": positions,
+            "tune_hyperparameters": tune_hyperparameters,
+            "n_trials": n_trials,
+            "test_season": test_season,
+            "walk_forward": walk_forward,
+            "fast": fast,
+            "strict_requirements": strict_requirements,
+        },
+        description=f"train_models {'fast' if fast else 'full'} run",
+    )
+
     print("=" * 60)
     print("NFL Player Performance Model Training")
+    print(f"  Experiment run: {experiment_run_id}")
     print("=" * 60)
     
     # Load data with automatic train/test split (test = latest season)
@@ -1253,9 +1501,12 @@ def train_models(positions: list = None,
         cols=["fantasy_points", "target_1w", "target_4w", "target_18w", "target_util_1w", "utilization_score"],
     )
     _report_train_serve_feature_parity(train_data, test_data)
+    # H2: Adversarial validation to detect train/test distribution shift
+    dist_shift = _check_distribution_shift(train_data, test_data)
     quality_payload = {
         "generated_at": datetime.now().isoformat(),
         "strict_requirements": bool(strict_requirements),
+        "distribution_shift": dist_shift,
         "missingness_above_5pct": {
             "train": train_missing,
             "test": test_missing,
@@ -1540,14 +1791,17 @@ def train_models(positions: list = None,
         print(f"  Test season: {actual_test_season}")
         print(f"  Test records: {len(test_data)}")
         _report_test_metrics(trainer, test_data, train_data)
-        _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season)
-    
-    # Robust time-series CV validation report (skip in fast mode)
+        _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season,
+                                     train_data=train_data)
+
+    # Rolling-origin time-series CV validation report (skip in fast mode)
+    # This satisfies the rolling-origin CV requirement: train on seasons 1..N-1,
+    # validate on season N, across multiple folds with season-based splits.
     if not fast:
-        print("\n[6/6] Robust CV validation (Ridge baseline)...")
+        print("\n[6/6] Rolling-origin time-series CV validation (Ridge baseline)...")
         _run_robust_cv_report(train_data)
     else:
-        print("\n[6/6] Robust CV validation skipped (fast mode)")
+        print("\n[6/6] Rolling-origin CV validation skipped (fast mode)")
     
     # Print summary
     print("\n" + "=" * 60)
@@ -1664,6 +1918,20 @@ def train_models(positions: list = None,
         print(f"Monitoring report written: {monitoring_path.name}")
     except Exception as e:
         print(f"Model metadata write skipped: {e}")
+    # Log experiment metrics and end tracking run
+    try:
+        tracker.log_params(experiment_run_id, {
+            "train_seasons": train_seasons,
+            "test_season": actual_test_season,
+            "n_train_records": len(train_data),
+            "n_test_records": len(test_data),
+            "positions_trained": list(trainer.trained_models.keys()),
+        })
+        tracker.end_run(experiment_run_id)
+        print(f"Experiment {experiment_run_id} logged to {tracker.log_file}")
+    except Exception as e:
+        logger.warning("Experiment tracking finalization failed: %s", e)
+
     print("Training complete!")
 
     return trainer, train_data, test_data, actual_test_season

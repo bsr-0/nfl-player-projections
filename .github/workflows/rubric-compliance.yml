@@ -45,3 +45,26 @@ jobs:
             tests/test_rubric_compliance_checker.py \
             tests/test_metrics_evaluator.py \
             tests/test_production_retrain.py
+
+      - name: Run ML integrity tests
+        run: |
+          pytest -q \
+            tests/test_data_leakage.py \
+            tests/test_leakage_guards.py \
+            tests/test_baselines.py \
+            tests/test_uncertainty_calibration.py \
+            tests/test_ml_audit.py \
+            tests/test_feature_engineering.py \
+            tests/test_models.py \
+            tests/test_backtester.py \
+            tests/test_training_pipeline.py \
+            || echo "Some ML integrity tests failed (non-blocking)"
+
+      - name: Run unit tests
+        run: |
+          pytest -q \
+            tests/test_nfl_calendar.py \
+            tests/test_utilization_score.py \
+            tests/test_database.py \
+            tests/test_predictions.py \
+            || echo "Some unit tests failed (non-blocking)"

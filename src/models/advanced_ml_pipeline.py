@@ -1347,12 +1347,9 @@ def run_comprehensive_evaluation():
 
         feature_cols.append(c)
 
-    try:
-        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-        feature_cols = filter_feature_columns(feature_cols)
-        assert_no_leakage_columns(feature_cols, context="advanced_ml_pipeline")
-    except Exception:
-        pass
+    from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+    feature_cols = filter_feature_columns(feature_cols)
+    assert_no_leakage_columns(feature_cols, context="advanced_ml_pipeline")
     
     print(f"Total features available: {len(feature_cols)}")
     
@@ -1392,16 +1389,18 @@ def run_comprehensive_evaluation():
     results_serializable["_metadata"] = {
         "generated_at": datetime.now().isoformat(),
         "git_commit": git_hash,
+        "authoritative": False,
         "target_variable": "utilization_score (0-100; converted to fantasy_points via Ridge)",
         "test_season": int(CURRENT_NFL_SEASON),
-        "evaluation_type": "static_snapshot",
+        "evaluation_type": "static_snapshot (exploratory, NOT production)",
         "n_features": len(feature_cols),
         "feature_columns": sorted(feature_cols),
         "scoring_format": "PPR",
         "note": (
-            "RMSE/R² are on the utilization_score scale (0-100), not raw "
-            "fantasy points. To compare with fantasy-point RMSE, use the "
-            "backtest results in data/advanced_model_results.json."
+            "WARNING: This is an exploratory evaluation file, NOT the production "
+            "model's authoritative results. RMSE/R² here may differ significantly "
+            "from actual model performance. The single source of truth is "
+            "data/advanced_model_results.json (produced by train.py)."
         ),
     }
 

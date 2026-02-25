@@ -22,7 +22,7 @@ try:
     import torch.nn as nn
     from torch.utils.data import TensorDataset, DataLoader
     HAS_TORCH = True
-except ImportError:
+except (ImportError, OSError):
     HAS_TORCH = False
 
 # Legacy alias so train.py imports still work
@@ -179,7 +179,7 @@ class LSTM4WeekModel:
         print(f"  LSTM best params: {study.best_params} (val loss: {study.best_value:.4f})")
         return study.best_params
 
-    def _build(self, n_features: int) -> _LSTMNet:
+    def _build(self, n_features: int):
         return _LSTMNet(n_features, self.lstm_units, self.dropout).to(self.device)
 
     def _sequences(self, X: np.ndarray, y: np.ndarray, player_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -595,7 +595,7 @@ class DeepSeasonLongModel:
         print(f"  Deep model best params: {study.best_params} (val loss: {study.best_value:.4f})")
         return study.best_params
 
-    def _build(self) -> _DeepFeedforwardNet:
+    def _build(self):
         hidden_units = MODEL_CONFIG.get("deep_hidden_units", None)
         return _DeepFeedforwardNet(self.n_features, hidden_units=hidden_units, dropout=self.dropout).to(self.device)
 
