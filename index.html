@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFL Fantasy Draft Board - ML-Powered Projections</title>
-  <meta name="description" content="Fantasy football draft board with ML-powered player projections for QB, RB, WR, and TE positions.">
+  <title>NFL Fantasy Draft Board - 2026 Projections</title>
+  <meta name="description" content="Fantasy football draft board with 2026 player projections for QB, RB, WR, and TE positions, based on 2025 season performance.">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,10 +17,10 @@
       <span class="app-header__logo" aria-hidden="true">&#127944;</span>
       <div>
         <h1 class="app-header__title">NFL Fantasy Draft Board</h1>
-        <p class="app-header__subtitle">ML-powered projections for your 2026 draft</p>
+        <p class="app-header__subtitle">2026 projections based on 2025 season performance</p>
       </div>
     </div>
-    <div class="app-header__badge" id="header-badge">2026 Season</div>
+    <div class="app-header__badge" id="header-badge">Pre-Draft 2026</div>
   </header>
 
   <!-- TAB NAVIGATION -->
@@ -56,9 +56,11 @@
       </div>
 
       <div class="notice notice--info" id="data-notice">
-        <strong>Note:</strong> These projections are based on 2025 actual fantasy points
-        extrapolated to a 17-game season. They will be updated when 2026 ML model projections
-        become available.
+        <strong>How to read this board:</strong> Player values are estimated by taking their
+        actual 2025 per-game fantasy points and projecting over a 17-game season. These are
+        <em>not</em> ML model predictions &mdash; they assume 2026 performance will match 2025.
+        The ML model (trained 2014&ndash;2024, validated on 2025) is available for the API;
+        its backtest metrics are shown in the Methodology tab.
       </div>
 
       <div class="section-card" id="overview-top10">
@@ -163,7 +165,7 @@
   </main>
 
   <footer class="app-footer">
-    <p>NFL Fantasy Draft Board &middot; Data through 2025 season &middot; Model trained on 2006&ndash;2024, tested on 2025</p>
+    <p>NFL Fantasy Draft Board &middot; Draft board: 2025 actuals extrapolated to 17 games &middot; ML model: trained 2006&ndash;2024, validated on 2025</p>
   </footer>
 
   <script src="app.js"></script>

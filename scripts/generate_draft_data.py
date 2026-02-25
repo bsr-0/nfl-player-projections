@@ -2,10 +2,12 @@
 """Generate static JSON data files for the fantasy draft web app.
 
 Reads 2025 season data from daily_predictions.parquet and creates
-per-position JSON files with player projections for the draft board.
+per-position JSON files with player estimates for the draft board.
 
-Until 2026 ML projections are available, this script uses 2025 actual
-fantasy points as the basis for projections.
+These estimates are 2025 actual per-game fantasy points extrapolated
+to a 17-game season.  They are NOT ML model predictions.  The ML model
+(trained 2014-2024, validated on the 2025 held-out season) produces
+separate predictions via the API / generate_app_data.py pipeline.
 
 Usage:
     python scripts/generate_draft_data.py
@@ -72,7 +74,7 @@ def aggregate_player_stats(season_df):
 
 
 def compute_projections(agg):
-    """Compute projected totals from 2025 actuals extrapolated to 17 games."""
+    """Compute estimated totals from 2025 actuals extrapolated to 17 games (not ML)."""
     agg["projection_points_total"] = (agg["ppg"] * 17).round(1)
     agg["projection_points_per_game"] = agg["ppg"].round(1)
     agg["projection_floor"] = (
@@ -251,12 +253,12 @@ def generate_model_metadata_frontend():
         training_window = f"{train_seasons[0]}-{train_seasons[-1]}"
 
     payload = {
-        "target_definition": "Half-PPR fantasy points per game for 2026 regular season weeks 1-17",
+        "target_definition": "PPR fantasy points per game (2025 actuals projected to 17 games for draft board; ML model targets 2026 season)",
         "training_data_range": training_window or "2006-2024",
         "positions": ["QB", "RB", "WR", "TE"],
         "schedule_incorporated": False,
         "schedule_release_status": (
-            "2026 schedule not released yet; current projections use "
+            "2026 schedule not released yet; draft board estimates use "
             "schedule-neutral assumptions based on 2025 actual performance."
         ),
         "version": "v1.0.0",
@@ -293,10 +295,11 @@ def generate_model_metadata_frontend():
             },
         },
         "data_basis_note": (
-            "Current projections are based on 2025 actual fantasy points "
-            "extrapolated to a 17-game season. These are NOT forward ML model "
-            "predictions. When 2026 ML projections become available, this data "
-            "will be updated automatically."
+            "Draft board values are 2025 actual PPR points per game projected "
+            "over 17 games. They are not ML model outputs. The ML model "
+            "(trained 2014\u20132024, validated on the 2025 held-out season) "
+            "is available via the prediction API; its backtest metrics are "
+            "shown in the Methodology section."
         ),
     }
     out_path = DATA_DIR / "draft_model_metadata.json"
@@ -306,7 +309,7 @@ def generate_model_metadata_frontend():
 
 
 def main():
-    print("Generating draft data from 2025 season...")
+    print("Generating draft board data (2025 actuals extrapolated to 17 games)...")
 
     season_df = load_season_data()
     print(f"  Loaded {len(season_df)} weekly records")
