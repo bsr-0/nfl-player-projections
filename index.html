@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NFL Fantasy Draft Board - ML-Powered Projections</title>
+  <meta name="description" content="Fantasy football draft board with ML-powered player projections for QB, RB, WR, and TE positions.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="app-header__brand">
+      <span class="app-header__logo" aria-hidden="true">&#127944;</span>
+      <div>
+        <h1 class="app-header__title">NFL Fantasy Draft Board</h1>
+        <p class="app-header__subtitle">ML-powered projections for your 2026 draft</p>
+      </div>
+    </div>
+    <div class="app-header__badge" id="header-badge">2026 Season</div>
+  </header>
+
+  <!-- TAB NAVIGATION -->
+  <nav class="tab-nav" role="tablist" aria-label="Main sections">
+    <button class="tab-nav__btn tab-nav__btn--active" role="tab" aria-selected="true" aria-controls="section-overview" data-tab="overview">Overview</button>
+    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-draft" data-tab="draft">Draft Board</button>
+    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-methodology" data-tab="methodology">Methodology</button>
+    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-data" data-tab="data">Data &amp; Assumptions</button>
+    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-schedule" data-tab="schedule">Schedule</button>
+    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-faq" data-tab="faq">FAQ</button>
+  </nav>
+
+  <main class="app-main">
+    <!-- SECTION: Overview -->
+    <section id="section-overview" class="tab-panel tab-panel--active" role="tabpanel">
+      <div class="hero-stats">
+        <div class="stat-card stat-card--accent">
+          <div class="stat-card__value" id="stat-total-players">--</div>
+          <div class="stat-card__label">Players Projected</div>
+        </div>
+        <div class="stat-card stat-card--accent">
+          <div class="stat-card__value">4</div>
+          <div class="stat-card__label">Positions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__value" id="stat-features">50</div>
+          <div class="stat-card__label">ML Features</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__value" id="stat-training-range">--</div>
+          <div class="stat-card__label">Training Data</div>
+        </div>
+      </div>
+
+      <div class="notice notice--info" id="data-notice">
+        <strong>Note:</strong> These projections are based on 2025 actual fantasy points
+        extrapolated to a 17-game season. They will be updated when 2026 ML model projections
+        become available.
+      </div>
+
+      <div class="section-card" id="overview-top10">
+        <h2>Top 10 Overall Projections</h2>
+        <div id="top10-list" class="top10-list"></div>
+      </div>
+
+      <h2 class="section-heading">Position Leaders</h2>
+      <div class="position-grid" id="overview-positions"></div>
+    </section>
+
+    <!-- SECTION: Draft Board & Player Search -->
+    <section id="section-draft" class="tab-panel" role="tabpanel" hidden>
+      <div class="section-card draft-controls">
+        <h2>Draft Board &amp; Player Search</h2>
+        <p class="section-desc" id="draft-summary"></p>
+        <div class="filter-row">
+          <div class="filter-group">
+            <label class="filter-label">Position</label>
+            <div class="btn-group" id="position-filters">
+              <button class="btn btn--filter btn--active" data-position="ALL">All</button>
+              <button class="btn btn--filter" data-position="QB">QB</button>
+              <button class="btn btn--filter" data-position="RB">RB</button>
+              <button class="btn btn--filter" data-position="WR">WR</button>
+              <button class="btn btn--filter" data-position="TE">TE</button>
+            </div>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="player-search">Search</label>
+            <input type="text" id="player-search" class="search-input" placeholder="Search player name..." autocomplete="off">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="sort-select">Sort By</label>
+            <select id="sort-select" class="sort-select">
+              <option value="projection_points_total">Total Proj Points</option>
+              <option value="projection_points_per_game">Points per Game</option>
+              <option value="adp">ADP (Rank)</option>
+              <option value="risk_score">Risk (Low to High)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="table-wrap">
+          <table class="draft-table" id="draft-table">
+            <thead>
+              <tr>
+                <th class="th--rank">#</th>
+                <th class="th--name">Player</th>
+                <th class="th--pos">Pos</th>
+                <th class="th--team">Team</th>
+                <th class="th--pts">Total Pts</th>
+                <th class="th--ppg">PPG</th>
+                <th class="th--risk">Risk</th>
+                <th class="th--adp">ADP</th>
+              </tr>
+            </thead>
+            <tbody id="draft-table-body"></tbody>
+          </table>
+        </div>
+        <div class="table-footer" id="table-footer"></div>
+      </div>
+
+      <div class="section-card player-detail" id="player-detail" hidden>
+        <button class="player-detail__close" id="detail-close" aria-label="Close detail panel">&times;</button>
+        <div id="detail-content"></div>
+      </div>
+    </section>
+
+    <!-- SECTION: Methodology -->
+    <section id="section-methodology" class="tab-panel" role="tabpanel" hidden>
+      <div class="section-card">
+        <h2>Methodology</h2>
+        <div id="methodology-content"></div>
+      </div>
+    </section>
+
+    <!-- SECTION: Data & Assumptions -->
+    <section id="section-data" class="tab-panel" role="tabpanel" hidden>
+      <div class="section-card">
+        <h2>Data &amp; Assumptions</h2>
+        <div id="data-content"></div>
+      </div>
+    </section>
+
+    <!-- SECTION: Schedule & Scenario Handling -->
+    <section id="section-schedule" class="tab-panel" role="tabpanel" hidden>
+      <div class="section-card">
+        <h2>Schedule &amp; Matchups</h2>
+        <div id="schedule-content"></div>
+      </div>
+    </section>
+
+    <!-- SECTION: FAQ & Limitations -->
+    <section id="section-faq" class="tab-panel" role="tabpanel" hidden>
+      <div class="section-card">
+        <h2>FAQ &amp; Limitations</h2>
+        <div id="faq-content"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>NFL Fantasy Draft Board &middot; Data through 2025 season &middot; Model trained on 2006&ndash;2024, tested on 2025</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
