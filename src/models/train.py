@@ -487,7 +487,7 @@ def _check_distribution_shift(train_df: pd.DataFrame, test_df: pd.DataFrame,
 
     clf = GradientBoostingClassifier(n_estimators=50, max_depth=3, random_state=42)
     try:
-        scores = cross_val_score(clf, X, y, cv=3, scoring="roc_auc")
+        scores = cross_val_score(clf, X, y, cv=3, scoring="roc_auc", n_jobs=1)
         auc = float(np.mean(scores))
     except Exception:
         auc = None

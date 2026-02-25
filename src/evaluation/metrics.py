@@ -354,9 +354,9 @@ class ModelEvaluator:
         tscv = TimeSeriesSplit(n_splits=n_splits)
         
         # Multiple scoring metrics
-        mse_scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error")
-        mae_scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_absolute_error")
-        r2_scores = cross_val_score(model, X, y, cv=tscv, scoring="r2")
+        mse_scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_squared_error", n_jobs=1)
+        mae_scores = cross_val_score(model, X, y, cv=tscv, scoring="neg_mean_absolute_error", n_jobs=1)
+        r2_scores = cross_val_score(model, X, y, cv=tscv, scoring="r2", n_jobs=1)
         
         return {
             "cv_mse_mean": -mse_scores.mean(),

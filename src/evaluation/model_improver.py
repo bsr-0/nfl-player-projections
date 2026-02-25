@@ -541,7 +541,7 @@ class ModelImprover:
         tscv = TimeSeriesSplit(n_splits=5)
         model = GradientBoostingRegressor(n_estimators=100, random_state=42)
         
-        scores = cross_val_score(model, X, y, cv=tscv, scoring='neg_root_mean_squared_error')
+        scores = cross_val_score(model, X, y, cv=tscv, scoring='neg_root_mean_squared_error', n_jobs=1)
         cv_rmse = -scores.mean()
         
         return {

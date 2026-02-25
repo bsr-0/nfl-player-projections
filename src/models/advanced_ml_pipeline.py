@@ -822,7 +822,7 @@ class RobustnessChecker:
         from sklearn.model_selection import cross_val_score
         
         clf = RandomForestClassifier(n_estimators=50, max_depth=4, random_state=42)
-        scores = cross_val_score(clf, X_combined, y_combined, cv=5, scoring='roc_auc')
+        scores = cross_val_score(clf, X_combined, y_combined, cv=5, scoring='roc_auc', n_jobs=1)
         
         self.adversarial_auc = scores.mean()
         
