@@ -300,6 +300,15 @@ LAG_WEEKS = [1, 2, 3, 4]  # Lag features
 MAX_PREDICTION_WEEKS = 18
 MIN_GAMES_FOR_PREDICTION = 4  # Minimum historical games needed
 
+# =============================================================================
+# PLAYER ELIGIBILITY FILTERING
+# =============================================================================
+# Players must appear on a roster in at least one of the ELIGIBLE_SEASONS to be
+# included in predictions. This prevents retired players (e.g. Gronkowski, who
+# retired in 2022) from appearing in projections for future seasons.
+# By default, require a roster entry in the most recent 2 seasons.
+ELIGIBLE_SEASONS_LOOKBACK = 2  # Number of recent seasons to check for roster presence
+
 # Production retraining/monitoring configuration
 # Used by scripts/production_retrain_and_monitor.py and train drift checks.
 RETRAINING_CONFIG = {

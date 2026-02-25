@@ -845,6 +845,45 @@ class NFLDataLoader:
         return depth_df
 
 
+def get_eligible_seasons(lookback: int = None) -> List[int]:
+    """Return the list of recent seasons used to determine player eligibility.
+
+    A player must have game data in at least one of these seasons to be
+    considered active (not retired). Uses the most recent *lookback* seasons
+    that actually have data in the database.
+    """
+    if lookback is None:
+        lookback = ELIGIBLE_SEASONS_LOOKBACK
+    db = DatabaseManager()
+    all_seasons = db.get_seasons_with_data()
+    if not all_seasons:
+        return []
+    return sorted(all_seasons)[-lookback:]
+
+
+def filter_to_eligible_players(df: pd.DataFrame, eligible_player_ids: List[str] = None) -> pd.DataFrame:
+    """Filter a player DataFrame to only include eligible (active) players.
+
+    If *eligible_player_ids* is not provided it is computed from the database
+    using the configured lookback window.
+    """
+    if df.empty or "player_id" not in df.columns:
+        return df
+    if eligible_player_ids is None:
+        db = DatabaseManager()
+        eligible_seasons = get_eligible_seasons()
+        eligible_player_ids = db.get_eligible_player_ids(eligible_seasons)
+    if not eligible_player_ids:
+        return df  # Safety: don't filter everything out if DB has no data
+    eligible_set = set(eligible_player_ids)
+    filtered = df[df["player_id"].isin(eligible_set)]
+    n_removed = len(df) - len(filtered)
+    if n_removed > 0:
+        n_unique_removed = df[~df["player_id"].isin(eligible_set)]["player_id"].nunique()
+        print(f"  Filtered out {n_unique_removed} ineligible (retired/inactive) players ({n_removed} rows)")
+    return filtered
+
+
 def load_all_historical_data(seasons: List[int] = None):
     """
     Load all historical data from nfl-data-py.

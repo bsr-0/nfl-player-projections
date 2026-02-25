@@ -152,6 +152,9 @@ def generate_app_data(save_daily: bool = False) -> bool:
             from config.settings import MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON
             print(f"No data in database. Run: python -m src.data.nfl_data_loader (default: {MIN_HISTORICAL_YEAR}-{CURRENT_NFL_SEASON})")
             return False
+        # Filter to eligible (active) players only for the prediction rows
+        from src.data.nfl_data_loader import filter_to_eligible_players
+        full_df = filter_to_eligible_players(full_df)
         full_df = engineer_all_features(full_df)
         full_df = add_qb_features(full_df)
         print(f"  Computed features for {len(full_df)} rows from DB")

@@ -877,6 +877,25 @@ class DatabaseManager:
         
         return df
     
+    def get_eligible_player_ids(self, eligible_seasons: List[int]) -> List[str]:
+        """Return player_ids that have game data in at least one of the given seasons.
+
+        Players without any weekly stats in these seasons are considered inactive
+        (retired, unsigned, etc.) and excluded from predictions.
+        """
+        if not eligible_seasons:
+            return []
+        placeholders = ",".join("?" for _ in eligible_seasons)
+        query = f"""
+            SELECT DISTINCT player_id
+            FROM player_weekly_stats
+            WHERE season IN ({placeholders})
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, eligible_seasons)
+            return [row[0] for row in cursor.fetchall()]
+
     def bulk_insert_dataframe(self, df: pd.DataFrame, table_name: str) -> int:
         """Bulk insert a DataFrame into a table."""
         with self._get_connection() as conn:

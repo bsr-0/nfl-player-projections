@@ -513,9 +513,15 @@ class NFLPredictor:
         return self.predict(n_weeks=n_weeks, position=position, top_n=100)
     
     def _load_player_data(self, position: str = None, min_games: int = 1) -> pd.DataFrame:
-        """Load player data from database."""
+        """Load player data from database, filtered to eligible (active) players only."""
         try:
-            return self.db.get_all_players_for_training(position=position, min_games=min_games)
+            df = self.db.get_all_players_for_training(position=position, min_games=min_games)
+            if df.empty:
+                return df
+            # Filter to players with game data in recent seasons (exclude retired)
+            from src.data.nfl_data_loader import filter_to_eligible_players
+            df = filter_to_eligible_players(df)
+            return df
         except Exception as e:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
