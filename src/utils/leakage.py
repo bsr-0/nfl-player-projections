@@ -4,13 +4,18 @@ Centralized leakage defenses for training/evaluation pipelines.
 This module provides:
 - Feature column filtering to block target/model-output leakage
 - Schedule sanitization to remove final scores from feature inputs
+- Explicit allowlist for schedule-derived features that are safe during training
+  (backward-looking or rate-based, despite containing "_next" in names)
 """
 from __future__ import annotations
 
+import logging
 from typing import Iterable, List, Optional, Sequence, Tuple
 import re
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 # -----------------------------------------------------------------------------
@@ -39,12 +44,57 @@ _FORWARD_SUBSTRINGS: Tuple[str, ...] = (
     "_forward",
 )
 
+# Identifier / row-index columns that must never be features (memorization risk).
+_IDENTIFIER_COLUMNS: Tuple[str, ...] = (
+    "id",
+    "player_id",
+    "player_name",
+    "name",
+    "gsis_id",
+    "espn_id",
+    "yahoo_id",
+)
+
+# Schedule-derived feature prefixes that contain "_next" but are safe during
+# training because multiweek_features.py computes them backward-looking
+# (rolling mean of past opponents) or from rate-based projections.
+# These are explicitly allowed through the forward-looking filter.
+SAFE_SCHEDULE_PREFIXES: Tuple[str, ...] = (
+    "sos_next_",
+    "sos_rank_next_",
+    "favorable_matchups_next_",
+    "expected_games_next_",
+    "injury_prob_next_",
+    "injury_risk_score_",
+    "expected_missed_games_",
+)
+
+
+def _is_safe_schedule_feature(col: str) -> bool:
+    """Return True if column is a known-safe schedule-derived feature."""
+    col_l = col.lower()
+    return any(col_l.startswith(p) for p in SAFE_SCHEDULE_PREFIXES)
+
 
 def is_leakage_feature(col: str, *, ban_utilization_score: bool = True) -> bool:
-    """Return True if a column name indicates leakage risk."""
+    """Return True if a column name indicates leakage risk.
+
+    Checks (in order):
+    1. Identifier columns (id, player_id, etc.) — memorization risk
+    2. Utilization score (when ban_utilization_score=True) — target leakage
+    3. Target columns (target_1w, target_util_4w, etc.)
+    4. Model-output prefixes (predicted_*, projection_*)
+    5. Backtest artifact prefixes (baseline_*, actual_for_backtest)
+    6. Forward-looking substrings (_future, _forward) — BUT allows
+       known-safe schedule-derived features (sos_next_*, etc.)
+    """
     if not col:
         return False
     col_l = col.lower()
+
+    # Identifier columns must never be features.
+    if col_l in _IDENTIFIER_COLUMNS:
+        return True
 
     if ban_utilization_score and col_l == "utilization_score":
         return True
@@ -58,8 +108,11 @@ def is_leakage_feature(col: str, *, ban_utilization_score: bool = True) -> bool:
     if any(col_l.startswith(p) for p in _BACKTEST_PREFIXES):
         return True
 
+    # Forward-looking check: block _future/_forward, but allow safe schedule
+    # features that use backward-looking computation during training.
     if any(s in col_l for s in _FORWARD_SUBSTRINGS):
-        return True
+        if not _is_safe_schedule_feature(col):
+            return True
 
     return False
 

@@ -141,6 +141,7 @@ class PositionModel:
         self.target_transformer = TargetTransformer()
         self._uncertainty_model = None  # Heteroscedastic error model
         self._uncertainty_model_type = None
+        self._uncertainty_scale_factor = 1.0  # Conformal recalibration factor
     
     def fit(self, X: pd.DataFrame, y: pd.Series,
             tune_hyperparameters: bool = True,
@@ -410,6 +411,53 @@ class PositionModel:
             self._uncertainty_model = None
             self._uncertainty_model_type = None
 
+        # Post-hoc conformal recalibration of uncertainty estimates.
+        # The blended uncertainty from predict_with_uncertainty is typically
+        # too narrow (e.g., 73% actual coverage at 90% nominal). We compute
+        # a single scalar correction factor from OOF residuals so that
+        # nominal coverage matches actual coverage.
+        self._uncertainty_scale_factor = 1.0
+        if oof_ensemble_pred is not None and oof_valid.sum() >= 50:
+            from scipy.stats import norm as _norm_dist
+
+            # Compute blended uncertainty on OOF data (same logic as predict_with_uncertainty)
+            oof_ensemble_std = np.std(oof_preds[oof_valid], axis=1)
+            conformal_std_fill = np.full_like(oof_ensemble_std, self._conformal_residual_std)
+
+            hetero_std_oof = None
+            if self._uncertainty_model is not None:
+                try:
+                    hetero_std_oof = self._uncertainty_model.predict(X_train_scaled[oof_valid])
+                    hetero_std_oof = np.clip(hetero_std_oof, 0.1, None)
+                except Exception:
+                    hetero_std_oof = None
+
+            if hetero_std_oof is not None:
+                blended_std = 0.5 * hetero_std_oof + 0.3 * conformal_std_fill + 0.2 * oof_ensemble_std
+            else:
+                blended_std = 0.7 * conformal_std_fill + 0.3 * oof_ensemble_std
+
+            # Standardized absolute residuals
+            oof_abs_resid = np.abs(y_train_inner[oof_valid] - oof_ensemble_pred)
+            standardized = oof_abs_resid / np.maximum(blended_std, 1e-8)
+
+            # Correction factor: make 90% nominal coverage actually achieve ~90%.
+            # For a N(0,1) distribution, P(|Z| < 1.645) = 0.90.
+            # If our standardized residuals have q90 != 1.645, scale accordingly.
+            z_90 = _norm_dist.ppf(0.95)  # 1.6449
+            q_90 = float(np.quantile(standardized, 0.90))
+            correction = q_90 / z_90 if z_90 > 0 else 1.0
+
+            # Bound to avoid pathological cases
+            correction = float(np.clip(correction, 0.5, 5.0))
+            self._uncertainty_scale_factor = correction
+
+            # Verify calibration on OOF data
+            raw_coverage = float((oof_abs_resid <= z_90 * blended_std).mean())
+            cal_coverage = float((oof_abs_resid <= z_90 * blended_std * correction).mean())
+            print(f"  Uncertainty recalibration: factor={correction:.3f}, "
+                  f"raw 90% coverage={raw_coverage:.1%} -> calibrated={cal_coverage:.1%}")
+
         self.is_fitted = True
         print(f"Model training complete. Meta-learner stacking {'enabled' if self.meta_learner else 'disabled (fixed weights)'}.")
         print(f"  Conformal calibration: residual_std={self._conformal_residual_std:.3f}, "
@@ -523,6 +571,12 @@ class PositionModel:
             std_pred = 0.7 * conformal_std_arr + 0.3 * ensemble_std
         else:
             std_pred = ensemble_std
+
+        # Apply conformal recalibration factor (computed during fit from OOF data)
+        # to correct systematic under/over-coverage of confidence intervals.
+        scale_factor = getattr(self, "_uncertainty_scale_factor", 1.0)
+        if scale_factor != 1.0:
+            std_pred = std_pred * scale_factor
 
         return mean_pred, std_pred
     

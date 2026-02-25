@@ -149,15 +149,13 @@ def load_training_data(positions: list = None, min_games: int = 4,
     
     combined = pd.concat(all_data, ignore_index=True)
 
-    # Guard: training data must not contain model-output columns.
-    try:
-        from src.utils.leakage import find_leakage_columns
-        leaked = [c for c in find_leakage_columns(combined.columns, ban_utilization_score=False)
-                  if c.startswith(("predicted_", "projection_"))]
-        if leaked:
-            raise ValueError(f"Model-output columns found in training data: {sorted(leaked)[:5]}")
-    except Exception:
-        pass
+    # Guard: training data must not contain model-output or leakage columns.
+    from src.utils.leakage import find_leakage_columns
+    leaked = find_leakage_columns(combined.columns, ban_utilization_score=False)
+    if leaked:
+        logger.warning("Dropping %d leakage-risk columns from training data: %s",
+                        len(leaked), sorted(leaked)[:10])
+        combined = combined.drop(columns=leaked, errors="ignore")
     
     # Split into train/test (strict unseen test: test season must not be in train)
     assert auto_test_season not in train_seasons, (
@@ -855,12 +853,9 @@ def _run_robust_cv_report(train_data: pd.DataFrame):
         feature_cols = [c for c in pos_df.columns 
                        if c not in exclude_cols and not c.startswith("target_")
                        and pos_df[c].dtype in ['int64', 'float64', 'int32', 'float32']]
-        try:
-            from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-            feature_cols = filter_feature_columns(feature_cols)
-            assert_no_leakage_columns(feature_cols, context=f"cv features ({position})")
-        except Exception:
-            pass
+        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+        feature_cols = filter_feature_columns(feature_cols)
+        assert_no_leakage_columns(feature_cols, context=f"cv features ({position})")
         if len(feature_cols) < 5:
             continue
         try:
