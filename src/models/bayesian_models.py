@@ -571,8 +571,11 @@ class BayesianEnsemble:
             
             # Get features (exclude identifiers and target)
             if feature_cols is None:
-                exclude_cols = ['player_id', 'name', 'position', 'team', 
-                               'season', 'week', target_col, 'opponent']
+                exclude_cols = ['player_id', 'name', 'position', 'team',
+                               'season', 'week', target_col, 'opponent',
+                               'home_away', 'created_at', 'updated_at', 'id',
+                               'birth_date', 'college', 'game_id', 'game_time',
+                               'player_name', 'gsis_id']
                 feature_cols_pos = [c for c in pos_data.columns 
                                    if c not in exclude_cols and not c.startswith('target_')]
             else:

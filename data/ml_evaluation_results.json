@@ -335,5 +335,13 @@
     "n_features": 59,
     "target_method": "standardized",
     "coverage_90": 0.7311770943796394
+  },
+  "_metadata": {
+    "generated_at": "unknown (pre-metadata era)",
+    "git_commit": "unknown",
+    "target_variable": "utilization_score (0-100; converted to fantasy_points via Ridge)",
+    "evaluation_type": "static_snapshot",
+    "scoring_format": "PPR",
+    "note": "RMSE/R² are on the utilization_score scale (0-100), not raw fantasy points. The high R² (0.959) reflects utilization prediction, which is more stable than raw fantasy points. For fantasy-point-level evaluation, see data/advanced_model_results.json."
   }
 }

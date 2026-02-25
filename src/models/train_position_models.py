@@ -175,7 +175,9 @@ def train_position_model(position: str,
     # Get position-specific features
     exclude_cols = [
         'player_id', 'name', 'position', 'team', 'season', 'week',
-        'fantasy_points', 'opponent', 'home_away'
+        'fantasy_points', 'opponent', 'home_away',
+        'created_at', 'updated_at', 'id', 'birth_date', 'college',
+        'game_id', 'game_time', 'player_name', 'gsis_id',
     ] + [f'target_{n}w' for n in n_weeks_list]
     
     available_features = [c for c in train_data.columns 

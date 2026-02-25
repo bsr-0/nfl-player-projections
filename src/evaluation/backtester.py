@@ -193,6 +193,30 @@ class ModelBacktester:
             df["baseline_position_avg"] = df.groupby("position")[actual_col].transform("mean")
         df["baseline_position_avg"] = df["baseline_position_avg"].fillna(df[actual_col].mean())
 
+        # Baseline 4: Prior-season rank (ADP-like) — strongest naive baseline.
+        # Uses each player's prior-season average as the prediction for every
+        # week of the current season (what you'd know at draft time).
+        if has_season:
+            season_avg_prev = (
+                df.groupby(["player_id", "season"])[actual_col]
+                .mean()
+                .reset_index()
+                .rename(columns={actual_col: "_prior_avg"})
+            )
+            season_avg_prev["_next_season"] = season_avg_prev["season"] + 1
+            df = df.merge(
+                season_avg_prev[["player_id", "_next_season", "_prior_avg"]],
+                left_on=["player_id", "season"],
+                right_on=["player_id", "_next_season"],
+                how="left",
+            )
+            # Fallback: position expanding mean for players without prior season
+            pos_fallback = df.groupby("position")[actual_col].transform("mean")
+            df["baseline_prior_season"] = df["_prior_avg"].fillna(pos_fallback)
+            df = df.drop(columns=["_next_season", "_prior_avg"], errors="ignore")
+        else:
+            df["baseline_prior_season"] = df.groupby("position")[actual_col].transform("mean")
+
         valid = df.dropna(subset=[pred_col, actual_col])
         if len(valid) < 10:
             return {"error": "Insufficient data for baseline comparison"}
@@ -218,35 +242,40 @@ class ModelBacktester:
         persistence = baseline_stats("baseline_persistence")
         season_avg = baseline_stats("baseline_season_avg")
         position_avg = baseline_stats("baseline_position_avg")
+        prior_season = baseline_stats("baseline_prior_season")
 
-        return {
-            "model": {"rmse": round(model_rmse, 2), "mae": round(model_mae, 2)},
+        all_baselines = {
             "baseline_persistence": persistence,
             "baseline_season_avg": season_avg,
             "baseline_position_avg": position_avg,
-            "model_beats_all_by_20_pct": (
-                persistence.get("beat_by_20_pct", False)
-                and season_avg.get("beat_by_20_pct", False)
-                and position_avg.get("beat_by_20_pct", False)
-            ),
-            "model_beats_all_by_25_pct": (
-                persistence.get("beat_by_25_pct", False)
-                and season_avg.get("beat_by_25_pct", False)
-                and position_avg.get("beat_by_25_pct", False)
-            ),
+            "baseline_prior_season": prior_season,
+        }
+
+        beats_all_20 = all(
+            b.get("beat_by_20_pct", False) for b in all_baselines.values()
+        )
+        beats_all_25 = all(
+            b.get("beat_by_25_pct", False) for b in all_baselines.values()
+        )
+        # The strongest baseline the model must beat to demonstrate real edge
+        strongest_baseline = min(
+            (b for b in all_baselines.values() if b.get("rmse") is not None),
+            key=lambda b: b["rmse"],
+            default=season_avg,
+        )
+
+        return {
+            "model": {"rmse": round(model_rmse, 2), "mae": round(model_mae, 2)},
+            **all_baselines,
+            "model_beats_all_by_20_pct": beats_all_20,
+            "model_beats_all_by_25_pct": beats_all_25,
+            "strongest_baseline_rmse": strongest_baseline.get("rmse"),
+            "model_beats_strongest": model_rmse < (strongest_baseline.get("rmse") or float("inf")),
             "status": {
-                "pass_20pct_gate": (
-                    persistence.get("beat_by_20_pct", False)
-                    and season_avg.get("beat_by_20_pct", False)
-                    and position_avg.get("beat_by_20_pct", False)
-                ),
-                "pass_25pct_gate": (
-                    persistence.get("beat_by_25_pct", False)
-                    and season_avg.get("beat_by_25_pct", False)
-                    and position_avg.get("beat_by_25_pct", False)
-                ),
-                "primary_baseline": "season_avg",
-                "pass_primary_25pct_gate": season_avg.get("beat_by_25_pct", False),
+                "pass_20pct_gate": beats_all_20,
+                "pass_25pct_gate": beats_all_25,
+                "primary_baseline": "prior_season",
+                "pass_primary_25pct_gate": prior_season.get("beat_by_25_pct", False),
             },
         }
 

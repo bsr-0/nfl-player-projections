@@ -1315,9 +1315,11 @@ def run_comprehensive_evaluation():
         'risk_adjusted_projection', 'completions', 'carries',
     ]
     
-    exclude_cols = ['player_id', 'name', 'team', 'position', 'season', 'week', 
+    exclude_cols = ['player_id', 'name', 'team', 'position', 'season', 'week',
                     'fantasy_points', 'opponent', 'home_away', 'rookie_archetype',
-                    'first_season']
+                    'first_season', 'created_at', 'updated_at', 'id',
+                    'birth_date', 'college', 'game_id', 'game_time',
+                    'player_name', 'gsis_id']
     
     # Use only training data for correlation-based feature filtering (avoid test leakage)
     train_only = df[df['season'] < CURRENT_NFL_SEASON] if 'season' in df.columns else df
@@ -1358,9 +1360,9 @@ def run_comprehensive_evaluation():
     evaluator = AdvancedMLEvaluator()
     results = evaluator.evaluate_all(df, feature_cols, test_season=CURRENT_NFL_SEASON)
     
-    # Save results
+    # Save results with mandatory metadata for reproducibility
     results_path = Path(__file__).parent.parent.parent / 'data' / 'ml_evaluation_results.json'
-    
+
     # Convert numpy types for JSON serialization
     def convert_numpy(obj):
         if isinstance(obj, np.ndarray):
@@ -1374,12 +1376,38 @@ def run_comprehensive_evaluation():
         elif isinstance(obj, list):
             return [convert_numpy(i) for i in obj]
         return obj
-    
+
     results_serializable = convert_numpy(results)
-    
+
+    # Add evaluation metadata (C2 fix: every result file must be self-describing)
+    import subprocess
+    try:
+        git_hash = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        git_hash = "unknown"
+
+    results_serializable["_metadata"] = {
+        "generated_at": datetime.now().isoformat(),
+        "git_commit": git_hash,
+        "target_variable": "utilization_score (0-100; converted to fantasy_points via Ridge)",
+        "test_season": int(CURRENT_NFL_SEASON),
+        "evaluation_type": "static_snapshot",
+        "n_features": len(feature_cols),
+        "feature_columns": sorted(feature_cols),
+        "scoring_format": "PPR",
+        "note": (
+            "RMSE/R² are on the utilization_score scale (0-100), not raw "
+            "fantasy points. To compare with fantasy-point RMSE, use the "
+            "backtest results in data/advanced_model_results.json."
+        ),
+    }
+
     with open(results_path, 'w') as f:
         json.dump(results_serializable, f, indent=2)
-    
+
     print(f"\nResults saved to {results_path}")
     
     return results

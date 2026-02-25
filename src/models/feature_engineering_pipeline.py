@@ -703,9 +703,11 @@ def run_feature_engineering_pipeline():
         'risk_adjusted_projection', 'completions', 'carries',
     ]
     
-    exclude_cols = ['player_id', 'name', 'team', 'position', 'season', 'week', 
+    exclude_cols = ['player_id', 'name', 'team', 'position', 'season', 'week',
                     'fantasy_points', 'opponent', 'home_away', 'rookie_archetype',
-                    'first_season']
+                    'first_season', 'created_at', 'updated_at', 'id',
+                    'birth_date', 'college', 'game_id', 'game_time',
+                    'player_name', 'gsis_id']
     
     # Use only training data for correlation-based feature filtering (avoid test leakage)
     train_only = df[df['season'] < 2024] if 'season' in df.columns else df
