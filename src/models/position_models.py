@@ -738,10 +738,21 @@ class PositionModel:
                 "verbosity": -1,
                 "n_jobs": 1,
             }
-            model = lgb.LGBMRegressor(**params)
+            # Avoid sklearn get_tags() path that breaks with third-party
+            # estimator MROs under sklearn>=1.6 by running manual CV
+            # (same fix as _tune_xgboost).
             cv = SeasonAwareTimeSeriesSplit(n_splits=tune_folds, seasons=seasons_tune, gap_seasons=gap)
-            scores = cross_val_score(model, X_tune, y_tune, cv=cv, scoring="neg_mean_squared_error", n_jobs=1)
-            return -scores.mean()
+            fold_mse = []
+            for train_idx, test_idx in cv.split(X_tune, y_tune):
+                model = lgb.LGBMRegressor(**params)
+                X_train, y_train = X_tune[train_idx], y_tune[train_idx]
+                X_test, y_test = X_tune[test_idx], y_tune[test_idx]
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                fold_mse.append(mean_squared_error(y_test, preds))
+            if not fold_mse:
+                return float("inf")
+            return float(np.mean(fold_mse))
         study = optuna.create_study(
             direction="minimize",
             sampler=TPESampler(seed=MODEL_CONFIG["random_state"])
@@ -804,6 +815,8 @@ class PositionModel:
         params["n_jobs"] = 1  # Avoid macOS fork deadlock with sequential position training
         params["objective"] = "reg:pseudohubererror"
         params["huber_slope"] = 1.0
+        # XGBoost 3.x moved eval_metric from fit() to constructor
+        params["eval_metric"] = "rmse"
         model = xgb.XGBRegressor(**params)
         kw = {}
         if sample_weight is not None:
@@ -820,8 +833,7 @@ class PositionModel:
                     kw["callbacks"] = [early_stop]
                 except (AttributeError, TypeError):
                     use_callbacks = False
-            # Ensure eval history includes the metric used by early stopping.
-            fit_kw = dict(eval_set=[(X_val, y_val)], eval_metric="rmse", verbose=False, **kw)
+            fit_kw = dict(eval_set=[(X_val, y_val)], verbose=False, **kw)
             if not use_callbacks:
                 fit_kw["early_stopping_rounds"] = EARLY_STOPPING_ROUNDS
             try:

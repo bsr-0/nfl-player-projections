@@ -526,6 +526,7 @@ class DeepSeasonLongModel:
         self.dropout = dropout or MODEL_CONFIG.get("deep_dropout", 0.35)
         self.learning_rate = learning_rate or MODEL_CONFIG.get("deep_learning_rate", 0.0005)
         self.device = _get_device()
+        self.regression_to_mean_scale = 0.95
 
     @staticmethod
     def tune_hyperparameters(X: np.ndarray, y: np.ndarray, n_trials: int = 15) -> Dict:
