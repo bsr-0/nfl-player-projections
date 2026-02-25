@@ -238,7 +238,7 @@
       var schedText = scheduleImpact && !scheduleImpact.schedule_incorporated
         ? 'Schedule not yet incorporated.'
         : 'Schedule incorporated.';
-      summaryEl.textContent = 'Projections based on 2025 season data \u00b7 ' +
+      summaryEl.textContent = '2025 actuals extrapolated to 17 games (not ML predictions) \u00b7 ' +
         (modelMetadata.methodology ? modelMetadata.methodology.scoring_format : 'PPR scoring') +
         ' \u00b7 ' + schedText +
         ' \u00b7 Last updated: ' + (modelMetadata.last_updated || 'N/A').split('T')[0];
@@ -382,15 +382,15 @@
         '</span>' +
         '<p style="margin-top:0.5rem;font-size:0.8rem;color:#94a3b8">' +
           (player.uses_schedule
-            ? 'These projections include the 2026 schedule, including bye weeks and matchup strength.'
-            : 'These projections are schedule-neutral; the NFL 2026 schedule is not yet included.') +
+            ? 'These estimates include the 2026 schedule, including bye weeks and matchup strength.'
+            : 'These estimates are schedule-neutral; the NFL 2026 schedule is not yet available.') +
         '</p>' +
       '</div>' +
 
       '<div class="detail-actuals">' +
-        '<p class="detail-actuals__note">Based on 2025 season: ' +
+        '<p class="detail-actuals__note">Basis: 2025 actual performance (' +
           player.games_played_2025 + ' games, ' +
-          num(player.total_fp_2025) + ' total fantasy points (PPR)</p>' +
+          num(player.total_fp_2025) + ' total PPR points) extrapolated to 17 games</p>' +
       '</div>';
 
     panel.hidden = false;
@@ -446,12 +446,19 @@
 
     // Training & Evaluation
     html += '<div class="content-section">' +
-      '<h3>Training &amp; Evaluation</h3>';
+      '<h3>ML Model Training &amp; Evaluation</h3>' +
+      '<div class="notice notice--warning" style="margin-bottom:0.75rem">' +
+        '<strong>Note:</strong> The metrics below reflect the ML model validated against the ' +
+        (modelMetadata.test_season || 2025) + ' season (held-out test set). ' +
+        'The Draft Board tab currently shows 2025 actuals extrapolated to 17 games, ' +
+        'not these ML model outputs. ML-driven forward projections will replace the ' +
+        'extrapolations when available.' +
+      '</div>';
 
     var bt = modelMetadata.backtest_results || {};
     var posKeys = Object.keys(bt).filter(function (k) { return POSITIONS.indexOf(k) !== -1; });
     if (posKeys.length > 0) {
-      html += '<p>Backtest results on the ' + (modelMetadata.test_season || 2025) + ' held-out season:</p>' +
+      html += '<p>ML model backtest results on the ' + (modelMetadata.test_season || 2025) + ' held-out season:</p>' +
         '<div class="table-wrap"><table class="draft-table" style="margin-top:0.75rem">' +
         '<thead><tr><th>Position</th><th>RMSE</th><th>MAE</th><th>R\u00b2</th><th>Correlation</th></tr></thead><tbody>';
       posKeys.forEach(function (pos) {
@@ -481,7 +488,7 @@
     // Data Basis Note
     if (modelMetadata.data_basis_note) {
       html += '<div class="notice notice--warning" style="margin-top:1rem">' +
-        '<strong>Current Data Basis:</strong> ' + escapeHtml(modelMetadata.data_basis_note) +
+        '<strong>Draft Board Data Source:</strong> ' + escapeHtml(modelMetadata.data_basis_note) +
       '</div>';
     }
 
@@ -497,7 +504,7 @@
       '<h3>Data Sources</h3>' +
       '<ul>' +
         '<li><strong>Player Statistics:</strong> Weekly player performance data from nfl-data-py (official NFL play-by-play and boxscore data)</li>' +
-        '<li><strong>Time Range:</strong> ' + (modelMetadata ? modelMetadata.training_data_range : '2006-2024') + ' for model training; 2025 season for current projections</li>' +
+        '<li><strong>Time Range:</strong> ' + (modelMetadata ? modelMetadata.training_data_range : '2006-2024') + ' for ML model training; 2025 season actuals for draft board estimates</li>' +
         '<li><strong>Play-by-Play:</strong> Advanced metrics including EPA (Expected Points Added), WPA (Win Probability Added), and success rate derived from play-by-play data</li>' +
         '<li><strong>Team Context:</strong> Team-level offensive stats, play volume, pass/rush ratios, and scoring tendencies</li>' +
       '</ul>' +
@@ -523,8 +530,8 @@
       '<h3>Handling of Edge Cases</h3>' +
       '<ul>' +
         '<li><strong>Missing Games:</strong> Players with fewer than 4 games of data in a season are included but flagged with higher risk scores due to small sample size.</li>' +
-        '<li><strong>Team Changes:</strong> Team assignments reflect the player\'s most recent 2025 team. Free agency moves and trades for 2026 are not yet reflected.</li>' +
-        '<li><strong>Rookies:</strong> 2026 rookies (draft class) are not included since they have no prior NFL data. They will be added when rookie projections are generated.</li>' +
+        '<li><strong>Team Changes:</strong> Team assignments reflect the player\'s most recent 2025 team. 2026 free agency moves and trades are not yet reflected.</li>' +
+        '<li><strong>Rookies:</strong> 2026 rookies (draft class) are not included since they have no NFL data to extrapolate from.</li>' +
         '<li><strong>Injuries:</strong> No injury model is currently incorporated. Injury history is not factored into projections or risk scores.</li>' +
       '</ul>' +
     '</div>';
@@ -532,9 +539,9 @@
     html += '<div class="content-section">' +
       '<h3>Key Assumptions</h3>' +
       '<ul>' +
-        '<li>Projections assume a 17-game regular season</li>' +
-        '<li>2025 performance is used as the baseline for 2026 projections (until ML forward predictions are available)</li>' +
-        '<li>Floor and ceiling are calculated as PPG &plusmn; 1.5 standard deviations, projected over 17 games</li>' +
+        '<li>Draft board values assume a 17-game regular season</li>' +
+        '<li>Each player\'s 2025 per-game average is projected to 17 games (no regression, no ML adjustment)</li>' +
+        '<li>Floor and ceiling are calculated as PPG &plusmn; 1.5 standard deviations over 17 games</li>' +
         '<li>ADP values are proxy rankings based on projected total points (not actual draft data)</li>' +
         '<li>Risk scores are relative within each position group and reflect week-to-week consistency, not injury risk</li>' +
       '</ul>' +
@@ -613,29 +620,29 @@
     var faqs = [
       {
         q: 'How should I use these projections?',
-        a: 'These projections are one input among many for your fantasy draft. Use them alongside your own research, expert rankings, and league-specific scoring rules. The projections provide a data-driven baseline, but factors like coaching changes, offseason moves, and training camp reports should also influence your decisions.'
+        a: 'The Draft Board shows each player\'s 2025 per-game average projected over 17 games. Use it as a data-driven starting point alongside your own research, expert rankings, and league-specific scoring rules. Because these are straight extrapolations (not ML forecasts), factors like regression to the mean, coaching changes, offseason moves, and age curves are not accounted for.'
       },
       {
         q: 'Are these actual ML model predictions?',
-        a: 'Currently, these projections are based on 2025 actual fantasy points extrapolated to a 17-game season. The underlying ML pipeline (LightGBM ensemble trained on 2006-2024 data) exists and has been validated, but forward 2026 predictions for QB/RB/WR/TE have not yet been generated. When they become available, this data will be updated automatically.'
+        a: 'No. The Draft Board currently shows 2025 actual fantasy points extrapolated to a 17-game season &mdash; essentially assuming each player repeats their 2025 performance. A separate ML pipeline (LightGBM ensemble trained on 2006\u20132024, validated against the 2025 held-out test set) exists and powers the prediction API, but its forward 2026 projections have not yet replaced the draft board extrapolations. The Methodology tab shows the ML model\'s backtest accuracy on the 2025 season.'
       },
       {
-        q: 'What are the biggest sources of uncertainty?',
-        a: 'The main sources of uncertainty are: (1) Injuries \u2014 the single largest driver of projection errors, (2) Depth chart and role changes \u2014 a new starter emerging or a player being traded, (3) Coaching changes \u2014 new offensive schemes can dramatically shift player usage, (4) Rookie integration \u2014 rookies are not included since they have no NFL track record, (5) Schedule difficulty \u2014 not yet incorporated for 2026.'
+        q: 'What do "trained on 2014\u20132024" and "tested on 2025" mean?',
+        a: 'The ML model learned patterns from 11 seasons of historical data (2014\u20132024). It was then evaluated against the 2025 season, which the model had never seen during training. The backtest metrics (RMSE, R\u00b2, etc.) in the Methodology tab measure how well the model would have predicted 2025 outcomes. This is a standard validation step &mdash; it does not mean the Draft Board numbers come from this model.'
       },
       {
         q: 'Are these projections schedule-adjusted?',
         a: isScheduleUsed
           ? 'Yes. The 2026 NFL schedule has been incorporated, including opponent defensive strength, home/away adjustments, and bye week identification.'
-          : 'No. The 2026 NFL schedule has not yet been released. All projections are schedule-neutral, treating each week as an average matchup. Once the schedule is available (typically May), matchup-quality adjustments will be applied.'
+          : 'No. The 2026 NFL schedule has not yet been released. All estimates are schedule-neutral, treating each week as an average matchup. Once the schedule is available (typically May), matchup-quality adjustments can be applied.'
       },
       {
         q: 'What do the risk scores mean?',
-        a: 'Risk scores range from 0 (lowest risk) to 100 (highest risk) and are calculated relative to each position group. They combine four factors: (1) Weekly scoring volatility (30% weight), (2) Coefficient of variation (25%), (3) Inverse consistency score (25%), and (4) Games played penalty (20%). A low-risk player (0-30) is highly consistent; a high-risk player (61-100) has significant week-to-week variance or limited game history.'
+        a: 'Risk scores range from 0 (lowest risk) to 100 (highest risk) and are calculated relative to each position group. They combine four factors: (1) Weekly scoring volatility (30% weight), (2) Coefficient of variation (25%), (3) Inverse consistency score (25%), and (4) Games played penalty (20%). A low-risk player (0\u201330) is highly consistent; a high-risk player (61\u2013100) has significant week-to-week variance or limited game history.'
       },
       {
         q: 'What scoring format is used?',
-        a: 'All projections use PPR (Points Per Reception) scoring: 0.04 points per passing yard, 4 points per passing TD, 0.1 points per rushing/receiving yard, 6 points per rushing/receiving TD, 1 point per reception, -2 for interceptions and fumbles lost.'
+        a: 'All values use PPR (Points Per Reception) scoring: 0.04 points per passing yard, 4 points per passing TD, 0.1 points per rushing/receiving yard, 6 points per rushing/receiving TD, 1 point per reception, \u22122 for interceptions and fumbles lost.'
       },
       {
         q: 'Why are some players missing?',
@@ -643,7 +650,7 @@
       },
       {
         q: 'What are the known limitations?',
-        a: 'Key limitations include: (1) No forward ML predictions \u2014 projections are 2025 extrapolations, (2) No injury model \u2014 injury history not factored in, (3) No real ADP data \u2014 ADP values are rank-based proxies, (4) No age data \u2014 age curves not applied, (5) No 2026 roster updates \u2014 free agency and trades not reflected, (6) No schedule adjustments \u2014 waiting for NFL schedule release.'
+        a: 'Key limitations: (1) Draft board uses 2025 extrapolations, not ML forward predictions, (2) No regression-to-the-mean or age adjustments, (3) No injury model, (4) ADP values are rank-based proxies (not actual draft data), (5) No 2026 roster updates (free agency, trades not reflected), (6) No schedule adjustments (waiting for NFL schedule release), (7) Rookies excluded (no historical data).'
       }
     ];
 
