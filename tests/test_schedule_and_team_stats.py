@@ -65,6 +65,34 @@ def test_ensure_schedule_loaded_returns_true_when_already_in_db():
     MockLoader.assert_not_called()
 
 
+def test_get_schedule_sanitizes_scores_by_default():
+    """get_schedule should remove score columns unless include_scores=True."""
+    import tempfile
+    import os
+    from src.utils.database import DatabaseManager
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = Path(f.name)
+    try:
+        db = DatabaseManager(db_path)
+        db.insert_schedule({
+            "season": 2024,
+            "week": 1,
+            "home_team": "KC",
+            "away_team": "BAL",
+            "home_score": 21,
+            "away_score": 17,
+        })
+        sched = db.get_schedule(season=2024, week=1)
+        assert "home_score" not in sched.columns
+        assert "away_score" not in sched.columns
+        sched_with_scores = db.get_schedule(season=2024, week=1, include_scores=True)
+        assert "home_score" in sched_with_scores.columns
+        assert "away_score" in sched_with_scores.columns
+    finally:
+        os.unlink(db_path)
+
+
 # -----------------------------------------------------------------------------
 # Team stats aggregation from player_weekly_stats
 # -----------------------------------------------------------------------------

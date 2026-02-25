@@ -320,6 +320,11 @@ class WeatherDataLoader:
         
         try:
             schedules = nfl.import_schedules(seasons)
+            try:
+                from src.utils.leakage import sanitize_schedule_df
+                schedules = sanitize_schedule_df(schedules)
+            except Exception:
+                pass
             
             if 'weather' in schedules.columns or 'temp' in schedules.columns:
                 print(f"  Found weather data in schedules")
@@ -518,6 +523,11 @@ class VegasLinesLoader:
             # Fall back to schedule which may have spread info
             try:
                 schedules = nfl.import_schedules(seasons)
+                try:
+                    from src.utils.leakage import sanitize_schedule_df
+                    schedules = sanitize_schedule_df(schedules)
+                except Exception:
+                    pass
                 if 'spread_line' in schedules.columns:
                     print(f"  Using spread from schedules")
                     return schedules

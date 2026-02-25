@@ -223,6 +223,12 @@ class FantasyBacktester:
                                     if c not in exclude and train_df[c].dtype in ['int64', 'float64']]
             else:
                 feature_cols_fold = [c for c in feature_cols if c in train_df.columns]
+            try:
+                from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+                feature_cols_fold = filter_feature_columns(feature_cols_fold)
+                assert_no_leakage_columns(feature_cols_fold, context="backtesting features")
+            except Exception:
+                pass
             
             # Prepare data
             X_train = train_df[feature_cols_fold].fillna(0)

@@ -307,7 +307,7 @@ def main():
         print("❌ No data available. Run data loader first.")
         return
     
-    df = engineer_all_features(df)
+    df = engineer_all_features(df, allow_autoload_bounds=False)
     df = add_qb_features(df)
     
     seasons = sorted(df['season'].unique())

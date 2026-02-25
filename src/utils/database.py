@@ -530,8 +530,12 @@ class DatabaseManager:
             return True
     
     def get_schedule(self, season: int = None, week: int = None, 
-                     team: str = None) -> pd.DataFrame:
-        """Get schedule with optional filters."""
+                     team: str = None, include_scores: bool = False) -> pd.DataFrame:
+        """Get schedule with optional filters.
+
+        By default, final score columns are removed to prevent leakage when
+        schedules are used as model features.
+        """
         query = "SELECT * FROM schedule WHERE 1=1"
         params = []
         
@@ -548,7 +552,14 @@ class DatabaseManager:
         query += " ORDER BY season, week"
         
         with self._get_connection() as conn:
-            return pd.read_sql_query(query, conn, params=params)
+            df = pd.read_sql_query(query, conn, params=params)
+        if not include_scores:
+            try:
+                from src.utils.leakage import sanitize_schedule_df
+                df = sanitize_schedule_df(df)
+            except Exception:
+                pass
+        return df
     
     def import_schedule_from_csv(self, csv_path: str) -> int:
         """
@@ -848,7 +859,8 @@ class DatabaseManager:
                    ts.points_per_drive as team_points_per_drive,
                    ts.pace_sec_per_play as team_pace_sec_per_play,
                    tds.fantasy_points_allowed_qb, tds.fantasy_points_allowed_rb,
-                   tds.fantasy_points_allowed_wr, tds.fantasy_points_allowed_te
+                   tds.fantasy_points_allowed_wr, tds.fantasy_points_allowed_te,
+                   tds.week as opp_defense_week
             FROM player_weekly_stats pws
             JOIN players p ON pws.player_id = p.player_id
             LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
@@ -869,6 +881,13 @@ class DatabaseManager:
         with self._get_connection() as conn:
             df = pd.read_sql_query(query, conn, params=params)
         
+        # Defensive stats must be strictly prior-week; block any same-week leakage.
+        if "opp_defense_week" in df.columns and "week" in df.columns:
+            bad = df["opp_defense_week"].notna() & (df["opp_defense_week"] >= df["week"])
+            if bad.any():
+                sample = df.loc[bad, ["player_id", "season", "week", "opponent", "opp_defense_week"]].head(3)
+                raise ValueError(f"Leakage detected: opponent defense stats not shifted. Sample: {sample.to_dict(orient='records')}")
+
         # Filter to players with minimum games
         if min_games > 0:
             game_counts = df.groupby('player_id').size()

@@ -1739,10 +1739,9 @@ class FeatureEngineer:
     def _update_feature_columns(self, df: pd.DataFrame):
         """Update list of feature columns.
         
-        Excludes identifiers, raw targets, and any columns that could cause
-        data leakage (current-week utilization_score is excluded by the
-        training pipeline's feature selector, not here, since it's a valid
-        input for the util->FP conversion layer).
+        Excludes identifiers, raw targets, and leakage-prone columns. This
+        guard is intentionally conservative to prevent model-output or target
+        leakage in downstream training/evaluation pipelines.
         """
         exclude_cols = {
             "player_id", "name", "season", "week", "team", "opponent",
@@ -1759,6 +1758,11 @@ class FeatureEngineer:
             and not any(col.startswith(p) for p in exclude_prefixes)
             and df[col].dtype in [np.float64, np.int64, float, int]
         ]
+        try:
+            from src.utils.leakage import filter_feature_columns
+            self.feature_columns = filter_feature_columns(self.feature_columns)
+        except Exception:
+            pass
     
     def get_feature_columns(self) -> List[str]:
         """Return list of feature column names."""

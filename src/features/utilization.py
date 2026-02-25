@@ -271,7 +271,12 @@ class UncertaintyQuantifier:
         return result
 
 
-def engineer_all_features(df: pd.DataFrame, percentile_bounds: Optional[Dict[Tuple[str, str], Tuple[float, float]]] = None) -> pd.DataFrame:
+def engineer_all_features(
+    df: pd.DataFrame,
+    percentile_bounds: Optional[Dict[Tuple[str, str], Tuple[float, float]]] = None,
+    allow_autoload_bounds: bool = True,
+    require_bounds: bool = False,
+) -> pd.DataFrame:
     """
     Apply all feature engineering to a player DataFrame.
     Core utilization from utilization_score (single source); then WOPR, expected_fp, volatility, uncertainty, rolling/lag.
@@ -279,11 +284,13 @@ def engineer_all_features(df: pd.DataFrame, percentile_bounds: Optional[Dict[Tup
     """
     print("Engineering advanced features...")
     if percentile_bounds is None:
+        if require_bounds:
+            raise ValueError("percentile_bounds required to avoid leakage in training contexts")
         try:
             from config.settings import MODELS_DIR
             from src.features.utilization_score import load_percentile_bounds
             bounds_path = MODELS_DIR / "utilization_percentile_bounds.json"
-            if bounds_path.exists():
+            if allow_autoload_bounds and bounds_path.exists():
                 percentile_bounds = load_percentile_bounds(bounds_path)
         except Exception:
             percentile_bounds = None

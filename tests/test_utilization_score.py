@@ -7,7 +7,13 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.features.utilization_score import UtilizationScoreCalculator, calculate_utilization_scores
+from src.features.utilization_score import (
+    UtilizationScoreCalculator,
+    calculate_utilization_scores,
+    save_percentile_bounds,
+    load_percentile_bounds,
+    validate_percentile_bounds_meta,
+)
 
 
 class TestUtilizationScoreCalculator:
@@ -183,6 +189,17 @@ class TestUtilizationScoreEdgeCases:
         data = pd.DataFrame()
         result = calculator.calculate_all_scores(data, pd.DataFrame())
         assert len(result) == 0
+
+    def test_percentile_bounds_metadata_roundtrip(self, tmp_path):
+        """Bounds metadata should be preserved and validated."""
+        bounds = {(\"RB\", \"snap_share_pct\"): (0.1, 0.9)}
+        meta = {\"train_seasons\": [2022, 2023], \"min_season\": 2022, \"max_season\": 2023}
+        path = tmp_path / \"bounds.json\"
+        save_percentile_bounds(bounds, path, metadata=meta)
+        loaded_bounds, loaded_meta = load_percentile_bounds(path, return_meta=True)
+        assert loaded_bounds == bounds
+        assert validate_percentile_bounds_meta(loaded_meta, [2022, 2023]) is True
+        assert validate_percentile_bounds_meta(loaded_meta, [2021, 2023]) is False
 
 
 if __name__ == "__main__":

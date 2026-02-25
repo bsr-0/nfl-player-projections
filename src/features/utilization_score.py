@@ -39,23 +39,55 @@ def _bounds_str_to_key(s: str) -> Tuple[str, str]:
     return (a, b)
 
 
-def save_percentile_bounds(position_percentiles: Dict[Tuple[str, str], Tuple[float, float]], path: Path) -> None:
-    """Persist percentile bounds (train-only) for use at test/serve. Keys (position, col) -> (lo, hi)."""
+def save_percentile_bounds(
+    position_percentiles: Dict[Tuple[str, str], Tuple[float, float]],
+    path: Path,
+    metadata: Optional[Dict] = None,
+) -> None:
+    """Persist percentile bounds (train-only) for use at test/serve.
+
+    Keys (position, col) -> (lo, hi). Optional metadata (e.g., train seasons)
+    is stored under "__meta__" for leakage auditing.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     out = {_bounds_key_to_str(k): list(v) for k, v in position_percentiles.items()}
+    if metadata:
+        out["__meta__"] = metadata
     with open(path, "w") as f:
         json.dump(out, f, indent=2)
 
 
-def load_percentile_bounds(path: Path) -> Dict[Tuple[str, str], Tuple[float, float]]:
-    """Load percentile bounds from file. Returns dict (position, col) -> (lo, hi)."""
+def load_percentile_bounds(path: Path, return_meta: bool = False):
+    """Load percentile bounds from file.
+
+    Returns dict (position, col) -> (lo, hi). If return_meta=True, returns
+    (bounds, metadata).
+    """
     path = Path(path)
     if not path.exists():
-        return {}
+        return ({}, {}) if return_meta else {}
     with open(path) as f:
         raw = json.load(f)
-    return {_bounds_str_to_key(k): (float(v[0]), float(v[1])) for k, v in raw.items()}
+    meta = raw.get("__meta__", {}) if isinstance(raw, dict) else {}
+    bounds = {
+        _bounds_str_to_key(k): (float(v[0]), float(v[1]))
+        for k, v in raw.items()
+        if k != "__meta__"
+    }
+    return (bounds, meta) if return_meta else bounds
+
+
+def validate_percentile_bounds_meta(metadata: Dict, expected_train_seasons: Optional[list]) -> bool:
+    """Validate bounds metadata against expected training seasons."""
+    if not expected_train_seasons:
+        return True
+    if not metadata:
+        return False
+    seasons = metadata.get("train_seasons")
+    if not isinstance(seasons, list) or not seasons:
+        return False
+    return set(seasons) == set(expected_train_seasons)
 
 
 class UtilizationScoreCalculator:
@@ -504,7 +536,7 @@ class UtilizationScoreCalculator:
     _BOUNDS_DEFAULT_PATH = Path(__file__).parent.parent.parent / "data" / "utilization_percentile_bounds.json"
 
     def fit_percentile_bounds(self, train_df: pd.DataFrame, position: str, component_columns: list,
-                               persist: bool = True) -> None:
+                               persist: bool = True, metadata: Optional[Dict] = None) -> None:
         """
         Fit min/max (or 1st/99th percentile) per component on train data for consistent apply at serve.
         Store in self.position_percentiles keyed by (position, col).
@@ -525,7 +557,7 @@ class UtilizationScoreCalculator:
             self.position_percentiles[(position, col)] = (float(lo), float(hi))
         
         if persist:
-            save_percentile_bounds(self.position_percentiles, self._BOUNDS_DEFAULT_PATH)
+            save_percentile_bounds(self.position_percentiles, self._BOUNDS_DEFAULT_PATH, metadata=metadata)
 
     def _ensure_bounds_loaded(self) -> None:
         """Auto-load persisted percentile bounds if none are in memory."""
