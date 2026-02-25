@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.features.feature_engineering import FeatureEngineer
+from src.data.pbp_stats_aggregator import _compute_league_neutral_pass_rate
 
 
 class TestRollingFeatureLeakage:
@@ -233,6 +234,30 @@ class TestDefenseRankingsLeakage:
         
         assert abs(actual - expected) < 0.01, \
             f"Week 5 rolling avg should be {expected}, got {actual}"
+
+
+class TestNeutralPassRateLeakage:
+    """Test neutral pass rate uses prior weeks only (shifted expanding)."""
+
+    def test_league_neutral_pass_rate_shifted(self):
+        # Two teams, two weeks: week 2 league rate should equal week 1 rate
+        df = pd.DataFrame({
+            "season": [2024, 2024, 2024, 2024],
+            "week": [1, 1, 2, 2],
+            "team": ["A", "B", "A", "B"],
+            "neutral_pass_plays": [30, 20, 40, 10],
+            "neutral_run_plays": [20, 30, 10, 40],
+        })
+        league = _compute_league_neutral_pass_rate(df)
+        week1 = league[league["week"] == 1].iloc[0]["neutral_pass_rate_lg"]
+        week2 = league[league["week"] == 2].iloc[0]["neutral_pass_rate_lg"]
+
+        # Week 1 has no prior data, should be NaN
+        assert pd.isna(week1)
+
+        # Week 2 league neutral pass rate should match week 1 rate
+        # Week 1 total pass = 50, run = 50 => rate = 0.5
+        assert abs(week2 - 0.5) < 1e-6
 
 
 class TestTimeSeriesCrossValidation:

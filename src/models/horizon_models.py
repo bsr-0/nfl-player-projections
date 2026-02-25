@@ -370,11 +370,12 @@ class Hybrid4WeekModel:
             # Optuna-tune LSTM hyperparameters when enabled
             tuned_params = {}
             if tune_lstm:
-                n_trials = MODEL_CONFIG.get("lstm_optuna_trials", 15)
-                print(f"  Tuning LSTM hyperparameters ({n_trials} trials)...")
-                tuned_params = LSTM4WeekModel.tune_hyperparameters(
-                    X_np, y_np, player_ids, feature_cols, n_trials=n_trials
-                )
+                n_trials = int(MODEL_CONFIG.get("lstm_optuna_trials", 15) or 0)
+                if n_trials > 0:
+                    print(f"  Tuning LSTM hyperparameters ({n_trials} trials)...")
+                    tuned_params = LSTM4WeekModel.tune_hyperparameters(
+                        X_np, y_np, player_ids, feature_cols, n_trials=n_trials
+                    )
             self.lstm = LSTM4WeekModel(
                 sequence_length=int(tuned_params.get("sequence_length", MODEL_CONFIG.get("lstm_sequence_length", 10))),
                 lstm_units=int(tuned_params.get("lstm_units", MODEL_CONFIG.get("lstm_units", 256))),

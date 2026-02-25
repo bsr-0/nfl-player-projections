@@ -80,6 +80,9 @@ class FeatureEngineer:
         
         # Create situational features
         df = self._create_situational_features(df)
+
+        # Team-change and scheme-fit features (proactive context adjustment)
+        df = self._create_team_change_features(df)
         
         # Create interaction features
         df = self._create_interaction_features(df)
@@ -122,6 +125,23 @@ class FeatureEngineer:
             df["receiving_yards"], df["receptions"]
         )
         df["catch_rate"] = safe_divide(df["receptions"], df["targets"]) * 100
+
+        # Advanced PBP efficiency (EPA/WPA per opportunity)
+        pass_plays = df.get("pass_plays", df.get("passing_attempts", pd.Series(0, index=df.index)))
+        rush_plays = df.get("rush_plays", df.get("rushing_attempts", pd.Series(0, index=df.index)))
+        recv_targets = df.get("recv_targets", df.get("targets", pd.Series(0, index=df.index)))
+        if "pass_epa" in df.columns:
+            df["pass_epa_per_play"] = safe_divide(df["pass_epa"], pass_plays)
+        if "rush_epa" in df.columns:
+            df["rush_epa_per_play"] = safe_divide(df["rush_epa"], rush_plays)
+        if "recv_epa" in df.columns:
+            df["recv_epa_per_target"] = safe_divide(df["recv_epa"], recv_targets)
+        if "pass_wpa" in df.columns:
+            df["pass_wpa_per_play"] = safe_divide(df["pass_wpa"], pass_plays)
+        if "rush_wpa" in df.columns:
+            df["rush_wpa_per_play"] = safe_divide(df["rush_wpa"], rush_plays)
+        if "recv_wpa" in df.columns:
+            df["recv_wpa_per_target"] = safe_divide(df["recv_wpa"], recv_targets)
         
         # QB-specific (only if columns exist)
         if "passing_completions" in df.columns and "passing_attempts" in df.columns:
@@ -420,9 +440,13 @@ class FeatureEngineer:
                 return df
             
             # Calculate rolling team averages (last 3 games)
-            team_metrics = ['points_scored', 'points_allowed', 'total_yards', 
+            team_metrics = ['points_scored', 'points_allowed', 'total_yards',
                            'passing_yards', 'rushing_yards', 'turnovers',
-                           'pass_attempts', 'rush_attempts', 'redzone_scores']
+                           'pass_attempts', 'rush_attempts', 'redzone_scores',
+                           'neutral_pass_plays', 'neutral_run_plays',
+                           'neutral_pass_rate', 'neutral_pass_rate_lg', 'neutral_pass_rate_oe',
+                           'drive_count', 'drive_success_rate', 'avg_drive_epa',
+                           'points_per_drive', 'pace_sec_per_play']
             
             # Create team averages lookup using PRIOR season's data to avoid
             # lookahead bias (current season avg includes future weeks).
@@ -696,6 +720,12 @@ class FeatureEngineer:
             'expected_game_total': 44.0, 'expected_point_diff': 0.0,
             'team_a_plays_per_game': 65.0, 'team_b_plays_per_game': 65.0,
             'team_a_pass_rate': 0.55,
+            'team_a_neutral_pass_rate': 0.55, 'team_a_neutral_pass_rate_oe': 0.0,
+            'team_b_neutral_pass_rate': 0.55, 'team_b_neutral_pass_rate_oe': 0.0,
+            'team_a_drive_success_rate': 0.50, 'team_b_drive_success_rate': 0.50,
+            'team_a_points_per_drive': 1.8, 'team_b_points_per_drive': 1.8,
+            'team_a_avg_drive_epa': 0.0, 'team_b_avg_drive_epa': 0.0,
+            'team_a_pace_sec_per_play': 28.0, 'team_b_pace_sec_per_play': 28.0,
         }
         
         for col, default_val in team_feature_defaults.items():
@@ -719,6 +749,31 @@ class FeatureEngineer:
                 df["team_pass_attempts"], 
                 df.get("team_plays", df["team_pass_attempts"] + df.get("team_rush_attempts", 0))
             )
+
+        # Situation-specific usage rates (advanced PBP)
+        neutral_targets = df.get("neutral_targets", pd.Series(0, index=df.index))
+        team_neutral_pass_plays = df.get("team_neutral_pass_plays", pd.Series(0, index=df.index))
+        df["neutral_target_share"] = safe_divide(neutral_targets, team_neutral_pass_plays)
+
+        df["third_down_target_rate"] = safe_divide(
+            df.get("third_down_targets", pd.Series(0, index=df.index)),
+            df.get("targets", pd.Series(0, index=df.index))
+        )
+        df["short_yardage_touch_rate"] = safe_divide(
+            df.get("short_yardage_rushes", pd.Series(0, index=df.index)),
+            df.get("rushing_attempts", pd.Series(0, index=df.index))
+        )
+        df["two_minute_target_rate"] = safe_divide(
+            df.get("two_minute_targets", pd.Series(0, index=df.index)),
+            df.get("targets", pd.Series(0, index=df.index))
+        )
+        total_touches = df.get("rushing_attempts", pd.Series(0, index=df.index)) + df.get(
+            "targets", pd.Series(0, index=df.index)
+        )
+        df["high_leverage_touch_rate"] = safe_divide(
+            df.get("high_leverage_touches", pd.Series(0, index=df.index)),
+            total_touches
+        )
         
         # Bye week indicator (no game previous week)
         df["post_bye"] = df.groupby("player_id")["week"].transform(
@@ -748,6 +803,82 @@ class FeatureEngineer:
         # Add game script / garbage time adjustment
         df = self._add_game_script_adjustment(df)
         
+        return df
+
+    def _create_team_change_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create features to proactively adjust for team changes and scheme fit.
+
+        Captures:
+        - team_changed: whether player changed teams since last appearance
+        - weeks_on_team: number of weeks since joining current team (resets on change or season boundary)
+        - team_change_pass_rate_delta: change in team pass rate vs previous team context
+        - scheme_fit_score: positional fit to team pass rate (higher = better fit)
+        - scheme_mismatch_on_change: mismatch severity when team_changed
+        - team_change_recent_util: recent utilization prior to change (lagged)
+        """
+        if df.empty or "player_id" not in df.columns or "team" not in df.columns:
+            return df
+
+        df = df.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
+        grp = df.groupby("player_id", sort=False)
+        prev_team = grp["team"].shift(1)
+        prev_season = grp["season"].shift(1)
+
+        season_changed = (df["season"] != prev_season) & prev_season.notna()
+        team_changed = (df["team"] != prev_team) & prev_team.notna()
+
+        df["team_changed"] = team_changed.astype(int)
+        df["new_season"] = season_changed.astype(int)
+
+        # Weeks on current team (reset on team change or season boundary)
+        change_flag = (team_changed | season_changed).astype(int)
+        df["_team_change_flag"] = change_flag
+        df["_team_stint_id"] = grp["_team_change_flag"].cumsum()
+        df["weeks_on_team"] = df.groupby(["player_id", "_team_stint_id"]).cumcount() + 1
+
+        # Team pass rate delta (use prior row for same player as a proxy)
+        if "team_a_pass_rate" in df.columns:
+            prev_pass = grp["team_a_pass_rate"].shift(1)
+            delta = (df["team_a_pass_rate"] - prev_pass).fillna(0.0)
+            df["team_pass_rate_delta"] = delta
+            df["team_change_pass_rate_delta"] = (delta * df["team_changed"]).fillna(0.0)
+        else:
+            df["team_pass_rate_delta"] = 0.0
+            df["team_change_pass_rate_delta"] = 0.0
+
+        # Scheme fit: position-specific preferred pass rate
+        if "team_a_pass_rate" in df.columns and "position" in df.columns:
+            pass_pref = df["position"].map({
+                "QB": 0.60,
+                "WR": 0.60,
+                "TE": 0.58,
+                "RB": 0.45,
+            }).fillna(0.52)
+            mismatch = (df["team_a_pass_rate"] - pass_pref).abs()
+            # Normalize mismatch to [0, 1] with 0.6 as a wide max band
+            mismatch_norm = (mismatch / 0.6).clip(0.0, 1.0)
+            df["scheme_fit_score"] = (1.0 - mismatch_norm).fillna(0.5)
+            df["scheme_mismatch"] = mismatch_norm.fillna(0.5)
+            df["scheme_mismatch_on_change"] = (df["scheme_mismatch"] * df["team_changed"]).fillna(0.0)
+        else:
+            df["scheme_fit_score"] = 0.5
+            df["scheme_mismatch"] = 0.5
+            df["scheme_mismatch_on_change"] = 0.0
+
+        # Recent utilization prior to change (lagged utilization only)
+        util_col = None
+        for cand in ["utilization_score_roll4_mean", "utilization_score_lag1", "utilization_score_roll3_mean"]:
+            if cand in df.columns:
+                util_col = cand
+                break
+        if util_col:
+            df["team_change_recent_util"] = np.where(df["team_changed"] == 1,
+                                                     df[util_col].fillna(0.0), 0.0)
+        else:
+            df["team_change_recent_util"] = 0.0
+
+        df = df.drop(columns=["_team_change_flag", "_team_stint_id"], errors="ignore")
         return df
     
     def _add_game_script_adjustment(self, df: pd.DataFrame) -> pd.DataFrame:

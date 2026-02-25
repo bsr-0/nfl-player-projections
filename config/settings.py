@@ -52,6 +52,25 @@ CURRENT_NFL_SEASON = _current_nfl_season()
 # Default range for scraping/loading: MIN_HISTORICAL_YEAR through current NFL season (inclusive).
 SEASONS_TO_SCRAPE = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
 
+# -----------------------------------------------------------------------------
+# PBP ADVANCED FEATURE SETTINGS
+# -----------------------------------------------------------------------------
+# Enable advanced PBP-derived features (EPA/WPA/success, neutral pass rate, drive metrics).
+PBP_ADVANCED_FEATURES_ENABLED = True
+# Seasons to compute advanced PBP features for (all since MIN_HISTORICAL_YEAR).
+PBP_ADVANCED_SEASONS = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
+# Neutral script threshold (score diff)
+NEUTRAL_SCORE_DIFF = 7
+# Short-yardage threshold
+SHORT_YARDAGE_YDSTOGO = 2
+# Red zone and goal line yardline_100 thresholds
+RED_ZONE_YARDLINE = 20
+GOAL_LINE_YARDLINE = 5
+# Two-minute warning window (seconds)
+TWO_MINUTE_SECONDS = 120
+# Fallback league neutral pass rate when insufficient data
+PROE_FALLBACK_LG_NEUTRAL_RATE = 0.56
+
 # Positions (offensive skill positions only)
 POSITIONS = ["QB", "RB", "WR", "TE"]
 # Offensive skill positions used by the utilization-based ML pipeline
@@ -168,6 +187,10 @@ MODEL_CONFIG = {
     "vif_threshold": 10,  # Iteratively drop features with VIF above this
     "adaptive_feature_count": True,  # Scale n_features_per_position by sqrt(n_samples)
     "recency_decay_halflife": 2.0,  # Seasons: weight halves every 2 seasons (None = no weighting)
+    # Horizon-aware recency: longer horizons should decay more slowly.
+    # Defaults: 1w=2 seasons, 4w=3 seasons, 18w=4 seasons.
+    # If a horizon is missing, falls back to recency_decay_halflife.
+    "horizon_recency_halflife": {1: 2.0, 4: 3.0, 18: 4.0},
     "cv_gap_seasons": 1,  # Gap between train and val for purged CV (1 = purge last season before test)
     # Horizon-specific models (per requirements): 4w LSTM+ARIMA, 18w deep feedforward
     "use_4w_hybrid": True,   # Use Hybrid4WeekModel for n_weeks in 4w band when TF available
@@ -199,6 +222,37 @@ MODEL_CONFIG = {
     # Training gate policy: when True, fail-fast on requirement minimums
     # (training seasons and per-position player counts) instead of warning only.
     "strict_requirements_default": False,
+    # Stability selection bootstrap iterations (per position)
+    "stability_n_bootstrap": 30,
+    # SHAP/PDP explainability (can be slow on large models)
+    "enable_shap_pdp": True,
+}
+
+# -----------------------------------------------------------------------------
+# PBP ADVANCED FEATURE SETTINGS
+# -----------------------------------------------------------------------------
+PBP_ADVANCED_FEATURES_ENABLED = True
+PBP_ADVANCED_SEASONS = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
+NEUTRAL_SCORE_DIFF = 7
+SHORT_YARDAGE_YDSTOGO = 2
+RED_ZONE_YARDLINE = 20
+GOAL_LINE_YARDLINE = 5
+TWO_MINUTE_SECONDS = 120
+PROE_FALLBACK_LG_NEUTRAL_RATE = 0.56
+
+# Fast training overrides: ~8-10x faster with minimal accuracy loss.
+# Applied via `python -m src.models.train --fast`.
+# Reduces Optuna trials, CV folds, stability bootstrap, horizon model
+# epochs, and skips expensive optional steps (SHAP, robust CV, QB dual-target).
+FAST_MODEL_CONFIG = {
+    "n_optuna_trials": 15,          # 15 vs 100 (6.7x fewer)
+    "cv_folds": 3,                  # 3 vs 5 (1.7x fewer OOF folds)
+    "stability_n_bootstrap": 10,    # 10 vs 30 (3x fewer)
+    "lstm_optuna_trials": 0,        # 0 vs 15 (skip LSTM tuning in fast mode for stability)
+    "lstm_epochs": 40,              # 40 vs 80
+    "deep_optuna_trials": 5,        # 5 vs 15
+    "deep_epochs": 50,              # 50 vs 100
+    "enable_shap_pdp": False,       # Skip SHAP/PDP
 }
 
 # =============================================================================

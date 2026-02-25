@@ -496,6 +496,13 @@ class ModelBacktester:
         boom_bust = boom_bust_metrics(a, p, boom_thresh=20.0, bust_thresh=5.0)
         vor = vor_accuracy(a, p)
 
+        # Tail-risk metrics (focus on outliers)
+        abs_err = np.abs(a - p)
+        p95_abs_err = float(np.percentile(abs_err, 95)) if len(abs_err) >= 20 else None
+        under = (a - p)
+        under_tail = under[under > 0]
+        p95_under = float(np.percentile(under_tail, 95)) if len(under_tail) >= 20 else None
+
         # MAE-to-RMSE ratio (requirement: MAE should be 20-25% lower than RMSE)
         mae_rmse_ratio = round(mae / rmse, 3) if rmse > 0 else None
         # Target: ratio ~0.75-0.80 means MAE is 20-25% lower than RMSE
@@ -522,6 +529,8 @@ class ModelBacktester:
             "avg_predicted": round(predicted.mean(), 2),
             "std_actual": round(actual.std(), 2),
             "std_predicted": round(predicted.std(), 2),
+            "p95_abs_error": round(p95_abs_err, 2) if p95_abs_err is not None else None,
+            "p95_underprediction": round(p95_under, 2) if p95_under is not None else None,
         }
     
     def _calculate_ranking_accuracy(self, df: pd.DataFrame, 

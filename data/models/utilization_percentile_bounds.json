@@ -53,7 +53,7 @@
   ],
   "WR|redzone_targets_pct": [
     0.0,
-    30.0
+    0.0
   ],
   "WR|route_participation_pct": [
     0.0,
@@ -73,7 +73,7 @@
   ],
   "TE|redzone_targets_pct": [
     0.0,
-    40.0
+    0.0
   ],
   "TE|air_yards_share_pct": [
     0.0,

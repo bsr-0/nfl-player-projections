@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-22T07:26:47.471751",
+  "generated_at": "2026-02-24T16:40:12.074580",
   "strict_requirements": false,
   "training_seasons": 19,
   "min_training_seasons": {
@@ -16,24 +16,18 @@
     "QB": 246,
     "RB": 604,
     "WR": 942,
-    "TE": 390,
-    "K": 0,
-    "DST": 0
+    "TE": 390
   },
   "min_players_per_position": {
     "QB": 30,
     "RB": 60,
     "WR": 70,
-    "TE": 30,
-    "K": 20,
-    "DST": 32
+    "TE": 30
   },
   "players_gate": {
     "QB": true,
     "RB": true,
     "WR": true,
-    "TE": true,
-    "K": false,
-    "DST": false
+    "TE": true
   }
 }

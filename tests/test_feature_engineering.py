@@ -46,6 +46,27 @@ class TestFeatureEngineer:
                     "passing_yards": 0,
                     "passing_tds": 0,
                     "interceptions": 0,
+                    "pass_plays": 0,
+                    "rush_plays": np.random.randint(10, 25),
+                    "recv_targets": np.random.randint(2, 8),
+                    "pass_epa": 0.0,
+                    "rush_epa": np.random.uniform(-2, 2),
+                    "recv_epa": np.random.uniform(-2, 2),
+                    "pass_wpa": 0.0,
+                    "rush_wpa": np.random.uniform(-0.1, 0.1),
+                    "recv_wpa": np.random.uniform(-0.1, 0.1),
+                    "pass_success_rate": 0.0,
+                    "rush_success_rate": np.random.uniform(0.3, 0.7),
+                    "recv_success_rate": np.random.uniform(0.3, 0.7),
+                    "neutral_targets": np.random.randint(0, 4),
+                    "neutral_rushes": np.random.randint(0, 8),
+                    "third_down_targets": np.random.randint(0, 2),
+                    "short_yardage_rushes": np.random.randint(0, 3),
+                    "redzone_targets": np.random.randint(0, 2),
+                    "goal_line_touches": np.random.randint(0, 2),
+                    "two_minute_targets": np.random.randint(0, 2),
+                    "high_leverage_touches": np.random.randint(0, 3),
+                    "team_neutral_pass_plays": 20,
                     "fumbles_lost": 0,
                     "snap_count": np.random.randint(30, 60),
                     "snap_share": np.random.uniform(0.5, 0.9),
@@ -93,6 +114,20 @@ class TestFeatureEngineer:
         
         trend_cols = [c for c in result.columns if "trend" in c]
         assert len(trend_cols) > 0
+
+    def test_advanced_pbp_features(self, engineer, sample_data):
+        """Test advanced PBP-derived features exist and are finite."""
+        result = engineer.create_features(sample_data)
+        expected_cols = [
+            "pass_epa_per_play", "rush_epa_per_play", "recv_epa_per_target",
+            "pass_wpa_per_play", "rush_wpa_per_play", "recv_wpa_per_target",
+            "neutral_target_share", "third_down_target_rate",
+            "short_yardage_touch_rate", "two_minute_target_rate",
+            "high_leverage_touch_rate",
+        ]
+        for col in expected_cols:
+            assert col in result.columns
+            assert np.isfinite(result[col]).all()
     
     def test_feature_columns_list(self, engineer, sample_data):
         """Test that feature columns are tracked."""

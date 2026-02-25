@@ -68,6 +68,26 @@ class DatabaseManager:
                     snap_count INTEGER DEFAULT 0,
                     snap_share REAL DEFAULT 0,
                     team_snaps INTEGER DEFAULT 0,
+                    pass_plays INTEGER DEFAULT 0,
+                    rush_plays INTEGER DEFAULT 0,
+                    recv_targets INTEGER DEFAULT 0,
+                    pass_epa REAL DEFAULT 0,
+                    rush_epa REAL DEFAULT 0,
+                    recv_epa REAL DEFAULT 0,
+                    pass_wpa REAL DEFAULT 0,
+                    rush_wpa REAL DEFAULT 0,
+                    recv_wpa REAL DEFAULT 0,
+                    pass_success_rate REAL DEFAULT 0,
+                    rush_success_rate REAL DEFAULT 0,
+                    recv_success_rate REAL DEFAULT 0,
+                    neutral_targets INTEGER DEFAULT 0,
+                    neutral_rushes INTEGER DEFAULT 0,
+                    third_down_targets INTEGER DEFAULT 0,
+                    short_yardage_rushes INTEGER DEFAULT 0,
+                    redzone_targets INTEGER DEFAULT 0,
+                    goal_line_touches INTEGER DEFAULT 0,
+                    two_minute_targets INTEGER DEFAULT 0,
+                    high_leverage_touches INTEGER DEFAULT 0,
                     fantasy_points REAL DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(player_id, season, week),
@@ -84,6 +104,26 @@ class DatabaseManager:
                     "rush_inside_5": "INTEGER DEFAULT 0",
                     "targets_15_plus": "INTEGER DEFAULT 0",
                     "air_yards": "REAL DEFAULT 0",
+                    "pass_plays": "INTEGER DEFAULT 0",
+                    "rush_plays": "INTEGER DEFAULT 0",
+                    "recv_targets": "INTEGER DEFAULT 0",
+                    "pass_epa": "REAL DEFAULT 0",
+                    "rush_epa": "REAL DEFAULT 0",
+                    "recv_epa": "REAL DEFAULT 0",
+                    "pass_wpa": "REAL DEFAULT 0",
+                    "rush_wpa": "REAL DEFAULT 0",
+                    "recv_wpa": "REAL DEFAULT 0",
+                    "pass_success_rate": "REAL DEFAULT 0",
+                    "rush_success_rate": "REAL DEFAULT 0",
+                    "recv_success_rate": "REAL DEFAULT 0",
+                    "neutral_targets": "INTEGER DEFAULT 0",
+                    "neutral_rushes": "INTEGER DEFAULT 0",
+                    "third_down_targets": "INTEGER DEFAULT 0",
+                    "short_yardage_rushes": "INTEGER DEFAULT 0",
+                    "redzone_targets": "INTEGER DEFAULT 0",
+                    "goal_line_touches": "INTEGER DEFAULT 0",
+                    "two_minute_targets": "INTEGER DEFAULT 0",
+                    "high_leverage_touches": "INTEGER DEFAULT 0",
                 }
                 for col, ddl in add_cols.items():
                     if col not in existing_cols:
@@ -114,10 +154,42 @@ class DatabaseManager:
                     redzone_scores INTEGER DEFAULT 0,
                     third_down_conv REAL DEFAULT 0,
                     sacks_allowed INTEGER DEFAULT 0,
+                    neutral_pass_plays INTEGER DEFAULT 0,
+                    neutral_run_plays INTEGER DEFAULT 0,
+                    neutral_pass_rate REAL DEFAULT 0,
+                    neutral_pass_rate_lg REAL DEFAULT 0,
+                    neutral_pass_rate_oe REAL DEFAULT 0,
+                    drive_count INTEGER DEFAULT 0,
+                    drive_success_rate REAL DEFAULT 0,
+                    avg_drive_epa REAL DEFAULT 0,
+                    points_per_drive REAL DEFAULT 0,
+                    pace_sec_per_play REAL DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(team, season, week)
                 )
             """)
+
+            # Backward-compatible migration for existing DBs: add missing team_stats columns.
+            try:
+                cursor.execute("PRAGMA table_info(team_stats)")
+                existing_team_cols = {row[1] for row in cursor.fetchall()}
+                add_team_cols = {
+                    "neutral_pass_plays": "INTEGER DEFAULT 0",
+                    "neutral_run_plays": "INTEGER DEFAULT 0",
+                    "neutral_pass_rate": "REAL DEFAULT 0",
+                    "neutral_pass_rate_lg": "REAL DEFAULT 0",
+                    "neutral_pass_rate_oe": "REAL DEFAULT 0",
+                    "drive_count": "INTEGER DEFAULT 0",
+                    "drive_success_rate": "REAL DEFAULT 0",
+                    "avg_drive_epa": "REAL DEFAULT 0",
+                    "points_per_drive": "REAL DEFAULT 0",
+                    "pace_sec_per_play": "REAL DEFAULT 0",
+                }
+                for col, ddl in add_team_cols.items():
+                    if col not in existing_team_cols:
+                        cursor.execute(f"ALTER TABLE team_stats ADD COLUMN {col} {ddl}")
+            except Exception:
+                pass
             
             # NFL Schedule
             cursor.execute("""
@@ -273,8 +345,14 @@ class DatabaseManager:
                  targets, receptions, receiving_yards, receiving_tds,
                  fumbles, fumbles_lost, two_point_conversions,
                  snap_count, snap_share, team_snaps, fantasy_points,
-                 rush_inside_10, rush_inside_5, targets_15_plus, air_yards)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 rush_inside_10, rush_inside_5, targets_15_plus, air_yards,
+                 pass_plays, rush_plays, recv_targets,
+                 pass_epa, rush_epa, recv_epa,
+                 pass_wpa, rush_wpa, recv_wpa,
+                 pass_success_rate, rush_success_rate, recv_success_rate,
+                 neutral_targets, neutral_rushes, third_down_targets, short_yardage_rushes,
+                 redzone_targets, goal_line_touches, two_minute_targets, high_leverage_touches)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 stats.get("player_id"),
                 stats.get("season"),
@@ -306,6 +384,26 @@ class DatabaseManager:
                 stats.get("rush_inside_5", 0),
                 stats.get("targets_15_plus", 0),
                 stats.get("air_yards", 0.0),
+                stats.get("pass_plays", 0),
+                stats.get("rush_plays", 0),
+                stats.get("recv_targets", 0),
+                stats.get("pass_epa", 0.0),
+                stats.get("rush_epa", 0.0),
+                stats.get("recv_epa", 0.0),
+                stats.get("pass_wpa", 0.0),
+                stats.get("rush_wpa", 0.0),
+                stats.get("recv_wpa", 0.0),
+                stats.get("pass_success_rate", 0.0),
+                stats.get("rush_success_rate", 0.0),
+                stats.get("recv_success_rate", 0.0),
+                stats.get("neutral_targets", 0),
+                stats.get("neutral_rushes", 0),
+                stats.get("third_down_targets", 0),
+                stats.get("short_yardage_rushes", 0),
+                stats.get("redzone_targets", 0),
+                stats.get("goal_line_touches", 0),
+                stats.get("two_minute_targets", 0),
+                stats.get("high_leverage_touches", 0),
             ))
             conn.commit()
             return True
@@ -315,12 +413,42 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT OR REPLACE INTO team_stats 
+                INSERT INTO team_stats 
                 (team, season, week, opponent, home_away, points_scored, points_allowed,
                  total_yards, passing_yards, rushing_yards, turnovers, time_of_possession,
                  total_plays, pass_attempts, rush_attempts, redzone_attempts, redzone_scores,
-                 third_down_conv, sacks_allowed)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 third_down_conv, sacks_allowed,
+                 neutral_pass_plays, neutral_run_plays, neutral_pass_rate,
+                 neutral_pass_rate_lg, neutral_pass_rate_oe, drive_count,
+                 drive_success_rate, avg_drive_epa, points_per_drive, pace_sec_per_play)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(team, season, week) DO UPDATE SET
+                    opponent = COALESCE(excluded.opponent, team_stats.opponent),
+                    home_away = COALESCE(excluded.home_away, team_stats.home_away),
+                    points_scored = COALESCE(excluded.points_scored, team_stats.points_scored),
+                    points_allowed = COALESCE(excluded.points_allowed, team_stats.points_allowed),
+                    total_yards = COALESCE(excluded.total_yards, team_stats.total_yards),
+                    passing_yards = COALESCE(excluded.passing_yards, team_stats.passing_yards),
+                    rushing_yards = COALESCE(excluded.rushing_yards, team_stats.rushing_yards),
+                    turnovers = COALESCE(excluded.turnovers, team_stats.turnovers),
+                    time_of_possession = COALESCE(excluded.time_of_possession, team_stats.time_of_possession),
+                    total_plays = COALESCE(excluded.total_plays, team_stats.total_plays),
+                    pass_attempts = COALESCE(excluded.pass_attempts, team_stats.pass_attempts),
+                    rush_attempts = COALESCE(excluded.rush_attempts, team_stats.rush_attempts),
+                    redzone_attempts = COALESCE(excluded.redzone_attempts, team_stats.redzone_attempts),
+                    redzone_scores = COALESCE(excluded.redzone_scores, team_stats.redzone_scores),
+                    third_down_conv = COALESCE(excluded.third_down_conv, team_stats.third_down_conv),
+                    sacks_allowed = COALESCE(excluded.sacks_allowed, team_stats.sacks_allowed),
+                    neutral_pass_plays = COALESCE(excluded.neutral_pass_plays, team_stats.neutral_pass_plays),
+                    neutral_run_plays = COALESCE(excluded.neutral_run_plays, team_stats.neutral_run_plays),
+                    neutral_pass_rate = COALESCE(excluded.neutral_pass_rate, team_stats.neutral_pass_rate),
+                    neutral_pass_rate_lg = COALESCE(excluded.neutral_pass_rate_lg, team_stats.neutral_pass_rate_lg),
+                    neutral_pass_rate_oe = COALESCE(excluded.neutral_pass_rate_oe, team_stats.neutral_pass_rate_oe),
+                    drive_count = COALESCE(excluded.drive_count, team_stats.drive_count),
+                    drive_success_rate = COALESCE(excluded.drive_success_rate, team_stats.drive_success_rate),
+                    avg_drive_epa = COALESCE(excluded.avg_drive_epa, team_stats.avg_drive_epa),
+                    points_per_drive = COALESCE(excluded.points_per_drive, team_stats.points_per_drive),
+                    pace_sec_per_play = COALESCE(excluded.pace_sec_per_play, team_stats.pace_sec_per_play)
             """, (
                 stats.get("team"),
                 stats.get("season"),
@@ -341,6 +469,16 @@ class DatabaseManager:
                 stats.get("redzone_scores", 0),
                 stats.get("third_down_conv", 0),
                 stats.get("sacks_allowed", 0),
+                stats.get("neutral_pass_plays", 0),
+                stats.get("neutral_run_plays", 0),
+                stats.get("neutral_pass_rate", 0.0),
+                stats.get("neutral_pass_rate_lg", 0.0),
+                stats.get("neutral_pass_rate_oe", 0.0),
+                stats.get("drive_count", 0),
+                stats.get("drive_success_rate", 0.0),
+                stats.get("avg_drive_epa", 0.0),
+                stats.get("points_per_drive", 0.0),
+                stats.get("pace_sec_per_play", 0.0),
             ))
             conn.commit()
             return True
@@ -512,7 +650,17 @@ class DatabaseManager:
                 0 AS redzone_attempts,
                 0 AS redzone_scores,
                 0.0 AS third_down_conv,
-                0 AS sacks_allowed
+                0 AS sacks_allowed,
+                0 AS neutral_pass_plays,
+                0 AS neutral_run_plays,
+                0.0 AS neutral_pass_rate,
+                0.0 AS neutral_pass_rate_lg,
+                0.0 AS neutral_pass_rate_oe,
+                0 AS drive_count,
+                0.0 AS drive_success_rate,
+                0.0 AS avg_drive_epa,
+                0.0 AS points_per_drive,
+                0.0 AS pace_sec_per_play
             FROM player_weekly_stats
             WHERE team IS NOT NULL AND team != ''
         """
@@ -565,6 +713,16 @@ class DatabaseManager:
                 "redzone_scores": int(row.get("redzone_scores", 0)),
                 "third_down_conv": float(row.get("third_down_conv", 0)),
                 "sacks_allowed": int(row.get("sacks_allowed", 0)),
+                "neutral_pass_plays": int(row.get("neutral_pass_plays", 0)),
+                "neutral_run_plays": int(row.get("neutral_run_plays", 0)),
+                "neutral_pass_rate": float(row.get("neutral_pass_rate", 0.0)),
+                "neutral_pass_rate_lg": float(row.get("neutral_pass_rate_lg", 0.0)),
+                "neutral_pass_rate_oe": float(row.get("neutral_pass_rate_oe", 0.0)),
+                "drive_count": int(row.get("drive_count", 0)),
+                "drive_success_rate": float(row.get("drive_success_rate", 0.0)),
+                "avg_drive_epa": float(row.get("avg_drive_epa", 0.0)),
+                "points_per_drive": float(row.get("points_per_drive", 0.0)),
+                "pace_sec_per_play": float(row.get("pace_sec_per_play", 0.0)),
             })
             count += 1
             existing_keys.add(key)
@@ -679,6 +837,16 @@ class DatabaseManager:
                    ts.points_scored as team_points, ts.total_yards as team_yards,
                    ts.pass_attempts as team_pass_attempts, ts.rush_attempts as team_rush_attempts,
                    ts.redzone_attempts as team_redzone_attempts, ts.total_plays as team_plays,
+                   ts.neutral_pass_plays as team_neutral_pass_plays,
+                   ts.neutral_run_plays as team_neutral_run_plays,
+                   ts.neutral_pass_rate as team_neutral_pass_rate,
+                   ts.neutral_pass_rate_lg as team_neutral_pass_rate_lg,
+                   ts.neutral_pass_rate_oe as team_neutral_pass_rate_oe,
+                   ts.drive_count as team_drive_count,
+                   ts.drive_success_rate as team_drive_success_rate,
+                   ts.avg_drive_epa as team_avg_drive_epa,
+                   ts.points_per_drive as team_points_per_drive,
+                   ts.pace_sec_per_play as team_pace_sec_per_play,
                    tds.fantasy_points_allowed_qb, tds.fantasy_points_allowed_rb,
                    tds.fantasy_points_allowed_wr, tds.fantasy_points_allowed_te
             FROM player_weekly_stats pws

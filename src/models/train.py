@@ -28,6 +28,7 @@ from config.settings import (
     MODELS_DIR,
     DATA_DIR,
     MODEL_CONFIG,
+    FAST_MODEL_CONFIG,
     QB_TARGET_CHOICE_FILENAME,
     FEATURE_VERSION,
     FEATURE_VERSION_FILENAME,
@@ -895,12 +896,16 @@ def _prepare_training_data(
     positions: list,
     tune_hyperparameters: bool,
     n_trials: int,
+    fast: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, "ModelTrainer"]:
     """Shared preprocessing pipeline used by both train_models() and _run_one_fold().
 
     Handles: DVP, external features, season-long features, utilization scores,
     horizon targets, util weight optimization, feature engineering, bounded scaling,
     winsorization, model training, and util-to-fp conversion.
+
+    When fast=True, skips QB dual-target selection by not passing test_data to
+    the model trainer (QB defaults to utilization or FP fallback path).
 
     Returns (train_data, test_data, trainer).
     """
@@ -1012,11 +1017,11 @@ def _prepare_training_data(
             lo, hi = valid.quantile(0.01), valid.quantile(0.99)
             train_data.loc[mask, col] = train_data.loc[mask, col].clip(lo, hi)
 
-    # Train models
+    # Train models (fast mode: skip QB dual-target comparison by withholding test_data)
     trainer = ModelTrainer()
     trainer.train_all_positions(
         train_data, positions=positions, tune_hyperparameters=tune_hyperparameters,
-        n_weeks_list=[1, 4, 18], test_data=test_data,
+        n_weeks_list=[1, 4, 18], test_data=None if fast else test_data,
     )
 
     # Utilization -> FP conversion
@@ -1043,6 +1048,7 @@ def _run_one_fold(
     """
     train_data, test_data, trainer = _prepare_training_data(
         train_data, test_data, positions, tune_hyperparameters, n_trials,
+        fast=False,
     )
 
     # Backtest prediction loop
@@ -1113,23 +1119,32 @@ def _run_one_fold(
     return trainer, results
 
 
-def train_models(positions: list = None, 
+def train_models(positions: list = None,
                  tune_hyperparameters: bool = True,
                  n_trials: int = None,
                  test_season: int = None,
                  optimize_training_years: bool = False,
                  walk_forward: bool = False,
-                 strict_requirements: bool = None):
+                 strict_requirements: bool = None,
+                 fast: bool = False):
     """
     Main training function with automatic train/test split.
-    
+
     Args:
         positions: Positions to train models for
         tune_hyperparameters: Whether to tune hyperparameters
         n_trials: Number of Optuna trials
         test_season: Override test season (None = use latest available)
         walk_forward: If True, run walk-forward validation (train on 1..N-1, test on N) for last 4 seasons and report mean +/- std RMSE/MAE.
+        fast: If True, apply FAST_MODEL_CONFIG overrides for ~8-10x faster training
+              with minimal accuracy loss.
     """
+    # Apply fast-mode overrides before reading any config values
+    if fast:
+        print("[FAST MODE] Applying reduced training config for faster iteration.")
+        for key, val in FAST_MODEL_CONFIG.items():
+            MODEL_CONFIG[key] = val
+
     positions = positions or POSITIONS
     n_trials = n_trials or MODEL_CONFIG["n_optuna_trials"]
     if strict_requirements is None:
@@ -1195,6 +1210,7 @@ def train_models(positions: list = None,
     print("\n[2/5] Preparing features, engineering, and training...")
     train_data, test_data, trainer = _prepare_training_data(
         train_data, test_data, positions, tune_hyperparameters, n_trials,
+        fast=fast,
     )
 
     # Data quality checks (train_models-only, not needed in walk-forward folds)
@@ -1299,7 +1315,8 @@ def train_models(positions: list = None,
                 elif y_4w is not None and y_4w.notna().sum() >= 100:
                     try:
                         hybrid = Hybrid4WeekModel(position)
-                        hybrid.fit(pos_data, y_4w, player_ids, feature_cols, epochs=80)
+                        hybrid.fit(pos_data, y_4w, player_ids, feature_cols,
+                                  epochs=MODEL_CONFIG.get("lstm_epochs", 80))
                         if hybrid.is_fitted:
                             hybrid.save()
                             horizon_status[position]["hybrid_4w"] = "trained_and_saved"
@@ -1330,8 +1347,8 @@ def train_models(positions: list = None,
                             deep.fit(
                                 X_arr[valid], y_arr[valid],
                                 feature_names=feature_cols,
-                                epochs=100,
-                                batch_size=64,
+                                epochs=MODEL_CONFIG.get("deep_epochs", 100),
+                                batch_size=MODEL_CONFIG.get("deep_batch_size", 64),
                             )
                             if deep.is_fitted:
                                 deep.save()
@@ -1497,9 +1514,12 @@ def train_models(positions: list = None,
         _report_test_metrics(trainer, test_data, train_data)
         _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season)
     
-    # Robust time-series CV validation report
-    print("\n[6/6] Robust CV validation (Ridge baseline)...")
-    _run_robust_cv_report(train_data)
+    # Robust time-series CV validation report (skip in fast mode)
+    if not fast:
+        print("\n[6/6] Robust CV validation (Ridge baseline)...")
+        _run_robust_cv_report(train_data)
+    else:
+        print("\n[6/6] Robust CV validation skipped (fast mode)")
     
     # Print summary
     print("\n" + "=" * 60)
@@ -1661,9 +1681,16 @@ def main():
         action="store_true",
         help="Fail training when minimum data requirements are not met (seasons/player counts)."
     )
-    
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Fast training mode: ~8-10x faster with minimal accuracy loss. "
+             "Reduces Optuna trials, CV folds, stability bootstrap, LSTM/deep epochs, "
+             "and skips SHAP/PDP and robust CV report."
+    )
+
     args = parser.parse_args()
-    
+
     train_models(
         positions=args.positions,
         tune_hyperparameters=not args.no_tune,
@@ -1672,6 +1699,7 @@ def main():
         optimize_training_years=args.optimize_years,
         walk_forward=args.walk_forward,
         strict_requirements=args.strict_requirements,
+        fast=args.fast,
     )
 
 

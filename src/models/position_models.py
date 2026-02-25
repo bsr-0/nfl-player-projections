@@ -8,7 +8,7 @@ import joblib
 from sklearn.model_selection import cross_val_score, cross_val_predict, TimeSeriesSplit
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import xgboost as xgb
 try:
@@ -139,6 +139,8 @@ class PositionModel:
         self.feature_medians = {}  # Training medians for prediction-time imputation
         self._oof_metrics = None  # OOF evaluation metrics (honest, no data leakage)
         self.target_transformer = TargetTransformer()
+        self._uncertainty_model = None  # Heteroscedastic error model
+        self._uncertainty_model_type = None
     
     def fit(self, X: pd.DataFrame, y: pd.Series,
             tune_hyperparameters: bool = True,
@@ -383,6 +385,31 @@ class PositionModel:
 
         self._conformal_hetero = None  # Removed: heteroscedastic conformal adds fitting complexity without clear generalization benefit
 
+        # Heteroscedastic uncertainty model: predict absolute residuals from features.
+        # This provides player-specific uncertainty rather than a constant-width interval.
+        try:
+            if oof_ensemble_pred is not None and oof_valid.sum() >= 200:
+                abs_resid = np.abs(y_train_inner[oof_valid] - oof_ensemble_pred)
+                # Use a conservative GBM to avoid overfitting residuals.
+                unc_model = GradientBoostingRegressor(
+                    random_state=42,
+                    n_estimators=200,
+                    learning_rate=0.05,
+                    max_depth=3,
+                    subsample=0.8,
+                )
+                unc_model.fit(X_train_scaled[oof_valid], abs_resid)
+                self._uncertainty_model = unc_model
+                self._uncertainty_model_type = "gbr_abs_resid"
+                print("  Uncertainty model: heteroscedastic GBM trained on OOF residuals")
+            else:
+                self._uncertainty_model = None
+                self._uncertainty_model_type = None
+        except Exception as e:
+            print(f"  Uncertainty model skipped: {e}")
+            self._uncertainty_model = None
+            self._uncertainty_model_type = None
+
         self.is_fitted = True
         print(f"Model training complete. Meta-learner stacking {'enabled' if self.meta_learner else 'disabled (fixed weights)'}.")
         print(f"  Conformal calibration: residual_std={self._conformal_residual_std:.3f}, "
@@ -462,15 +489,38 @@ class PositionModel:
             mean_pred = tt.inverse_transform(mean_pred)
 
         ensemble_std = np.std(preds, axis=0)
-        # If target was log-transformed, scale std by the derivative of expm1
+        conformal_std = getattr(self, "_conformal_residual_std", None)
+        conformal_std_arr = None
+        if conformal_std is not None and np.isfinite(conformal_std) and conformal_std > 0:
+            conformal_std_arr = np.full_like(ensemble_std, float(conformal_std))
+
+        # Optional heteroscedastic uncertainty model (trained on OOF residuals)
+        hetero_std = None
+        unc_model = getattr(self, "_uncertainty_model", None)
+        if unc_model is not None:
+            try:
+                hetero_std = unc_model.predict(X_np)
+                hetero_std = np.clip(hetero_std, 0.1, None)
+            except Exception:
+                hetero_std = None
+
+        # If target was log-transformed, scale std by derivative of expm1
         if tt is not None and tt.active:
             raw_mean = mean_pred + tt.shift
-            ensemble_std = ensemble_std * np.maximum(raw_mean, 1.0)
+            scale = np.maximum(raw_mean, 1.0)
+            ensemble_std = ensemble_std * scale
+            if conformal_std_arr is not None:
+                conformal_std_arr = conformal_std_arr * scale
+            if hetero_std is not None:
+                hetero_std = hetero_std * scale
 
-        conformal_std = getattr(self, '_conformal_residual_std', None)
-
-        if conformal_std is not None and conformal_std > 0:
-            std_pred = 0.7 * conformal_std + 0.3 * ensemble_std
+        # Blend uncertainties: heteroscedastic (if available) + conformal + ensemble spread
+        if hetero_std is not None and conformal_std_arr is not None:
+            std_pred = 0.5 * hetero_std + 0.3 * conformal_std_arr + 0.2 * ensemble_std
+        elif hetero_std is not None:
+            std_pred = 0.7 * hetero_std + 0.3 * ensemble_std
+        elif conformal_std_arr is not None:
+            std_pred = 0.7 * conformal_std_arr + 0.3 * ensemble_std
         else:
             std_pred = ensemble_std
 
@@ -568,10 +618,20 @@ class PositionModel:
                 "tree_method": "hist",
                 "n_jobs": 1,
             }
-            model = xgb.XGBRegressor(**params)
             cv = SeasonAwareTimeSeriesSplit(n_splits=tune_folds, seasons=seasons_tune, gap_seasons=gap)
-            scores = cross_val_score(model, X_tune, y_tune, cv=cv, scoring="neg_mean_squared_error", n_jobs=1)
-            return -scores.mean()
+            # Avoid sklearn get_tags() path that breaks with xgboost's estimator MRO
+            # under sklearn>=1.6 by running manual CV.
+            fold_mse = []
+            for train_idx, test_idx in cv.split(X_tune, y_tune):
+                model = xgb.XGBRegressor(**params)
+                X_train, y_train = X_tune[train_idx], y_tune[train_idx]
+                X_test, y_test = X_tune[test_idx], y_tune[test_idx]
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                fold_mse.append(mean_squared_error(y_test, preds))
+            if not fold_mse:
+                return float("inf")
+            return float(np.mean(fold_mse))
 
         study = optuna.create_study(
             direction="minimize",
@@ -706,7 +766,8 @@ class PositionModel:
                     kw["callbacks"] = [early_stop]
                 except (AttributeError, TypeError):
                     use_callbacks = False
-            fit_kw = dict(eval_set=[(X_val, y_val)], verbose=False, **kw)
+            # Ensure eval history includes the metric used by early stopping.
+            fit_kw = dict(eval_set=[(X_val, y_val)], eval_metric="rmse", verbose=False, **kw)
             if not use_callbacks:
                 fit_kw["early_stopping_rounds"] = EARLY_STOPPING_ROUNDS
             try:
@@ -844,6 +905,8 @@ class PositionModel:
             "feature_medians": getattr(self, "feature_medians", {}),
             "target_transformer": getattr(self, "target_transformer", None),
             "calibrator": getattr(self, "calibrator", None),
+            "_uncertainty_model": getattr(self, "_uncertainty_model", None),
+            "_uncertainty_model_type": getattr(self, "_uncertainty_model_type", None),
         }
         
         joblib.dump(model_data, filepath)
@@ -872,6 +935,8 @@ class PositionModel:
         model.feature_medians = model_data.get("feature_medians", {})
         model.target_transformer = model_data.get("target_transformer") or TargetTransformer()
         model.calibrator = model_data.get("calibrator")
+        model._uncertainty_model = model_data.get("_uncertainty_model")
+        model._uncertainty_model_type = model_data.get("_uncertainty_model_type")
         model.is_fitted = True
         return model
 
@@ -920,6 +985,28 @@ class MultiWeekModel:
                 return None
             return min(subset, key=lambda w: abs(w - preferred))
 
+        def _horizon_recency_weights(n_weeks: int) -> Optional[np.ndarray]:
+            """Compute horizon-aware recency weights if seasons are provided."""
+            if seasons is None or len(seasons) == 0:
+                return sample_weight
+            base_halflife = MODEL_CONFIG.get("recency_decay_halflife")
+            horizon_map = MODEL_CONFIG.get("horizon_recency_halflife", {})
+            halflife = horizon_map.get(n_weeks, base_halflife)
+            if not halflife:
+                return sample_weight
+            seasons_arr = np.asarray(seasons, dtype=float)
+            max_season = np.nanmax(seasons_arr)
+            min_season = np.nanmin(seasons_arr)
+            if not np.isfinite(max_season) or max_season <= min_season:
+                return sample_weight
+            decay = np.power(0.5, (max_season - seasons_arr) / float(halflife))
+            w = decay / decay.max()
+            if sample_weight is not None and len(sample_weight) == len(w):
+                # Combine provided weights with horizon-specific decay.
+                w = w * sample_weight
+                w = w / np.nanmax(w) if np.nanmax(w) > 0 else w
+            return w
+
         representative_weeks = {
             "short": _pick_available(1, self.horizon_groups["short"] + [1]),
             "medium": _pick_available(4, self.horizon_groups["medium"] + [4]),
@@ -932,8 +1019,9 @@ class MultiWeekModel:
             print(f"\nTraining {horizon}-term model ({n_weeks} weeks)...")
 
             model = PositionModel(self.position, n_weeks=n_weeks)
+            sw = _horizon_recency_weights(n_weeks)
             model.fit(X, y_dict[n_weeks], tune_hyperparameters=tune_hyperparameters,
-                      sample_weight=sample_weight, seasons=seasons)
+                      sample_weight=sw, seasons=seasons)
 
             # Use this model for all weeks in the horizon group
             for week in self.horizon_groups[horizon]:

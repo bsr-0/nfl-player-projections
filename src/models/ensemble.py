@@ -720,14 +720,18 @@ class ModelTrainer:
 
             if len(X.columns) > n_features:
                 # Select features separately per horizon for better horizon-specific modeling
+                # skip_vif=True here because a final VIF prune runs on the union below
                 horizon_features = {}
                 for n_weeks, y_horizon in y_dict.items():
+                    print(f"  Feature selection for {n_weeks}w horizon ({len(X.columns)} candidates)...",
+                          flush=True)
                     y_fs = y_horizon.iloc[:fs_split]
                     X_fs = X.iloc[:fs_split]
                     _, sel_cols = select_features_simple(
                         X_fs, y_fs,
                         n_features=n_features,
-                        correlation_threshold=corr_thresh
+                        correlation_threshold=corr_thresh,
+                        skip_vif=True,
                     )
                     horizon_features[n_weeks] = sel_cols if sel_cols else list(X.columns)
 
@@ -741,7 +745,8 @@ class ModelTrainer:
                 try:
                     from src.models.feature_engineering_pipeline import StabilitySelector
                     y_primary = y_dict.get(1, list(y_dict.values())[0])
-                    stability_sel = StabilitySelector(n_bootstrap=30, threshold=0.5)
+                    stability_n_bootstrap = MODEL_CONFIG.get("stability_n_bootstrap", 30)
+                    stability_sel = StabilitySelector(n_bootstrap=stability_n_bootstrap, threshold=0.5)
                     stable_features = stability_sel.fit(
                         X.iloc[:fs_split], y_primary.iloc[:fs_split],
                         n_features_to_select=n_features
@@ -763,6 +768,7 @@ class ModelTrainer:
 
             # Actionable VIF pruning: iteratively drop highest-VIF feature
             # Compute VIF on training portion only to avoid val→train leakage
+            print(f"  Running final VIF pruning on {X.shape[1]} features...", flush=True)
             try:
                 from src.features.dimensionality_reduction import prune_by_vif
                 vif_thresh = MODEL_CONFIG.get("vif_threshold", 10.0)

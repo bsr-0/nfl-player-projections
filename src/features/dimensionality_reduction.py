@@ -362,39 +362,57 @@ class PositionDimensionalityReducer:
 
 def compute_vif(X: pd.DataFrame) -> Dict[str, float]:
     """
-    Compute Variance Inflation Factor for each feature using R² from OLS.
-    VIF = 1 / (1 - R²) where R² is from regressing each feature on the others.
-    VIF > 5-10 indicates concerning multicollinearity.
+    Compute Variance Inflation Factor for each feature using the correlation
+    matrix inverse.  VIF_i = diag(C^{-1})_i where C is the correlation matrix.
+
+    This is O(n_features³) — orders of magnitude faster than the previous
+    approach of fitting n_features separate OLS regressions (which was
+    O(n_features² × n_samples) per call and caused multi-hour hangs on
+    200-300 feature sets).
     """
-    from sklearn.linear_model import LinearRegression
-    
     X_clean = X.copy().fillna(0).replace([np.inf, -np.inf], 0)
     cols = list(X_clean.columns)
-    vif_data = {}
-    for col in cols:
+
+    # Fast path: use correlation matrix inverse
+    try:
+        corr = np.corrcoef(X_clean.values, rowvar=False)
+        # Regularise slightly to avoid singular matrix on perfectly collinear features
+        corr += np.eye(corr.shape[0]) * 1e-10
+        inv_corr = np.linalg.inv(corr)
+        vif_values = np.diag(inv_corr)
+        return {
+            col: float(v) if np.isfinite(v) and v > 0 else np.inf
+            for col, v in zip(cols, vif_values)
+        }
+    except np.linalg.LinAlgError:
+        # Fallback: pseudo-inverse for near-singular matrices
         try:
-            other = [c for c in cols if c != col]
-            X_oth = X_clean[other].values
-            y_col = X_clean[col].values
-            lr = LinearRegression().fit(X_oth, y_col)
-            r2 = lr.score(X_oth, y_col)
-            vif = 1 / (1 - r2) if r2 < 1 else np.inf
-            vif_data[col] = float(vif) if np.isfinite(vif) else np.inf
+            corr = np.corrcoef(X_clean.values, rowvar=False)
+            corr += np.eye(corr.shape[0]) * 1e-6
+            inv_corr = np.linalg.pinv(corr)
+            vif_values = np.diag(inv_corr)
+            return {
+                col: float(v) if np.isfinite(v) and v > 0 else np.inf
+                for col, v in zip(cols, vif_values)
+            }
         except Exception:
-            vif_data[col] = np.nan
-    return vif_data
+            # Last resort: return inf for all (will be pruned)
+            return {col: np.inf for col in cols}
 
 
 def prune_by_vif(X: pd.DataFrame, threshold: float = 10.0,
                  max_iterations: int = 50) -> Tuple[pd.DataFrame, List[str]]:
     """Iteratively drop the highest-VIF feature until all VIF <= threshold.
 
+    Uses fast matrix-inverse VIF computation so each iteration is O(n_features³)
+    rather than O(n_features² × n_samples).
+
     Returns:
         Tuple of (pruned DataFrame, list of removed column names).
     """
     removed = []
     X_work = X.copy()
-    for _ in range(max_iterations):
+    for i in range(max_iterations):
         if X_work.shape[1] <= 2:
             break
         vif = compute_vif(X_work)
@@ -404,6 +422,8 @@ def prune_by_vif(X: pd.DataFrame, threshold: float = 10.0,
             break
         X_work = X_work.drop(columns=[max_col])
         removed.append(max_col)
+    if removed:
+        print(f"    VIF pruning: {len(removed)} features removed in {i+1} iterations")
     return X_work, removed
 
 
@@ -419,14 +439,19 @@ def adaptive_feature_count(n_samples: int, default: int = 50) -> int:
 
 def select_features_simple(X: pd.DataFrame, y: pd.Series,
                            n_features: int = 50,
-                           correlation_threshold: float = 0.92) -> Tuple[pd.DataFrame, List[str]]:
+                           correlation_threshold: float = 0.92,
+                           skip_vif: bool = False) -> Tuple[pd.DataFrame, List[str]]:
     """
-    Lightweight feature selection: remove correlated features, prune by VIF,
-    then keep top N by mutual information importance.
+    Lightweight feature selection: remove correlated features, optionally
+    prune by VIF, then keep top N by mutual information importance.
+
+    When called per-horizon inside the training loop, set skip_vif=True because
+    a final VIF prune runs on the union afterwards (avoids redundant O(n³) work).
 
     Fits on X, y. Returns (X with selected columns only, list of selected feature names).
     """
     from config.settings import MODEL_CONFIG
+    n_cols_in = len(X.columns)
     X = X.copy().fillna(0).replace([np.inf, -np.inf], np.nan).fillna(0)
 
     # Remove highly correlated features
@@ -443,12 +468,15 @@ def select_features_simple(X: pd.DataFrame, y: pd.Series,
 
     kept = [c for c in X.columns if c not in to_remove]
     X_reduced = X[kept]
+    print(f"    Correlation filter: {n_cols_in} -> {len(kept)} features "
+          f"(removed {len(to_remove)} correlated)")
 
-    # VIF pruning: iteratively remove highest-VIF features
-    vif_thresh = MODEL_CONFIG.get("vif_threshold", 10.0)
-    if len(kept) > 5:
-        X_reduced, vif_removed = prune_by_vif(X_reduced, threshold=vif_thresh)
-        kept = [c for c in kept if c not in vif_removed]
+    # VIF pruning: skip when a downstream VIF prune handles the union
+    if not skip_vif:
+        vif_thresh = MODEL_CONFIG.get("vif_threshold", 10.0)
+        if len(kept) > 5:
+            X_reduced, vif_removed = prune_by_vif(X_reduced, threshold=vif_thresh)
+            kept = [c for c in kept if c not in vif_removed]
 
     if len(kept) <= n_features:
         return X_reduced, kept
@@ -457,6 +485,7 @@ def select_features_simple(X: pd.DataFrame, y: pd.Series,
     mi_scores = mutual_info_regression(X_reduced, y, random_state=42)
     ranks = np.argsort(-mi_scores)
     selected = [kept[i] for i in ranks[:n_features]]
+    print(f"    MI ranking: kept top {len(selected)} of {len(kept)} features")
 
     return X[selected], selected
 
