@@ -577,7 +577,7 @@ def run_comprehensive_validation():
     print("\n1. Loading data...")
     db = DatabaseManager()
     df = db.get_all_players_for_training(min_games=4)
-    df = engineer_all_features(df)
+    df = engineer_all_features(df, allow_autoload_bounds=False)
     
     # Get features
     feature_cols = [c for c in df.columns if any(p in c for p in [

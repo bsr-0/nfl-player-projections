@@ -252,6 +252,16 @@ def validate_no_leakage(df: pd.DataFrame, feature_cols: List[str],
                 if not is_safe:
                     results['errors'].append(f"Feature '{col}' may contain target information")
                     results['passed'] = False
+
+    # Check for explicit leakage patterns (model outputs, targets, etc.)
+    try:
+        from src.utils.leakage import find_leakage_columns
+        leaked = find_leakage_columns(feature_cols)
+        if leaked:
+            results['errors'].append(f"Leakage columns present in features: {sorted(leaked)[:10]}")
+            results['passed'] = False
+    except Exception:
+        pass
     
     return results
 

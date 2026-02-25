@@ -1270,7 +1270,7 @@ def run_comprehensive_evaluation():
     df = db.get_all_players_for_training(min_games=4)
     
     print("Engineering features...")
-    df = engineer_all_features(df)
+    df = engineer_all_features(df, allow_autoload_bounds=False)
     df = add_qb_features(df)
     df = add_external_features(df)
     df = add_multiweek_features(df, horizons=[1, 5, 18])
@@ -1344,6 +1344,13 @@ def run_comprehensive_evaluation():
                 continue
 
         feature_cols.append(c)
+
+    try:
+        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+        feature_cols = filter_feature_columns(feature_cols)
+        assert_no_leakage_columns(feature_cols, context="advanced_ml_pipeline")
+    except Exception:
+        pass
     
     print(f"Total features available: {len(feature_cols)}")
     

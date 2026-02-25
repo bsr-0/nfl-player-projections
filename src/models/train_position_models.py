@@ -187,6 +187,12 @@ def train_position_model(position: str,
     # If position-specific features not available, use all numeric
     if len(feature_cols) < 5:
         feature_cols = available_features
+    try:
+        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+        feature_cols = filter_feature_columns(feature_cols)
+        assert_no_leakage_columns(feature_cols, context=f"train_position_models ({position})")
+    except Exception:
+        pass
     
     print(f"Using {len(feature_cols)} features")
     

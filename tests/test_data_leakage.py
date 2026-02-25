@@ -236,6 +236,47 @@ class TestDefenseRankingsLeakage:
             f"Week 5 rolling avg should be {expected}, got {actual}"
 
 
+class TestOpponentDefenseShift:
+    """Ensure opponent defense stats are joined from prior week only."""
+
+    def test_opponent_defense_week_is_prior(self):
+        import tempfile
+        import os
+        from src.utils.database import DatabaseManager
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = Path(f.name)
+        try:
+            db = DatabaseManager(db_path)
+            db.insert_player({"player_id": "p1", "name": "P1", "position": "RB"})
+            db.insert_player({"player_id": "p2", "name": "P2", "position": "WR"})
+            # Week 1 stats for both teams so defense table can be built
+            db.insert_player_weekly_stats({
+                "player_id": "p1", "season": 2024, "week": 1, "team": "KC", "opponent": "LV",
+                "home_away": "home", "fantasy_points": 12,
+            })
+            db.insert_player_weekly_stats({
+                "player_id": "p2", "season": 2024, "week": 1, "team": "LV", "opponent": "KC",
+                "home_away": "away", "fantasy_points": 8,
+            })
+            # Week 2 stats
+            db.insert_player_weekly_stats({
+                "player_id": "p1", "season": 2024, "week": 2, "team": "KC", "opponent": "LV",
+                "home_away": "home", "fantasy_points": 15,
+            })
+            db.insert_player_weekly_stats({
+                "player_id": "p2", "season": 2024, "week": 2, "team": "LV", "opponent": "KC",
+                "home_away": "away", "fantasy_points": 10,
+            })
+            db.ensure_team_defense_stats(season=2024)
+            df = db.get_all_players_for_training(min_games=0)
+            assert "opp_defense_week" in df.columns
+            mask = df["opp_defense_week"].notna()
+            assert (df.loc[mask, "opp_defense_week"] < df.loc[mask, "week"]).all()
+        finally:
+            os.unlink(db_path)
+
+
 class TestNeutralPassRateLeakage:
     """Test neutral pass rate uses prior weeks only (shifted expanding)."""
 

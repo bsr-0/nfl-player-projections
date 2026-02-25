@@ -81,7 +81,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     start = time.time()
     
     # Use the comprehensive feature engineering
-    df = engineer_all_features(df)
+    df = engineer_all_features(df, allow_autoload_bounds=False)
     
     # Add QB-specific features
     df = add_qb_features(df)
@@ -153,7 +153,7 @@ def get_feature_columns(df: pd.DataFrame, position: str = None) -> list:
         'sos_rank_next_',    # Schedule strength rank
         'favorable_matchups_next_', # Count of favorable matchups
         'expected_games_next_',  # Expected games to play
-        'projection_',       # Multi-week projections
+        # NOTE: projection_* columns are excluded to avoid model-output leakage
         'floor_',            # Multi-week floor
         'ceiling_',          # Multi-week ceiling
         'injury_prob_next_', # Injury probability
@@ -213,7 +213,14 @@ def get_feature_columns(df: pd.DataFrame, position: str = None) -> list:
         
         if is_allowed:
             feature_cols.append(col)
-    
+
+    try:
+        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+        feature_cols = filter_feature_columns(feature_cols)
+        assert_no_leakage_columns(feature_cols, context="train_advanced feature selection")
+    except Exception:
+        pass
+
     return feature_cols
 
 

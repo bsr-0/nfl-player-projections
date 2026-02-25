@@ -38,6 +38,11 @@ def load_data():
     data_path = Path(__file__).parent.parent / "data" / "daily_predictions.parquet"
     if data_path.exists():
         df = pd.read_parquet(data_path)
+        try:
+            from src.utils.leakage import drop_leakage_columns
+            df = drop_leakage_columns(df)
+        except Exception:
+            pass
         print(f"Loaded {len(df):,} records")
         print(f"Seasons: {sorted(df['season'].unique())}")
         return df

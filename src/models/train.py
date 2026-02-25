@@ -47,6 +47,7 @@ from src.features.utilization_score import (
     UtilizationScoreCalculator,
     save_percentile_bounds,
     load_percentile_bounds,
+    validate_percentile_bounds_meta,
 )
 from src.features.utilization_weight_optimizer import fit_utilization_weights, UTIL_COMPONENTS
 from src.features.dimensionality_reduction import PositionDimensionalityReducer
@@ -147,6 +148,16 @@ def load_training_data(positions: list = None, min_games: int = 4,
         )
     
     combined = pd.concat(all_data, ignore_index=True)
+
+    # Guard: training data must not contain model-output columns.
+    try:
+        from src.utils.leakage import find_leakage_columns
+        leaked = [c for c in find_leakage_columns(combined.columns, ban_utilization_score=False)
+                  if c.startswith(("predicted_", "projection_"))]
+        if leaked:
+            raise ValueError(f"Model-output columns found in training data: {sorted(leaked)[:5]}")
+    except Exception:
+        pass
     
     # Split into train/test (strict unseen test: test season must not be in train)
     assert auto_test_season not in train_seasons, (
@@ -844,6 +855,12 @@ def _run_robust_cv_report(train_data: pd.DataFrame):
         feature_cols = [c for c in pos_df.columns 
                        if c not in exclude_cols and not c.startswith("target_")
                        and pos_df[c].dtype in ['int64', 'float64', 'int32', 'float32']]
+        try:
+            from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+            feature_cols = filter_feature_columns(feature_cols)
+            assert_no_leakage_columns(feature_cols, context=f"cv features ({position})")
+        except Exception:
+            pass
         if len(feature_cols) < 5:
             continue
         try:
@@ -942,13 +959,29 @@ def _prepare_training_data(
     # Utilization scores with train-only percentile bounds
     team_df = pd.DataFrame()
     util_calc = UtilizationScoreCalculator(weights=None)
+    train_seasons_list = []
+    if "season" in train_data.columns:
+        train_seasons_list = sorted({int(s) for s in train_data["season"].dropna().unique()})
+    bounds_meta = {
+        "train_seasons": train_seasons_list,
+        "min_season": min(train_seasons_list) if train_seasons_list else None,
+        "max_season": max(train_seasons_list) if train_seasons_list else None,
+        "created_at": datetime.now().isoformat(),
+    }
     train_data = util_calc.calculate_all_scores(train_data, team_df)
     for pos in POSITIONS:
-        util_calc.fit_percentile_bounds(train_data, pos, UTIL_COMPONENTS.get(pos, []))
+        util_calc.fit_percentile_bounds(
+            train_data, pos, UTIL_COMPONENTS.get(pos, []), metadata=bounds_meta
+        )
     bounds_path = MODELS_DIR / "utilization_percentile_bounds.json"
-    save_percentile_bounds(util_calc.position_percentiles, bounds_path)
+    save_percentile_bounds(util_calc.position_percentiles, bounds_path, metadata=bounds_meta)
     train_data = util_calc.calculate_all_scores(train_data, team_df)
-    loaded_bounds = load_percentile_bounds(bounds_path)
+    loaded_bounds, loaded_meta = load_percentile_bounds(bounds_path, return_meta=True)
+    if not validate_percentile_bounds_meta(loaded_meta, train_seasons_list):
+        raise ValueError(
+            "Utilization percentile bounds metadata mismatch; "
+            "refusing to use bounds not fit on the current training seasons."
+        )
     test_data = calculate_utilization_scores(test_data, team_df=team_df, weights=None, percentile_bounds=loaded_bounds)
 
     # Horizon targets (season-bounded)

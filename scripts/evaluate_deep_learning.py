@@ -44,6 +44,11 @@ def load_data():
     """Load the main predictions data."""
     data_path = Path(__file__).parent.parent / "data" / "daily_predictions.parquet"
     df = pd.read_parquet(data_path)
+    try:
+        from src.utils.leakage import drop_leakage_columns
+        df = drop_leakage_columns(df)
+    except Exception:
+        pass
     print(f"Loaded {len(df):,} records")
     print(f"Seasons: {int(df['season'].min())}-{int(df['season'].max())}")
     return df
