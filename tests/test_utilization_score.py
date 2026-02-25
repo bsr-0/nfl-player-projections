@@ -192,9 +192,9 @@ class TestUtilizationScoreEdgeCases:
 
     def test_percentile_bounds_metadata_roundtrip(self, tmp_path):
         """Bounds metadata should be preserved and validated."""
-        bounds = {(\"RB\", \"snap_share_pct\"): (0.1, 0.9)}
-        meta = {\"train_seasons\": [2022, 2023], \"min_season\": 2022, \"max_season\": 2023}
-        path = tmp_path / \"bounds.json\"
+        bounds = {("RB", "snap_share_pct"): (0.1, 0.9)}
+        meta = {"train_seasons": [2022, 2023], "min_season": 2022, "max_season": 2023}
+        path = tmp_path / "bounds.json"
         save_percentile_bounds(bounds, path, metadata=meta)
         loaded_bounds, loaded_meta = load_percentile_bounds(path, return_meta=True)
         assert loaded_bounds == bounds
