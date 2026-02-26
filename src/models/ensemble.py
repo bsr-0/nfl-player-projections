@@ -303,7 +303,10 @@ class EnsemblePredictor:
                                 pos_data[fn] = 0
                         try:
                             player_ids = pos_data["player_id"].values if "player_id" in pos_data.columns else np.arange(len(pos_data))
-                            hy_pred = hybrid.predict(pos_data, player_ids, fcols, traditional_pred)
+                            # pos_data contains lagged/rolling utilization features that
+                            # the Hybrid4WeekModel uses to provide ARIMA with recent
+                            # target history for dynamic forecasting.
+                            hy_pred = hybrid.predict(pos_data, player_ids, fcols, traditional_pred, n_weeks=n_weeks)
                             use_hy = np.isfinite(hy_pred)
                             predictions = np.where(use_hy, hy_pred, traditional_pred)
                         except Exception:
