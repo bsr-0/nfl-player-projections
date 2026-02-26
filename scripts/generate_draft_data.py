@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Generate static JSON data files for the fantasy draft web app.
 
-Reads 2025 season data from daily_predictions.parquet and creates
-per-position JSON files with player estimates for the draft board.
+Produces two categories of data:
 
-These estimates are 2025 actual per-game fantasy points extrapolated
-to a 17-game season.  They are NOT ML model predictions.  The ML model
-(trained 2014-2024, validated on the 2025 held-out season) produces
-separate predictions via the API / generate_app_data.py pipeline.
+1. **Model Performance** (``model_performance.json``):
+   Previous season's out-of-sample predictions alongside actual results,
+   demonstrating how the model performed on truly unseen data.
+
+2. **Upcoming Season Projections** (``players_{POS}.json``):
+   ML model predictions for the upcoming season.  When the schedule has
+   not been released yet the projection fields are set to ``null`` so the
+   frontend can display a "pending" state instead of extrapolating.
+
+No extrapolation is ever performed — all numbers come from the ML model
+or from real game results.
 
 Usage:
     python scripts/generate_draft_data.py
@@ -23,14 +29,141 @@ import numpy as np
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 MODELS_DIR = DATA_DIR / "models"
+BACKTEST_DIR = DATA_DIR / "backtest_results"
 
 
-def load_season_data():
-    """Load the most recent full regular season data (weeks 1-18) from parquet."""
-    df = pd.read_parquet(DATA_DIR / "daily_predictions.parquet")
-    # Use 2025 regular season for QB/RB/WR/TE
+# ---------------------------------------------------------------------------
+# 1. Model Performance: previous season out-of-sample predictions vs actuals
+# ---------------------------------------------------------------------------
+
+def _load_latest_backtest_json(season: int = None):
+    """Load the latest backtest JSON for a given (or most recent) season."""
+    if not BACKTEST_DIR.exists():
+        return None
+    files = sorted(BACKTEST_DIR.glob("backtest_*.json"),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in files:
+        try:
+            with open(p) as f:
+                data = json.load(f)
+            if season is None or data.get("season") == season:
+                return data
+        except Exception:
+            continue
+    return None
+
+
+def _load_ts_backtest_predictions(season: int = None):
+    """Load per-player per-week ts-backtest predictions CSV."""
+    if not BACKTEST_DIR.exists():
+        return None
+    pattern = f"ts_backtest_{season}_*_predictions.csv" if season else "ts_backtest_*_predictions.csv"
+    files = sorted(BACKTEST_DIR.glob(pattern),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        return None
+    try:
+        return pd.read_csv(files[0])
+    except Exception:
+        return None
+
+
+def generate_model_performance():
+    """Create model_performance.json showing previous season predictions vs actuals."""
+    from src.utils.nfl_calendar import get_current_nfl_season
+    current_season = get_current_nfl_season()
+    # Previous completed season
+    prev_season = current_season
+
+    # Try ts-backtest predictions (per-player, per-week granularity)
+    ts_preds = _load_ts_backtest_predictions(prev_season)
+    if ts_preds is None:
+        # Fall back to one season earlier
+        ts_preds = _load_ts_backtest_predictions(prev_season - 1)
+        if ts_preds is not None:
+            prev_season = prev_season - 1
+
+    # Also load aggregate backtest metrics
+    backtest_json = _load_latest_backtest_json(prev_season)
+    if backtest_json is None:
+        backtest_json = _load_latest_backtest_json()  # any season
+
+    payload = {
+        "season": prev_season,
+        "has_per_player_predictions": ts_preds is not None and len(ts_preds) > 0,
+        "aggregate_metrics": {},
+        "by_position": {},
+        "top_performers": {},
+        "per_player_season_totals": [],
+    }
+
+    if backtest_json:
+        payload["aggregate_metrics"] = backtest_json.get("metrics", {})
+        payload["by_position"] = backtest_json.get("by_position", {})
+        tp = backtest_json.get("top_performers", {})
+        for pos in ["QB", "RB", "WR", "TE"]:
+            if pos in tp and "top_10_actual" in tp[pos]:
+                payload["top_performers"][pos] = tp[pos]["top_10_actual"]
+
+    # Build per-player season aggregates from ts-backtest predictions
+    if ts_preds is not None and not ts_preds.empty:
+        required_cols = {"player_id", "name", "position", "predicted", "actual"}
+        if required_cols.issubset(set(ts_preds.columns)):
+            ts_preds = ts_preds[ts_preds["position"].isin(["QB", "RB", "WR", "TE"])]
+            agg = ts_preds.groupby(["player_id", "name", "position"]).agg(
+                predicted_total=("predicted", "sum"),
+                actual_total=("actual", "sum"),
+                games=("actual", "count"),
+                predicted_ppg=("predicted", "mean"),
+                actual_ppg=("actual", "mean"),
+            ).reset_index()
+
+            if "team" in ts_preds.columns:
+                team_map = ts_preds.groupby("player_id")["team"].last().to_dict()
+                agg["team"] = agg["player_id"].map(team_map).fillna("")
+            else:
+                agg["team"] = ""
+
+            agg["error"] = (agg["predicted_total"] - agg["actual_total"]).round(1)
+            agg["abs_error"] = agg["error"].abs()
+
+            # Sort by actual total (best performers first)
+            agg = agg.sort_values("actual_total", ascending=False)
+
+            records = []
+            for _, row in agg.head(200).iterrows():
+                records.append({
+                    "player_id": str(row["player_id"]),
+                    "name": row["name"],
+                    "position": row["position"],
+                    "team": row.get("team", ""),
+                    "predicted_total": round(float(row["predicted_total"]), 1),
+                    "actual_total": round(float(row["actual_total"]), 1),
+                    "predicted_ppg": round(float(row["predicted_ppg"]), 1),
+                    "actual_ppg": round(float(row["actual_ppg"]), 1),
+                    "games": int(row["games"]),
+                    "error": round(float(row["error"]), 1),
+                })
+            payload["per_player_season_totals"] = records
+
+    out_path = DATA_DIR / "model_performance.json"
+    with open(out_path, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"  Wrote model_performance.json ({len(payload.get('per_player_season_totals', []))} players, season {prev_season})")
+
+
+# ---------------------------------------------------------------------------
+# 2. Upcoming season projections (ML predictions, never extrapolated)
+# ---------------------------------------------------------------------------
+
+def load_season_data(season: int):
+    """Load regular season data (weeks 1-18) from parquet for a given season."""
+    parquet_path = DATA_DIR / "daily_predictions.parquet"
+    if not parquet_path.exists():
+        return pd.DataFrame()
+    df = pd.read_parquet(parquet_path)
     mask = (
-        (df["season"] == 2025)
+        (df["season"] == season)
         & (df["week"] <= 18)
         & (df["position"].isin(["QB", "RB", "WR", "TE"]))
     )
@@ -47,7 +180,6 @@ def aggregate_player_stats(season_df):
         "util_mean": ("utilization_score", "mean"),
     }
 
-    # Add optional columns if they exist
     optional_cols = {
         "vol_mean": ("weekly_volatility", "mean"),
         "consistency_mean": ("consistency_score", "mean"),
@@ -62,10 +194,8 @@ def aggregate_player_stats(season_df):
         **agg_dict
     ).reset_index()
 
-    # Fill NaN std for single-game players
     agg["fp_std"] = agg["fp_std"].fillna(0)
 
-    # Fill missing optional columns with defaults
     for col in ["vol_mean", "consistency_mean", "confidence_mean", "cv_mean"]:
         if col not in agg.columns:
             agg[col] = 0.0
@@ -73,23 +203,8 @@ def aggregate_player_stats(season_df):
     return agg
 
 
-def compute_projections(agg):
-    """Compute estimated totals from 2025 actuals extrapolated to 17 games (not ML)."""
-    agg["projection_points_total"] = (agg["ppg"] * 17).round(1)
-    agg["projection_points_per_game"] = agg["ppg"].round(1)
-    agg["projection_floor"] = (
-        (agg["ppg"] - 1.5 * agg["fp_std"]).clip(lower=0) * 17
-    ).round(1)
-    agg["projection_ceiling"] = ((agg["ppg"] + 1.5 * agg["fp_std"]) * 17).round(1)
-    return agg
-
-
 def compute_risk_scores(agg):
-    """Risk score 0-100 where higher = more risky.
-
-    Based on volatility, coefficient of variation, inverse consistency,
-    and games played penalty, normalized within each position.
-    """
+    """Risk score 0-100 where higher = more risky."""
     agg["risk_vol"] = 0.0
     agg["risk_cv"] = 0.0
     agg["risk_consistency"] = 0.0
@@ -101,24 +216,20 @@ def compute_risk_scores(agg):
         if len(subset) == 0:
             continue
 
-        # Volatility component (higher vol = higher risk)
         vol_min, vol_max = subset["vol_mean"].min(), subset["vol_mean"].max()
         vol_range = vol_max - vol_min if vol_max > vol_min else 1
         agg.loc[mask, "risk_vol"] = (subset["vol_mean"] - vol_min) / vol_range
 
-        # CV component (higher CV = higher risk)
         cv_min, cv_max = subset["cv_mean"].min(), subset["cv_mean"].max()
         cv_range = cv_max - cv_min if cv_max > cv_min else 1
         agg.loc[mask, "risk_cv"] = (subset["cv_mean"] - cv_min) / cv_range
 
-        # Consistency inverse (lower consistency = higher risk)
         cons_max = subset["consistency_mean"].max()
         if cons_max > 0:
             agg.loc[mask, "risk_consistency"] = 1 - (
                 subset["consistency_mean"] / cons_max
             )
 
-        # Games played penalty (fewer games = higher risk)
         gp_max = subset["games_played"].max()
         if gp_max > 0:
             agg.loc[mask, "risk_games"] = 1 - (subset["games_played"] / gp_max)
@@ -158,75 +269,139 @@ def add_feature_importance(agg):
     return agg
 
 
-def add_adp_proxy(agg):
-    """Generate synthetic ADP from overall rank by projected points."""
-    agg = agg.sort_values(
-        "projection_points_total", ascending=False
-    ).reset_index(drop=True)
-    agg["adp"] = agg.index + 1
-    return agg
+def _check_schedule_available(upcoming_season: int) -> bool:
+    """Check if the NFL schedule is available for the upcoming season."""
+    try:
+        from src.utils.database import DatabaseManager
+        db = DatabaseManager()
+        return db.has_schedule_for_season(upcoming_season)
+    except Exception:
+        return False
 
 
-def output_position_files(agg):
-    """Write per-position JSON files."""
+def _load_ml_predictions(upcoming_season: int):
+    """Try to load ML predictions from daily_predictions.parquet for the upcoming season."""
+    parquet_path = DATA_DIR / "daily_predictions.parquet"
+    if not parquet_path.exists():
+        return None
+    try:
+        df = pd.read_parquet(parquet_path)
+        upcoming = df[
+            (df["season"] == upcoming_season)
+            & (df["position"].isin(["QB", "RB", "WR", "TE"]))
+        ]
+        if upcoming.empty:
+            return None
+        # Check if these are actual ML predictions (have projection_18w column with non-null values)
+        proj_cols = [c for c in ["projection_1w", "projection_4w", "projection_18w"] if c in upcoming.columns]
+        if not proj_cols:
+            return None
+        has_predictions = False
+        for col in proj_cols:
+            if upcoming[col].notna().any():
+                has_predictions = True
+                break
+        if not has_predictions:
+            return None
+        return upcoming
+    except Exception:
+        return None
+
+
+def output_position_files(agg, upcoming_season: int, schedule_available: bool,
+                          has_ml_predictions: bool, prev_season: int):
+    """Write per-position JSON files.
+
+    When ML predictions are available, use projection_18w for full-season totals.
+    When no schedule is available for the upcoming season, set projection fields
+    to null so the frontend shows a "pending" state.
+    """
     for pos in ["QB", "RB", "WR", "TE"]:
-        pos_df = agg[agg["position"] == pos].sort_values(
-            "projection_points_total", ascending=False
-        )
+        pos_df = agg[agg["position"] == pos].copy()
+
+        # Sort: if ML predictions available, by projection; else by previous-season PPG
+        if has_ml_predictions and "projection_18w" in pos_df.columns:
+            sort_col = "projection_18w"
+            pos_df = pos_df.sort_values(sort_col, ascending=False, na_position="last")
+        else:
+            pos_df = pos_df.sort_values("ppg", ascending=False, na_position="last")
+
         players = []
-        for _, row in pos_df.iterrows():
+        for rank, (_, row) in enumerate(pos_df.iterrows(), 1):
+            # ML prediction values (null if not available)
+            proj_total = None
+            proj_ppg = None
+            proj_floor = None
+            proj_ceiling = None
+
+            if has_ml_predictions and schedule_available:
+                p18 = row.get("projection_18w")
+                if pd.notna(p18):
+                    proj_total = round(float(p18), 1)
+                    proj_ppg = round(float(p18) / 17, 1)
+                    std = row.get("fp_std", 0)
+                    if pd.notna(std) and std > 0:
+                        proj_floor = round(max(0, float(p18) - 1.5 * float(std) * (17 ** 0.5)), 1)
+                        proj_ceiling = round(float(p18) + 1.5 * float(std) * (17 ** 0.5), 1)
+
             players.append({
                 "player_id": str(row["player_id"]),
                 "name": row["name"],
                 "team": row["team"],
                 "position": row["position"],
                 "bye_week": None,
-                "adp": int(row["adp"]),
-                "projection_points_total": float(row["projection_points_total"]),
-                "projection_points_per_game": float(row["projection_points_per_game"]),
-                "projection_floor": float(row["projection_floor"]),
-                "projection_ceiling": float(row["projection_ceiling"]),
-                "risk_score": int(row["risk_score"]),
+                "adp": rank,
+                "projection_points_total": proj_total,
+                "projection_points_per_game": proj_ppg,
+                "projection_floor": proj_floor,
+                "projection_ceiling": proj_ceiling,
+                "risk_score": int(row["risk_score"]) if pd.notna(row.get("risk_score")) else None,
                 "injury_flag": False,
                 "age": None,
-                "key_features": row["key_features"],
-                "feature_importance_rank": row["feature_importance_rank"],
-                "uses_schedule": False,
-                "games_played_2025": int(row["games_played"]),
-                "total_fp_2025": round(float(row["total_fp"]), 1),
+                "key_features": row.get("key_features", []),
+                "feature_importance_rank": row.get("feature_importance_rank", {}),
+                "uses_schedule": schedule_available,
+                "prev_season": prev_season,
+                "prev_season_ppg": round(float(row["ppg"]), 1) if pd.notna(row.get("ppg")) else None,
+                "prev_season_total_fp": round(float(row["total_fp"]), 1) if pd.notna(row.get("total_fp")) else None,
+                "prev_season_games": int(row["games_played"]) if pd.notna(row.get("games_played")) else None,
+                "has_ml_prediction": proj_total is not None,
             })
         out_path = DATA_DIR / f"players_{pos}.json"
         with open(out_path, "w") as f:
             json.dump(players, f, indent=2)
-        print(f"  Wrote {len(players)} players to {out_path.name}")
+        print(f"  Wrote {len(players)} players to {out_path.name}"
+              f" (ML predictions: {'yes' if has_ml_predictions and schedule_available else 'pending'})")
 
 
-def generate_schedule_impact():
-    """Generate schedule_impact.json from upcoming_week_meta.json."""
-    meta_path = DATA_DIR / "upcoming_week_meta.json"
-    meta = {}
-    if meta_path.exists():
-        with open(meta_path) as f:
-            meta = json.load(f)
-
-    payload = {
-        "schedule_incorporated": False,
-        "reason": (
-            "The 2026 NFL schedule has not been released. All projections are "
-            "based on 2025 season performance without opponent-specific "
-            "adjustments. Once the schedule is released, matchup quality, "
-            "home/away splits, and defensive rankings will be incorporated."
-        ),
-        "season": meta.get("season", 2026),
-        "schedule_available": meta.get("schedule_available", False),
-    }
+def generate_schedule_impact(upcoming_season: int, schedule_available: bool):
+    """Generate schedule_impact.json."""
+    if schedule_available:
+        payload = {
+            "schedule_incorporated": True,
+            "reason": f"The {upcoming_season} NFL schedule has been incorporated.",
+            "season": upcoming_season,
+            "schedule_available": True,
+        }
+    else:
+        payload = {
+            "schedule_incorporated": False,
+            "reason": (
+                f"The {upcoming_season} NFL schedule has not been released. "
+                f"Projections will be available once the schedule is out. "
+                f"No extrapolations are used."
+            ),
+            "season": upcoming_season,
+            "schedule_available": False,
+        }
     out_path = DATA_DIR / "schedule_impact.json"
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2)
     print(f"  Wrote {out_path.name}")
 
 
-def generate_model_metadata_frontend():
+def generate_model_metadata_frontend(upcoming_season: int, prev_season: int,
+                                     schedule_available: bool, has_ml_predictions: bool):
     """Create draft_model_metadata.json for the frontend methodology section."""
     meta_path = MODELS_DIR / "model_metadata.json"
     backtest_path = DATA_DIR / "advanced_model_results.json"
@@ -252,17 +427,32 @@ def generate_model_metadata_frontend():
     if train_seasons:
         training_window = f"{train_seasons[0]}-{train_seasons[-1]}"
 
+    if has_ml_predictions and schedule_available:
+        target_def = f"PPR fantasy points — ML model predictions for {upcoming_season} season"
+        data_basis = (
+            f"All projections are ML model outputs for the {upcoming_season} season. "
+            f"Model performance on the {prev_season} held-out season is shown in the "
+            f"Model Performance tab."
+        )
+    else:
+        target_def = f"PPR fantasy points — awaiting {upcoming_season} NFL schedule"
+        data_basis = (
+            f"The {upcoming_season} NFL schedule has not been released. "
+            f"Projections will appear once the schedule is available. "
+            f"No extrapolations are used. The Model Performance tab shows how "
+            f"the model performed on the {prev_season} season (out-of-sample)."
+        )
+
     payload = {
-        "target_definition": "PPR fantasy points per game (2025 actuals projected to 17 games for draft board; ML model targets 2026 season)",
+        "target_definition": target_def,
         "training_data_range": training_window or "2006-2024",
         "positions": ["QB", "RB", "WR", "TE"],
-        "schedule_incorporated": False,
-        "schedule_release_status": (
-            "2026 schedule not released yet; draft board estimates use "
-            "schedule-neutral assumptions based on 2025 actual performance."
-        ),
-        "version": "v1.0.0",
-        "last_updated": meta.get("training_date", "2026-02-25"),
+        "schedule_incorporated": schedule_available,
+        "upcoming_season": upcoming_season,
+        "prev_season": prev_season,
+        "has_ml_predictions": has_ml_predictions and schedule_available,
+        "version": "v2.0.0",
+        "last_updated": meta.get("training_date", ""),
         "training_date": meta.get("training_date"),
         "test_season": meta.get("test_season"),
         "n_features_per_position": meta.get("n_features_per_position", {}),
@@ -272,7 +462,7 @@ def generate_model_metadata_frontend():
         "methodology": {
             "model_type": "LightGBM ensemble with XGBoost and Ridge regression",
             "training_window": training_window or "2006-2024",
-            "test_season": str(meta.get("test_season", 2025)),
+            "test_season": str(meta.get("test_season", prev_season)),
             "scoring_format": "PPR (1 point per reception)",
             "features_description": (
                 "50 features per position including utilization scores, "
@@ -288,19 +478,8 @@ def generate_model_metadata_frontend():
                 "Early stopping with 25 rounds patience",
             ],
             "horizons": ["1-week", "4-week", "Full season (18-week)"],
-            "evaluation_metrics": {
-                "primary": ["RMSE", "MAE", "R-squared"],
-                "ranking": ["Spearman rank correlation", "Tier classification accuracy"],
-                "calibration": ["Within 7-point accuracy", "Within 10-point accuracy"],
-            },
         },
-        "data_basis_note": (
-            "Draft board values are 2025 actual PPR points per game projected "
-            "over 17 games. They are not ML model outputs. The ML model "
-            "(trained 2014\u20132024, validated on the 2025 held-out season) "
-            "is available via the prediction API; its backtest metrics are "
-            "shown in the Methodology section."
-        ),
+        "data_basis_note": data_basis,
     }
     out_path = DATA_DIR / "draft_model_metadata.json"
     with open(out_path, "w") as f:
@@ -309,24 +488,67 @@ def generate_model_metadata_frontend():
 
 
 def main():
-    print("Generating draft board data (2025 actuals extrapolated to 17 games)...")
+    from src.utils.nfl_calendar import get_current_nfl_season, is_offseason
 
-    season_df = load_season_data()
+    current_season = get_current_nfl_season()
+    prev_season = current_season
+    upcoming_season = current_season + 1 if is_offseason() else current_season
+
+    print(f"Current NFL season: {current_season}")
+    print(f"Previous completed season: {prev_season}")
+    print(f"Upcoming season: {upcoming_season}")
+    print()
+
+    # 1. Model Performance (previous season OOS predictions vs actuals)
+    print("Generating model performance data...")
+    generate_model_performance()
+    print()
+
+    # 2. Upcoming season projections
+    schedule_available = _check_schedule_available(upcoming_season)
+    print(f"Schedule available for {upcoming_season}: {schedule_available}")
+
+    # Load previous season stats for player list and risk scores
+    print(f"Loading {prev_season} season data for player baseline...")
+    season_df = load_season_data(prev_season)
+    if season_df.empty:
+        print(f"  No data for {prev_season} season. Trying {prev_season - 1}...")
+        prev_season = prev_season - 1
+        season_df = load_season_data(prev_season)
+
+    if season_df.empty:
+        print("  No season data available. Cannot generate draft board.")
+        return
+
     print(f"  Loaded {len(season_df)} weekly records")
 
     agg = aggregate_player_stats(season_df)
     print(f"  Aggregated {len(agg)} unique players")
 
-    agg = compute_projections(agg)
     agg = compute_risk_scores(agg)
     agg = add_feature_importance(agg)
-    agg = add_adp_proxy(agg)
 
-    output_position_files(agg)
-    generate_schedule_impact()
-    generate_model_metadata_frontend()
+    # Check for ML predictions for upcoming season
+    has_ml_predictions = False
+    ml_df = _load_ml_predictions(upcoming_season)
+    if ml_df is not None and not ml_df.empty:
+        # Merge ML predictions into agg
+        for col in ["projection_1w", "projection_4w", "projection_18w"]:
+            if col in ml_df.columns:
+                pred_map = ml_df.groupby("player_id")[col].last().to_dict()
+                agg[col] = agg["player_id"].map(pred_map)
+        has_ml_predictions = True
+        print(f"  Loaded ML predictions for {upcoming_season} season")
+    else:
+        print(f"  No ML predictions available for {upcoming_season} season")
 
-    print("\nDone! JSON files ready for the draft web app.")
+    output_position_files(agg, upcoming_season, schedule_available,
+                          has_ml_predictions, prev_season)
+    generate_schedule_impact(upcoming_season, schedule_available)
+    generate_model_metadata_frontend(upcoming_season, prev_season,
+                                     schedule_available, has_ml_predictions)
+
+    print("\nDone! JSON files ready for the web app.")
 
 
 if __name__ == "__main__":

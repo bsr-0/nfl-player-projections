@@ -11,9 +11,13 @@
   var filteredPlayers = [];
   var modelMetadata = null;
   var scheduleImpact = null;
+  var modelPerformance = null;
+  var perfFiltered = [];
   var currentPosition = 'ALL';
   var currentSort = 'projection_points_total';
   var searchQuery = '';
+  var perfPosition = 'ALL';
+  var perfSearch = '';
 
   // ========== UTILITIES ==========
   function detectBasePath() {
@@ -44,6 +48,7 @@
   }
 
   function riskClass(score) {
+    if (score == null) return '';
     if (score <= 30) return 'risk-low';
     if (score <= 60) return 'risk-med';
     return 'risk-high';
@@ -56,6 +61,14 @@
   function num(val, decimals) {
     if (val == null || isNaN(val)) return 'N/A';
     return Number(val).toFixed(decimals == null ? 1 : decimals);
+  }
+
+  function errorClass(error) {
+    if (error == null) return '';
+    var abs = Math.abs(error);
+    if (abs <= 5) return 'risk-low';
+    if (abs <= 15) return 'risk-med';
+    return 'risk-high';
   }
 
   // ========== DATA LOADING ==========
@@ -74,10 +87,12 @@
       fetchJSON('data/players_TE.json'),
       fetchJSON('data/draft_model_metadata.json'),
       fetchJSON('data/schedule_impact.json'),
+      fetchJSON('data/model_performance.json').catch(function () { return null; }),
     ]).then(function (results) {
       var qb = results[0], rb = results[1], wr = results[2], te = results[3];
       modelMetadata = results[4];
       scheduleImpact = results[5];
+      modelPerformance = results[6];
       allPlayers = [].concat(qb, rb, wr, te);
     });
   }
@@ -111,7 +126,6 @@
       tab.addEventListener('click', function () { activateTab(tab); });
     });
 
-    // Handle initial hash
     var hash = window.location.hash.replace('#', '');
     if (hash) {
       var matchingTab = document.querySelector('[data-tab="' + hash + '"]');
@@ -119,9 +133,28 @@
     }
   }
 
+  // ========== DYNAMIC HEADER ==========
+  function updateHeader() {
+    var badge = document.getElementById('header-badge');
+    var subtitle = document.getElementById('header-subtitle');
+    var upcomingSeason = (modelMetadata && modelMetadata.upcoming_season) || '';
+    var prevSeason = (modelMetadata && modelMetadata.prev_season) || '';
+    var hasPred = modelMetadata && modelMetadata.has_ml_predictions;
+
+    if (badge) {
+      badge.textContent = hasPred ? upcomingSeason + ' Predictions' : 'Offseason ' + upcomingSeason;
+    }
+    if (subtitle) {
+      if (hasPred) {
+        subtitle.textContent = upcomingSeason + ' ML predictions \u00b7 ' + prevSeason + ' model performance';
+      } else {
+        subtitle.textContent = prevSeason + ' model performance \u00b7 ' + upcomingSeason + ' predictions pending schedule';
+      }
+    }
+  }
+
   // ========== OVERVIEW SECTION ==========
   function renderOverview() {
-    // Update stat cards
     var totalEl = document.getElementById('stat-total-players');
     if (totalEl) totalEl.textContent = allPlayers.length.toLocaleString();
 
@@ -136,13 +169,40 @@
       rangeEl.textContent = modelMetadata.training_data_range || '2006-2024';
     }
 
-    // Top 10 overall
-    var top10 = allPlayers.slice().sort(function (a, b) {
-      return b.projection_points_total - a.projection_points_total;
-    }).slice(0, 10);
-    renderTop10List(top10);
+    // Update notice
+    var noticeEl = document.getElementById('data-notice');
+    if (noticeEl && modelMetadata) {
+      var hasPred = modelMetadata.has_ml_predictions;
+      var upcoming = modelMetadata.upcoming_season || '';
+      var prev = modelMetadata.prev_season || '';
+      if (hasPred) {
+        noticeEl.innerHTML = '<strong>How to read this board:</strong> ' +
+          'Player projections are ML model predictions for the ' + upcoming + ' season. ' +
+          'The <em>Model Performance</em> tab shows how the model performed on the ' +
+          prev + ' season (out-of-sample predictions vs actual results).';
+      } else {
+        noticeEl.innerHTML = '<strong>Awaiting ' + upcoming + ' schedule:</strong> ' +
+          'The ' + upcoming + ' NFL schedule has not been released. Once available, ML predictions will appear. ' +
+          'No extrapolations are used. Check the <em>Model Performance</em> tab to see how the model ' +
+          'performed on the ' + prev + ' season.';
+      }
+    }
 
-    // Position cards
+    // Top 10 — only show if predictions available
+    var hasPredictions = allPlayers.some(function (p) { return p.projection_points_total != null; });
+    if (hasPredictions) {
+      var top10 = allPlayers.slice().sort(function (a, b) {
+        return (b.projection_points_total || 0) - (a.projection_points_total || 0);
+      }).slice(0, 10);
+      renderTop10List(top10);
+    } else {
+      var top10Container = document.getElementById('top10-list');
+      if (top10Container) {
+        top10Container.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:1rem">' +
+          'Projections pending \u2014 the upcoming season schedule has not been released.</p>';
+      }
+    }
+
     renderPositionCards();
   }
 
@@ -150,12 +210,13 @@
     var container = document.getElementById('top10-list');
     if (!container) return;
     container.innerHTML = players.map(function (p, i) {
+      var pts = p.projection_points_total != null ? num(p.projection_points_total) : 'Pending';
       return '<div class="top10-item">' +
         '<span class="top10-rank">' + (i + 1) + '</span>' +
         '<span class="top10-name">' + escapeHtml(p.name) + '</span>' +
         '<span class="pos-badge ' + posClass(p.position) + '">' + escapeHtml(p.position) + '</span>' +
         '<span class="top10-team">' + escapeHtml(p.team) + '</span>' +
-        '<span class="top10-pts">' + num(p.projection_points_total) + '</span>' +
+        '<span class="top10-pts">' + pts + '</span>' +
         '</div>';
     }).join('');
   }
@@ -163,9 +224,12 @@
   function renderPositionCards() {
     var container = document.getElementById('overview-positions');
     if (!container) return;
+    var hasPredictions = allPlayers.some(function (p) { return p.projection_points_total != null; });
     container.innerHTML = POSITIONS.map(function (pos) {
       var posPlayers = allPlayers.filter(function (p) { return p.position === pos; });
-      posPlayers.sort(function (a, b) { return b.projection_points_total - a.projection_points_total; });
+      posPlayers.sort(function (a, b) {
+        return (b.projection_points_total || 0) - (a.projection_points_total || 0);
+      });
       var top5 = posPlayers.slice(0, 5);
       var color = POS_COLORS[pos] || '#fff';
       return '<div class="position-card">' +
@@ -175,9 +239,12 @@
         '</div>' +
         '<ul class="position-card__list">' +
           top5.map(function (p) {
+            var pts = hasPredictions && p.projection_points_total != null
+              ? num(p.projection_points_total)
+              : (p.prev_season_ppg != null ? num(p.prev_season_ppg) + ' PPG (prev)' : 'N/A');
             return '<li>' +
               '<span class="player-name">' + escapeHtml(p.name) + '</span>' +
-              '<span class="player-pts" style="color:' + color + '">' + num(p.projection_points_total) + '</span>' +
+              '<span class="player-pts" style="color:' + color + '">' + pts + '</span>' +
             '</li>';
           }).join('') +
         '</ul>' +
@@ -185,9 +252,132 @@
     }).join('');
   }
 
-  // ========== DRAFT BOARD ==========
+  // ========== MODEL PERFORMANCE SECTION ==========
+  function initModelPerformance() {
+    if (!modelPerformance) return;
+
+    var heading = document.getElementById('perf-heading');
+    if (heading) {
+      heading.textContent = 'Model Performance \u2014 ' + modelPerformance.season + ' Season (Out-of-Sample)';
+    }
+
+    var summary = document.getElementById('perf-summary');
+    if (summary) {
+      summary.textContent = 'These are genuine out-of-sample predictions: the model never saw ' +
+        modelPerformance.season + ' data during training. Predicted values are compared against actual game results.';
+    }
+
+    // Aggregate metrics
+    var metricsEl = document.getElementById('perf-metrics');
+    if (metricsEl) {
+      var m = modelPerformance.aggregate_metrics || {};
+      var byPos = modelPerformance.by_position || {};
+      var html = '';
+      if (m.rmse || m.mae) {
+        html += '<div class="hero-stats" style="margin-bottom:1rem">';
+        if (m.rmse) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.rmse) + '</div><div class="stat-card__label">RMSE</div></div>';
+        if (m.mae) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.mae) + '</div><div class="stat-card__label">MAE</div></div>';
+        if (m.r2) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.r2, 3) + '</div><div class="stat-card__label">R\u00b2</div></div>';
+        if (m.correlation) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.correlation, 3) + '</div><div class="stat-card__label">Correlation</div></div>';
+        html += '</div>';
+      }
+      // Per-position metrics table
+      var posKeys = Object.keys(byPos).filter(function (k) { return POSITIONS.indexOf(k) !== -1; });
+      if (posKeys.length > 0) {
+        html += '<div class="table-wrap" style="margin-bottom:1rem"><table class="draft-table"><thead><tr>' +
+          '<th>Position</th><th>RMSE</th><th>MAE</th><th>R\u00b2</th><th>Correlation</th>' +
+          '<th>Within 7pts</th><th>Within 10pts</th>' +
+          '</tr></thead><tbody>';
+        posKeys.forEach(function (pos) {
+          var r = byPos[pos];
+          html += '<tr>' +
+            '<td><span class="pos-badge ' + posClass(pos) + '">' + pos + '</span></td>' +
+            '<td class="td--pts">' + num(r.rmse) + '</td>' +
+            '<td class="td--pts">' + num(r.mae) + '</td>' +
+            '<td class="td--pts">' + num(r.r2, 3) + '</td>' +
+            '<td class="td--pts">' + num(r.correlation, 3) + '</td>' +
+            '<td class="td--pts">' + num(r.within_7_pts_pct) + '%</td>' +
+            '<td class="td--pts">' + num(r.within_10_pts_pct) + '%</td>' +
+          '</tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+      metricsEl.innerHTML = html;
+    }
+
+    // Position filter
+    var filtersContainer = document.getElementById('perf-position-filters');
+    if (filtersContainer) {
+      filtersContainer.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-position]');
+        if (!btn) return;
+        perfPosition = btn.dataset.position;
+        filtersContainer.querySelectorAll('.btn').forEach(function (b) {
+          b.classList.toggle('btn--active', b.dataset.position === perfPosition);
+        });
+        applyPerfFilters();
+      });
+    }
+
+    // Search
+    var searchInput = document.getElementById('perf-search');
+    var debounceTimer;
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+          perfSearch = searchInput.value.trim().toLowerCase();
+          applyPerfFilters();
+        }, 200);
+      });
+    }
+
+    applyPerfFilters();
+  }
+
+  function applyPerfFilters() {
+    if (!modelPerformance || !modelPerformance.per_player_season_totals) return;
+    perfFiltered = modelPerformance.per_player_season_totals.filter(function (p) {
+      if (perfPosition !== 'ALL' && p.position !== perfPosition) return false;
+      if (perfSearch && p.name.toLowerCase().indexOf(perfSearch) === -1) return false;
+      return true;
+    });
+    renderPerfTable();
+  }
+
+  function renderPerfTable() {
+    var tbody = document.getElementById('perf-table-body');
+    if (!tbody) return;
+
+    var maxRows = 200;
+    var displayed = perfFiltered.slice(0, maxRows);
+
+    tbody.innerHTML = displayed.map(function (p, i) {
+      var errCls = errorClass(p.error);
+      return '<tr>' +
+        '<td class="td--rank">' + (i + 1) + '</td>' +
+        '<td class="td--name">' + escapeHtml(p.name) + '</td>' +
+        '<td class="td--pos"><span class="pos-badge ' + posClass(p.position) + '">' + p.position + '</span></td>' +
+        '<td class="td--team">' + escapeHtml(p.team) + '</td>' +
+        '<td class="td--pts">' + num(p.predicted_total) + '</td>' +
+        '<td class="td--pts">' + num(p.actual_total) + '</td>' +
+        '<td class="td--pts"><span class="risk-badge ' + errCls + '">' + (p.error > 0 ? '+' : '') + num(p.error) + '</span></td>' +
+        '<td class="td--ppg">' + num(p.predicted_ppg) + '</td>' +
+        '<td class="td--ppg">' + num(p.actual_ppg) + '</td>' +
+        '<td class="td--rank">' + p.games + '</td>' +
+      '</tr>';
+    }).join('');
+
+    var footerEl = document.getElementById('perf-table-footer');
+    if (footerEl) {
+      footerEl.textContent = perfFiltered.length + ' player' +
+        (perfFiltered.length !== 1 ? 's' : '') + ' shown \u00b7 ' +
+        modelPerformance.season + ' out-of-sample predictions vs actual results';
+    }
+  }
+
+  // ========== DRAFT BOARD (UPCOMING SEASON) ==========
   function initDraftBoard() {
-    // Position filter buttons
     var filtersContainer = document.getElementById('position-filters');
     if (filtersContainer) {
       filtersContainer.addEventListener('click', function (e) {
@@ -201,7 +391,6 @@
       });
     }
 
-    // Search input with debounce
     var searchInput = document.getElementById('player-search');
     var debounceTimer;
     if (searchInput) {
@@ -214,7 +403,6 @@
       });
     }
 
-    // Sort dropdown
     var sortSelect = document.getElementById('sort-select');
     if (sortSelect) {
       sortSelect.addEventListener('change', function () {
@@ -223,7 +411,6 @@
       });
     }
 
-    // Close detail panel
     var closeBtn = document.getElementById('detail-close');
     if (closeBtn) {
       closeBtn.addEventListener('click', function () {
@@ -235,13 +422,17 @@
     // Draft summary
     var summaryEl = document.getElementById('draft-summary');
     if (summaryEl && modelMetadata) {
-      var schedText = scheduleImpact && !scheduleImpact.schedule_incorporated
-        ? 'Schedule not yet incorporated.'
-        : 'Schedule incorporated.';
-      summaryEl.textContent = '2025 actuals extrapolated to 17 games (not ML predictions) \u00b7 ' +
-        (modelMetadata.methodology ? modelMetadata.methodology.scoring_format : 'PPR scoring') +
-        ' \u00b7 ' + schedText +
-        ' \u00b7 Last updated: ' + (modelMetadata.last_updated || 'N/A').split('T')[0];
+      var hasPred = modelMetadata.has_ml_predictions;
+      var upcoming = modelMetadata.upcoming_season || '';
+      if (hasPred) {
+        summaryEl.textContent = upcoming + ' ML model predictions \u00b7 ' +
+          (modelMetadata.methodology ? modelMetadata.methodology.scoring_format : 'PPR scoring') +
+          ' \u00b7 Schedule incorporated';
+      } else {
+        summaryEl.textContent = upcoming + ' season \u2014 predictions pending schedule release \u00b7 ' +
+          'No extrapolations \u00b7 ' +
+          'Players listed based on ' + (modelMetadata.prev_season || '') + ' performance';
+      }
     }
   }
 
@@ -253,9 +444,10 @@
     });
 
     filteredPlayers.sort(function (a, b) {
-      if (currentSort === 'risk_score') return a.risk_score - b.risk_score;
-      if (currentSort === 'adp') return a.adp - b.adp;
-      return (b[currentSort] || 0) - (a[currentSort] || 0);
+      if (currentSort === 'risk_score') return (a.risk_score || 100) - (b.risk_score || 100);
+      if (currentSort === 'adp') return (a.adp || 999) - (b.adp || 999);
+      if (currentSort === 'prev_season_ppg') return (b.prev_season_ppg || 0) - (a.prev_season_ppg || 0);
+      return ((b[currentSort] || 0) - (a[currentSort] || 0));
     });
 
     renderDraftTable();
@@ -265,23 +457,28 @@
     var tbody = document.getElementById('draft-table-body');
     if (!tbody) return;
 
+    var hasPredictions = allPlayers.some(function (p) { return p.projection_points_total != null; });
     var maxRows = 300;
     var displayed = filteredPlayers.slice(0, maxRows);
 
     tbody.innerHTML = displayed.map(function (p, i) {
+      var pts = p.projection_points_total != null ? num(p.projection_points_total) : '<span style="color:#64748b">Pending</span>';
+      var ppg = p.projection_points_per_game != null ? num(p.projection_points_per_game) : '<span style="color:#64748b">Pending</span>';
+      var riskBadge = p.risk_score != null
+        ? '<span class="risk-badge ' + riskClass(p.risk_score) + '">' + p.risk_score + '</span>'
+        : '<span style="color:#64748b">N/A</span>';
       return '<tr class="draft-row" data-idx="' + i + '">' +
         '<td class="td--rank">' + (i + 1) + '</td>' +
         '<td class="td--name">' + escapeHtml(p.name) + '</td>' +
         '<td class="td--pos"><span class="pos-badge ' + posClass(p.position) + '">' + p.position + '</span></td>' +
         '<td class="td--team">' + escapeHtml(p.team) + '</td>' +
-        '<td class="td--pts">' + num(p.projection_points_total) + '</td>' +
-        '<td class="td--ppg">' + num(p.projection_points_per_game) + '</td>' +
-        '<td class="td--risk"><span class="risk-badge ' + riskClass(p.risk_score) + '">' + p.risk_score + '</span></td>' +
-        '<td class="td--adp">' + p.adp + '</td>' +
+        '<td class="td--pts">' + pts + '</td>' +
+        '<td class="td--ppg">' + ppg + '</td>' +
+        '<td class="td--risk">' + riskBadge + '</td>' +
+        '<td class="td--adp">' + (p.adp || 'N/A') + '</td>' +
       '</tr>';
     }).join('');
 
-    // Row click handlers
     tbody.querySelectorAll('.draft-row').forEach(function (row) {
       row.addEventListener('click', function () {
         var idx = parseInt(row.dataset.idx, 10);
@@ -290,11 +487,10 @@
       });
     });
 
-    // Table footer
     var footerEl = document.getElementById('table-footer');
     if (footerEl) {
       if (filteredPlayers.length > maxRows) {
-        footerEl.textContent = 'Showing ' + maxRows + ' of ' + filteredPlayers.length + ' players. Use search or position filter to narrow results.';
+        footerEl.textContent = 'Showing ' + maxRows + ' of ' + filteredPlayers.length + ' players.';
       } else {
         footerEl.textContent = filteredPlayers.length + ' player' + (filteredPlayers.length !== 1 ? 's' : '') + ' shown';
       }
@@ -307,11 +503,59 @@
     var content = document.getElementById('detail-content');
     if (!panel || !content) return;
 
-    var ceiling = player.projection_ceiling || 1;
-    var floorPct = Math.max(0, (player.projection_floor / ceiling) * 100).toFixed(1);
-    var projPct = Math.min(100, Math.max(0, (player.projection_points_total / ceiling) * 100)).toFixed(1);
-    var fillWidth = (100 - parseFloat(floorPct)).toFixed(1);
+    var hasPred = player.projection_points_total != null;
+    var upcoming = (modelMetadata && modelMetadata.upcoming_season) || '';
 
+    var statsHtml = '<div class="detail-stats">';
+    if (hasPred) {
+      var ceiling = player.projection_ceiling || 1;
+      statsHtml +=
+        '<div class="detail-stat">' +
+          '<div class="detail-stat__label">Total Projected</div>' +
+          '<div class="detail-stat__value">' + num(player.projection_points_total) + '</div>' +
+        '</div>' +
+        '<div class="detail-stat">' +
+          '<div class="detail-stat__label">Per Game</div>' +
+          '<div class="detail-stat__value">' + num(player.projection_points_per_game) + '</div>' +
+        '</div>';
+      if (player.projection_floor != null) {
+        statsHtml +=
+          '<div class="detail-stat">' +
+            '<div class="detail-stat__label">Floor (Season)</div>' +
+            '<div class="detail-stat__value">' + num(player.projection_floor) + '</div>' +
+          '</div>' +
+          '<div class="detail-stat">' +
+            '<div class="detail-stat__label">Ceiling (Season)</div>' +
+            '<div class="detail-stat__value">' + num(player.projection_ceiling) + '</div>' +
+          '</div>';
+      }
+    } else {
+      statsHtml += '<div class="detail-stat">' +
+          '<div class="detail-stat__label">' + upcoming + ' Projection</div>' +
+          '<div class="detail-stat__value" style="color:#64748b">Pending schedule release</div>' +
+        '</div>';
+    }
+    if (player.risk_score != null) {
+      statsHtml +=
+        '<div class="detail-stat">' +
+          '<div class="detail-stat__label">Risk Score</div>' +
+          '<div class="detail-stat__value"><span class="risk-badge ' + riskClass(player.risk_score) + '">' + player.risk_score + ' / 100</span></div>' +
+        '</div>';
+    }
+    statsHtml += '</div>';
+
+    // Previous season basis
+    var prevHtml = '';
+    if (player.prev_season_ppg != null) {
+      prevHtml = '<div class="detail-actuals">' +
+        '<p class="detail-actuals__note">' + (player.prev_season || '') + ' season: ' +
+          (player.prev_season_games || 0) + ' games, ' +
+          num(player.prev_season_total_fp) + ' total PPR points, ' +
+          num(player.prev_season_ppg) + ' PPG</p>' +
+      '</div>';
+    }
+
+    // Features
     var featuresHtml = '';
     if (player.key_features && player.key_features.length > 0) {
       featuresHtml = '<div class="detail-features">' +
@@ -334,63 +578,18 @@
         '<h3>' + escapeHtml(player.name) + '</h3>' +
         '<span class="detail-team">' + escapeHtml(player.team) + '</span>' +
       '</div>' +
-
-      '<div class="detail-stats">' +
-        '<div class="detail-stat">' +
-          '<div class="detail-stat__label">Total Projected</div>' +
-          '<div class="detail-stat__value">' + num(player.projection_points_total) + '</div>' +
-        '</div>' +
-        '<div class="detail-stat">' +
-          '<div class="detail-stat__label">Per Game</div>' +
-          '<div class="detail-stat__value">' + num(player.projection_points_per_game) + '</div>' +
-        '</div>' +
-        '<div class="detail-stat">' +
-          '<div class="detail-stat__label">Floor (Season)</div>' +
-          '<div class="detail-stat__value">' + num(player.projection_floor) + '</div>' +
-        '</div>' +
-        '<div class="detail-stat">' +
-          '<div class="detail-stat__label">Ceiling (Season)</div>' +
-          '<div class="detail-stat__value">' + num(player.projection_ceiling) + '</div>' +
-        '</div>' +
-        '<div class="detail-stat">' +
-          '<div class="detail-stat__label">Risk Score</div>' +
-          '<div class="detail-stat__value"><span class="risk-badge ' + riskClass(player.risk_score) + '">' + player.risk_score + ' / 100</span></div>' +
-        '</div>' +
-        '<div class="detail-stat">' +
-          '<div class="detail-stat__label">ADP (Rank)</div>' +
-          '<div class="detail-stat__value">' + player.adp + '</div>' +
-        '</div>' +
-      '</div>' +
-
-      '<div class="range-bar">' +
-        '<div class="range-bar__labels">' +
-          '<span>Floor: ' + num(player.projection_floor) + '</span>' +
-          '<span>Projected: ' + num(player.projection_points_total) + '</span>' +
-          '<span>Ceiling: ' + num(player.projection_ceiling) + '</span>' +
-        '</div>' +
-        '<div class="range-bar__track">' +
-          '<div class="range-bar__fill" style="left:' + floorPct + '%;width:' + fillWidth + '%"></div>' +
-          '<div class="range-bar__marker" style="left:' + projPct + '%"></div>' +
-        '</div>' +
-      '</div>' +
-
+      statsHtml +
+      prevHtml +
       featuresHtml +
-
       '<div class="detail-schedule">' +
         '<span class="pill ' + (player.uses_schedule ? 'pill--success' : 'pill--warning') + '">' +
           (player.uses_schedule ? 'Schedule Incorporated' : 'Schedule Not Available') +
         '</span>' +
         '<p style="margin-top:0.5rem;font-size:0.8rem;color:#94a3b8">' +
           (player.uses_schedule
-            ? 'These estimates include the 2026 schedule, including bye weeks and matchup strength.'
-            : 'These estimates are schedule-neutral; the NFL 2026 schedule is not yet available.') +
+            ? 'Predictions include ' + upcoming + ' schedule data.'
+            : 'Predictions will be available once the ' + upcoming + ' NFL schedule is released. No extrapolations are used.') +
         '</p>' +
-      '</div>' +
-
-      '<div class="detail-actuals">' +
-        '<p class="detail-actuals__note">Basis: 2025 actual performance (' +
-          player.games_played_2025 + ' games, ' +
-          num(player.total_fp_2025) + ' total PPR points) extrapolated to 17 games</p>' +
       '</div>';
 
     panel.hidden = false;
@@ -405,13 +604,11 @@
     var m = modelMetadata.methodology || {};
     var html = '';
 
-    // Prediction Target
     html += '<div class="content-section">' +
       '<h3>Prediction Target</h3>' +
       '<p>' + escapeHtml(modelMetadata.target_definition || 'Fantasy points per game') + '</p>' +
     '</div>';
 
-    // Modeling Approach
     html += '<div class="content-section">' +
       '<h3>Modeling Approach</h3>' +
       '<p><strong>Model:</strong> ' + escapeHtml(m.model_type || 'LightGBM ensemble') + '</p>' +
@@ -425,7 +622,6 @@
     html += '<div class="content-section">' +
       '<h3>Features Used</h3>' +
       '<p>' + escapeHtml(m.features_description || '') + '</p>';
-
     if (modelMetadata.top_features) {
       html += '<div class="metric-grid">';
       POSITIONS.forEach(function (pos) {
@@ -446,19 +642,11 @@
 
     // Training & Evaluation
     html += '<div class="content-section">' +
-      '<h3>ML Model Training &amp; Evaluation</h3>' +
-      '<div class="notice notice--warning" style="margin-bottom:0.75rem">' +
-        '<strong>Note:</strong> The metrics below reflect the ML model validated against the ' +
-        (modelMetadata.test_season || 2025) + ' season (held-out test set). ' +
-        'The Draft Board tab currently shows 2025 actuals extrapolated to 17 games, ' +
-        'not these ML model outputs. ML-driven forward projections will replace the ' +
-        'extrapolations when available.' +
-      '</div>';
-
+      '<h3>ML Model Training &amp; Evaluation</h3>';
     var bt = modelMetadata.backtest_results || {};
     var posKeys = Object.keys(bt).filter(function (k) { return POSITIONS.indexOf(k) !== -1; });
     if (posKeys.length > 0) {
-      html += '<p>ML model backtest results on the ' + (modelMetadata.test_season || 2025) + ' held-out season:</p>' +
+      html += '<p>Backtest results on the ' + (modelMetadata.test_season || '') + ' held-out season:</p>' +
         '<div class="table-wrap"><table class="draft-table" style="margin-top:0.75rem">' +
         '<thead><tr><th>Position</th><th>RMSE</th><th>MAE</th><th>R\u00b2</th><th>Correlation</th></tr></thead><tbody>';
       posKeys.forEach(function (pos) {
@@ -487,8 +675,8 @@
 
     // Data Basis Note
     if (modelMetadata.data_basis_note) {
-      html += '<div class="notice notice--warning" style="margin-top:1rem">' +
-        '<strong>Draft Board Data Source:</strong> ' + escapeHtml(modelMetadata.data_basis_note) +
+      html += '<div class="notice notice--info" style="margin-top:1rem">' +
+        '<strong>Data Source:</strong> ' + escapeHtml(modelMetadata.data_basis_note) +
       '</div>';
     }
 
@@ -500,13 +688,17 @@
     var container = document.getElementById('data-content');
     if (!container) return;
 
+    var upcoming = (modelMetadata && modelMetadata.upcoming_season) || '';
+    var prev = (modelMetadata && modelMetadata.prev_season) || '';
+    var hasPred = modelMetadata && modelMetadata.has_ml_predictions;
+
     var html = '<div class="content-section">' +
       '<h3>Data Sources</h3>' +
       '<ul>' +
         '<li><strong>Player Statistics:</strong> Weekly player performance data from nfl-data-py (official NFL play-by-play and boxscore data)</li>' +
-        '<li><strong>Time Range:</strong> ' + (modelMetadata ? modelMetadata.training_data_range : '2006-2024') + ' for ML model training; 2025 season actuals for draft board estimates</li>' +
-        '<li><strong>Play-by-Play:</strong> Advanced metrics including EPA (Expected Points Added), WPA (Win Probability Added), and success rate derived from play-by-play data</li>' +
-        '<li><strong>Team Context:</strong> Team-level offensive stats, play volume, pass/rush ratios, and scoring tendencies</li>' +
+        '<li><strong>Time Range:</strong> ' + (modelMetadata ? modelMetadata.training_data_range : '2006-2024') + ' for ML model training</li>' +
+        '<li><strong>Play-by-Play:</strong> Advanced metrics including EPA, WPA, and success rate</li>' +
+        '<li><strong>Team Context:</strong> Team-level offensive stats, play volume, pass/rush ratios</li>' +
       '</ul>' +
     '</div>';
 
@@ -527,29 +719,21 @@
     '</div>';
 
     html += '<div class="content-section">' +
-      '<h3>Handling of Edge Cases</h3>' +
+      '<h3>Key Principles</h3>' +
       '<ul>' +
-        '<li><strong>Missing Games:</strong> Players with fewer than 4 games of data in a season are included but flagged with higher risk scores due to small sample size.</li>' +
-        '<li><strong>Team Changes:</strong> Team assignments reflect the player\'s most recent 2025 team. 2026 free agency moves and trades are not yet reflected.</li>' +
-        '<li><strong>Rookies:</strong> 2026 rookies (draft class) are not included since they have no NFL data to extrapolate from.</li>' +
-        '<li><strong>Injuries:</strong> No injury model is currently incorporated. Injury history is not factored into projections or risk scores.</li>' +
-      '</ul>' +
-    '</div>';
-
-    html += '<div class="content-section">' +
-      '<h3>Key Assumptions</h3>' +
-      '<ul>' +
-        '<li>Draft board values assume a 17-game regular season</li>' +
-        '<li>Each player\'s 2025 per-game average is projected to 17 games (no regression, no ML adjustment)</li>' +
-        '<li>Floor and ceiling are calculated as PPG &plusmn; 1.5 standard deviations over 17 games</li>' +
-        '<li>ADP values are proxy rankings based on projected total points (not actual draft data)</li>' +
-        '<li>Risk scores are relative within each position group and reflect week-to-week consistency, not injury risk</li>' +
+        '<li><strong>No Extrapolation:</strong> This app never extrapolates past performance to future seasons. ' +
+           'Upcoming season projections come exclusively from the ML model.</li>' +
+        '<li><strong>Model Performance:</strong> The Model Performance tab shows genuine out-of-sample ' +
+           'predictions vs actual results for the ' + prev + ' season.</li>' +
+        (hasPred
+          ? '<li><strong>Current Projections:</strong> The Upcoming Season tab shows ML model predictions for ' + upcoming + '.</li>'
+          : '<li><strong>Pending:</strong> The ' + upcoming + ' schedule has not been released. ' +
+             'Projections will appear once the schedule is available.</li>') +
       '</ul>' +
     '</div>';
 
     html += '<div class="notice notice--info">' +
       '<strong>Disclaimer:</strong> Fantasy football projections are inherently uncertain. ' +
-      'These numbers should be used as one input among many when making draft decisions. ' +
       'Injuries, coaching changes, roster moves, and schedule difficulty can all significantly ' +
       'impact actual outcomes.' +
     '</div>';
@@ -563,38 +747,28 @@
     if (!container) return;
 
     var isIncorporated = scheduleImpact && scheduleImpact.schedule_incorporated;
+    var upcoming = (scheduleImpact && scheduleImpact.season) || '';
     var html = '';
 
     if (!isIncorporated) {
       html += '<div class="schedule-status">' +
         '<span class="schedule-status__icon" aria-hidden="true">&#128197;</span>' +
         '<div class="schedule-status__text">' +
-          '<h3>Schedule Not Yet Incorporated</h3>' +
-          '<p>' + escapeHtml(scheduleImpact ? scheduleImpact.reason : 'The 2026 NFL schedule has not been released.') + '</p>' +
+          '<h3>Schedule Not Yet Released</h3>' +
+          '<p>' + escapeHtml(scheduleImpact ? scheduleImpact.reason : 'The ' + upcoming + ' NFL schedule has not been released.') + '</p>' +
         '</div>' +
       '</div>';
 
       html += '<div class="content-section">' +
         '<h3>What This Means</h3>' +
-        '<p>All projections treat each week as an average matchup based on historical team tendencies. ' +
-        'No opponent-specific adjustments have been applied. This means:</p>' +
+        '<p>ML projections for the ' + upcoming + ' season will be generated once the schedule is released. ' +
+        'Until then, no projections are shown (no extrapolation is used). The following adjustments ' +
+        'will be incorporated once the schedule is available:</p>' +
         '<ul>' +
-          '<li>No strength-of-schedule adjustments to player projections</li>' +
-          '<li>No home/away performance splits applied</li>' +
-          '<li>No bye week information available</li>' +
-          '<li>No short-week (Thursday game) adjustments</li>' +
-        '</ul>' +
-      '</div>';
-
-      html += '<div class="content-section">' +
-        '<h3>When the Schedule Is Available</h3>' +
-        '<p>Once the NFL releases the 2026 schedule (typically in May), the following adjustments will be incorporated:</p>' +
-        '<ul>' +
-          '<li><strong>Matchup Quality:</strong> Opponent defense strength adjustments per position (e.g., how many fantasy points allowed to QBs/RBs/WRs/TEs)</li>' +
-          '<li><strong>Home/Away Splits:</strong> Historical performance differences when playing at home vs. away</li>' +
-          '<li><strong>Bye Weeks:</strong> Each player\'s bye week identified for draft planning</li>' +
-          '<li><strong>Short Weeks:</strong> Adjustments for Thursday Night Football and other short-week games</li>' +
-          '<li><strong>Divisional Matchups:</strong> Historical patterns in divisional rivalry games</li>' +
+          '<li>Matchup quality (opponent defense strength per position)</li>' +
+          '<li>Home/away performance splits</li>' +
+          '<li>Bye week identification</li>' +
+          '<li>Short-week (Thursday game) adjustments</li>' +
         '</ul>' +
       '</div>';
     } else {
@@ -602,7 +776,7 @@
         '<span class="schedule-status__icon" aria-hidden="true">&#9989;</span>' +
         '<div class="schedule-status__text">' +
           '<h3>Schedule Incorporated</h3>' +
-          '<p>The 2026 NFL schedule has been incorporated into projections, including matchup strength, bye weeks, and home/away adjustments.</p>' +
+          '<p>The ' + upcoming + ' NFL schedule has been incorporated into ML predictions.</p>' +
         '</div>' +
       '</div>';
     }
@@ -615,42 +789,57 @@
     var container = document.getElementById('faq-content');
     if (!container) return;
 
+    var upcoming = (modelMetadata && modelMetadata.upcoming_season) || '';
+    var prev = (modelMetadata && modelMetadata.prev_season) || '';
+    var hasPred = modelMetadata && modelMetadata.has_ml_predictions;
     var isScheduleUsed = scheduleImpact && scheduleImpact.schedule_incorporated;
 
     var faqs = [
       {
-        q: 'How should I use these projections?',
-        a: 'The Draft Board shows each player\'s 2025 per-game average projected over 17 games. Use it as a data-driven starting point alongside your own research, expert rankings, and league-specific scoring rules. Because these are straight extrapolations (not ML forecasts), factors like regression to the mean, coaching changes, offseason moves, and age curves are not accounted for.'
+        q: 'What does "Model Performance" show?',
+        a: 'The Model Performance tab displays genuine out-of-sample predictions vs actual results for the ' +
+          prev + ' season. The model was trained on data through ' + (prev - 1) +
+          ' and never saw ' + prev + ' data during training. This demonstrates how accurately the model ' +
+          'would have predicted fantasy outcomes for a season it had never seen.'
       },
       {
-        q: 'Are these actual ML model predictions?',
-        a: 'No. The Draft Board currently shows 2025 actual fantasy points extrapolated to a 17-game season &mdash; essentially assuming each player repeats their 2025 performance. A separate ML pipeline (LightGBM ensemble trained on 2006\u20132024, validated against the 2025 held-out test set) exists and powers the prediction API, but its forward 2026 projections have not yet replaced the draft board extrapolations. The Methodology tab shows the ML model\'s backtest accuracy on the 2025 season.'
+        q: 'Why are upcoming season projections blank?',
+        a: hasPred
+          ? 'They aren\'t! The ' + upcoming + ' schedule has been incorporated and ML predictions are available.'
+          : 'The ' + upcoming + ' NFL schedule has not been released yet (typically released in May). ' +
+            'Rather than extrapolating past performance, we wait for the actual schedule so the ML model can ' +
+            'generate proper predictions that account for matchup quality, home/away splits, and bye weeks. ' +
+            'No extrapolation is ever used.'
       },
       {
-        q: 'What do "trained on 2014\u20132024" and "tested on 2025" mean?',
-        a: 'The ML model learned patterns from 11 seasons of historical data (2014\u20132024). It was then evaluated against the 2025 season, which the model had never seen during training. The backtest metrics (RMSE, R\u00b2, etc.) in the Methodology tab measure how well the model would have predicted 2025 outcomes. This is a standard validation step &mdash; it does not mean the Draft Board numbers come from this model.'
+        q: 'How is this different from simple extrapolation?',
+        a: 'Many sites take last season\'s per-game average and multiply by 17 games. We do NOT do this. ' +
+          'Our ML model (LightGBM ensemble with XGBoost and Ridge regression) uses 50+ features per position ' +
+          'including rolling averages, utilization metrics, team context, and advanced play-by-play data ' +
+          'to generate genuine forward predictions. When the model can\'t generate proper predictions ' +
+          '(e.g., no schedule available), we show "pending" rather than an extrapolation.'
       },
       {
         q: 'Are these projections schedule-adjusted?',
         a: isScheduleUsed
-          ? 'Yes. The 2026 NFL schedule has been incorporated, including opponent defensive strength, home/away adjustments, and bye week identification.'
-          : 'No. The 2026 NFL schedule has not yet been released. All estimates are schedule-neutral, treating each week as an average matchup. Once the schedule is available (typically May), matchup-quality adjustments can be applied.'
+          ? 'Yes. The ' + upcoming + ' NFL schedule has been incorporated.'
+          : 'Not yet. The ' + upcoming + ' NFL schedule has not been released. Once available (typically May), ' +
+            'matchup-quality adjustments will be applied.'
       },
       {
         q: 'What do the risk scores mean?',
-        a: 'Risk scores range from 0 (lowest risk) to 100 (highest risk) and are calculated relative to each position group. They combine four factors: (1) Weekly scoring volatility (30% weight), (2) Coefficient of variation (25%), (3) Inverse consistency score (25%), and (4) Games played penalty (20%). A low-risk player (0\u201330) is highly consistent; a high-risk player (61\u2013100) has significant week-to-week variance or limited game history.'
+        a: 'Risk scores range from 0 (lowest risk) to 100 (highest risk), calculated relative to each position group. ' +
+          'They combine: weekly scoring volatility (30%), coefficient of variation (25%), ' +
+          'inverse consistency (25%), and games played penalty (20%).'
       },
       {
         q: 'What scoring format is used?',
-        a: 'All values use PPR (Points Per Reception) scoring: 0.04 points per passing yard, 4 points per passing TD, 0.1 points per rushing/receiving yard, 6 points per rushing/receiving TD, 1 point per reception, \u22122 for interceptions and fumbles lost.'
+        a: 'All values use PPR (Points Per Reception) scoring.'
       },
       {
         q: 'Why are some players missing?',
-        a: 'Players must have at least one game of 2025 NFL data to appear. This excludes: (1) 2026 rookies who haven\'t played an NFL game, (2) Players who missed the entire 2025 season, (3) Retired players. Free agents and players who changed teams in the 2026 offseason still show their 2025 team.'
-      },
-      {
-        q: 'What are the known limitations?',
-        a: 'Key limitations: (1) Draft board uses 2025 extrapolations, not ML forward predictions, (2) No regression-to-the-mean or age adjustments, (3) No injury model, (4) ADP values are rank-based proxies (not actual draft data), (5) No 2026 roster updates (free agency, trades not reflected), (6) No schedule adjustments (waiting for NFL schedule release), (7) Rookies excluded (no historical data).'
+        a: 'Players must have played in the ' + prev + ' NFL season to appear. This excludes: ' +
+          '(1) Incoming rookies, (2) Players who missed the entire ' + prev + ' season, (3) Retired players.'
       }
     ];
 
@@ -667,7 +856,9 @@
     loadAllData()
       .then(function () {
         initTabs();
+        updateHeader();
         renderOverview();
+        initModelPerformance();
         initDraftBoard();
         applyFiltersAndRender();
         renderMethodology();
