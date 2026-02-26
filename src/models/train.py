@@ -1581,6 +1581,7 @@ def train_models(positions: list = None,
             pos_data = pos_data.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
             X_pos = pos_data[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
             player_ids = pos_data["player_id"].values
+            seasons_arr = pos_data["season"].values if "season" in pos_data.columns else None
 
             if MODEL_CONFIG.get("use_4w_hybrid", True) and n_seasons >= MIN_TRAINING_SEASONS_4W:
                 y_4w = pos_data.get("target_util_4w", pos_data.get("target_4w"))
@@ -1595,7 +1596,8 @@ def train_models(positions: list = None,
                     try:
                         hybrid = Hybrid4WeekModel(position)
                         hybrid.fit(pos_data, y_4w, player_ids, feature_cols,
-                                  epochs=MODEL_CONFIG.get("lstm_epochs", 80))
+                                  epochs=MODEL_CONFIG.get("lstm_epochs", 80),
+                                  seasons=seasons_arr)
                         if hybrid.is_fitted:
                             hybrid.save()
                             horizon_status[position]["hybrid_4w"] = "trained_and_saved"
@@ -1623,11 +1625,13 @@ def train_models(positions: list = None,
                         y_arr = y_18w.values.astype(np.float64)
                         valid = np.isfinite(y_arr) & np.all(np.isfinite(X_arr), axis=1)
                         if valid.sum() >= 80:
+                            seasons_18w = seasons_arr[valid] if seasons_arr is not None else None
                             deep.fit(
                                 X_arr[valid], y_arr[valid],
                                 feature_names=feature_cols,
                                 epochs=MODEL_CONFIG.get("deep_epochs", 100),
                                 batch_size=MODEL_CONFIG.get("deep_batch_size", 64),
+                                seasons=seasons_18w,
                             )
                             if deep.is_fitted:
                                 deep.save()
