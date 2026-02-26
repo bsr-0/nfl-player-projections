@@ -167,6 +167,7 @@ class LSTM4WeekModel:
             units = trial.suggest_categorical("lstm_units", [128, 192, 256])
             dropout = trial.suggest_float("dropout", 0.15, 0.40)
             lr = trial.suggest_float("learning_rate", 1e-4, 5e-3, log=True)
+            batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
 
             from sklearn.preprocessing import StandardScaler
             scaler = StandardScaler()
@@ -199,12 +200,12 @@ class LSTM4WeekModel:
             y_va = torch.tensor(y_seq[val_idx], dtype=torch.float32).to(device)
 
             model = _LSTMNet(X_seq.shape[2], units, dropout).to(device)
-            optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
             criterion = nn.HuberLoss(delta=1.0)
 
             best_val = float("inf")
             patience, no_improve = 5, 0
-            loader = DataLoader(TensorDataset(X_tr, y_tr), batch_size=32, shuffle=True)
+            loader = DataLoader(TensorDataset(X_tr, y_tr), batch_size=batch_size, shuffle=True)
 
             for _ in range(30):  # Reduced epochs for tuning speed
                 model.train()
@@ -212,6 +213,7 @@ class LSTM4WeekModel:
                     xb, yb = xb.to(device), yb.to(device)
                     optimizer.zero_grad()
                     criterion(model(xb), yb).backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                     optimizer.step()
                 model.eval()
                 with torch.no_grad():
@@ -268,6 +270,9 @@ class LSTM4WeekModel:
             seasons: Optional[np.ndarray] = None) -> "LSTM4WeekModel":
         epochs = epochs or MODEL_CONFIG.get("lstm_epochs", 80)
         batch_size = batch_size or MODEL_CONFIG.get("lstm_batch_size", 32)
+        torch.manual_seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
         from sklearn.preprocessing import StandardScaler
         self.feature_names = list(feature_names)
         self.scaler = StandardScaler()
@@ -292,7 +297,8 @@ class LSTM4WeekModel:
         dataset = TensorDataset(X_train_t, y_train_t)
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=1e-4)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
         criterion = nn.HuberLoss(delta=1.0)  # Robust to outlier games
 
         best_val_loss = float("inf")
@@ -306,12 +312,14 @@ class LSTM4WeekModel:
                 optimizer.zero_grad()
                 loss = criterion(self.model(xb), yb)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             # Validation
             self.model.eval()
             with torch.no_grad():
                 val_loss = criterion(self.model(X_val_t), y_val_t).item()
+            scheduler.step(val_loss)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience = 0
@@ -328,7 +336,11 @@ class LSTM4WeekModel:
         return self
 
     def predict(self, X: np.ndarray, player_ids: np.ndarray) -> np.ndarray:
-        """Predict using LSTM sequences."""
+        """Predict using LSTM sequences.
+
+        Players with fewer games than sequence_length get zero-padded
+        sequences so they still receive a prediction (instead of NaN).
+        """
         if not self.is_fitted or self.model is None:
             return np.full(X.shape[0], np.nan)
         Xs = self.scaler.transform(X)
@@ -339,14 +351,21 @@ class LSTM4WeekModel:
                 mask = player_ids == pid
                 Xi = Xs[mask]
                 n = mask.sum()
+                indices = np.where(mask)[0]
                 if n < self.sequence_length:
+                    # Pad short sequences with zeros at the beginning
+                    pad_len = self.sequence_length - n
+                    Xi_padded = np.vstack([np.zeros((pad_len, Xi.shape[1])), Xi])
+                    seq = Xi_padded[-self.sequence_length:].reshape(1, self.sequence_length, -1)
+                    t = torch.tensor(seq, dtype=torch.float32).to(self.device)
+                    pred_val = self.model(t).cpu().numpy()[0]
+                    out[indices[-1]] = pred_val
                     continue
                 seqs = np.array([Xi[i:i + self.sequence_length] for i in range(n - self.sequence_length + 1)])
                 if len(seqs) == 0:
                     continue
                 t = torch.tensor(seqs, dtype=torch.float32).to(self.device)
                 p = self.model(t).cpu().numpy()
-                indices = np.where(mask)[0]
                 for j, pred_val in enumerate(p):
                     target_idx = indices[j + self.sequence_length - 1]
                     out[target_idx] = pred_val
@@ -355,21 +374,21 @@ class LSTM4WeekModel:
 
 class ARIMA4WeekModel:
     """
-    Per-player ARIMA for 4-week horizon. Fits univariate ARIMA on each player's
-    target series; produces a 4-step-ahead forecast (mean over next 4 weeks)
-    per player. Fallback: global mean or 4-week rolling mean when ARIMA fails
+    Per-player ARIMA for configurable horizon. Fits univariate ARIMA on each player's
+    target series; produces an n-step-ahead forecast (mean over next n weeks)
+    per player. Fallback: global mean or rolling mean when ARIMA fails
     or series too short.
     """
     MIN_LENGTH = 6  # minimum observations to fit ARIMA
-    FORECAST_STEPS = 4  # 4-week horizon
 
-    def __init__(self, order: Tuple[int, int, int] = None):
+    def __init__(self, order: Tuple[int, int, int] = None, forecast_steps: int = 4):
         if not HAS_ARIMA:
             raise ImportError("statsmodels required for ARIMA. pip install statsmodels")
         self.order = order or tuple(MODEL_CONFIG.get("arima_order", (2, 1, 2)))
+        self.FORECAST_STEPS = forecast_steps
         self.is_fitted = False
         self.fallback_mean = 0.0
-        self._player_forecast: Dict[str, float] = {}  # str(player_id) -> 4-week forecast
+        self._player_forecast: Dict[str, float] = {}  # str(player_id) -> forecast
         self._player_train_series: Dict[str, np.ndarray] = {}  # training series for online update
         self._player_fit_result: Dict[str, Any] = {}  # fitted ARIMA result objects
 
@@ -539,6 +558,29 @@ class Hybrid4WeekModel:
         self.is_fitted = self.lstm is not None or self.arima is not None
 
         return self
+
+    def learn_blend_weight(self, X: pd.DataFrame, y: np.ndarray, player_ids: np.ndarray,
+                           feature_cols: List[str], n_weeks: int = 4):
+        """Learn optimal LSTM/ARIMA blend weight on held-out validation data."""
+        if not self.is_fitted:
+            return
+        try:
+            X_np = X[feature_cols].reindex(columns=feature_cols, fill_value=0).values
+            pred_lstm = self.lstm.predict(X_np, player_ids) if self.lstm and self.lstm.is_fitted else np.full(len(X_np), np.nan)
+            pred_arima = self.arima.predict(X_np, {}, player_ids, n_steps=n_weeks) if self.arima else np.full(len(X_np), np.nan)
+            valid = np.isfinite(pred_lstm) & np.isfinite(pred_arima) & np.isfinite(y)
+            if valid.sum() < 10:
+                return
+            from scipy.optimize import minimize_scalar
+            def loss(w):
+                blend = w * pred_lstm[valid] + (1 - w) * pred_arima[valid]
+                return np.mean((blend - y[valid]) ** 2)
+            result = minimize_scalar(loss, bounds=(0.1, 0.9), method='bounded')
+            self.lstm_weight = float(result.x)
+            self.arima_weight = 1.0 - self.lstm_weight
+            print(f"    Learned 4w blend: LSTM={self.lstm_weight:.2f}, ARIMA={self.arima_weight:.2f}")
+        except Exception:
+            pass
 
     def predict(self, X: pd.DataFrame, player_ids: np.ndarray, feature_cols: List[str],
                 fallback_pred: np.ndarray, n_weeks: int = 4) -> np.ndarray:
@@ -737,7 +779,7 @@ class DeepSeasonLongModel:
                 hidden_units_flat.extend([w] * (nb * 3))  # Approx legacy format
 
             model = _DeepFeedforwardNet(X.shape[1], hidden_units=hidden_units_flat, dropout=dropout).to(device)
-            optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
             criterion = nn.HuberLoss(delta=1.0)
 
             loader = DataLoader(TensorDataset(X_tr, y_tr), batch_size=64, shuffle=True)
@@ -750,6 +792,7 @@ class DeepSeasonLongModel:
                     xb, yb = xb.to(device), yb.to(device)
                     optimizer.zero_grad()
                     criterion(model(xb), yb).backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                     optimizer.step()
                 model.eval()
                 with torch.no_grad():
@@ -778,6 +821,9 @@ class DeepSeasonLongModel:
             seasons: Optional[np.ndarray] = None) -> "DeepSeasonLongModel":
         epochs = epochs or MODEL_CONFIG.get("deep_epochs", 100)
         batch_size = batch_size or MODEL_CONFIG.get("deep_batch_size", 64)
+        torch.manual_seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
         from sklearn.preprocessing import StandardScaler
         self.feature_names = list(feature_names)
         self.scaler = StandardScaler()
@@ -798,7 +844,8 @@ class DeepSeasonLongModel:
         dataset = TensorDataset(X_train_t, y_train_t)
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=1e-4)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=7)
         criterion = nn.HuberLoss(delta=1.0)  # Robust to outlier games
 
         best_val_loss = float("inf")
@@ -812,11 +859,13 @@ class DeepSeasonLongModel:
                 optimizer.zero_grad()
                 loss = criterion(self.model(xb), yb)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             self.model.eval()
             with torch.no_grad():
                 val_loss = criterion(self.model(X_val_t), y_val_t).item()
+            scheduler.step(val_loss)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience = 0
@@ -836,16 +885,34 @@ class DeepSeasonLongModel:
         blend_traditional = blend_traditional if blend_traditional is not None else getattr(self, '_learned_blend_traditional', MODEL_CONFIG.get("deep_blend_traditional", 0.3))
         if not self.is_fitted or self.model is None:
             return traditional_pred
+        if X.shape[1] != self.n_features:
+            import warnings
+            warnings.warn(
+                f"DeepSeasonLongModel feature count mismatch: model expects {self.n_features}, "
+                f"got {X.shape[1]}. {'Truncating' if X.shape[1] > self.n_features else 'Padding with zeros'}. "
+                f"This may degrade predictions — retrain the model if feature set changed.",
+                UserWarning, stacklevel=2,
+            )
         X_in = X[:, :self.n_features] if X.shape[1] >= self.n_features else np.hstack([X, np.zeros((X.shape[0], self.n_features - X.shape[1]))])
         Xs = self.scaler.transform(X_in)
         self.model.eval()
         with torch.no_grad():
             t = torch.tensor(Xs, dtype=torch.float32).to(self.device)
             deep_pred = self.model(t).cpu().numpy()
-        return (1 - blend_traditional) * deep_pred + blend_traditional * traditional_pred
+        blended = (1 - blend_traditional) * deep_pred + blend_traditional * traditional_pred
+        # Apply regression to mean: shrink extreme predictions toward global mean
+        rtm = getattr(self, 'regression_to_mean_scale', 0.95)
+        if rtm < 1.0:
+            global_mean = np.nanmean(blended)
+            blended = rtm * blended + (1 - rtm) * global_mean
+        return blended
 
     def learn_blend_weight(self, X: np.ndarray, y: np.ndarray, traditional_pred: np.ndarray):
-        """Learn the optimal deep/traditional blend weight on validation data."""
+        """Learn the optimal deep/traditional blend weight on validation data.
+
+        IMPORTANT: This must be called on held-out validation data only (not
+        training data) to avoid overfitting the blend weight.
+        """
         if not self.is_fitted or self.model is None:
             return
         try:
@@ -878,6 +945,8 @@ class DeepSeasonLongModel:
             self.model.to(self.device)
         joblib.dump({"scaler": self.scaler, "feature_names": self.feature_names, "n_features": self.n_features,
                      "is_fitted": self.is_fitted, "position": self.position,
+                     "dropout": self.dropout,
+                     "hidden_units": MODEL_CONFIG.get("deep_hidden_units", None),
                      "regression_to_mean_scale": self.regression_to_mean_scale,
                      "_learned_blend_traditional": getattr(self, "_learned_blend_traditional", None)}, path / "config.joblib")
 
@@ -898,7 +967,9 @@ class DeepSeasonLongModel:
         if learned_blend is not None:
             m._learned_blend_traditional = learned_blend
         if (path / "model.pt").exists() and HAS_TORCH:
-            m.model = _DeepFeedforwardNet(m.n_features).to(m.device)
+            saved_hidden = cfg.get("hidden_units", None)
+            saved_dropout = cfg.get("dropout", 0.35)
+            m.model = _DeepFeedforwardNet(m.n_features, hidden_units=saved_hidden, dropout=saved_dropout).to(m.device)
             m.model.load_state_dict(torch.load(path / "model.pt", map_location=m.device))
             m.model.eval()
         return m

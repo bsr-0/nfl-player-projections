@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFL Fantasy Draft Board - 2026 Projections</title>
-  <meta name="description" content="Fantasy football draft board with 2026 player projections for QB, RB, WR, and TE positions, based on 2025 season performance.">
+  <title>NFL Fantasy Projections</title>
+  <meta name="description" content="NFL fantasy football projections with ML model performance and upcoming season predictions for QB, RB, WR, and TE positions.">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,17 +16,18 @@
     <div class="app-header__brand">
       <span class="app-header__logo" aria-hidden="true">&#127944;</span>
       <div>
-        <h1 class="app-header__title">NFL Fantasy Draft Board</h1>
-        <p class="app-header__subtitle">2026 projections based on 2025 season performance</p>
+        <h1 class="app-header__title">NFL Fantasy Projections</h1>
+        <p class="app-header__subtitle" id="header-subtitle">ML model predictions &amp; performance</p>
       </div>
     </div>
-    <div class="app-header__badge" id="header-badge">Pre-Draft 2026</div>
+    <div class="app-header__badge" id="header-badge"></div>
   </header>
 
   <!-- TAB NAVIGATION -->
   <nav class="tab-nav" role="tablist" aria-label="Main sections">
     <button class="tab-nav__btn tab-nav__btn--active" role="tab" aria-selected="true" aria-controls="section-overview" data-tab="overview">Overview</button>
-    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-draft" data-tab="draft">Draft Board</button>
+    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-performance" data-tab="performance">Model Performance</button>
+    <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-draft" data-tab="draft">Upcoming Season</button>
     <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-methodology" data-tab="methodology">Methodology</button>
     <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-data" data-tab="data">Data &amp; Assumptions</button>
     <button class="tab-nav__btn" role="tab" aria-selected="false" aria-controls="section-schedule" data-tab="schedule">Schedule</button>
@@ -55,13 +56,7 @@
         </div>
       </div>
 
-      <div class="notice notice--info" id="data-notice">
-        <strong>How to read this board:</strong> Player values are estimated by taking their
-        actual 2025 per-game fantasy points and projecting over a 17-game season. These are
-        <em>not</em> ML model predictions &mdash; they assume 2026 performance will match 2025.
-        The ML model (trained 2014&ndash;2024, validated on 2025) is available for the API;
-        its backtest metrics are shown in the Methodology tab.
-      </div>
+      <div class="notice notice--info" id="data-notice"></div>
 
       <div class="section-card" id="overview-top10">
         <h2>Top 10 Overall Projections</h2>
@@ -72,10 +67,57 @@
       <div class="position-grid" id="overview-positions"></div>
     </section>
 
-    <!-- SECTION: Draft Board & Player Search -->
+    <!-- SECTION: Model Performance -->
+    <section id="section-performance" class="tab-panel" role="tabpanel" hidden>
+      <div class="section-card">
+        <h2 id="perf-heading">Model Performance</h2>
+        <p class="section-desc" id="perf-summary"></p>
+        <div id="perf-metrics"></div>
+        <div class="filter-row" style="margin-top:1rem">
+          <div class="filter-group">
+            <label class="filter-label">Position</label>
+            <div class="btn-group" id="perf-position-filters">
+              <button class="btn btn--filter btn--active" data-position="ALL">All</button>
+              <button class="btn btn--filter" data-position="QB">QB</button>
+              <button class="btn btn--filter" data-position="RB">RB</button>
+              <button class="btn btn--filter" data-position="WR">WR</button>
+              <button class="btn btn--filter" data-position="TE">TE</button>
+            </div>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="perf-search">Search</label>
+            <input type="text" id="perf-search" class="search-input" placeholder="Search player name..." autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <div class="section-card">
+        <div class="table-wrap">
+          <table class="draft-table" id="perf-table">
+            <thead>
+              <tr>
+                <th class="th--rank">#</th>
+                <th class="th--name">Player</th>
+                <th class="th--pos">Pos</th>
+                <th class="th--team">Team</th>
+                <th class="th--pts">Predicted</th>
+                <th class="th--pts">Actual</th>
+                <th class="th--pts">Error</th>
+                <th class="th--ppg">Pred PPG</th>
+                <th class="th--ppg">Actual PPG</th>
+                <th class="th--rank">Games</th>
+              </tr>
+            </thead>
+            <tbody id="perf-table-body"></tbody>
+          </table>
+        </div>
+        <div class="table-footer" id="perf-table-footer"></div>
+      </div>
+    </section>
+
+    <!-- SECTION: Upcoming Season -->
     <section id="section-draft" class="tab-panel" role="tabpanel" hidden>
       <div class="section-card draft-controls">
-        <h2>Draft Board &amp; Player Search</h2>
+        <h2>Upcoming Season</h2>
         <p class="section-desc" id="draft-summary"></p>
         <div class="filter-row">
           <div class="filter-group">
@@ -165,7 +207,7 @@
   </main>
 
   <footer class="app-footer">
-    <p>NFL Fantasy Draft Board &middot; Draft board: 2025 actuals extrapolated to 17 games &middot; ML model: trained 2006&ndash;2024, validated on 2025</p>
+    <p>NFL Fantasy Projections &middot; ML model predictions &amp; out-of-sample performance &middot; No extrapolations</p>
   </footer>
 
   <script src="app.js"></script>
