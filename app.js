@@ -140,13 +140,16 @@
     var upcomingSeason = (modelMetadata && modelMetadata.upcoming_season) || '';
     var prevSeason = (modelMetadata && modelMetadata.prev_season) || '';
     var hasPred = modelMetadata && modelMetadata.has_ml_predictions;
+    var hasPerf = modelPerformance && modelPerformance.per_player_season_totals && modelPerformance.per_player_season_totals.length > 0;
 
     if (badge) {
-      badge.textContent = hasPred ? upcomingSeason + ' Predictions' : 'Offseason ' + upcomingSeason;
+      badge.textContent = hasPred ? upcomingSeason + ' Predictions' : prevSeason + ' Model Validation';
     }
     if (subtitle) {
       if (hasPred) {
         subtitle.textContent = upcomingSeason + ' ML predictions \u00b7 ' + prevSeason + ' model performance';
+      } else if (hasPerf) {
+        subtitle.textContent = prevSeason + ' out-of-sample predictions vs actuals \u00b7 ' + upcomingSeason + ' predictions pending schedule';
       } else {
         subtitle.textContent = prevSeason + ' model performance \u00b7 ' + upcomingSeason + ' predictions pending schedule';
       }
@@ -155,6 +158,16 @@
 
   // ========== OVERVIEW SECTION ==========
   function renderOverview() {
+    var hasPredictions = allPlayers.some(function (p) { return p.projection_points_total != null; });
+    var hasPred = modelMetadata && modelMetadata.has_ml_predictions;
+
+    // If off-season (no ML predictions) and we have model performance data, show off-season overview
+    if (!hasPred && modelPerformance && modelPerformance.per_player_season_totals && modelPerformance.per_player_season_totals.length > 0) {
+      renderOffseasonOverview();
+      return;
+    }
+
+    // In-season or predictions available: show normal overview
     var totalEl = document.getElementById('stat-total-players');
     if (totalEl) totalEl.textContent = allPlayers.length.toLocaleString();
 
@@ -172,7 +185,6 @@
     // Update notice
     var noticeEl = document.getElementById('data-notice');
     if (noticeEl && modelMetadata) {
-      var hasPred = modelMetadata.has_ml_predictions;
       var upcoming = modelMetadata.upcoming_season || '';
       var prev = modelMetadata.prev_season || '';
       if (hasPred) {
@@ -183,13 +195,11 @@
       } else {
         noticeEl.innerHTML = '<strong>Awaiting ' + upcoming + ' schedule:</strong> ' +
           'The ' + upcoming + ' NFL schedule has not been released. Once available, ML predictions will appear. ' +
-          'No extrapolations are used. Check the <em>Model Performance</em> tab to see how the model ' +
-          'performed on the ' + prev + ' season.';
+          'No extrapolations are used.';
       }
     }
 
-    // Top 10 — only show if predictions available
-    var hasPredictions = allPlayers.some(function (p) { return p.projection_points_total != null; });
+    // Top 10
     if (hasPredictions) {
       var top10 = allPlayers.slice().sort(function (a, b) {
         return (b.projection_points_total || 0) - (a.projection_points_total || 0);
@@ -204,6 +214,95 @@
     }
 
     renderPositionCards();
+  }
+
+  function renderOffseasonOverview() {
+    var section = document.getElementById('section-overview');
+    if (!section) return;
+
+    var prev = modelPerformance.season || '';
+    var upcoming = (modelMetadata && modelMetadata.upcoming_season) || '';
+    var m = modelPerformance.aggregate_metrics || {};
+    var byPos = modelPerformance.by_position || {};
+    var players = modelPerformance.per_player_season_totals || [];
+    var trainRange = (modelMetadata && modelMetadata.training_data_range) || '2006-' + (prev - 1);
+
+    var html = '';
+
+    // Hero banner
+    html += '<div class="section-card" style="text-align:center;padding:2rem;border:1px solid var(--color-accent-cyan);border-radius:var(--radius)">' +
+      '<h2 style="color:var(--color-accent-cyan);font-size:1.5rem;margin-bottom:0.5rem">' +
+        prev + ' Season: Model Predictions vs Reality</h2>' +
+      '<p style="color:var(--color-text-secondary);margin-bottom:0.25rem">' +
+        'Out-of-sample predictions &mdash; model trained on ' + trainRange + ', never saw ' + prev + ' data</p>' +
+      '<span class="pill pill--success" style="margin-top:0.5rem;display:inline-block">' +
+        'Zero Data Leakage Verified</span>' +
+    '</div>';
+
+    // Key metrics
+    html += '<div class="hero-stats" style="margin-top:1.5rem">';
+    if (m.rmse != null) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.rmse) + '</div><div class="stat-card__label">RMSE</div></div>';
+    if (m.mae != null) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.mae) + '</div><div class="stat-card__label">MAE</div></div>';
+    if (m.r2 != null) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.r2, 3) + '</div><div class="stat-card__label">R\u00b2</div></div>';
+    if (m.correlation != null) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.correlation, 3) + '</div><div class="stat-card__label">Correlation</div></div>';
+    if (m.within_7_pts_pct != null) html += '<div class="stat-card stat-card--accent"><div class="stat-card__value">' + num(m.within_7_pts_pct) + '%</div><div class="stat-card__label">Within 7 Pts</div></div>';
+    html += '</div>';
+
+    // Upcoming season notice
+    html += '<div class="notice notice--info" style="margin-top:1.5rem">' +
+      '<strong>' + upcoming + ' Predictions:</strong> ' +
+      'The ' + upcoming + ' NFL schedule has not been released (typically May). ' +
+      'Once available, ML predictions will automatically appear here. ' +
+      'Below is how our model performed on the ' + prev + ' season.' +
+    '</div>';
+
+    // Top 10 Most Accurate Predictions
+    var sorted = players.slice().sort(function (a, b) {
+      return Math.abs(a.error) - Math.abs(b.error);
+    });
+    var top10Accurate = sorted.slice(0, 10);
+    html += '<div class="section-card" style="margin-top:1.5rem">' +
+      '<h2>Top 10 Most Accurate Predictions</h2>' +
+      '<p class="section-desc">Players where the model\'s season-total prediction was closest to the actual result.</p>' +
+      '<div class="top10-list">';
+    top10Accurate.forEach(function (p, i) {
+      var errCls = errorClass(p.error);
+      html += '<div class="top10-item">' +
+        '<span class="top10-rank">' + (i + 1) + '</span>' +
+        '<span class="top10-name">' + escapeHtml(p.name) + '</span>' +
+        '<span class="pos-badge ' + posClass(p.position) + '">' + escapeHtml(p.position) + '</span>' +
+        '<span class="top10-team">' + escapeHtml(p.team) + '</span>' +
+        '<span class="top10-pts" style="font-size:0.8rem">' +
+          'Pred: ' + num(p.predicted_total) + ' &middot; Actual: ' + num(p.actual_total) +
+          ' &middot; <span class="risk-badge ' + errCls + '">' + (p.error > 0 ? '+' : '') + num(p.error) + '</span>' +
+        '</span>' +
+      '</div>';
+    });
+    html += '</div></div>';
+
+    // Position accuracy cards
+    html += '<h2 class="section-heading">Position Accuracy</h2>';
+    html += '<div class="position-grid">';
+    POSITIONS.forEach(function (pos) {
+      var r = byPos[pos];
+      if (!r) return;
+      var color = POS_COLORS[pos] || '#fff';
+      html += '<div class="position-card">' +
+        '<div class="position-card__header">' +
+          '<span class="position-card__title" style="color:' + color + '">' + pos + '</span>' +
+        '</div>' +
+        '<ul class="position-card__list" style="list-style:none">' +
+          '<li><span class="player-name">RMSE</span><span class="player-pts" style="color:' + color + '">' + num(r.rmse) + '</span></li>' +
+          '<li><span class="player-name">MAE</span><span class="player-pts" style="color:' + color + '">' + num(r.mae) + '</span></li>' +
+          '<li><span class="player-name">R\u00b2</span><span class="player-pts" style="color:' + color + '">' + num(r.r2, 3) + '</span></li>' +
+          '<li><span class="player-name">Within 7 pts</span><span class="player-pts" style="color:' + color + '">' + num(r.within_7_pts_pct) + '%</span></li>' +
+          '<li><span class="player-name">Within 10 pts</span><span class="player-pts" style="color:' + color + '">' + num(r.within_10_pts_pct) + '%</span></li>' +
+        '</ul>' +
+      '</div>';
+    });
+    html += '</div>';
+
+    section.innerHTML = html;
   }
 
   function renderTop10List(players) {
@@ -253,6 +352,90 @@
   }
 
   // ========== MODEL PERFORMANCE SECTION ==========
+  function renderScatterPlot(players) {
+    if (!players || players.length === 0) return '';
+    var W = 500, H = 400, PAD = 50;
+
+    // Compute axis range
+    var allVals = [];
+    players.forEach(function (p) {
+      if (p.predicted_total != null) allVals.push(p.predicted_total);
+      if (p.actual_total != null) allVals.push(p.actual_total);
+    });
+    if (allVals.length === 0) return '';
+    var minVal = 0;
+    var maxVal = Math.ceil(Math.max.apply(null, allVals) / 50) * 50;
+    if (maxVal <= 0) maxVal = 100;
+
+    function sx(v) { return PAD + (v - minVal) / (maxVal - minVal) * (W - 2 * PAD); }
+    function sy(v) { return H - PAD - (v - minVal) / (maxVal - minVal) * (H - 2 * PAD); }
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:600px;display:block;margin:1rem auto" xmlns="http://www.w3.org/2000/svg">';
+
+    // Background
+    svg += '<rect width="' + W + '" height="' + H + '" fill="#0f1322" rx="8"/>';
+
+    // Grid lines
+    for (var g = 0; g <= maxVal; g += 50) {
+      var gx = sx(g), gy = sy(g);
+      svg += '<line x1="' + PAD + '" y1="' + gy + '" x2="' + (W - PAD) + '" y2="' + gy + '" stroke="#1e293b" stroke-width="1"/>';
+      svg += '<line x1="' + gx + '" y1="' + PAD + '" x2="' + gx + '" y2="' + (H - PAD) + '" stroke="#1e293b" stroke-width="1"/>';
+      svg += '<text x="' + (PAD - 5) + '" y="' + (gy + 4) + '" text-anchor="end" fill="#64748b" font-size="10">' + g + '</text>';
+      svg += '<text x="' + gx + '" y="' + (H - PAD + 15) + '" text-anchor="middle" fill="#64748b" font-size="10">' + g + '</text>';
+    }
+
+    // Perfect prediction line
+    svg += '<line x1="' + sx(minVal) + '" y1="' + sy(minVal) + '" x2="' + sx(maxVal) + '" y2="' + sy(maxVal) + '" stroke="#00f5ff" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.5"/>';
+
+    // Data points
+    players.forEach(function (p) {
+      if (p.predicted_total == null || p.actual_total == null) return;
+      var color = POS_COLORS[p.position] || '#fff';
+      svg += '<circle cx="' + sx(p.predicted_total) + '" cy="' + sy(p.actual_total) + '" r="3.5" fill="' + color + '" opacity="0.7">' +
+        '<title>' + p.name + ' (' + p.position + '): Pred=' + num(p.predicted_total) + ', Actual=' + num(p.actual_total) + '</title>' +
+      '</circle>';
+    });
+
+    // Axis labels
+    svg += '<text x="' + (W / 2) + '" y="' + (H - 5) + '" text-anchor="middle" fill="#94a3b8" font-size="12">Predicted Total (PPR)</text>';
+    svg += '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="#94a3b8" font-size="12" transform="rotate(-90,12,' + (H / 2) + ')">Actual Total (PPR)</text>';
+
+    // Legend
+    var lx = W - PAD - 100;
+    svg += '<text x="' + lx + '" y="' + (PAD + 10) + '" fill="#64748b" font-size="10">Position:</text>';
+    POSITIONS.forEach(function (pos, i) {
+      svg += '<circle cx="' + (lx + 5) + '" cy="' + (PAD + 22 + i * 14) + '" r="4" fill="' + POS_COLORS[pos] + '"/>';
+      svg += '<text x="' + (lx + 14) + '" y="' + (PAD + 25 + i * 14) + '" fill="' + POS_COLORS[pos] + '" font-size="10">' + pos + '</text>';
+    });
+
+    svg += '</svg>';
+    return svg;
+  }
+
+  function renderAccuracyBars(m) {
+    if (!m) return '';
+    var bars = [
+      { label: 'Within 3 pts', pct: m.within_3_pts_pct, color: '#10b981' },
+      { label: 'Within 5 pts', pct: m.within_5_pts_pct, color: '#00f5ff' },
+      { label: 'Within 7 pts', pct: m.within_7_pts_pct, color: '#a78bfa' },
+      { label: 'Within 10 pts', pct: m.within_10_pts_pct, color: '#fbbf24' },
+    ];
+
+    var html = '<div style="margin:1rem 0">';
+    bars.forEach(function (bar) {
+      if (bar.pct == null) return;
+      html += '<div style="display:flex;align-items:center;margin-bottom:0.5rem">' +
+        '<span style="width:100px;font-size:0.8rem;color:#94a3b8">' + bar.label + '</span>' +
+        '<div style="flex:1;background:#1e293b;border-radius:4px;height:20px;position:relative;overflow:hidden">' +
+          '<div style="width:' + Math.min(bar.pct, 100) + '%;height:100%;background:' + bar.color + ';border-radius:4px;transition:width 0.5s"></div>' +
+        '</div>' +
+        '<span style="width:50px;text-align:right;font-size:0.85rem;color:' + bar.color + ';font-weight:600">' + num(bar.pct) + '%</span>' +
+      '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   function initModelPerformance() {
     if (!modelPerformance) return;
 
@@ -263,8 +446,10 @@
 
     var summary = document.getElementById('perf-summary');
     if (summary) {
-      summary.textContent = 'These are genuine out-of-sample predictions: the model never saw ' +
-        modelPerformance.season + ' data during training. Predicted values are compared against actual game results.';
+      summary.innerHTML = '<span class="pill pill--success" style="margin-right:0.5rem">Zero Data Leakage</span>' +
+        'These are genuine out-of-sample predictions: the model never saw ' +
+        modelPerformance.season + ' data during training. ' +
+        'Predicted values are compared against actual game results.';
     }
 
     // Aggregate metrics
@@ -277,13 +462,27 @@
         html += '<div class="hero-stats" style="margin-bottom:1rem">';
         if (m.rmse) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.rmse) + '</div><div class="stat-card__label">RMSE</div></div>';
         if (m.mae) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.mae) + '</div><div class="stat-card__label">MAE</div></div>';
-        if (m.r2) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.r2, 3) + '</div><div class="stat-card__label">R\u00b2</div></div>';
-        if (m.correlation) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.correlation, 3) + '</div><div class="stat-card__label">Correlation</div></div>';
+        if (m.r2 != null) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.r2, 3) + '</div><div class="stat-card__label">R\u00b2</div></div>';
+        if (m.correlation != null) html += '<div class="stat-card"><div class="stat-card__value">' + num(m.correlation, 3) + '</div><div class="stat-card__label">Correlation</div></div>';
         html += '</div>';
       }
+
+      // Accuracy distribution bars
+      html += '<h3 style="margin:1rem 0 0.5rem;color:var(--color-text-primary)">Prediction Accuracy Distribution</h3>';
+      html += renderAccuracyBars(m);
+
+      // Scatter plot
+      var players = modelPerformance.per_player_season_totals || [];
+      if (players.length > 0) {
+        html += '<h3 style="margin:1.5rem 0 0.5rem;color:var(--color-text-primary)">Predicted vs Actual (Season Totals)</h3>';
+        html += '<p style="font-size:0.8rem;color:#64748b;margin-bottom:0.5rem">Each dot is one player. Dashed line = perfect prediction. Closer to the line = more accurate.</p>';
+        html += renderScatterPlot(players);
+      }
+
       // Per-position metrics table
       var posKeys = Object.keys(byPos).filter(function (k) { return POSITIONS.indexOf(k) !== -1; });
       if (posKeys.length > 0) {
+        html += '<h3 style="margin:1.5rem 0 0.5rem;color:var(--color-text-primary)">Per-Position Metrics</h3>';
         html += '<div class="table-wrap" style="margin-bottom:1rem"><table class="draft-table"><thead><tr>' +
           '<th>Position</th><th>RMSE</th><th>MAE</th><th>R\u00b2</th><th>Correlation</th>' +
           '<th>Within 7pts</th><th>Within 10pts</th>' +
@@ -378,6 +577,16 @@
 
   // ========== DRAFT BOARD (UPCOMING SEASON) ==========
   function initDraftBoard() {
+    var hasPred = modelMetadata && modelMetadata.has_ml_predictions;
+    var upcoming = (modelMetadata && modelMetadata.upcoming_season) || '';
+    var prev = (modelMetadata && modelMetadata.prev_season) || '';
+
+    // Off-season: show preview table with OOS comparison instead of empty draft board
+    if (!hasPred && modelPerformance && modelPerformance.per_player_season_totals && modelPerformance.per_player_season_totals.length > 0) {
+      renderOffseasonDraftBoard(upcoming, prev);
+      return;
+    }
+
     var filtersContainer = document.getElementById('position-filters');
     if (filtersContainer) {
       filtersContainer.addEventListener('click', function (e) {
@@ -422,8 +631,6 @@
     // Draft summary
     var summaryEl = document.getElementById('draft-summary');
     if (summaryEl && modelMetadata) {
-      var hasPred = modelMetadata.has_ml_predictions;
-      var upcoming = modelMetadata.upcoming_season || '';
       if (hasPred) {
         summaryEl.textContent = upcoming + ' ML model predictions \u00b7 ' +
           (modelMetadata.methodology ? modelMetadata.methodology.scoring_format : 'PPR scoring') +
@@ -431,9 +638,64 @@
       } else {
         summaryEl.textContent = upcoming + ' season \u2014 predictions pending schedule release \u00b7 ' +
           'No extrapolations \u00b7 ' +
-          'Players listed based on ' + (modelMetadata.prev_season || '') + ' performance';
+          'Players listed based on ' + prev + ' performance';
       }
     }
+  }
+
+  function renderOffseasonDraftBoard(upcoming, prev) {
+    var section = document.getElementById('section-draft');
+    if (!section) return;
+
+    var players = modelPerformance.per_player_season_totals || [];
+
+    var html = '<div class="section-card">' +
+      '<h2>Upcoming Season</h2>' +
+      '<div class="notice notice--info" style="margin-bottom:1rem">' +
+        '<strong>' + upcoming + ' predictions pending</strong> &mdash; ' +
+        'The NFL schedule is typically released in May. Predictions will automatically appear once incorporated. ' +
+        'No extrapolations are ever used.' +
+      '</div>' +
+      '<p class="section-desc" style="margin-bottom:1rem">' +
+        'While waiting for the ' + upcoming + ' schedule, here\'s how the model predicted the ' + prev + ' season ' +
+        '(out-of-sample). Use this to gauge model accuracy for each player.' +
+      '</p>';
+
+    // Table showing players with OOS predictions
+    html += '<div class="table-wrap"><table class="draft-table">' +
+      '<thead><tr>' +
+        '<th class="th--rank">#</th>' +
+        '<th class="th--name">Player</th>' +
+        '<th class="th--pos">Pos</th>' +
+        '<th class="th--team">Team</th>' +
+        '<th class="th--ppg">' + prev + ' PPG</th>' +
+        '<th class="th--pts">' + prev + ' Total</th>' +
+        '<th class="th--pts">Model Prediction</th>' +
+        '<th class="th--pts">Error</th>' +
+        '<th class="th--rank">Games</th>' +
+      '</tr></thead><tbody>';
+
+    players.slice(0, 100).forEach(function (p, i) {
+      var errCls = errorClass(p.error);
+      html += '<tr>' +
+        '<td class="td--rank">' + (i + 1) + '</td>' +
+        '<td class="td--name">' + escapeHtml(p.name) + '</td>' +
+        '<td class="td--pos"><span class="pos-badge ' + posClass(p.position) + '">' + p.position + '</span></td>' +
+        '<td class="td--team">' + escapeHtml(p.team) + '</td>' +
+        '<td class="td--ppg">' + num(p.actual_ppg) + '</td>' +
+        '<td class="td--pts">' + num(p.actual_total) + '</td>' +
+        '<td class="td--pts">' + num(p.predicted_total) + '</td>' +
+        '<td class="td--pts"><span class="risk-badge ' + errCls + '">' + (p.error > 0 ? '+' : '') + num(p.error) + '</span></td>' +
+        '<td class="td--rank">' + p.games + '</td>' +
+      '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    html += '<div class="table-footer">' + players.length + ' players shown &middot; ' +
+      prev + ' out-of-sample predictions vs actual results</div>';
+    html += '</div>';
+
+    section.innerHTML = html;
   }
 
   function applyFiltersAndRender() {
@@ -602,7 +864,38 @@
     if (!container || !modelMetadata) return;
 
     var m = modelMetadata.methodology || {};
+    var hasPred = modelMetadata.has_ml_predictions;
+    var upcoming = modelMetadata.upcoming_season || '';
+    var prev = modelMetadata.prev_season || '';
     var html = '';
+
+    // Off-season validation section (when no predictions yet)
+    if (!hasPred) {
+      html += '<div class="content-section" style="border-left:3px solid var(--color-accent-cyan);padding-left:1rem">' +
+        '<h3>Off-Season Validation</h3>' +
+        '<p>During the off-season, the primary purpose of this app is to demonstrate model accuracy ' +
+        'through <strong>out-of-sample validation</strong> on the ' + prev + ' season.</p>' +
+        '<div style="display:flex;gap:0.5rem;align-items:center;margin:1rem 0;flex-wrap:wrap">' +
+          '<div style="background:#1e293b;padding:0.5rem 1rem;border-radius:8px;text-align:center;flex:1;min-width:120px">' +
+            '<div style="color:#64748b;font-size:0.75rem">TRAIN</div>' +
+            '<div style="color:var(--color-accent-cyan);font-weight:600">' + (m.training_window || '2006-2024') + '</div>' +
+          '</div>' +
+          '<span style="color:#64748b;font-size:1.2rem">\u2192</span>' +
+          '<div style="background:#1e293b;padding:0.5rem 1rem;border-radius:8px;text-align:center;flex:1;min-width:120px">' +
+            '<div style="color:#64748b;font-size:0.75rem">TEST (OOS)</div>' +
+            '<div style="color:var(--color-accent-emerald);font-weight:600">' + prev + '</div>' +
+          '</div>' +
+          '<span style="color:#64748b;font-size:1.2rem">\u2192</span>' +
+          '<div style="background:#1e293b;padding:0.5rem 1rem;border-radius:8px;text-align:center;flex:1;min-width:120px">' +
+            '<div style="color:#64748b;font-size:0.75rem">PREDICT</div>' +
+            '<div style="color:var(--color-accent-amber);font-weight:600">' + upcoming + ' (pending)</div>' +
+          '</div>' +
+        '</div>' +
+        '<p style="font-size:0.85rem;color:#94a3b8">The model was trained on all data before ' + prev + '. ' +
+        'It predicted each week of ' + prev + ' without seeing any ' + prev + ' data. ' +
+        'Results are shown in the Overview and Model Performance tabs.</p>' +
+      '</div>';
+    }
 
     html += '<div class="content-section">' +
       '<h3>Prediction Target</h3>' +
@@ -732,6 +1025,26 @@
       '</ul>' +
     '</div>';
 
+    html += '<div class="content-section">' +
+      '<h3>Season Transition</h3>' +
+      '<p>The app automatically handles the NFL calendar:</p>' +
+      '<ul>' +
+        '<li><strong>Off-Season (Feb\u2013May):</strong> Shows previous season out-of-sample predictions vs actuals. ' +
+           'No forward projections until the schedule is released.</li>' +
+        '<li><strong>Schedule Release (~May):</strong> Once the ' + upcoming + ' schedule is available, ' +
+           'the model retrains with ' + prev + ' data included and generates ' + upcoming + ' predictions. ' +
+           'The front page automatically switches to show upcoming season projections.</li>' +
+        '<li><strong>In-Season:</strong> Weekly predictions with schedule-adjusted matchup quality.</li>' +
+      '</ul>' +
+    '</div>';
+
+    if (modelMetadata && modelMetadata.last_updated) {
+      html += '<div class="content-section">' +
+        '<h3>Data Freshness</h3>' +
+        '<p>Model last trained: ' + escapeHtml(modelMetadata.last_updated) + '</p>' +
+      '</div>';
+    }
+
     html += '<div class="notice notice--info">' +
       '<strong>Disclaimer:</strong> Fantasy football projections are inherently uncertain. ' +
       'Injuries, coaching changes, roster moves, and schedule difficulty can all significantly ' +
@@ -760,15 +1073,25 @@
       '</div>';
 
       html += '<div class="content-section">' +
-        '<h3>What This Means</h3>' +
-        '<p>ML projections for the ' + upcoming + ' season will be generated once the schedule is released. ' +
-        'Until then, no projections are shown (no extrapolation is used). The following adjustments ' +
-        'will be incorporated once the schedule is available:</p>' +
+        '<h3>Expected Timeline</h3>' +
+        '<p>The NFL typically releases the regular season schedule in <strong>mid-May</strong>. ' +
+        'Once the ' + upcoming + ' schedule is released:</p>' +
+        '<ol>' +
+          '<li>Schedule data is automatically detected by the pipeline</li>' +
+          '<li>Models are retrained to include the latest completed season data</li>' +
+          '<li>Full-season ML predictions are generated for ' + upcoming + '</li>' +
+          '<li>The app front page switches to show ' + upcoming + ' projections</li>' +
+        '</ol>' +
+      '</div>';
+
+      html += '<div class="content-section">' +
+        '<h3>What Schedule Incorporation Changes</h3>' +
+        '<p>When the schedule is available, the following adjustments are applied to predictions:</p>' +
         '<ul>' +
-          '<li>Matchup quality (opponent defense strength per position)</li>' +
-          '<li>Home/away performance splits</li>' +
-          '<li>Bye week identification</li>' +
-          '<li>Short-week (Thursday game) adjustments</li>' +
+          '<li><strong>Matchup quality:</strong> Opponent defense strength per position (e.g., facing a top-5 vs bottom-5 pass defense)</li>' +
+          '<li><strong>Home/away splits:</strong> Historical performance differences at home vs on the road</li>' +
+          '<li><strong>Bye week identification:</strong> Rest advantages and post-bye performance patterns</li>' +
+          '<li><strong>Short-week adjustments:</strong> Thursday Night Football scheduling impacts</li>' +
         '</ul>' +
       '</div>';
     } else {
@@ -796,6 +1119,25 @@
 
     var faqs = [
       {
+        q: 'What am I looking at during the off-season?',
+        a: hasPred
+          ? 'The ' + upcoming + ' schedule has been incorporated, so you\'re seeing ML model predictions for the upcoming season.'
+          : 'During the off-season, the app showcases how the model predicted the ' + prev + ' season. ' +
+            'These are genuine <strong>out-of-sample predictions</strong>: the model was trained only on data before ' + prev + ' ' +
+            'and predicted each week of ' + prev + ' without seeing any of that season\'s data. ' +
+            'This lets you evaluate model accuracy before the ' + upcoming + ' predictions are available.'
+      },
+      {
+        q: 'How do I know the model didn\'t cheat on the ' + prev + ' predictions?',
+        a: 'The model uses a strict <strong>expanding-window backtest</strong> with multiple leakage safeguards: ' +
+          '(1) Training data only includes seasons before ' + prev + '. ' +
+          '(2) Each week\'s prediction is made using only data available up to that point. ' +
+          '(3) An automated leakage check verifies no future data appears in training before every fold. ' +
+          '(4) Feature scaling is fit on training data only \u2014 never on test data. ' +
+          '(5) Rolling features are re-computed per fold to prevent look-ahead bias. ' +
+          'These measures ensure genuinely out-of-sample predictions with zero data leakage.'
+      },
+      {
         q: 'What does "Model Performance" show?',
         a: 'The Model Performance tab displays genuine out-of-sample predictions vs actual results for the ' +
           prev + ' season. The model was trained on data through ' + (prev - 1) +
@@ -806,10 +1148,10 @@
         q: 'Why are upcoming season projections blank?',
         a: hasPred
           ? 'They aren\'t! The ' + upcoming + ' schedule has been incorporated and ML predictions are available.'
-          : 'The ' + upcoming + ' NFL schedule has not been released yet (typically released in May). ' +
+          : 'The ' + upcoming + ' NFL schedule has not been released yet (typically released in mid-May). ' +
             'Rather than extrapolating past performance, we wait for the actual schedule so the ML model can ' +
             'generate proper predictions that account for matchup quality, home/away splits, and bye weeks. ' +
-            'No extrapolation is ever used.'
+            'Once the schedule drops, predictions will automatically appear on this app.'
       },
       {
         q: 'How is this different from simple extrapolation?',
