@@ -414,9 +414,11 @@ class PositionModel:
         # Post-hoc conformal recalibration of uncertainty estimates.
         # The blended uncertainty from predict_with_uncertainty is typically
         # too narrow (e.g., 73% actual coverage at 90% nominal). We compute
-        # a single scalar correction factor from OOF residuals so that
-        # nominal coverage matches actual coverage.
+        # per-level correction factors from OOF residuals so that each
+        # nominal coverage level (50%, 80%, 90%, 95%) matches actual coverage.
+        # This replaces the single-scalar approach which only targeted 90%.
         self._uncertainty_scale_factor = 1.0
+        self._uncertainty_scale_factors_per_level = {}
         if oof_ensemble_pred is not None and oof_valid.sum() >= 50:
             from scipy.stats import norm as _norm_dist
 
@@ -441,22 +443,28 @@ class PositionModel:
             oof_abs_resid = np.abs(y_train_inner[oof_valid] - oof_ensemble_pred)
             standardized = oof_abs_resid / np.maximum(blended_std, 1e-8)
 
-            # Correction factor: make 90% nominal coverage actually achieve ~90%.
-            # For a N(0,1) distribution, P(|Z| < 1.645) = 0.90.
-            # If our standardized residuals have q90 != 1.645, scale accordingly.
-            z_90 = _norm_dist.ppf(0.95)  # 1.6449
-            q_90 = float(np.quantile(standardized, 0.90))
-            correction = q_90 / z_90 if z_90 > 0 else 1.0
+            # Per-level correction factors: for each nominal level, compute the
+            # quantile of standardized residuals and compare to the Gaussian z-score.
+            # This ensures each CI level achieves its stated coverage.
+            nominal_levels = [0.50, 0.80, 0.90, 0.95]
+            corrections = []
+            for level in nominal_levels:
+                z_level = _norm_dist.ppf(0.5 + level / 2.0)  # two-sided z-score
+                q_level = float(np.quantile(standardized, level))
+                correction = q_level / z_level if z_level > 0 else 1.0
+                correction = float(np.clip(correction, 0.5, 5.0))
+                self._uncertainty_scale_factors_per_level[level] = correction
+                corrections.append(correction)
 
-            # Bound to avoid pathological cases
-            correction = float(np.clip(correction, 0.5, 5.0))
-            self._uncertainty_scale_factor = correction
+                raw_coverage = float((oof_abs_resid <= z_level * blended_std).mean())
+                cal_coverage = float((oof_abs_resid <= z_level * blended_std * correction).mean())
+                print(f"  CI {int(level*100)}%: factor={correction:.3f}, "
+                      f"raw={raw_coverage:.1%} -> calibrated={cal_coverage:.1%}")
 
-            # Verify calibration on OOF data
-            raw_coverage = float((oof_abs_resid <= z_90 * blended_std).mean())
-            cal_coverage = float((oof_abs_resid <= z_90 * blended_std * correction).mean())
-            print(f"  Uncertainty recalibration: factor={correction:.3f}, "
-                  f"raw 90% coverage={raw_coverage:.1%} -> calibrated={cal_coverage:.1%}")
+            # Use the 90% correction as the primary backward-compatible scalar
+            self._uncertainty_scale_factor = self._uncertainty_scale_factors_per_level.get(
+                0.90, np.median(corrections)
+            )
 
         self.is_fitted = True
         print(f"Model training complete. Meta-learner stacking {'enabled' if self.meta_learner else 'disabled (fixed weights)'}.")
@@ -579,6 +587,44 @@ class PositionModel:
             std_pred = std_pred * scale_factor
 
         return mean_pred, std_pred
+
+    def get_calibrated_interval(
+        self, X: pd.DataFrame, level: float = 0.90
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return prediction with a calibrated confidence interval at the given level.
+
+        Uses per-level conformal correction factors computed during fit for
+        tighter calibration at each coverage level (50%, 80%, 90%, 95%).
+
+        Args:
+            X: Feature DataFrame.
+            level: Nominal coverage level (e.g. 0.90 for 90% CI).
+
+        Returns:
+            Tuple of (point_predictions, lower_bound, upper_bound).
+        """
+        from scipy.stats import norm as _norm
+
+        mean_pred, std_pred_base = self.predict_with_uncertainty(X)
+
+        # Use per-level factor if available; fall back to global factor
+        per_level = getattr(self, "_uncertainty_scale_factors_per_level", {})
+        # _uncertainty_scale_factor is already applied in predict_with_uncertainty,
+        # so we need to undo it and apply the per-level one instead.
+        global_factor = getattr(self, "_uncertainty_scale_factor", 1.0)
+        level_factor = per_level.get(level, global_factor)
+
+        # Undo the global factor, apply per-level factor
+        if global_factor > 0:
+            std_pred = std_pred_base / global_factor * level_factor
+        else:
+            std_pred = std_pred_base * level_factor
+
+        z = _norm.ppf(0.5 + level / 2.0)
+        lower = mean_pred - z * std_pred
+        upper = mean_pred + z * std_pred
+
+        return mean_pred, lower, upper
 
     def predict_distributional(self, X: pd.DataFrame,
                                boom_threshold: float = 20.0,
@@ -1001,6 +1047,7 @@ class PositionModel:
             "calibrator": getattr(self, "calibrator", None),
             "_uncertainty_model": getattr(self, "_uncertainty_model", None),
             "_uncertainty_model_type": getattr(self, "_uncertainty_model_type", None),
+            "_uncertainty_scale_factors_per_level": getattr(self, "_uncertainty_scale_factors_per_level", {}),
         }
         
         joblib.dump(model_data, filepath)
@@ -1031,6 +1078,9 @@ class PositionModel:
         model.calibrator = model_data.get("calibrator")
         model._uncertainty_model = model_data.get("_uncertainty_model")
         model._uncertainty_model_type = model_data.get("_uncertainty_model_type")
+        model._uncertainty_scale_factors_per_level = model_data.get(
+            "_uncertainty_scale_factors_per_level", {}
+        )
         model.is_fitted = True
         return model
 

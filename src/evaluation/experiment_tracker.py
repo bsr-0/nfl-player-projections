@@ -13,6 +13,7 @@ Usage in train.py:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -80,6 +81,54 @@ class ExperimentTracker:
         self._active_runs[run_id]["config"].update(
             {k: self._serialize(v) for k, v in params.items()}
         )
+
+    def log_dataset_hash(self, run_id: str, df, label: str = "training_data") -> str:
+        """Compute and log a deterministic hash of a DataFrame for data lineage.
+
+        Per Agent Directive V7 Section 5: dataset snapshots must be versioned
+        so experiments are reproducible.
+
+        Args:
+            run_id: Active experiment run ID.
+            df: pandas DataFrame to hash.
+            label: Human-readable label for the dataset (e.g., 'training_data').
+
+        Returns:
+            The hex digest of the dataset hash.
+        """
+        import pandas as pd
+
+        if not isinstance(df, pd.DataFrame):
+            logger.warning("log_dataset_hash expects a DataFrame; skipping.")
+            return ""
+
+        # Deterministic hash: sort columns, convert to bytes, hash
+        cols_sorted = sorted(df.columns.tolist())
+        # Use shape + column names + a sample of values for speed on large DFs
+        hasher = hashlib.sha256()
+        hasher.update(f"shape={df.shape}".encode())
+        hasher.update(",".join(cols_sorted).encode())
+        hasher.update(str(df.dtypes.tolist()).encode())
+        # Hash first/last 1000 rows for content fingerprint (full hash too slow on >1M rows)
+        sample_size = min(1000, len(df))
+        if sample_size > 0:
+            head_bytes = df.head(sample_size).to_csv(index=False).encode()
+            tail_bytes = df.tail(sample_size).to_csv(index=False).encode()
+            hasher.update(head_bytes)
+            hasher.update(tail_bytes)
+        digest = hasher.hexdigest()
+
+        if run_id in self._active_runs:
+            hashes = self._active_runs[run_id].setdefault("dataset_hashes", {})
+            hashes[label] = {
+                "sha256": digest,
+                "rows": len(df),
+                "columns": len(df.columns),
+                "column_names": cols_sorted,
+            }
+        logger.info("Dataset hash for '%s': %s (%d rows, %d cols)",
+                     label, digest[:12], len(df), len(df.columns))
+        return digest
 
     def end_run(self, run_id: str, status: str = "completed") -> None:
         """Finalize a run and flush to disk."""

@@ -52,6 +52,8 @@ data/models/feature_scaler*.joblib
 data/processed/
 data/diagnostics/
 data/improvement_results/
+data/experiments/
+data/monitoring/
 
 # Frontend
 frontend/node_modules/

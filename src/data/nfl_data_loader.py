@@ -45,6 +45,7 @@ from config.settings import (
 from src.utils.database import DatabaseManager
 from src.utils.helpers import calculate_fantasy_points
 from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week, current_season_has_weeks_played
+from src.data.schema_validator import validate_weekly_data, validate_schedule_data
 
 
 def _to_scalar_int(x, default: int = 0) -> int:
@@ -217,7 +218,13 @@ class NFLDataLoader:
         
         if not all_dfs:
             return pd.DataFrame()
-        
+
+        # Schema validation before processing (Directive V7, Section 19)
+        for i, chunk_df in enumerate(all_dfs):
+            issues = validate_weekly_data(chunk_df)
+            for issue in issues:
+                print(f"  Schema validation [{i}]: {issue}")
+
         # Ensure unique column names so concat does not raise InvalidIndexError
         def _unique_columns(d: pd.DataFrame) -> pd.DataFrame:
             if d.columns.duplicated().any():
@@ -569,6 +576,10 @@ class NFLDataLoader:
     
     def _store_schedules(self, df: pd.DataFrame):
         """Store schedule data in database. Maps game_type to week 19-22 for playoffs (SB=22)."""
+        # Schema validation (Directive V7, Section 19)
+        issues = validate_schedule_data(df)
+        for issue in issues:
+            print(f"  Schedule schema: {issue}")
         print("  Storing schedules in database...")
         # nflverse game_type: REG, WC, DIV, CON, SB -> align with nfl_calendar week_num 19-22
         _GAME_TYPE_WEEK = {"WC": 19, "DIV": 20, "CON": 21, "SB": 22}

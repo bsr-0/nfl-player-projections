@@ -58,7 +58,9 @@ jobs:
             tests/test_models.py \
             tests/test_backtester.py \
             tests/test_training_pipeline.py \
-            || echo "Some ML integrity tests failed (non-blocking)"
+            tests/test_ts_backtester.py \
+            tests/test_target_and_history_causality.py \
+            tests/test_horizon_models.py
 
       - name: Run unit tests
         run: |
@@ -67,4 +69,5 @@ jobs:
             tests/test_utilization_score.py \
             tests/test_database.py \
             tests/test_predictions.py \
-            || echo "Some unit tests failed (non-blocking)"
+            tests/test_qb_utilization_conversion.py \
+            tests/test_eligible_players.py
