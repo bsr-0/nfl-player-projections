@@ -1,5 +1,5 @@
 {
-  "updated": "2026-05-20T20:23:24Z",
+  "updated": "2026-05-21T19:59:29Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
@@ -32,7 +32,7 @@
       "team": "ARI"
     },
     "Najee Harris": {
-      "status": "IR",
+      "status": "Questionable",
       "note": "Achilles",
       "pos": "RB",
       "team": "LAC"
@@ -157,12 +157,6 @@
       "pos": "QB",
       "team": "KC"
     },
-    "Cam Ward": {
-      "status": "Questionable",
-      "note": "Shoulder - AC Joint \u2014 Sprain",
-      "pos": "QB",
-      "team": "TEN"
-    },
     "Chris Bell": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
@@ -229,18 +223,6 @@
       "pos": "RB",
       "team": "NO"
     },
-    "Justice Hill": {
-      "status": "Questionable",
-      "note": "Neck",
-      "pos": "RB",
-      "team": "BAL"
-    },
-    "Gunnar Helm": {
-      "status": "Questionable",
-      "note": "Toe",
-      "pos": "TE",
-      "team": "TEN"
-    },
     "Jordyn Tyson": {
       "status": "Questionable",
       "note": "Undisclosed",
@@ -252,12 +234,6 @@
       "note": "Foot",
       "pos": "TE",
       "team": "SF"
-    },
-    "Rashod Bateman": {
-      "status": "Questionable",
-      "note": "Illness",
-      "pos": "WR",
-      "team": "BAL"
     },
     "Jerome Ford": {
       "status": "Questionable",
