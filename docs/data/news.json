@@ -1,5 +1,5 @@
 {
-  "updated": "2026-05-24T19:23:09Z",
+  "updated": "2026-05-25T19:47:26Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
@@ -41,7 +41,7 @@
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
-      "team": "FA"
+      "team": "TEN"
     },
     "Rashee Rice": {
       "status": "Questionable",
@@ -199,17 +199,17 @@
       "pos": "RB",
       "team": "CLE"
     },
-    "Malik Davis": {
-      "status": "Questionable",
-      "note": "Eye",
-      "pos": "RB",
-      "team": "DAL"
-    },
     "Devaughn Vele": {
       "status": "Questionable",
       "note": "Shoulder",
       "pos": "WR",
       "team": "NO"
+    },
+    "Malik Davis": {
+      "status": "Questionable",
+      "note": "Eye",
+      "pos": "RB",
+      "team": "DAL"
     },
     "Alvin Kamara": {
       "status": "Questionable",
