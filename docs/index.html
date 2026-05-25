@@ -355,12 +355,16 @@ details summary::-webkit-details-marker { display: none; }
    Scarcity strip
    ============================================================ */
 .scarcity-strip {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.scarcity-strip-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 10px 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 
@@ -419,9 +423,13 @@ details summary::-webkit-details-marker { display: none; }
    VONA panel (Round Guide)
    ============================================================ */
 .vona-panel {
-  padding: 10px 16px 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+.vona-panel-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 10px 20px 12px;
 }
 
 .vona-header {
@@ -774,6 +782,8 @@ body.draft-mode .draft-toggle {
   .header      { padding: 10px 14px; }
   .controls    { padding: 10px 14px 6px; }
   .stats-strip { padding: 0 14px 12px; }
+  .scarcity-strip-inner { padding: 8px 14px; }
+  .vona-panel-inner { padding: 8px 14px 10px; }
   .draft-panel { padding: 0 14px 12px; }
   .sources-row { padding: 0 14px 12px; }
   .card-grid   { padding: 0 14px 30px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
@@ -1121,13 +1131,15 @@ function renderScarcityStrip() {
   const nextPick = Math.min(maxPick, draftPick + teams);
 
   return `<div class="scarcity-strip">
-    <div class="scar-header">
-      <button class="scar-btn" onclick="setDraftPick(${prevPick})" ${draftPick <= teams ? "disabled" : ""}>◀</button>
-      <span class="scar-pick-label">Pick ${draftPick} · Rd ${round}</span>
-      <button class="scar-btn" onclick="setDraftPick(${nextPick})" ${draftPick >= maxPick ? "disabled" : ""}>▶</button>
+    <div class="scarcity-strip-inner">
+      <div class="scar-header">
+        <button class="scar-btn" onclick="setDraftPick(${prevPick})" ${draftPick <= teams ? "disabled" : ""}>◀</button>
+        <span class="scar-pick-label">Pick ${draftPick} · Rd ${round}</span>
+        <button class="scar-btn" onclick="setDraftPick(${nextPick})" ${draftPick >= maxPick ? "disabled" : ""}>▶</button>
+      </div>
+      <div class="scar-tiles">${tiles}</div>
+      <div class="scar-note">Starters above replacement remaining</div>
     </div>
-    <div class="scar-tiles">${tiles}</div>
-    <div class="scar-note">Starters above replacement remaining</div>
   </div>`;
 }
 
@@ -1171,11 +1183,13 @@ function renderVonaPanel() {
 
   if (currentRound > rounds) {
     return `<div class="vona-panel">
-      <div class="vona-header">
-        <span class="vona-title">Round Guide · Slot</span>
-        <div class="slot-pills">${slotPills}</div>
+      <div class="vona-panel-inner">
+        <div class="vona-header">
+          <span class="vona-title">Round Guide · Slot</span>
+          <div class="slot-pills">${slotPills}</div>
+        </div>
+        <div class="vona-done">Draft complete</div>
       </div>
-      <div class="vona-done">Draft complete</div>
     </div>`;
   }
 
@@ -1197,13 +1211,15 @@ function renderVonaPanel() {
     : "";
 
   return `<div class="vona-panel">
-    <div class="vona-header">
-      <span class="vona-title">Round Guide · Slot</span>
-      <div class="slot-pills">${slotPills}</div>
-    </div>
-    <div class="vona-body">
-      <div class="vona-round-cur">${curSection}</div>
-      ${nextSection}
+    <div class="vona-panel-inner">
+      <div class="vona-header">
+        <span class="vona-title">Round Guide · Slot</span>
+        <div class="slot-pills">${slotPills}</div>
+      </div>
+      <div class="vona-body">
+        <div class="vona-round-cur">${curSection}</div>
+        ${nextSection}
+      </div>
     </div>
   </div>`;
 }
