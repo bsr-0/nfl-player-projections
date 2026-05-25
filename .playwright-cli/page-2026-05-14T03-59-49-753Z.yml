@@ -1,0 +1,74 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]: Draft Advisor 2026
+      - generic [ref=e5]: Model-powered fantasy draft rankings
+    - generic [ref=e6]:
+      - button "Draft Mode Off" [ref=e7] [cursor=pointer]
+      - textbox "Search players…" [ref=e8]: Malik Nabers
+      - combobox [ref=e9] [cursor=pointer]:
+        - 'option "Sort: Value Rank" [selected]'
+        - 'option "Sort: Season PPR"'
+        - 'option "Sort: ADP"'
+        - 'option "Sort: vs ADP"'
+        - 'option "Sort: VORP"'
+  - generic [ref=e11]:
+    - button "All (249)" [ref=e12] [cursor=pointer]
+    - button "QB (32)" [ref=e13] [cursor=pointer]
+    - button "RB (77)" [ref=e14] [cursor=pointer]
+    - button "WR (106)" [ref=e15] [cursor=pointer]
+    - button "TE (34)" [ref=e16] [cursor=pointer]
+  - generic [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]: "149"
+      - generic [ref=e20]:
+        - text: Overvalued
+        - text: 118 strong FADE
+    - generic [ref=e21]:
+      - generic [ref=e22]: "100"
+      - generic [ref=e23]:
+        - text: Undervalued
+        - text: 78 strong Sleeper
+  - generic [ref=e24]:
+    - generic [ref=e25]: ▲ Sleeper — model projects more value than their draft rank suggests
+    - generic [ref=e26]: ▼ FADE — model projects less value than their draft rank suggests
+    - generic [ref=e27]:
+      - generic "How many spots our model ranks them versus expert consensus. Positive means undervalued" [ref=e28]: vs Experts
+      - text: — positive = undervalued, negative = overvalued
+    - generic [ref=e29]:
+      - generic "Points above a freely available replacement player at this position" [ref=e30]: Above Repl.
+      - text: — points above a freely available player at same position
+    - generic [ref=e31]:
+      - generic "Projected full-season PPR fantasy points" [ref=e32]: Season PPR
+      - text: — expected full-season PPR fantasy points
+  - generic [ref=e7585]:
+    - generic [ref=e7586]:
+      - generic [ref=e7587]: WR
+      - generic [ref=e7588]:
+        - generic [ref=e7589]: "#275"
+        - button "Queue" [ref=e7590] [cursor=pointer]
+    - generic "Malik Nabers" [ref=e7591]
+    - generic [ref=e7592]: NYG
+    - generic [ref=e7593]:
+      - generic "Projected full-season PPR fantasy points" [ref=e7594]:
+        - generic "Projected full-season PPR fantasy points" [ref=e7595]: Season PPR
+        - generic [ref=e7596]: "60.4"
+      - generic "Average draft position (expert consensus rank)" [ref=e7597]:
+        - generic [ref=e7598]: ADP Rank
+        - generic [ref=e7599]: "14.9"
+      - generic "Points above a freely available replacement player at this position" [ref=e7600]:
+        - generic "Points above a freely available replacement player at this position" [ref=e7601]: Above Repl.
+        - generic [ref=e7602]: "-121.6"
+      - generic "How many spots our model ranks them versus expert consensus. Positive means undervalued" [ref=e7603]:
+        - generic "How many spots our model ranks them versus expert consensus. Positive means undervalued" [ref=e7604]: vs Experts
+        - generic [ref=e7605]: "-263"
+    - generic [ref=e7606]:
+      - generic [ref=e7607]: FADE
+      - generic [ref=e7608]: Rotational
+    - group [ref=e7609]:
+      - generic "Why -" [active] [ref=e7611] [cursor=pointer]
+      - list [ref=e7612]:
+        - listitem [ref=e7613]: "Model #275 vs ADP #15"
+        - listitem [ref=e7614]: Inj 11g
+        - listitem [ref=e7615]: Easy div
+  - generic [ref=e7553]: Projections from walk-forward ML models trained on 2006–2025 NFL data. Not financial advice.

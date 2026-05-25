@@ -103,3 +103,6 @@ walk-forward-validation.md
 # Regenerate: python scripts/generate_dashboard_html.py
 
 data/nfl_data.db
+data/nfl_data.db-shm
+data/nfl_data.db-wal
+data/raw/http_cache/

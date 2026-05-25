@@ -1,0 +1,75 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]: Draft Advisor 2026
+      - generic [ref=e5]: Model-powered fantasy draft rankings
+    - generic [ref=e6]:
+      - button "Draft Mode Off" [ref=e7] [cursor=pointer]
+      - textbox "Search players…" [ref=e8]: Aaron Rodgers
+      - combobox [ref=e9] [cursor=pointer]:
+        - 'option "Sort: Value Rank" [selected]'
+        - 'option "Sort: Season PPR"'
+        - 'option "Sort: ADP"'
+        - 'option "Sort: vs ADP"'
+        - 'option "Sort: VORP"'
+  - generic [ref=e11]:
+    - button "All (249)" [ref=e12] [cursor=pointer]
+    - button "QB (32)" [ref=e13] [cursor=pointer]
+    - button "RB (77)" [ref=e14] [cursor=pointer]
+    - button "WR (106)" [ref=e15] [cursor=pointer]
+    - button "TE (34)" [ref=e16] [cursor=pointer]
+  - generic [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]: "149"
+      - generic [ref=e20]:
+        - text: Overvalued
+        - text: 118 strong FADE
+    - generic [ref=e21]:
+      - generic [ref=e22]: "100"
+      - generic [ref=e23]:
+        - text: Undervalued
+        - text: 78 strong Sleeper
+  - generic [ref=e24]:
+    - generic [ref=e25]: ▲ Sleeper — model projects more value than their draft rank suggests
+    - generic [ref=e26]: ▼ FADE — model projects less value than their draft rank suggests
+    - generic [ref=e27]:
+      - generic "How many spots our model ranks them versus expert consensus. Positive means undervalued" [ref=e28]: vs Experts
+      - text: — positive = undervalued, negative = overvalued
+    - generic [ref=e29]:
+      - generic "Points above a freely available replacement player at this position" [ref=e30]: Above Repl.
+      - text: — points above a freely available player at same position
+    - generic [ref=e31]:
+      - generic "Projected full-season PPR fantasy points" [ref=e32]: Season PPR
+      - text: — expected full-season PPR fantasy points
+  - generic [ref=e7581]:
+    - generic [ref=e7582]:
+      - generic [ref=e7583]: QB
+      - generic [ref=e7584]:
+        - generic [ref=e7585]: "#37"
+        - button "Queue" [ref=e7586] [cursor=pointer]
+    - generic "Aaron Rodgers" [ref=e7587]
+    - generic [ref=e7588]:
+      - text: FA
+      - generic [ref=e7589]: QB1
+    - generic [ref=e7590]:
+      - generic "Projected full-season PPR fantasy points" [ref=e7591]:
+        - generic "Projected full-season PPR fantasy points" [ref=e7592]: Season PPR
+        - generic [ref=e7593]: "232.2"
+      - generic "Average draft position (expert consensus rank)" [ref=e7594]:
+        - generic [ref=e7595]: ADP Rank
+        - generic [ref=e7596]: "263.7"
+      - generic "Points above a freely available replacement player at this position" [ref=e7597]:
+        - generic "Points above a freely available replacement player at this position" [ref=e7598]: Above Repl.
+        - generic [ref=e7599]: "-16.5"
+      - generic "How many spots our model ranks them versus expert consensus. Positive means undervalued" [ref=e7600]:
+        - generic "How many spots our model ranks them versus expert consensus. Positive means undervalued" [ref=e7601]: vs Experts
+        - generic [ref=e7602]: "+206"
+    - generic [ref=e7603]:
+      - generic [ref=e7604]: Sleeper
+      - generic [ref=e7605]: Starter
+    - group [ref=e7606]:
+      - generic "Why -" [active] [ref=e7608] [cursor=pointer]
+      - list [ref=e7609]:
+        - listitem [ref=e7610]: "Model #37 vs ADP #264"
+        - listitem [ref=e7611]: New team
+  - generic [ref=e7553]: Projections from walk-forward ML models trained on 2006–2025 NFL data. Not financial advice.
