@@ -108,5 +108,10 @@
     "player": "Aaron Rodgers",
     "mult": 0.55,
     "note": "Age 43, final season declared \u2014 retirement risk, no 2027 value"
+  },
+  {
+    "player": "Tua Tagovailoa",
+    "mult": 0.85,
+    "note": "ATL: Concussion history (5 career), QB competition uncertainty"
   }
 ]

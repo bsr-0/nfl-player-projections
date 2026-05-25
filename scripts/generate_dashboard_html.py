@@ -1555,8 +1555,14 @@ def build_usage_roles(season: int) -> dict:
         for pos, players in positions.items():
             if pos == "RB":
                 players.sort(key=lambda x: -(x["carries"] + x["targets"]))
+            elif pos in ("WR", "TE"):
+                # Weight targets 10x over snaps — snaps have data gaps and rookies
+                # get inflated snap estimates that would otherwise bury veterans
+                # with missing snap counts (e.g. MHJ: 74 real tgts, 0 recorded snaps).
+                players.sort(key=lambda x: -(x["targets"] * 10 + x["snaps"]))
             else:
-                players.sort(key=lambda x: -(x["targets"] + x["snaps"]))
+                # QB: sort by snaps (QBs have 0 targets)
+                players.sort(key=lambda x: -x["snaps"])
 
             for rank, p in enumerate(players, 1):
                 tgt_share = round(p["targets"] / team_targets * 100) if team_targets else 0
@@ -1590,6 +1596,7 @@ def build_usage_roles(season: int) -> dict:
                     "tgt_share": tgt_share,
                     "carry_share": carry_share,
                     "usage": note,
+                    "games": p["games"],
                 }
 
     return roles
@@ -1790,6 +1797,9 @@ def build_board_data(season: int):
             usage_note = ur["usage"]
             tgt_share = ur["tgt_share"]
             carry_share = ur["carry_share"]
+            # Injury-return override: missed 7+ games + high consensus → incoherent labels
+            if ur.get("games", 17) <= 9 and sr.ecr < 100:
+                usage_note = "Returning"
         else:
             team_role = proj_role_map.get(sr.name, "")
             usage_note = "Rookie" if "rookie_" in str(sr.name).lower() else "Proj"
@@ -1912,6 +1922,15 @@ def build_board_data(season: int):
             "edge": round(calibration["final_display_projection"] - _mkt_get(mkt_proj_lookup, sr.name))
                 if _mkt_get(mkt_proj_lookup, sr.name) is not None else None,
         })
+
+    # Recompute vs-experts signal from calibrated projection rank, not raw ML rank.
+    # Raw ML rank is pre-calibration and produces misleading signals (e.g. Rodgers
+    # at mr=37 showing +206 despite a 103-pt calibrated projection).
+    proj_sorted = sorted(players, key=lambda p: -p["proj"])
+    cal_rank_map = {p["n"]: i + 1 for i, p in enumerate(proj_sorted)}
+    for p in players:
+        cal_rank = cal_rank_map.get(p["n"], 999)
+        p["sp"] = round(p["ecr"]) - cal_rank
 
     calibration_summary = _summarize_board_calibration(players)
     rb_wr_gap_excess = calibration_summary["summary"].get("rb_wr_gap_excess", 0.0)
