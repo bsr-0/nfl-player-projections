@@ -337,8 +337,8 @@ CAUSAL_FEATURES = {
         "recv_epa_per_target_roll3_mean",
         "opp_fpts_allowed", "implied_team_total", "spread",
         "team_prior_season_wins",
-        # Prior-season QB efficiency: high-EPA QB elevates WR output (2006+)
-        "team_qb_pass_epa_per_att",
+        # QB identity EPA: actual QB1 assigned to team (roster-sourced for 2026+)
+        "current_qb_epa_per_att",
         "injury_score", "prev_season_ppg", "preseason_ecr",
         "age_curve", "team_changed", "availability_3yr",
         "career_year_flag", "bayesian_prior_ppg",
@@ -365,8 +365,8 @@ CAUSAL_FEATURES = {
         "recv_epa_per_target_roll3_mean",
         "opp_fpts_allowed", "implied_team_total", "spread",
         "team_prior_season_wins",
-        # Prior-season QB efficiency: high-EPA QB elevates TE output (2006+)
-        "team_qb_pass_epa_per_att",
+        # QB identity EPA: actual QB1 assigned to team (roster-sourced for 2026+)
+        "current_qb_epa_per_att",
         "injury_score", "prev_season_ppg", "preseason_ecr",
         "age_curve", "team_changed", "availability_3yr",
         "career_year_flag", "bayesian_prior_ppg",
@@ -552,7 +552,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "20"  # v20: remove QB prior_season_late_ppg (caused upward bias); keep fp_volatility_roll5 + usage accel
+FEATURE_VERSION = "21"  # v21: current_qb_epa_per_att replaces team_qb_pass_epa_per_att for WR/TE; QB1 sourced from live rosters for 2026+
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

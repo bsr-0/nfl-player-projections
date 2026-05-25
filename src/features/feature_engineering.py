@@ -111,6 +111,8 @@ class FeatureEngineer:
         df = self._add_prior_season_wins(df)
         # Prior-season QB efficiency (benefits WR/TE predictions)
         df = self._add_team_qb_efficiency(df)
+        # QB-identity-aware efficiency: uses actual QB1 per team, roster-sourced for 2026+
+        df = self._add_current_qb_efficiency(df)
 
         # Advanced analytics: sentiment, coaching changes, suspensions,
         # trade deadline, and playoff context features.
@@ -190,6 +192,8 @@ class FeatureEngineer:
         df = self._add_prior_season_wins(df)
         # Prior-season QB efficiency (benefits WR/TE predictions)
         df = self._add_team_qb_efficiency(df)
+        # QB-identity-aware efficiency: uses actual QB1 per team, roster-sourced for 2026+
+        df = self._add_current_qb_efficiency(df)
 
         # NGS stats (CPOE, separation, RYOE) — merged + rolled for causal features
         df = self._merge_ngs_data(df)
@@ -2987,6 +2991,114 @@ class FeatureEngineer:
 
         df = df.merge(qb_df, on=["team", "season"], how="left")
         df["team_qb_pass_epa_per_att"] = df["team_qb_pass_epa_per_att"].fillna(0.0)
+        return df
+
+    def _add_current_qb_efficiency(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add current_qb_epa_per_att: EPA/att for the actual QB1 assigned to each team.
+
+        Unlike team_qb_pass_epa_per_att (which lags the prior-year team aggregate),
+        this identifies the specific QB by player identity and uses their rolling
+        3-season career EPA. For 2026+, QB1 is sourced from nfl-data-py current
+        rosters rather than inferred from prior-year stats, capturing free agency
+        moves and trades before any games are played.
+
+        Causality: historical QB1 = QB with most attempts in season-1 for that team.
+        Career EPA = sum over the 3 seasons strictly before the prediction season.
+        """
+        if "team" not in df.columns or "season" not in df.columns:
+            df["current_qb_epa_per_att"] = 0.0
+            return df
+
+        try:
+            import sqlite3
+            from config.settings import DB_PATH
+            conn = sqlite3.connect(str(DB_PATH))
+            rows = conn.execute("""
+                SELECT pws.player_id, pws.season, pws.team,
+                       SUM(pws.pass_epa)          AS total_epa,
+                       SUM(pws.passing_attempts)  AS total_att
+                FROM player_weekly_stats pws
+                JOIN players p ON pws.player_id = p.player_id
+                WHERE p.position = 'QB' AND pws.passing_attempts > 0
+                GROUP BY pws.player_id, pws.season, pws.team
+                HAVING SUM(pws.passing_attempts) > 50
+            """).fetchall()
+            conn.close()
+        except Exception:
+            df["current_qb_epa_per_att"] = 0.0
+            return df
+
+        qb_seasons = pd.DataFrame(rows, columns=["player_id", "season", "team", "total_epa", "total_att"])
+
+        # QB1 per team per season (causal): QB with most attempts in the PRIOR season.
+        # Advance season by 1 so the lookup key is the prediction season.
+        qb1_prior = (
+            qb_seasons.sort_values("total_att", ascending=False)
+            .groupby(["team", "season"])[["player_id"]]
+            .first()
+            .reset_index()
+            .assign(target_season=lambda x: x["season"] + 1)
+            [["team", "target_season", "player_id"]]
+        )
+
+        # Career EPA per att for each QB going into each target season:
+        # sum over the 3 seasons strictly before target_season.
+        target_seasons = sorted(df["season"].unique())
+        qb_prior_epa_rows = []
+        for ts in target_seasons:
+            prior = qb_seasons[(qb_seasons["season"] >= ts - 3) & (qb_seasons["season"] < ts)]
+            if prior.empty:
+                continue
+            agg = prior.groupby("player_id").agg(
+                epa=("total_epa", "sum"), att=("total_att", "sum")
+            ).reset_index()
+            agg = agg[agg["att"] >= 50]
+            agg["current_qb_epa_per_att"] = agg["epa"] / agg["att"]
+            agg["target_season"] = ts
+            qb_prior_epa_rows.append(agg[["player_id", "target_season", "current_qb_epa_per_att"]])
+
+        if not qb_prior_epa_rows:
+            df["current_qb_epa_per_att"] = 0.0
+            return df
+
+        qb_prior_epa_df = pd.concat(qb_prior_epa_rows, ignore_index=True)
+
+        # For 2026+ seasons, override QB1 lookup with live roster data.
+        upcoming = [s for s in target_seasons if s >= 2026]
+        if upcoming:
+            try:
+                import nfl_data_py as nfl
+                rosters = nfl.import_seasonal_rosters(upcoming)
+                rosters = rosters[
+                    (rosters["position"] == "QB") & (rosters["status"] == "ACT")
+                ].copy()
+                rosters["season"] = rosters["season"].astype(int)
+                # Rank QBs by career attempts so QB1 = most experienced (likely starter)
+                qb_career_att = qb_seasons.groupby("player_id")["total_att"].sum().reset_index()
+                qb_career_att.columns = ["player_id", "career_att"]
+                rosters = rosters.merge(qb_career_att, on="player_id", how="left")
+                rosters["career_att"] = rosters["career_att"].fillna(0)
+                qb1_roster = (
+                    rosters.sort_values("career_att", ascending=False)
+                    .groupby(["team", "season"])
+                    .first()
+                    .reset_index()[["team", "season", "player_id"]]
+                    .rename(columns={"season": "target_season"})
+                )
+                # Replace historical prior-season QB1 entries for upcoming seasons
+                qb1_prior = qb1_prior[~qb1_prior["target_season"].isin(upcoming)]
+                qb1_prior = pd.concat([qb1_prior, qb1_roster], ignore_index=True)
+            except Exception:
+                pass  # Fall back to prior-season QB1 if roster fetch fails
+
+        # Join QB1 identity → their career EPA
+        team_qb_epa = qb1_prior.merge(
+            qb_prior_epa_df, on=["player_id", "target_season"], how="left"
+        )[["team", "target_season", "current_qb_epa_per_att"]]
+        team_qb_epa = team_qb_epa.rename(columns={"target_season": "season"})
+
+        df = df.merge(team_qb_epa, on=["team", "season"], how="left")
+        df["current_qb_epa_per_att"] = df["current_qb_epa_per_att"].fillna(0.0)
         return df
 
     def _create_advanced_analytics_features(self, df: pd.DataFrame) -> pd.DataFrame:

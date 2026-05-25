@@ -60,16 +60,16 @@ CALIBRATION_POLICY = {
     "divergence_soft_pct": 0.10,
     "divergence_hard_pct": 0.45,
     "per_signal_caps_pct": {
-        "age": 0.05,
+        "age": 0.15,       # Raised from 0.05 — allows meaningful penalty for 40+ players
         "team_change": 0.04,
         "usage": 0.04,
         "regression": 0.05,
         "injury": 0.06,
         "breakout": 0.04,
-        "manual": 0.06,
+        "manual": 0.10,    # Raised from 0.06 — allows stronger overrides for known situations
         "sos": 0.03,
     },
-    "global_adjustment_cap_pct": 0.10,
+    "global_adjustment_cap_pct": 0.20,  # Raised from 0.10 — prevents all signals being crushed
     "market_band_pct": {"QB": 0.22, "RB": 0.18, "WR": 0.16, "TE": 0.18},
     "elite_band_pct": {"QB": 0.18, "RB": 0.12, "WR": 0.12, "TE": 0.14},
     "min_band_points": {"QB": 16.0, "RB": 14.0, "WR": 12.0, "TE": 10.0},
@@ -96,6 +96,17 @@ def _norm_key(name: str, pos: str | None = None):
             idx -= 1
         last = parts[idx].lower() if idx >= 0 else ""
     return (initial, "".join(c for c in last if c.isalnum()))
+
+
+def _mkt_get(lookup: dict, name: str):
+    """Look up a market projection by full name first, norm_key second.
+
+    The lookup dict stores both full-name-lower keys (primary, unambiguous) and
+    norm_key tuple keys (fallback, for abbreviated names). This avoids collisions
+    between players who share a first initial + last name (e.g. Kaytron Allen /
+    Keenan Allen both normalize to ('k', 'allen')).
+    """
+    return lookup.get(name.lower().strip()) or lookup.get(_norm_key(name))
 
 
 def _spread_identity(sr) -> tuple[str, str, str, str, float]:
@@ -141,7 +152,7 @@ def _build_market_anchor_context(spread_results, market_lookup: dict) -> dict:
         pos = getattr(sr, "position", "")
         pos_rank[pos] += 1
         ident = _spread_identity(sr)
-        exact_market = market_lookup.get(_norm_key(getattr(sr, "name", "")))
+        exact_market = _mkt_get(market_lookup, getattr(sr, "name", ""))
         player_context[ident] = {
             "position_rank": pos_rank[pos],
             "overall_rank": overall_rank,
@@ -196,6 +207,18 @@ def _compute_blend_weight(position: str, ecr: float, raw_proj: float, market_pro
 
     base_weight = CALIBRATION_POLICY["blend_model_weight"].get(position, 0.5)
     min_weight = CALIBRATION_POLICY["min_model_weight"].get(position, 0.35)
+
+    # When the market consensus ranks a player as effectively undraftable (ECR > 150),
+    # reduce model weight. The consensus is almost always right about retirement risk,
+    # age cliffs, and major roster uncertainty. Scale from full weight at ECR=150
+    # down to 40% of base at ECR=300+. This prevents the model's stale historical
+    # data from dominating over the market's forward-looking view.
+    if ecr > 150:
+        # e.g. ECR=264: scale = max(0.40, 1 - (264-150)/300) = max(0.40, 0.62) = 0.62
+        consensus_scale = max(0.40, 1.0 - (ecr - 150) / 300.0)
+        base_weight = base_weight * consensus_scale
+        min_weight = min_weight * consensus_scale
+
     divergence_pct = abs(raw_proj - market_proj) / max(abs(market_proj), 1.0)
     soft = CALIBRATION_POLICY["divergence_soft_pct"]
     hard = CALIBRATION_POLICY["divergence_hard_pct"]
@@ -302,6 +325,12 @@ def _apply_structured_adjustments(
         "manualCapHit": False,
     }
 
+    # When a player has a major injury signal (expected < 15 games), their
+    # usage_trend and regression signals are measuring the injured season, not
+    # their true baseline. Suppress those two to avoid triple-counting the same
+    # root cause (e.g. ACL mid-season → low late targets → regression penalty).
+    major_injury = bool(injury_data and injury_data.get("expected_gp", 17) < 15)
+
     if age_data and age_data.get("mult", 1.0) != 1.0:
         flags["ageCapHit"] = _add_adjustment(
             breakdown,
@@ -328,7 +357,7 @@ def _apply_structured_adjustments(
             team_change_label,
         )
 
-    if trend_data and trend_data.get("mult", 1.0) != 1.0:
+    if trend_data and trend_data.get("mult", 1.0) != 1.0 and not major_injury:
         slope = float(trend_data.get("slope", 0.0) or 0.0)
         slope_prefix = "+" if slope > 0 else ""
         _add_adjustment(
@@ -340,7 +369,7 @@ def _apply_structured_adjustments(
             f"Usage trend {slope_prefix}{slope:.0f}",
         )
 
-    if regression_data and regression_data.get("mult", 1.0) != 1.0:
+    if regression_data and regression_data.get("mult", 1.0) != 1.0 and not major_injury:
         _add_adjustment(
             breakdown,
             "regression",
@@ -852,7 +881,7 @@ def compute_age_adjustments(season: int) -> dict:
         name = r.get("player_name") or r.get("name") or ""
         if not name:
             continue
-        result[name] = {"age": round(age, 1), "mult": round(mult, 3)}
+        result[(name, pos)] = {"age": round(age, 1), "mult": round(mult, 3)}
 
     return result
 
@@ -891,7 +920,7 @@ def compute_team_changes(season: int) -> dict:
     result = {}
     for name, pos, old_team, new_team in rows:
         penalty = TEAM_CHANGE_PENALTY.get(pos, 0.05)
-        result[name] = {
+        result[(name, pos)] = {
             "from": old_team,
             "to": new_team,
             "mult": round(1.0 - penalty, 2),
@@ -944,7 +973,7 @@ def compute_usage_trends(season: int) -> dict:
             mult = 1.0
 
         if mult != 1.0:
-            result[name] = {
+            result[(name, pos)] = {
                 "early": round(early, 1),
                 "late": round(late, 1),
                 "slope": round(slope, 1),
@@ -998,7 +1027,7 @@ def compute_injury_risk(season: int) -> dict:
         # Cap at 0.65 — don't discount more than 35% for injury alone
         mult = max(0.65, mult)
         expected_gp = round(mult * 17, 1)
-        result[name] = {
+        result[(name, pos)] = {
             "avail_rate": round(avail_rate, 2),
             "expected_gp": expected_gp,
             "mult": round(mult, 3),
@@ -1072,7 +1101,8 @@ def compute_breakout_candidates(season: int) -> dict:
             # Conservative boost — only +5% since 75% of efficiency jumps revert
             # But combined signals have higher persistence (~45%)
             mult = 1.05
-            result[name] = {
+            pos = cur.get("pos", "")
+            result[(name, pos)] = {
                 "eff_change": round(eff_change * 100),
                 "vol_change": round(vol_change * 100),
                 "mult": mult,
@@ -1156,7 +1186,7 @@ def compute_regression_adjustments(season: int) -> dict:
         mult = retain + (1.0 - retain) * (career_ppg / recent_ppg)
         mult = max(0.6, min(1.0, mult))
 
-        result[name] = {
+        result[(name, pos)] = {
             "career_ppg": round(career_ppg, 1),
             "recent_ppg": round(recent_ppg, 1),
             "pct_above": round(pct_above * 100),
@@ -1662,10 +1692,10 @@ def build_board_data(season: int):
     raw_usage_roles = build_usage_roles(season)
     team_tendencies = build_team_tendencies(season)
 
-    usage_roles = {}  # normalized key -> role data
+    usage_roles = {}  # (norm_key, position) -> role data
     for name, data in raw_usage_roles.items():
-        pos = data["role"][:2]
-        key = _norm_key(name, pos)
+        pos = data["role"][:2]  # "WR" from "WR3", "RB" from "RB1", etc.
+        key = (_norm_key(name), pos)
         # Keep the one with higher usage
         existing = usage_roles.get(key)
         if existing is None or (data["tgt_share"] + data["carry_share"]) > (existing["tgt_share"] + existing["carry_share"]):
@@ -1686,6 +1716,18 @@ def build_board_data(season: int):
             pos_players.sort(key=lambda s: -s.model_projection)
             for rank, sr in enumerate(pos_players, 1):
                 proj_role_map[sr.name] = f"{pos}{rank}"
+
+    # Build current-roster team lookup to correct stale ADP team labels (e.g. "FA"
+    # for players who signed after the last ADP scrape). Keyed by _norm_key(name).
+    roster_team_override: dict = {}
+    try:
+        import nfl_data_py as _nfl_rt
+        _rt = _nfl_rt.import_seasonal_rosters([season])
+        _rt = _rt[_rt["status"] == "ACT"][["player_name", "team"]].dropna()
+        for _, row in _rt.iterrows():
+            roster_team_override[_norm_key(str(row["player_name"]))] = str(row["team"])
+    except Exception:
+        pass
 
     # Compute projection adjustments
     print("  Computing adjustments (age, team changes, usage trends, SOS)...")
@@ -1727,11 +1769,11 @@ def build_board_data(season: int):
         mkt_raw = json.loads(mkt_proj_path.read_text(encoding="utf-8"))
         market_projection_season = mkt_raw.get("season")
         for pname, rec in mkt_raw.get("players", {}).items():
-            key = _norm_key(pname)
             fp = rec.get("market_fp", 0)
-            # Keep the highest-fp entry when norm keys collide
-            if key not in mkt_proj_lookup or fp > mkt_proj_lookup[key]:
-                mkt_proj_lookup[key] = fp
+            # Key by full name lowercase — unambiguous, no collisions between
+            # players who share first initial + last name (e.g. Kaytron/Keenan Allen).
+            # Board player names are always full names so full-name matching is sufficient.
+            mkt_proj_lookup[pname.lower().strip()] = fp
 
     anchor_context = _build_market_anchor_context(spread_results, mkt_proj_lookup)
     headshot_lookup = load_headshot_lookup()
@@ -1742,7 +1784,7 @@ def build_board_data(season: int):
         if sr.ecr > 300:
             continue
         # Use real usage role if available, else projection-based
-        ur = usage_roles.get(_norm_key(sr.name, sr.position))
+        ur = usage_roles.get((_norm_key(sr.name), sr.position))
         if ur:
             team_role = ur["role"]
             usage_note = ur["usage"]
@@ -1758,32 +1800,38 @@ def build_board_data(season: int):
         tt = team_tendencies.get(sr.team, {})
 
         player_age = None
-        aa = age_adj.get(sr.name)
+        aa = age_adj.get((sr.name, sr.position))
         if aa is None:
             aa = next(
-                (data for name, data in age_adj.items() if _norm_key(name, sr.position) == _norm_key(sr.name, sr.position)),
+                (data for (name, pos), data in age_adj.items()
+                 if _norm_key(name) == _norm_key(sr.name) and pos == sr.position),
                 None,
             )
         if aa:
             player_age = aa["age"]
         tc = next(
-            (data for name, data in team_change_adj.items() if _norm_key(name, sr.position) == _norm_key(sr.name, sr.position)),
+            (data for (name, pos), data in team_change_adj.items()
+             if _norm_key(name) == _norm_key(sr.name) and pos == sr.position),
             None,
         )
         tr = next(
-            (data for name, data in trend_adj.items() if _norm_key(name, sr.position) == _norm_key(sr.name, sr.position)),
+            (data for (name, pos), data in trend_adj.items()
+             if _norm_key(name) == _norm_key(sr.name) and pos == sr.position),
             None,
         )
         ra = next(
-            (data for name, data in regression_adj.items() if _norm_key(name) == _norm_key(sr.name)),
+            (data for (name, pos), data in regression_adj.items()
+             if _norm_key(name) == _norm_key(sr.name) and pos == sr.position),
             None,
         )
         ia = next(
-            (data for name, data in injury_adj.items() if _norm_key(name) == _norm_key(sr.name)),
+            (data for (name, pos), data in injury_adj.items()
+             if _norm_key(name) == _norm_key(sr.name) and pos == sr.position),
             None,
         )
         ba = next(
-            (data for name, data in breakout_adj.items() if _norm_key(name) == _norm_key(sr.name)),
+            (data for (name, pos), data in breakout_adj.items()
+             if _norm_key(name) == _norm_key(sr.name) and pos == sr.position),
             None,
         )
 
@@ -1819,11 +1867,17 @@ def build_board_data(season: int):
             if item["signal"] != "market_clamp"
         ]
 
+        # Correct stale ADP team labels: if ADP says "FA" but the live roster
+        # has the player on a team, use the live roster value.
+        board_team = sr.team
+        if not board_team or board_team == "FA":
+            board_team = roster_team_override.get(_norm_key(sr.name), sr.team)
+
         players.append({
             "id": i,
             "n": sr.name,
             "p": sr.position,
-            "t": sr.team,
+            "t": board_team,
             "img": resolve_headshot_url(sr, headshot_lookup),
             "ecr": round(sr.ecr, 1),
             "mr": sr.model_rank,
@@ -1854,9 +1908,9 @@ def build_board_data(season: int):
             "w": sr.model_wins if has_actuals else None,
             "adj_note": manual["note"] if manual else "",
             "why": calibration["why"],
-            "mkt25": mkt_proj_lookup.get(_norm_key(sr.name)),
-            "edge": round(calibration["final_display_projection"] - mkt_proj_lookup[_norm_key(sr.name)])
-                if _norm_key(sr.name) in mkt_proj_lookup else None,
+            "mkt25": _mkt_get(mkt_proj_lookup, sr.name),
+            "edge": round(calibration["final_display_projection"] - _mkt_get(mkt_proj_lookup, sr.name))
+                if _mkt_get(mkt_proj_lookup, sr.name) is not None else None,
         })
 
     calibration_summary = _summarize_board_calibration(players)

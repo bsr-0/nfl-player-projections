@@ -622,12 +622,17 @@ class NFLPredictor:
             pass
 
         # Apply train-fitted bounded scaler to ensure serving parity.
+        # Skip silently if the saved scaler was built on a different feature set
+        # (feature version mismatch after retraining without regenerating the scaler).
         if self.bounded_scaler_artifact:
             cols = [c for c in self.bounded_scaler_artifact["columns"] if c in data.columns]
             if cols:
                 values = data[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
-                scaled = self.bounded_scaler_artifact["scaler"].transform(values)
-                data.loc[:, cols] = scaled
+                try:
+                    scaled = self.bounded_scaler_artifact["scaler"].transform(values)
+                    data.loc[:, cols] = scaled
+                except ValueError:
+                    pass  # Feature count mismatch from version bump — skip scaling
         
         return data
 

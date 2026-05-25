@@ -70,6 +70,10 @@ def get_preseason_ecr(season: int, db_path: Path = DB_PATH) -> Dict[str, float]:
     adp_rows = c.fetchall()
 
     # Build lookup from our DB: (abbrev_name, position, team) -> player_id
+    # Primary: use the requested season's game data.
+    # Fallback: when no game data exists yet (preseason), use the most recent
+    # season that does have data — then overlay current team assignments from
+    # nfl-data-py rosters so players who switched teams still match.
     c.execute(
         """SELECT DISTINCT p.player_id, p.name, p.position, pws.team
            FROM players p
@@ -77,8 +81,35 @@ def get_preseason_ecr(season: int, db_path: Path = DB_PATH) -> Dict[str, float]:
            WHERE pws.season = ?""",
         (season,),
     )
+    rows = c.fetchall()
+
+    if not rows:
+        # No game data for this season yet — use most recent available season.
+        c.execute(
+            """SELECT DISTINCT p.player_id, p.name, p.position, pws.team
+               FROM players p
+               JOIN player_weekly_stats pws ON p.player_id = pws.player_id
+               WHERE pws.season = (SELECT MAX(season) FROM player_weekly_stats)""",
+        )
+        rows = c.fetchall()
+
+        # Overlay current team assignments from nfl-data-py rosters so players
+        # who moved in the offseason still match their ADP team.
+        try:
+            import nfl_data_py as nfl
+            roster_df = nfl.import_seasonal_rosters([season])
+            roster_df = roster_df[roster_df["status"] == "ACT"][["player_id", "team"]].dropna()
+            team_override = dict(zip(roster_df["player_id"], roster_df["team"]))
+        except Exception:
+            team_override = {}
+
+        rows = [
+            (pid, name, pos, team_override.get(pid, team))
+            for pid, name, pos, team in rows
+        ]
+
     db_lookup: Dict[tuple, str] = {}
-    for pid, name, pos, team in c.fetchall():
+    for pid, name, pos, team in rows:
         db_lookup[(name, pos, team)] = pid
         # Also index without team for cross-team matches (trades)
         if (name, pos) not in db_lookup:

@@ -36,6 +36,53 @@ python -m src.scrapers.run_scrapers --refresh
 python -m src.models.train --positions QB RB WR TE
 ```
 
+### Retraining
+
+**When to retrain:** Any time `FEATURE_VERSION` in `config/settings.py` is bumped (e.g. after adding or removing features), or after loading a new season of data. The model will log a version-mismatch warning at prediction time if the saved artifact is stale.
+
+**Fast retrain** (recommended for iterating — ~8-10x faster, minimal accuracy loss):
+```bash
+python -m src.models.train --positions QB RB WR TE --fast --no-tune
+```
+
+**Production retrain** (full hyperparameter search via Optuna — slow, may OOM on large machines; use `--no-tune` if it crashes):
+```bash
+python -m src.models.train --positions QB RB WR TE
+```
+
+**Single position** (useful for testing a feature change on one position before full retrain):
+```bash
+python -m src.models.train --positions WR --fast --no-tune
+```
+
+Trained artifacts are saved to `data/models/`. After retraining, regenerate predictions:
+```bash
+python -m src.predict --weeks 18
+```
+
+### Diagnosing outlier projections
+
+If a player is projected far above or below expectations, run:
+```bash
+# Check all positions (default: 18-week horizon, 1.5σ threshold)
+python scripts/diagnose_outliers.py
+
+# Tighter threshold or single position
+python scripts/diagnose_outliers.py --sigma 1.2 --position WR
+
+# Week-1 view
+python scripts/diagnose_outliers.py --weeks 1
+```
+
+The script flags each outlier and identifies the most likely driver from a known list of failure modes:
+- `preseason_ecr=300` — ADP name match failed; model treats player as undrafted
+- `prev_season_ppg≈0` — player missed most/all of prior season
+- `team_changed=1` — share features (target/rush/snap%) reflect the old team's system
+- `fp_late6_vs_season` near clip bounds — single-game outlier inflating/deflating late-season trend
+- `snap_share≈0` — no recent snap data (new signing or ADP lookup miss)
+- `injury_score<0.5` — significant injury flag
+- `depth_chart_rank≥3` — listed as backup
+
 ### 3. Make Predictions
 ```bash
 # Predict next week

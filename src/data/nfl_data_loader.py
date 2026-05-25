@@ -51,6 +51,7 @@ from config.settings import (
     SCORING,
     PBP_ADVANCED_FEATURES_ENABLED,
     PBP_ADVANCED_SEASONS,
+    ELIGIBLE_SEASONS_LOOKBACK,
 )
 from src.utils.database import DatabaseManager
 from src.utils.helpers import calculate_fantasy_points
