@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T00:33:58.394684",
+  "generated_at": "2026-05-25T19:47:52.542902",
   "train_seasons": [
     2018,
     2019,
@@ -11,15 +11,42 @@
   ],
   "status_by_position": {
     "QB": {
-      "hybrid_4w": "trained_and_saved",
-      "deep_18w": "trained_and_saved"
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
+    },
+    "RB": {
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
+    },
+    "WR": {
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
+    },
+    "TE": {
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
     }
   },
   "target_semantics": {
     "QB": {
-      "1w": "target_1w_or_target_util_1w_trainer_selected",
-      "4w": "target_util_4w_preferred_over_target_4w",
-      "18w": "target_util_18w_preferred_over_target_18w"
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
+    },
+    "RB": {
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
+    },
+    "WR": {
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
+    },
+    "TE": {
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
     }
   }
 }

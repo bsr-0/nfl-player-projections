@@ -66,10 +66,10 @@ CALIBRATION_POLICY = {
         "regression": 0.05,
         "injury": 0.06,
         "breakout": 0.04,
-        "manual": 0.10,    # Raised from 0.06 — allows stronger overrides for known situations
+        "manual": 0.25,    # Raised from 0.10 — manual adj needs real leverage for role changes
         "sos": 0.03,
     },
-    "global_adjustment_cap_pct": 0.20,  # Raised from 0.10 — prevents all signals being crushed
+    "global_adjustment_cap_pct": 0.40,  # Raised further — manual overrides for role changes need room
     "market_band_pct": {"QB": 0.22, "RB": 0.18, "WR": 0.16, "TE": 0.18},
     "elite_band_pct": {"QB": 0.18, "RB": 0.12, "WR": 0.12, "TE": 0.14},
     "min_band_points": {"QB": 16.0, "RB": 14.0, "WR": 12.0, "TE": 10.0},
@@ -214,8 +214,10 @@ def _compute_blend_weight(position: str, ecr: float, raw_proj: float, market_pro
     # down to 40% of base at ECR=300+. This prevents the model's stale historical
     # data from dominating over the market's forward-looking view.
     if ecr > 150:
-        # e.g. ECR=264: scale = max(0.40, 1 - (264-150)/300) = max(0.40, 0.62) = 0.62
-        consensus_scale = max(0.40, 1.0 - (ecr - 150) / 300.0)
+        # Steeper falloff: reaches 0.20 floor at ECR~350 (was 0.40 floor near-never reached).
+        # At ECR=225: max(0.20, 1-(75/200)) = 0.625. At ECR=250: 0.50. At ECR=300: 0.25.
+        # This prevents stale historical data from dominating for backup/unknown players.
+        consensus_scale = max(0.20, 1.0 - (ecr - 150) / 200.0)
         base_weight = base_weight * consensus_scale
         min_weight = min_weight * consensus_scale
 

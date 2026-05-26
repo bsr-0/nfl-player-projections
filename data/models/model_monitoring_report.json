@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-05-11T00:34:37.987726",
-  "feature_version": "18",
+  "generated_at": "2026-05-25T19:48:10.479397",
+  "feature_version": "21",
   "metadata_file": "/Users/benrosen/nfl-player-projections/data/models/model_metadata.json",
   "training_metadata": {
-    "training_date": "2026-05-11T00:34:37.987368",
-    "feature_version": "18",
+    "training_date": "2026-05-25T19:48:10.478875",
+    "feature_version": "21",
     "train_seasons": [
       2018,
       2019,
@@ -16,97 +16,76 @@
     ],
     "test_season": 2025,
     "positions_trained": [
-      "QB"
+      "QB",
+      "RB",
+      "WR",
+      "TE"
     ],
-    "oof_metrics": {
-      "QB": {
-        "1w": {
-          "rmse": 6.948816705341478,
-          "mae": 5.580389075933337,
-          "r2": 0.2871392372623376
-        },
-        "4w": {
-          "rmse": 18.08703418814169,
-          "mae": 13.830693431235579,
-          "r2": 0.2432068226316063
-        },
-        "18w": {
-          "rmse": 0.04498828180757425,
-          "mae": 0.014912600863882004,
-          "r2": 0.15572539902406635
-        }
-      }
-    },
+    "oof_metrics": {},
     "test_metrics": {
       "QB": {
-        "FP (owner objective)": {
-          "rmse": 7.343218333129975,
-          "mae": 5.962562442708058,
-          "r2": -0.02101617060024563,
-          "within_7pt_pct": 63.05031446540881,
-          "within_10pt_pct": 81.91823899371069,
-          "n_samples": 636,
-          "mape": 92.40791138896958,
-          "spearman_rho": 0.2922255258135181,
-          "expert_benchmark_rmse": 7.5,
-          "vs_expert_pct": 2.1
+        "FP (component)": {
+          "rmse": 6.896826732438017,
+          "mae": 5.659379538064679,
+          "r2": 0.14431311261458724,
+          "within_7pt_pct": 67.11111111111111,
+          "within_10pt_pct": 86.22222222222223,
+          "n_samples": 675,
+          "mape": 84.12911894521497,
+          "spearman_rho": 0.40838966035782137
+        }
+      },
+      "RB": {
+        "FP (component)": {
+          "rmse": 6.502232120033138,
+          "mae": 4.706171866727938,
+          "r2": 0.28810724990253256,
+          "within_7pt_pct": 80.11088011088012,
+          "within_10pt_pct": 89.74358974358975,
+          "n_samples": 1443,
+          "mape": 66.7117689910112,
+          "spearman_rho": 0.5686928890284775
+        }
+      },
+      "WR": {
+        "FP (component)": {
+          "rmse": 6.22362492782219,
+          "mae": 4.559450356856304,
+          "r2": 0.20121168886067664,
+          "within_7pt_pct": 81.20744439400816,
+          "within_10pt_pct": 89.60508397639583,
+          "n_samples": 2203,
+          "mape": 67.6579795926848,
+          "spearman_rho": 0.46813837943967246
+        }
+      },
+      "TE": {
+        "FP (component)": {
+          "rmse": 5.370154790961788,
+          "mae": 3.8255813212651986,
+          "r2": 0.10093343193138471,
+          "within_7pt_pct": 85.81314878892734,
+          "within_10pt_pct": 93.25259515570934,
+          "n_samples": 1156,
+          "mape": 57.709331889911994,
+          "spearman_rho": 0.4259916208642503
         }
       }
     },
     "n_features_per_position": {
-      "QB": 320
+      "QB": 36,
+      "RB": 34,
+      "WR": 35,
+      "TE": 34
     },
-    "previous_training_date": "2026-05-10T23:47:35.065797",
+    "previous_training_date": "2026-05-11T00:34:37.987368",
     "previous_feature_version": "18",
     "rollback_available": true,
     "n_rollback_versions": 5,
     "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
     "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
   },
-  "top10_features_per_position": {
-    "QB": [
-      {
-        "feature": "player_emb_0",
-        "importance": 34.271099368405245
-      },
-      {
-        "feature": "int_rate_roll3_mean",
-        "importance": 27.253025454480834
-      },
-      {
-        "feature": "ngs_avg_air_yards_to_sticks_roll3_mean",
-        "importance": 19.753395960198358
-      },
-      {
-        "feature": "opp_fpts_allowed_s2d_lag1",
-        "importance": 18.00275689917923
-      },
-      {
-        "feature": "opp_defense_week",
-        "importance": 17.00331953188651
-      },
-      {
-        "feature": "position_rank",
-        "importance": 15.254929320288799
-      },
-      {
-        "feature": "ngs_avg_time_to_throw",
-        "importance": 15.002290236713627
-      },
-      {
-        "feature": "offensive_momentum_score",
-        "importance": 14.75282783116535
-      },
-      {
-        "feature": "team_a_points_allowed",
-        "importance": 14.752583898957315
-      },
-      {
-        "feature": "team_a_points_scored",
-        "importance": 14.253017043201373
-      }
-    ]
-  },
+  "top10_features_per_position": {},
   "feature_importance_stability": {
     "QB": {
       "overlap_pct": null,

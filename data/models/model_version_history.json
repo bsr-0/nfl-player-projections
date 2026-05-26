@@ -1,88 +1,5 @@
 [
   {
-    "training_date": "2026-05-10T22:55:11.082141",
-    "feature_version": "16",
-    "train_seasons": [
-      2018,
-      2019,
-      2020,
-      2021,
-      2022,
-      2023,
-      2024
-    ],
-    "test_season": 2025,
-    "positions_trained": [
-      "QB",
-      "RB",
-      "WR",
-      "TE"
-    ],
-    "oof_metrics": {},
-    "test_metrics": {
-      "QB": {
-        "FP (component)": {
-          "rmse": 6.89612578014334,
-          "mae": 5.662801284518222,
-          "r2": 0.13843883825435888,
-          "within_7pt_pct": 67.29559748427673,
-          "within_10pt_pct": 86.32075471698113,
-          "n_samples": 636,
-          "mape": 83.38861148925403,
-          "spearman_rho": 0.40900184166954023
-        }
-      },
-      "RB": {
-        "FP (component)": {
-          "rmse": 6.951459434497858,
-          "mae": 5.266957152750823,
-          "r2": 0.23219016403330506,
-          "within_7pt_pct": 74.65397923875432,
-          "within_10pt_pct": 87.37024221453287,
-          "n_samples": 1156,
-          "mape": 74.10078141803518,
-          "spearman_rho": 0.504124011963038
-        }
-      },
-      "WR": {
-        "FP (component)": {
-          "rmse": 5.8732419713834645,
-          "mae": 4.228508746520061,
-          "r2": 0.20289001380132854,
-          "within_7pt_pct": 83.33333333333334,
-          "within_10pt_pct": 91.2568306010929,
-          "n_samples": 3294,
-          "mape": 63.66160356356482,
-          "spearman_rho": 0.4659106265173895
-        }
-      },
-      "TE": {
-        "FP (component)": {
-          "rmse": 5.519138913382969,
-          "mae": 4.060505836600343,
-          "r2": 0.1289952088367251,
-          "within_7pt_pct": 85.42199488491049,
-          "within_10pt_pct": 92.32736572890026,
-          "n_samples": 391,
-          "mape": 71.84352573789127,
-          "spearman_rho": 0.40014317380405073
-        }
-      }
-    },
-    "n_features_per_position": {
-      "QB": 31,
-      "RB": 30,
-      "WR": 31,
-      "TE": 30
-    },
-    "previous_training_date": "2026-05-10T22:14:57.481212",
-    "previous_feature_version": "15",
-    "rollback_available": true,
-    "n_rollback_versions": 5,
-    "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
-    "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
-  },
-  {
     "training_date": "2026-05-10T23:05:12.102771",
     "feature_version": "17",
     "train_seasons": [
@@ -324,6 +241,67 @@
       "QB": 35
     },
     "previous_training_date": "2026-05-10T23:42:09.590605",
+    "previous_feature_version": "18",
+    "rollback_available": true,
+    "n_rollback_versions": 5,
+    "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
+    "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
+  },
+  {
+    "training_date": "2026-05-11T00:34:37.987368",
+    "feature_version": "18",
+    "train_seasons": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "test_season": 2025,
+    "positions_trained": [
+      "QB"
+    ],
+    "oof_metrics": {
+      "QB": {
+        "1w": {
+          "rmse": 6.948816705341478,
+          "mae": 5.580389075933337,
+          "r2": 0.2871392372623376
+        },
+        "4w": {
+          "rmse": 18.08703418814169,
+          "mae": 13.830693431235579,
+          "r2": 0.2432068226316063
+        },
+        "18w": {
+          "rmse": 0.04498828180757425,
+          "mae": 0.014912600863882004,
+          "r2": 0.15572539902406635
+        }
+      }
+    },
+    "test_metrics": {
+      "QB": {
+        "FP (owner objective)": {
+          "rmse": 7.343218333129975,
+          "mae": 5.962562442708058,
+          "r2": -0.02101617060024563,
+          "within_7pt_pct": 63.05031446540881,
+          "within_10pt_pct": 81.91823899371069,
+          "n_samples": 636,
+          "mape": 92.40791138896958,
+          "spearman_rho": 0.2922255258135181,
+          "expert_benchmark_rmse": 7.5,
+          "vs_expert_pct": 2.1
+        }
+      }
+    },
+    "n_features_per_position": {
+      "QB": 320
+    },
+    "previous_training_date": "2026-05-10T23:47:35.065797",
     "previous_feature_version": "18",
     "rollback_available": true,
     "n_rollback_versions": 5,

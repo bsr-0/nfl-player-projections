@@ -818,22 +818,6 @@
       "rec_yds": 726.5,
       "kicking_pts": 0
     },
-    "Geno Smith": {
-      "market_fp": 171.2,
-      "prop_fp": 171.2,
-      "td_fp": 0.0,
-      "td_rush": 0,
-      "td_rec": 0,
-      "games": 12,
-      "position": "QB",
-      "pass_yds": 2593.0,
-      "pass_tds": 14.0,
-      "pass_ints": 0,
-      "rush_yds": 115.0,
-      "receptions": 0,
-      "rec_yds": 0,
-      "kicking_pts": 0
-    },
     "Breece Hall": {
       "market_fp": 170.8,
       "prop_fp": 152.8,
@@ -7648,6 +7632,22 @@
       "rush_yds": 0,
       "receptions": 0,
       "rec_yds": 0.5,
+      "kicking_pts": 0
+    },
+    "Geno Smith": {
+      "market_fp": 171.2,
+      "prop_fp": 171.2,
+      "td_fp": 0.0,
+      "td_rush": 0,
+      "td_rec": 0,
+      "games": 12,
+      "position": "QB",
+      "pass_yds": 0,
+      "pass_tds": 0,
+      "pass_ints": 0,
+      "rush_yds": 0,
+      "receptions": 0,
+      "rec_yds": 0,
       "kicking_pts": 0
     }
   }

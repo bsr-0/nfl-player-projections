@@ -1,101 +1,101 @@
 {
-  "generated_at": "2026-05-11T00:33:53.958805",
+  "generated_at": "2026-05-25T19:47:52.481904",
   "strict_requirements": false,
   "distribution_shift": {
     "adversarial_auc": 1.0,
     "shift_detected": true,
     "top_shifted_features": [
       {
+        "feature": "fantasy_points_allowed_rb_zscore",
+        "ks_stat": 0.883,
+        "p_value": 0.0
+      },
+      {
         "feature": "fantasy_points_allowed_wr_zscore",
-        "ks_stat": 0.89,
+        "ks_stat": 0.883,
         "p_value": 0.0
       },
       {
         "feature": "fantasy_points_allowed_rb",
-        "ks_stat": 0.882,
-        "p_value": 0.0
-      },
-      {
-        "feature": "fantasy_points_allowed_wr",
-        "ks_stat": 0.882,
-        "p_value": 0.0
-      },
-      {
-        "feature": "fantasy_points_allowed_rb_zscore",
         "ks_stat": 0.879,
         "p_value": 0.0
       },
       {
+        "feature": "fantasy_points_allowed_wr",
+        "ks_stat": 0.878,
+        "p_value": 0.0
+      },
+      {
         "feature": "fantasy_points_allowed_qb",
-        "ks_stat": 0.863,
+        "ks_stat": 0.874,
         "p_value": 0.0
       },
       {
         "feature": "fantasy_points_allowed_qb_zscore",
-        "ks_stat": 0.86,
+        "ks_stat": 0.871,
         "p_value": 0.0
       },
       {
         "feature": "fantasy_points_allowed_te",
-        "ks_stat": 0.747,
+        "ks_stat": 0.86,
         "p_value": 0.0
       },
       {
         "feature": "fantasy_points_allowed_te_zscore",
-        "ks_stat": 0.701,
-        "p_value": 0.0
-      },
-      {
-        "feature": "depth_chart_rank",
-        "ks_stat": 0.65,
+        "ks_stat": 0.859,
         "p_value": 0.0
       },
       {
         "feature": "expected_game_total",
-        "ks_stat": 0.589,
+        "ks_stat": 0.593,
+        "p_value": 0.0
+      },
+      {
+        "feature": "depth_chart_rank",
+        "ks_stat": 0.574,
         "p_value": 0.0
       }
     ],
     "top_discriminative_features": [
       {
-        "feature": "opp_pts_allowed",
-        "importance": 0.8614
-      },
-      {
         "feature": "team_b_pace_sec_per_play",
-        "importance": 0.0397
-      },
-      {
-        "feature": "fantasy_points_allowed_rb",
-        "importance": 0.0215
-      },
-      {
-        "feature": "team_a_points_scored",
-        "importance": 0.0205
+        "importance": 0.8849
       },
       {
         "feature": "fantasy_points_allowed_wr",
-        "importance": 0.0187
+        "importance": 0.0979
       },
       {
-        "feature": "total_yards",
-        "importance": 0.0108
+        "feature": "team_snaps",
+        "importance": 0.0171
       },
       {
-        "feature": "team_b_points_allowed",
-        "importance": 0.0082
+        "feature": "opp_pts_allowed",
+        "importance": 0.0001
       },
       {
-        "feature": "team_b_points_scored",
-        "importance": 0.006
+        "feature": "team_a_plays_per_game",
+        "importance": 0.0
       },
       {
-        "feature": "rushing_yards",
-        "importance": 0.0045
+        "feature": "opp_fpts_allowed",
+        "importance": 0.0
       },
       {
-        "feature": "team_b_total_yards",
-        "importance": 0.0027
+        "feature": "route_part_norm",
+        "importance": 0.0
+      },
+      {
+        "feature": "team_yards",
+        "importance": 0.0
+      },
+      {
+        "feature": "team_a_points_allowed",
+        "importance": 0.0
+      },
+      {
+        "feature": "utilization_score",
+        "importance": 0.0
       }
     ]
   },
@@ -113,33 +113,33 @@
   },
   "train_outliers_3sigma": {
     "fantasy_points": {
-      "n_outliers": 6,
-      "n_samples": 4511,
-      "pct_outliers": 0.133
+      "n_outliers": 416,
+      "n_samples": 37233,
+      "pct_outliers": 1.117
     },
     "target_1w": {
-      "n_outliers": 0,
-      "n_samples": 4511,
-      "pct_outliers": 0.0
+      "n_outliers": 479,
+      "n_samples": 37233,
+      "pct_outliers": 1.286
     },
     "target_4w": {
-      "n_outliers": 0,
-      "n_samples": 4511,
-      "pct_outliers": 0.0
+      "n_outliers": 352,
+      "n_samples": 37233,
+      "pct_outliers": 0.945
     },
     "target_18w": {
-      "n_outliers": 201,
-      "n_samples": 4511,
-      "pct_outliers": 4.456
+      "n_outliers": 1403,
+      "n_samples": 37233,
+      "pct_outliers": 3.768
     },
     "target_util_1w": {
       "n_outliers": 0,
-      "n_samples": 4511,
+      "n_samples": 37233,
       "pct_outliers": 0.0
     },
     "utilization_score": {
       "n_outliers": 0,
-      "n_samples": 4511,
+      "n_samples": 37233,
       "pct_outliers": 0.0
     }
   }
