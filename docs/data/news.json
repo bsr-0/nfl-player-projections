@@ -1,11 +1,17 @@
 {
-  "updated": "2026-05-25T19:47:26Z",
+  "updated": "2026-05-26T20:13:59Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "NYG"
+    },
+    "Tucker Kraft": {
+      "status": "Questionable",
+      "note": "Knee - ACL \u2014 Surgery",
+      "pos": "TE",
+      "team": "GB"
     },
     "Cam Skattebo": {
       "status": "Questionable",
@@ -19,11 +25,11 @@
       "pos": "WR",
       "team": "NYJ"
     },
-    "Tucker Kraft": {
+    "Najee Harris": {
       "status": "Questionable",
-      "note": "Knee - ACL \u2014 Surgery",
-      "pos": "TE",
-      "team": "GB"
+      "note": "Achilles",
+      "pos": "RB",
+      "team": "LAC"
     },
     "Trey Benson": {
       "status": "Questionable",
@@ -31,23 +37,11 @@
       "pos": "RB",
       "team": "ARI"
     },
-    "Najee Harris": {
-      "status": "Questionable",
-      "note": "Achilles",
-      "pos": "RB",
-      "team": "LAC"
-    },
     "Tyreek Hill": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "TEN"
-    },
-    "Rashee Rice": {
-      "status": "Questionable",
-      "note": "Knee",
-      "pos": "WR",
-      "team": "KC"
     },
     "Jayden Daniels": {
       "status": "Questionable",
@@ -55,29 +49,17 @@
       "pos": "QB",
       "team": "WAS"
     },
-    "Daniel Jones": {
-      "status": "IR",
-      "note": "Achilles \u2014 Surgery",
-      "pos": "QB",
-      "team": "IND"
-    },
-    "Devin Neal": {
-      "status": "Questionable",
-      "note": "Hamstring",
-      "pos": "RB",
-      "team": "NO"
-    },
-    "Tank Dell": {
-      "status": "Questionable",
-      "note": "Knee - ACL + MCL \u2014 Surgery",
-      "pos": "WR",
-      "team": "HOU"
-    },
     "Travis Hunter": {
       "status": "Questionable",
       "note": "Knee \u2014 Surgery",
       "pos": "WR",
       "team": "JAC"
+    },
+    "Rashee Rice": {
+      "status": "Questionable",
+      "note": "Knee",
+      "pos": "WR",
+      "team": "KC"
     },
     "Sam LaPorta": {
       "status": "Questionable",
@@ -85,11 +67,11 @@
       "pos": "TE",
       "team": "DET"
     },
-    "Troy Franklin": {
+    "Tank Dell": {
       "status": "Questionable",
-      "note": "Hamstring",
+      "note": "Knee - ACL + MCL \u2014 Surgery",
       "pos": "WR",
-      "team": "DEN"
+      "team": "HOU"
     },
     "Brock Bowers": {
       "status": "Questionable",
@@ -97,23 +79,17 @@
       "pos": "TE",
       "team": "LV"
     },
-    "Bo Nix": {
-      "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
+    "Daniel Jones": {
+      "status": "IR",
+      "note": "Achilles \u2014 Surgery",
       "pos": "QB",
-      "team": "DEN"
+      "team": "IND"
     },
-    "Ty Johnson": {
+    "Troy Franklin": {
       "status": "Questionable",
-      "note": "Ankle",
-      "pos": "RB",
-      "team": "BUF"
-    },
-    "Calvin Ridley": {
-      "status": "Questionable",
-      "note": "Lower Leg \u2014 Surgery",
+      "note": "Hamstring",
       "pos": "WR",
-      "team": "TEN"
+      "team": "DEN"
     },
     "Kendre Miller": {
       "status": "Questionable",
@@ -121,23 +97,17 @@
       "pos": "RB",
       "team": "NO"
     },
+    "Calvin Ridley": {
+      "status": "Questionable",
+      "note": "Lower Leg \u2014 Surgery",
+      "pos": "WR",
+      "team": "TEN"
+    },
     "Darius Slayton": {
       "status": "Questionable",
       "note": "Abdomen",
       "pos": "WR",
       "team": "NYG"
-    },
-    "Dalton Schultz": {
-      "status": "Questionable",
-      "note": "Calf",
-      "pos": "TE",
-      "team": "HOU"
-    },
-    "Joe Mixon": {
-      "status": "Questionable",
-      "note": "Foot",
-      "pos": "RB",
-      "team": "FA"
     },
     "Bucky Irving": {
       "status": "Questionable",
@@ -145,11 +115,17 @@
       "pos": "RB",
       "team": "TB"
     },
-    "Patrick Mahomes II": {
+    "Bo Nix": {
       "status": "Questionable",
-      "note": "Knee - ACL \u2014 Surgery",
+      "note": "Ankle \u2014 Surgery",
       "pos": "QB",
-      "team": "KC"
+      "team": "DEN"
+    },
+    "Dalton Schultz": {
+      "status": "Questionable",
+      "note": "Calf",
+      "pos": "TE",
+      "team": "HOU"
     },
     "Chris Bell": {
       "status": "Questionable",
@@ -157,11 +133,17 @@
       "pos": "WR",
       "team": "MIA"
     },
-    "Michael Penix Jr.": {
+    "Devin Neal": {
       "status": "Questionable",
-      "note": "Knee - ACL \u2014 Surgery",
-      "pos": "QB",
-      "team": "ATL"
+      "note": "Hamstring",
+      "pos": "RB",
+      "team": "NO"
+    },
+    "Joe Mixon": {
+      "status": "Questionable",
+      "note": "Foot",
+      "pos": "RB",
+      "team": "FA"
     },
     "Tory Horton": {
       "status": "Questionable",
@@ -169,41 +151,35 @@
       "pos": "WR",
       "team": "SEA"
     },
+    "Patrick Mahomes II": {
+      "status": "Questionable",
+      "note": "Knee - ACL \u2014 Surgery",
+      "pos": "QB",
+      "team": "KC"
+    },
+    "Tetairoa McMillan": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "WR",
+      "team": "CAR"
+    },
+    "Ty Johnson": {
+      "status": "Questionable",
+      "note": "Ankle",
+      "pos": "RB",
+      "team": "BUF"
+    },
     "MarShawn Lloyd": {
       "status": "Questionable",
       "note": "Hamstring",
       "pos": "RB",
       "team": "GB"
     },
-    "George Kittle": {
-      "status": "IR",
-      "note": "Achilles \u2014 Surgery",
-      "pos": "TE",
-      "team": "SF"
-    },
-    "Alec Pierce": {
+    "Michael Penix Jr.": {
       "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
-      "pos": "WR",
-      "team": "IND"
-    },
-    "Zach Charbonnet": {
-      "status": "IR",
       "note": "Knee - ACL \u2014 Surgery",
-      "pos": "RB",
-      "team": "SEA"
-    },
-    "Quinshon Judkins": {
-      "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
-      "pos": "RB",
-      "team": "CLE"
-    },
-    "Devaughn Vele": {
-      "status": "Questionable",
-      "note": "Shoulder",
-      "pos": "WR",
-      "team": "NO"
+      "pos": "QB",
+      "team": "ATL"
     },
     "Malik Davis": {
       "status": "Questionable",
@@ -211,15 +187,33 @@
       "pos": "RB",
       "team": "DAL"
     },
-    "Alvin Kamara": {
-      "status": "Questionable",
-      "note": "Knee - MCL \u2014 Sprain",
+    "Zach Charbonnet": {
+      "status": "IR",
+      "note": "Knee - ACL \u2014 Surgery",
       "pos": "RB",
-      "team": "NO"
+      "team": "SEA"
     },
     "Jake Tonges": {
       "status": "Questionable",
       "note": "Foot",
+      "pos": "TE",
+      "team": "SF"
+    },
+    "Quinshon Judkins": {
+      "status": "Questionable",
+      "note": "Ankle \u2014 Surgery",
+      "pos": "RB",
+      "team": "CLE"
+    },
+    "Alec Pierce": {
+      "status": "Questionable",
+      "note": "Ankle \u2014 Surgery",
+      "pos": "WR",
+      "team": "IND"
+    },
+    "George Kittle": {
+      "status": "IR",
+      "note": "Achilles \u2014 Surgery",
       "pos": "TE",
       "team": "SF"
     },
@@ -228,6 +222,18 @@
       "note": "Shoulder",
       "pos": "RB",
       "team": "WAS"
+    },
+    "Devaughn Vele": {
+      "status": "Questionable",
+      "note": "Shoulder",
+      "pos": "WR",
+      "team": "NO"
+    },
+    "Alvin Kamara": {
+      "status": "Questionable",
+      "note": "Knee - MCL \u2014 Sprain",
+      "pos": "RB",
+      "team": "NO"
     }
   }
 }
