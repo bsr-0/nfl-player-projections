@@ -1,5 +1,5 @@
 {
-  "updated": "2026-05-26T20:13:59Z",
+  "updated": "2026-05-27T20:24:20Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
@@ -42,12 +42,6 @@
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "TEN"
-    },
-    "Jayden Daniels": {
-      "status": "Questionable",
-      "note": "Elbow",
-      "pos": "QB",
-      "team": "WAS"
     },
     "Travis Hunter": {
       "status": "Questionable",
@@ -163,17 +157,11 @@
       "pos": "WR",
       "team": "CAR"
     },
-    "Ty Johnson": {
+    "AJ Barner": {
       "status": "Questionable",
-      "note": "Ankle",
-      "pos": "RB",
-      "team": "BUF"
-    },
-    "MarShawn Lloyd": {
-      "status": "Questionable",
-      "note": "Hamstring",
-      "pos": "RB",
-      "team": "GB"
+      "note": "Undisclosed",
+      "pos": "TE",
+      "team": "SEA"
     },
     "Michael Penix Jr.": {
       "status": "Questionable",
@@ -229,11 +217,23 @@
       "pos": "WR",
       "team": "NO"
     },
+    "De'Von Achane": {
+      "status": "Questionable",
+      "note": "Shoulder \u2014 Surgery",
+      "pos": "RB",
+      "team": "MIA"
+    },
     "Alvin Kamara": {
       "status": "Questionable",
       "note": "Knee - MCL \u2014 Sprain",
       "pos": "RB",
       "team": "NO"
+    },
+    "Jacory Croskey-Merritt": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "RB",
+      "team": "WAS"
     }
   }
 }
