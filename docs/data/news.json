@@ -1,5 +1,5 @@
 {
-  "updated": "2026-05-27T20:24:20Z",
+  "updated": "2026-05-28T20:29:37Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
@@ -19,10 +19,10 @@
       "pos": "RB",
       "team": "NYG"
     },
-    "Garrett Wilson": {
+    "Kenyon Sadiq": {
       "status": "Questionable",
-      "note": "Knee \u2014 Sprain",
-      "pos": "WR",
+      "note": "Undisclosed",
+      "pos": "TE",
       "team": "NYJ"
     },
     "Najee Harris": {
@@ -66,12 +66,6 @@
       "note": "Knee - ACL + MCL \u2014 Surgery",
       "pos": "WR",
       "team": "HOU"
-    },
-    "Brock Bowers": {
-      "status": "Questionable",
-      "note": "Knee - PCL \u2014 Bruise",
-      "pos": "TE",
-      "team": "LV"
     },
     "Daniel Jones": {
       "status": "IR",
@@ -211,9 +205,9 @@
       "pos": "RB",
       "team": "WAS"
     },
-    "Devaughn Vele": {
+    "Jordyn Tyson": {
       "status": "Questionable",
-      "note": "Shoulder",
+      "note": "Undisclosed",
       "pos": "WR",
       "team": "NO"
     },
@@ -228,6 +222,12 @@
       "note": "Knee - MCL \u2014 Sprain",
       "pos": "RB",
       "team": "NO"
+    },
+    "Xavier Worthy": {
+      "status": "Questionable",
+      "note": "Shoulder - Labrum",
+      "pos": "WR",
+      "team": "KC"
     },
     "Jacory Croskey-Merritt": {
       "status": "Questionable",
