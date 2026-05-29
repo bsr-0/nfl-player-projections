@@ -1,5 +1,5 @@
 {
-  "updated": "2026-05-28T20:29:37Z",
+  "updated": "2026-05-29T20:32:05Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
@@ -156,6 +156,12 @@
       "note": "Undisclosed",
       "pos": "TE",
       "team": "SEA"
+    },
+    "Isaac Guerendo": {
+      "status": "Questionable",
+      "note": "Pectoral",
+      "pos": "RB",
+      "team": "SF"
     },
     "Michael Penix Jr.": {
       "status": "Questionable",
