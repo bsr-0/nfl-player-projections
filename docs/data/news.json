@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-01T21:37:45Z",
+  "updated": "2026-06-02T20:55:09Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
@@ -210,6 +210,12 @@
       "note": "Shoulder",
       "pos": "RB",
       "team": "WAS"
+    },
+    "Makai Lemon": {
+      "status": "Questionable",
+      "note": "Hamstring",
+      "pos": "WR",
+      "team": "PHI"
     },
     "Jordyn Tyson": {
       "status": "Questionable",
