@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-02T20:55:09Z",
+  "updated": "2026-06-03T21:20:07Z",
   "players": {
     "Malik Nabers": {
       "status": "IR",
@@ -109,23 +109,11 @@
       "pos": "QB",
       "team": "DEN"
     },
-    "Dalton Schultz": {
-      "status": "Questionable",
-      "note": "Calf",
-      "pos": "TE",
-      "team": "HOU"
-    },
     "Chris Bell": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "MIA"
-    },
-    "Devin Neal": {
-      "status": "Questionable",
-      "note": "Hamstring",
-      "pos": "RB",
-      "team": "NO"
     },
     "Joe Mixon": {
       "status": "Questionable",
@@ -169,12 +157,6 @@
       "pos": "QB",
       "team": "ATL"
     },
-    "Malik Davis": {
-      "status": "Questionable",
-      "note": "Eye",
-      "pos": "RB",
-      "team": "DAL"
-    },
     "Zach Charbonnet": {
       "status": "IR",
       "note": "Knee - ACL \u2014 Surgery",
@@ -198,6 +180,12 @@
       "note": "Ankle \u2014 Surgery",
       "pos": "WR",
       "team": "IND"
+    },
+    "Rashod Bateman": {
+      "status": "Questionable",
+      "note": "Personal",
+      "pos": "WR",
+      "team": "BAL"
     },
     "George Kittle": {
       "status": "IR",
