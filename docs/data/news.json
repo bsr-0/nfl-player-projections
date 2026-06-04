@@ -1,11 +1,17 @@
 {
-  "updated": "2026-06-03T21:20:07Z",
+  "updated": "2026-06-04T20:10:37Z",
   "players": {
     "Malik Nabers": {
-      "status": "IR",
+      "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "NYG"
+    },
+    "James Conner": {
+      "status": "Questionable",
+      "note": "Foot",
+      "pos": "RB",
+      "team": "ARI"
     },
     "Tucker Kraft": {
       "status": "Questionable",
@@ -68,7 +74,7 @@
       "team": "HOU"
     },
     "Daniel Jones": {
-      "status": "IR",
+      "status": "Questionable",
       "note": "Achilles \u2014 Surgery",
       "pos": "QB",
       "team": "IND"
@@ -158,7 +164,7 @@
       "team": "ATL"
     },
     "Zach Charbonnet": {
-      "status": "IR",
+      "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "RB",
       "team": "SEA"
@@ -188,7 +194,7 @@
       "team": "BAL"
     },
     "George Kittle": {
-      "status": "IR",
+      "status": "Questionable",
       "note": "Achilles \u2014 Surgery",
       "pos": "TE",
       "team": "SF"
@@ -216,12 +222,6 @@
       "note": "Shoulder \u2014 Surgery",
       "pos": "RB",
       "team": "MIA"
-    },
-    "Alvin Kamara": {
-      "status": "Questionable",
-      "note": "Knee - MCL \u2014 Sprain",
-      "pos": "RB",
-      "team": "NO"
     },
     "Xavier Worthy": {
       "status": "Questionable",
