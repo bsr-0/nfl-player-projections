@@ -287,7 +287,7 @@ details summary::-webkit-details-marker { display: none; }
   padding: 0 20px 50px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
-  gap: 10px;
+  gap: 14px;
 }
 
 .tier-break {
@@ -320,18 +320,51 @@ details summary::-webkit-details-marker { display: none; }
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 20px 12px;
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   gap: 6px 20px;
   font-size: 0.72rem;
   color: var(--text-muted);
 }
+.glossary.open { display: flex; }
 .gl-value { color: var(--value); font-weight: 600; }
 .gl-avoid { color: var(--avoid); font-weight: 600; }
 .def-term {
   border-bottom: 1px dotted var(--text-dim);
   cursor: help;
 }
+
+/* Info (glossary toggle) button */
+.info-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  padding: 3px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+  line-height: 1.4;
+}
+.info-btn:hover  { border-color: var(--text-muted); color: var(--text-muted); }
+.info-btn.active { border-color: var(--text-muted); color: var(--text); }
+
+/* Slot dropdown inside VONA panel */
+.slot-select {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: var(--transition);
+}
+.slot-select:focus { border-color: var(--text-muted); color: var(--text); }
 
 /* Manual adjustment note on card */
 .adj-badge {
@@ -441,29 +474,6 @@ details summary::-webkit-details-marker { display: none; }
   white-space: nowrap;
 }
 
-.slot-pills {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.slot-pill {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-dim);
-  padding: 2px 7px;
-  cursor: pointer;
-  font-size: 0.65rem;
-  font-weight: 600;
-  line-height: 1.5;
-}
-.slot-pill.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.slot-pill:not(.active):hover { border-color: var(--text-muted); color: var(--text-muted); }
 
 .vona-body { display: flex; gap: 24px; flex-wrap: wrap; }
 
@@ -510,7 +520,7 @@ details summary::-webkit-details-marker { display: none; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 11px;
   transition: transform var(--transition), border-color var(--transition);
   position: relative;
   overflow: hidden;
@@ -537,7 +547,7 @@ details summary::-webkit-details-marker { display: none; }
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 /* Position badge */
@@ -564,7 +574,7 @@ details summary::-webkit-details-marker { display: none; }
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .player-photo {
@@ -626,8 +636,8 @@ details summary::-webkit-details-marker { display: none; }
 .card-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 4px;
-  margin-bottom: 10px;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 .stat-item      { display: flex; flex-direction: column; }
 .stat-label     { font-size: 0.58rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; }
@@ -794,10 +804,7 @@ body.draft-mode .draft-toggle {
 <body>
 
 <div class="header">
-  <div>
-    <div class="header-title">Draft Advisor 2026</div>
-    <div class="header-sub">Model-powered fantasy draft rankings</div>
-  </div>
+  <div class="header-title">Draft Advisor 2026</div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <a class="nav-link" href="lineup.html">Lineup Optimizer →</a>
     <button class="draft-toggle" id="draftModeBtn" type="button" onclick="toggleDraftMode()">
@@ -822,6 +829,7 @@ body.draft-mode .draft-toggle {
 
 <div class="controls">
   <div class="pills" id="pills"></div>
+  <button class="info-btn" id="glossaryBtn" type="button" onclick="toggleGlossary()" title="Glossary">?</button>
 </div>
 
 <div class="stats-strip" id="statsStrip"></div>
@@ -832,7 +840,7 @@ body.draft-mode .draft-toggle {
 
 <div class="draft-panel" id="draftPanel"></div>
 
-<div class="glossary">
+<div class="glossary" id="glossary">
   <span><span class="gl-value">▲ Sleeper</span> — model projects more value than their draft rank suggests</span>
   <span><span class="gl-avoid">▼ FADE</span> — model projects less value than their draft rank suggests</span>
   <span><span class="def-term" title="How many spots our model ranks them versus expert consensus. Positive means undervalued"><b>vs Experts</b></span> — positive = undervalued, negative = overvalued</span>
@@ -1027,10 +1035,6 @@ function renderCard(p) {
       <span class="stat-label def-term" title="${seasonPprTitle}">Season PPR</span>
       <span class="stat-value">${p.proj}</span>
     </div>
-    <div class="stat-item" title="Average draft position (expert consensus rank)">
-      <span class="stat-label">ADP Rank</span>
-      <span class="stat-value">${p.ecr}</span>
-    </div>
     <div class="stat-item" title="${aboveReplTitle}">
       <span class="stat-label def-term" title="${aboveReplTitle}">Above Repl.</span>
       <span class="stat-value">${p.vorp}</span>
@@ -1153,9 +1157,10 @@ function renderVonaPanel() {
   const currentRound = Math.ceil(draftPick / teams);
   const slotPicks = VONA[String(draftSlot)] || [];
 
-  const slotPills = Array.from({ length: teams }, (_, i) => i + 1).map(s =>
-    `<button class="slot-pill${s === draftSlot ? " active" : ""}" onclick="setDraftSlot(${s})">${s}</button>`
+  const slotOptions = Array.from({ length: teams }, (_, i) => i + 1).map(s =>
+    `<option value="${s}"${s === draftSlot ? " selected" : ""}>Slot ${s}</option>`
   ).join("");
+  const slotSelect = `<select class="slot-select" onchange="setDraftSlot(parseInt(this.value))" title="Your draft slot">${slotOptions}</select>`;
 
   function renderPick(p) {
     const netCls = p.net > 1 ? "vona-net-pos" : p.net < -1 ? "vona-net-neg" : "";
@@ -1173,7 +1178,7 @@ function renderVonaPanel() {
     return `<div class="vona-panel">
       <div class="vona-header">
         <span class="vona-title">Round Guide · Slot</span>
-        <div class="slot-pills">${slotPills}</div>
+        ${slotSelect}
       </div>
       <div class="vona-done">Draft complete</div>
     </div>`;
@@ -1199,7 +1204,7 @@ function renderVonaPanel() {
   return `<div class="vona-panel">
     <div class="vona-header">
       <span class="vona-title">Round Guide · Slot</span>
-      <div class="slot-pills">${slotPills}</div>
+      ${slotSelect}
     </div>
     <div class="vona-body">
       <div class="vona-round-cur">${curSection}</div>
@@ -1356,6 +1361,13 @@ function toggleWatch(playerId) {
 function updateCards() {
   const grid = document.getElementById("cardGrid");
   if (grid) grid.innerHTML = renderCards();
+}
+
+function toggleGlossary() {
+  const g   = document.getElementById("glossary");
+  const btn = document.getElementById("glossaryBtn");
+  if (g)   g.classList.toggle("open");
+  if (btn) btn.classList.toggle("active");
 }
 
 function renderDraftModeState() {
