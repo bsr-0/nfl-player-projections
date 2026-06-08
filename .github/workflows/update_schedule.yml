@@ -1,0 +1,48 @@
+name: Update Schedule & SoS Projections
+
+# When to run:
+#  - Monthly March–August (schedule releases in May; re-checks until data lands)
+#  - Weekly September–January (in-season: SoS updates as season progresses)
+#  - Manual trigger at any time from the GitHub Actions UI
+
+on:
+  schedule:
+    # Monthly, 1st of month at 10:00 UTC  (March–August offseason window)
+    - cron: '0 10 1 3-8 *'
+    # Weekly, every Tuesday at 10:00 UTC  (Sep–Jan in-season window)
+    - cron: '0 10 * 9-12,1 2'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force refresh even if schedule is unchanged'
+        required: false
+        default: 'false'
+
+jobs:
+  refresh-schedule:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install nfl-data-py pandas numpy
+
+      - name: Run schedule + SoS refresh
+        run: python scripts/refresh_schedule_projections.py
+
+      - name: Commit updated files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/schedule.json docs/data/board.json data/schedule_impact.json
+          git diff --staged --quiet \
+            && echo "No changes — schedule data is up to date." \
+            || git commit -m "chore: refresh 2026 schedule + SoS projections [skip ci]"
+          git push

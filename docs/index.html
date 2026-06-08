@@ -664,6 +664,18 @@ details summary::-webkit-details-marker { display: none; }
 .signal-badge.avoid { background: rgba(224, 82, 82, 0.15);  color: var(--avoid); }
 .signal-badge.fair  { color: var(--text-dim); font-weight: 400; font-size: 0.6rem; }
 
+/* Strength of Schedule badge */
+.sos-badge {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.sos-easy { background: rgba(76, 175, 130, 0.12); color: var(--value); }
+.sos-tough { background: rgba(224, 82, 82, 0.12); color: var(--avoid); }
+
 .queue-btn {
   border: 1px solid var(--border);
   background: transparent;
@@ -845,6 +857,8 @@ body.draft-mode .draft-toggle {
   <span><span class="def-term" title="How many spots our model ranks them versus expert consensus. Positive means undervalued"><b>vs Experts</b></span> — positive = undervalued, negative = overvalued</span>
   <span><span class="def-term" title="Points above a freely available replacement player at this position"><b>Above Repl.</b></span> — points above a freely available player at same position</span>
   <span><span class="def-term" title="Projected PPR fantasy points per game (season total ÷ 17)"><b>PPR/gm</b></span> — projected PPR points per game (season ÷ 17)</span>
+  <span><span class="gl-value">Sch ▲</span> easy schedule — opponents had weak 2025 defenses</span>
+  <span><span class="gl-avoid">Sch ▼</span> tough schedule — opponents had strong 2025 defenses</span>
 </div>
 
 <div class="card-grid" id="cardGrid"></div>
@@ -998,6 +1012,15 @@ function renderCard(p) {
   const showRole = p.role && roleNum <= (roleDepthCap[p.p] || 3);
   const roleTag  = showRole ? `<span class="role-tag">${p.role}</span>` : "";
   const usageNote = p.usage ? `<span style="font-size:0.6rem;color:var(--text-dim)">${p.usage}</span>` : "";
+  const schedWks  = (window.SCHEDULE && SCHEDULE.weeks_available) || 0;
+  const sosTip    = schedWks
+    ? `2026 schedule difficulty (based on ${schedWks}/18 weeks)`
+    : "Schedule difficulty (full schedule not yet loaded)";
+  const sosBadge  = p.sos_tier === "easy"
+    ? `<span class="sos-badge sos-easy" title="${sosTip}">Sch ▲</span>`
+    : p.sos_tier === "tough"
+    ? `<span class="sos-badge sos-tough" title="${sosTip}">Sch ▼</span>`
+    : "";
   const adjBadge  = p.adj_note ? `<div class="adj-badge" title="Manual adjustment">✎ ${p.adj_note}</div>` : "";
   const whyItems = Array.isArray(p.why) ? p.why.filter(Boolean).slice(0, 4) : [];
   const whyBlock = whyItems.length ? `<details class="why-expander">
@@ -1046,6 +1069,7 @@ function renderCard(p) {
   </div>
   <div class="signal-row">
     <span class="signal-badge ${sig.cls}">${sig.label}</span>
+    ${sosBadge}
     ${usageNote}
   </div>
   ${mktBlock}
@@ -1412,12 +1436,14 @@ Promise.all([
   fetch("data/meta.json").then(r => r.json()),
   fetch("data/scarcity.json").then(r => r.json()),
   fetch("data/news.json").then(r => r.json()).catch(() => ({})),
-]).then(([board, vona, meta, scarcity, news]) => {
+  fetch("data/schedule.json").then(r => r.json()).catch(() => ({})),
+]).then(([board, vona, meta, scarcity, news, schedule]) => {
   window.BOARD    = board;
   window.VONA     = vona;
   window.META     = meta;
   window.SCARCITY = scarcity;
   window.NEWS     = news;
+  window.SCHEDULE = schedule;
   render();
 }).catch(err => {
   document.body.innerHTML =
