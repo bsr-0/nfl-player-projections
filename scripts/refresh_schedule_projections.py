@@ -292,28 +292,100 @@ def write_schedule_json(schedule_df: pd.DataFrame,
     print(f"  Wrote {SCHEDULE_OUT}  ({len(teams_out)} teams, {weeks_available}/{TOTAL_WEEKS} weeks)")
 
 
-# ── 5. Patch board.json ────────────────────────────────────────────────────────
+# ── 5. Apply SoS adjustments and rebuild board.json ───────────────────────────
 
-def patch_board(sos_data: dict[str, dict]) -> None:
-    """Add sos_score, sos_rank, sos_tier to every player in board.json."""
+# Replacement-level player count per position (12-team PPR)
+REPLACEMENT_LEVELS: dict[str, int] = {"QB": 12, "RB": 24, "WR": 36, "TE": 12}
+MAX_SOS_ADJ = 0.08   # cap adjustment at ±8%
+MIN_DELTA_WHY = 1.0  # only add a why-bullet if |delta| >= 1 pt
+
+
+def _sos_multiplier(sos_score: float) -> float:
+    """
+    Convert a 0-100 SoS score to a proj multiplier.
+    score=0 (easiest) → +8%;  score=50 (avg) → 0%;  score=100 (hardest) → -8%.
+    """
+    return 1.0 - (sos_score - 50.0) / 50.0 * MAX_SOS_ADJ
+
+
+def _compute_vorp(board: list, pos_key: str = "p", proj_key: str = "proj") -> dict:
+    """
+    Return {player_id: vorp} using replacement-level proj per position.
+    Replacement level = proj of the Nth player at that position.
+    """
+    by_pos: dict[str, list] = {}
+    for p in board:
+        by_pos.setdefault(p[pos_key], []).append(p)
+
+    vorp_map: dict[int, float] = {}
+    for pos, players in by_pos.items():
+        n = REPLACEMENT_LEVELS.get(pos, 12)
+        sorted_p = sorted(players, key=lambda x: x[proj_key], reverse=True)
+        repl = sorted_p[n - 1][proj_key] if len(sorted_p) >= n else 0.0
+        for p in players:
+            vorp_map[p["id"]] = round(p[proj_key] - repl, 1)
+    return vorp_map
+
+
+def patch_board(sos_data: dict[str, dict], weeks_available: int) -> None:
+    """
+    Apply SoS multiplier to proj, recalculate vorp/mr/sp, add why bullets.
+    Also stamps sos_score/sos_rank/sos_tier on every player.
+    """
     with open(BOARD_JSON) as f:
         board = json.load(f)
 
-    patched = 0
-    for player in board:
-        team = player.get("t", "")
-        if team in sos_data:
-            player["sos_score"] = sos_data[team]["sos_score"]
-            player["sos_rank"]  = sos_data[team]["sos_rank"]
-            player["sos_tier"]  = sos_data[team]["sos_tier"]
-            patched += 1
-        else:
-            player["sos_score"] = 50.0
-            player["sos_rank"]  = 16
-            player["sos_tier"]  = "avg"
+    # ── Step A: apply SoS multiplier to proj ──
+    adjusted = 0
+    for p in board:
+        team = p.get("t", "")
+        sos  = sos_data.get(team, {"sos_score": 50.0, "sos_rank": 16, "sos_tier": "avg",
+                                   "sos_raw": 1.0})
+        p["sos_score"] = sos["sos_score"]
+        p["sos_rank"]  = sos["sos_rank"]
+        p["sos_tier"]  = sos["sos_tier"]
+
+        if team not in sos_data:
+            continue
+
+        mult  = _sos_multiplier(sos["sos_score"])
+        delta = round(p["proj"] * (mult - 1.0), 1)
+        p["proj"] = round(p["proj"] * mult, 1)
+        adjusted += 1
+
+        # Remove any stale schedule why-bullet, then add updated one
+        why = [w for w in (p.get("why") or [])
+               if "schedule" not in w.lower() and "sos" not in w.lower()]
+        if abs(delta) >= MIN_DELTA_WHY:
+            sign  = "+" if delta > 0 else ""
+            tier  = sos["sos_tier"]
+            rank  = sos["sos_rank"]
+            n_wks = weeks_available
+            why.append(
+                f"2026 schedule: {sign}{delta} pts ({tier} slate, "
+                f"SoS rank {rank}/32, {n_wks}-wk data)"
+            )
+        p["why"] = why
+
+    # ── Step B: recalculate VORP with adjusted proj ──
+    vorp_map = _compute_vorp(board)
+    for p in board:
+        p["vorp"] = vorp_map.get(p["id"], p.get("vorp", 0))
+
+    # ── Step C: re-rank globally by adjusted proj → update mr and sp ──
+    ranked = sorted(board, key=lambda p: p["proj"], reverse=True)
+    rank_map = {p["id"]: i + 1 for i, p in enumerate(ranked)}
+    for p in board:
+        p["mr"] = rank_map[p["id"]]
+        # sp = how many spots we rank a player above/below consensus
+        # positive = we like them more than consensus (sleeper signal)
+        ecr = p.get("ecr")
+        if ecr is not None:
+            p["sp"] = round(ecr - p["mr"])
 
     BOARD_JSON.write_text(json.dumps(board, separators=(",", ":")))
-    print(f"  Patched {patched}/{len(board)} players in board.json")
+    print(f"  Adjusted proj for {adjusted}/{len(board)} players")
+    print(f"  Recalculated vorp, mr, sp for all {len(board)} players")
 
 
 # ── 6. Update schedule_impact.json ────────────────────────────────────────────
@@ -375,8 +447,8 @@ def main() -> None:
     print("\n4/5  Writing docs/data/schedule.json…")
     write_schedule_json(schedule_df, def_ratings, sos_data, weeks_available)
 
-    print("\n5/5  Patching docs/data/board.json + schedule_impact.json…")
-    patch_board(sos_data)
+    print("\n5/5  Applying SoS adjustments + rebuilding docs/data/board.json…")
+    patch_board(sos_data, weeks_available)
     update_impact_json(weeks_available, sos_data)
 
     print(f"\n{'='*60}")
