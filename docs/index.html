@@ -818,7 +818,7 @@ body.draft-mode .draft-toggle {
     >
     <select class="sort-select" onchange="setSort(this.value)">
       <option value="mr">Sort: Value Rank</option>
-      <option value="proj">Sort: Season PPR</option>
+      <option value="proj">Sort: PPR/gm</option>
       <option value="ecr">Sort: ADP</option>
       <option value="sp">Sort: vs ADP</option>
       <option value="vorp">Sort: VORP</option>
@@ -844,7 +844,7 @@ body.draft-mode .draft-toggle {
   <span><span class="gl-avoid">▼ FADE</span> — model projects less value than their draft rank suggests</span>
   <span><span class="def-term" title="How many spots our model ranks them versus expert consensus. Positive means undervalued"><b>vs Experts</b></span> — positive = undervalued, negative = overvalued</span>
   <span><span class="def-term" title="Points above a freely available replacement player at this position"><b>Above Repl.</b></span> — points above a freely available player at same position</span>
-  <span><span class="def-term" title="Projected full-season PPR fantasy points"><b>Season PPR</b></span> — expected full-season PPR fantasy points</span>
+  <span><span class="def-term" title="Projected PPR fantasy points per game (season total ÷ 17)"><b>PPR/gm</b></span> — projected PPR points per game (season ÷ 17)</span>
 </div>
 
 <div class="card-grid" id="cardGrid"></div>
@@ -988,7 +988,8 @@ function renderCard(p) {
   const spStr  = fmtSpread(p.sp);
   const spCls  = p.sp > 5 ? "pos" : p.sp < -5 ? "neg" : "neu";
   const cardCls = p.sp >= 10 ? "signal-value" : p.sp <= -10 ? "signal-avoid" : "";
-  const seasonPprTitle = "Projected full-season PPR fantasy points";
+  const pprPerGame     = (p.proj / 17).toFixed(1);
+  const pprPerGameTitle = "Projected PPR fantasy points per game (season total ÷ 17)";
   const aboveReplTitle = "Points above a freely available replacement player at this position";
   const vsExpertsTitle = "How many spots our model ranks them versus expert consensus. Positive means undervalued";
 
@@ -1030,9 +1031,9 @@ function renderCard(p) {
     </div>
   </div>
   <div class="card-stats">
-    <div class="stat-item" title="${seasonPprTitle}">
-      <span class="stat-label def-term" title="${seasonPprTitle}">Season PPR</span>
-      <span class="stat-value">${p.proj}</span>
+    <div class="stat-item" title="${pprPerGameTitle}">
+      <span class="stat-label def-term" title="${pprPerGameTitle}">PPR/gm</span>
+      <span class="stat-value">${pprPerGame}</span>
     </div>
     <div class="stat-item" title="${aboveReplTitle}">
       <span class="stat-label def-term" title="${aboveReplTitle}">Above Repl.</span>
