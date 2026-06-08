@@ -1,10 +1,10 @@
 {
   "schedule_incorporated": true,
   "season": 2026,
-  "weeks_available": 1,
+  "weeks_available": 18,
   "weeks_total": 18,
-  "partial": true,
-  "teams_with_sos": 31,
-  "generated_at": "2026-06-08T14:24:12Z",
-  "reason": "Schedule incorporated from 1/18 weeks."
+  "partial": false,
+  "teams_with_sos": 32,
+  "generated_at": "2026-06-08T21:21:36Z",
+  "reason": "Schedule incorporated from 18/18 weeks."
 }

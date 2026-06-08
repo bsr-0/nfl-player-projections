@@ -33,10 +33,118 @@ SEASON       = 2026
 TOTAL_WEEKS  = 18
 
 STATS_FILES  = sorted(DATA_RAW.glob("team_weekly_stats_*.csv"))
+SCHEDULE_CSV = DATA_RAW / f"schedule_{SEASON}.csv"
 TEMPLATE_CSV = DATA_RAW / f"schedule_{SEASON}_template.csv"
 BOARD_JSON   = DOCS_DATA / "board.json"
 SCHEDULE_OUT = DOCS_DATA / "schedule.json"
 IMPACT_JSON  = DATA_DIR / "schedule_impact.json"
+
+# nflverse abbreviations → board.json abbreviations
+TEAM_ABBREV_MAP = {
+    "LA":  "LAR",   # Los Angeles Rams
+    "JAX": "JAC",   # Jacksonville Jaguars
+}
+
+
+def _normalize_abbrevs(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["home_team"] = df["home_team"].replace(TEAM_ABBREV_MAP)
+    df["away_team"] = df["away_team"].replace(TEAM_ABBREV_MAP)
+    return df
+
+
+# ── 2. Schedule fetch ──────────────────────────────────────────────────────────
+
+NFLVERSE_GAMES_URL = (
+    "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
+)
+
+
+def fetch_schedule_nflverse(season: int) -> pd.DataFrame | None:
+    """Fetch schedule directly from nflverse/nfldata games.csv on GitHub."""
+    try:
+        import urllib.request, io
+        req = urllib.request.Request(
+            NFLVERSE_GAMES_URL, headers={"User-Agent": "nfl-projections/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            df = pd.read_csv(io.BytesIO(r.read()))
+        df = df[df["season"] == season].copy()
+        df = df[df["game_type"] == "REG"]
+        df = df[["season", "week", "home_team", "away_team"]].dropna()
+        df["week"] = df["week"].astype(int)
+        df = df[df["week"].between(1, TOTAL_WEEKS)]
+        df = _normalize_abbrevs(df)
+        # Cache locally so subsequent runs are instant
+        df.to_csv(SCHEDULE_CSV, index=False)
+        print(f"  nflverse: {len(df)} games fetched for {season}  (cached to {SCHEDULE_CSV.name})")
+        return df
+    except Exception as e:
+        print(f"  nflverse fetch failed ({e})")
+    return None
+
+
+def fetch_schedule_nfl_data_py(season: int) -> pd.DataFrame | None:
+    """Try nfl_data_py; return None on any failure."""
+    try:
+        import nfl_data_py as nfl
+        df = nfl.import_schedules([season])
+        if df is not None and not df.empty:
+            df = df[["season", "week", "home_team", "away_team"]].dropna()
+            df["week"] = df["week"].astype(int)
+            df = df[df["week"].between(1, TOTAL_WEEKS)]
+            df = _normalize_abbrevs(df)
+            df.to_csv(SCHEDULE_CSV, index=False)
+            print(f"  nfl_data_py: {len(df)} games fetched for {season}  (cached)")
+            return df
+    except Exception as e:
+        print(f"  nfl_data_py unavailable ({e})")
+    return None
+
+
+def load_schedule_csv(path: Path) -> pd.DataFrame | None:
+    """Load schedule from a previously cached or template CSV."""
+    if not path.exists():
+        return None
+    try:
+        df = pd.read_csv(path)
+        df = df[["season", "week", "home_team", "away_team"]].dropna()
+        df["week"] = df["week"].astype(int)
+        df = _normalize_abbrevs(df)
+        print(f"  CSV: {len(df)} games from {path.name}")
+        return df
+    except Exception as e:
+        print(f"  Could not read CSV {path}: {e}")
+    return None
+
+
+def get_schedule(season: int) -> tuple[pd.DataFrame, int]:
+    """
+    Return (schedule_df, weeks_available).
+    schedule_df has columns: season, week, home_team, away_team.
+    Tries: cached CSV → nflverse GitHub → nfl_data_py → template CSV.
+    """
+    # Use cached full schedule if already present
+    if SCHEDULE_CSV.exists():
+        df = load_schedule_csv(SCHEDULE_CSV)
+        if df is not None and df["week"].nunique() >= 17:
+            weeks_available = df["week"].nunique()
+            return df, weeks_available
+
+    # Live fetch order: nflverse (no auth required) → nfl_data_py
+    for fetcher in (fetch_schedule_nflverse, fetch_schedule_nfl_data_py):
+        df = fetcher(season)
+        if df is not None:
+            return df, df["week"].nunique()
+
+    # Last resort: cached partial or template
+    for fallback in (SCHEDULE_CSV, TEMPLATE_CSV):
+        df = load_schedule_csv(fallback)
+        if df is not None:
+            return df, df["week"].nunique()
+
+    print("  No schedule data available; SoS will use neutral ratings.")
+    return pd.DataFrame(columns=["season", "week", "home_team", "away_team"]), 0
 
 
 # ── 1. Defensive strength ratings from the most recent complete season ─────────
@@ -69,54 +177,6 @@ def load_defensive_ratings(most_recent_seasons: int = 2) -> dict[str, float]:
     print(f"  Defensive ratings computed from seasons {sorted(recent_seasons)}  "
           f"(league avg = {league_avg:.1f} pts/gm)")
     return ratings
-
-
-# ── 2. Schedule fetch ──────────────────────────────────────────────────────────
-
-def fetch_schedule_nfl_data_py(season: int) -> pd.DataFrame | None:
-    """Try nfl_data_py first; return None on any failure."""
-    try:
-        import nfl_data_py as nfl
-        df = nfl.import_schedules([season])
-        if df is not None and not df.empty:
-            df = df[["season", "week", "home_team", "away_team"]].dropna()
-            df = df[df["week"].between(1, TOTAL_WEEKS)]
-            print(f"  nfl_data_py: {len(df)} games fetched for {season}")
-            return df
-    except Exception as e:
-        print(f"  nfl_data_py unavailable ({e}); trying local CSV fallback.")
-    return None
-
-
-def load_schedule_csv(path: Path) -> pd.DataFrame | None:
-    """Load schedule from local CSV template."""
-    if not path.exists():
-        return None
-    try:
-        df = pd.read_csv(path)
-        df = df[["season", "week", "home_team", "away_team"]].dropna()
-        print(f"  CSV fallback: {len(df)} games from {path.name}")
-        return df
-    except Exception as e:
-        print(f"  Could not read CSV {path}: {e}")
-    return None
-
-
-def get_schedule(season: int) -> tuple[pd.DataFrame, int]:
-    """
-    Return (schedule_df, weeks_available).
-    schedule_df has columns: season, week, home_team, away_team.
-    """
-    df = fetch_schedule_nfl_data_py(season)
-    if df is None:
-        df = load_schedule_csv(TEMPLATE_CSV)
-    if df is None:
-        print("  No schedule data available; SoS will use neutral ratings.")
-        return pd.DataFrame(columns=["season", "week", "home_team", "away_team"]), 0
-
-    weeks_available = df["week"].nunique()
-    return df, weeks_available
-
 
 # ── 3. Strength of Schedule ────────────────────────────────────────────────────
 
