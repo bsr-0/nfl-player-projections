@@ -1,0 +1,484 @@
+{
+  "season": 2026,
+  "generated_at": "2026-06-08T14:24:12Z",
+  "weeks_available": 1,
+  "weeks_total": 18,
+  "partial": true,
+  "def_ratings": {
+    "ARI": 1.1105,
+    "ATL": 1.0554,
+    "BAL": 0.9722,
+    "BUF": 0.9389,
+    "CAR": 1.1707,
+    "CHI": 1.0055,
+    "CIN": 1.1861,
+    "CLE": 1.0426,
+    "DAL": 1.254,
+    "DEN": 0.7967,
+    "DET": 0.9671,
+    "GB": 0.894,
+    "HOU": 0.8543,
+    "IND": 1.0747,
+    "JAX": 0.9876,
+    "KC": 0.8377,
+    "LAC": 0.821,
+    "LAR": 0.9376,
+    "LV": 1.1092,
+    "MIA": 1.0093,
+    "MIN": 0.8518,
+    "NE": 0.944,
+    "NO": 1.0004,
+    "NYG": 1.0939,
+    "NYJ": 1.1617,
+    "PHI": 0.8044,
+    "PIT": 0.9402,
+    "SEA": 0.8454,
+    "SF": 1.0337,
+    "TB": 1.0196,
+    "TEN": 1.2015,
+    "WAS": 1.0785
+  },
+  "teams": {
+    "ARI": {
+      "sos_score": 40.0,
+      "sos_rank": 19,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "SF",
+          "home": false,
+          "opp_def_rating": 1.034,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "ATL": {
+      "sos_score": 50.0,
+      "sos_rank": 16,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "NO",
+          "home": true,
+          "opp_def_rating": 1.0,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "BAL": {
+      "sos_score": 6.7,
+      "sos_rank": 29,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "CIN",
+          "home": true,
+          "opp_def_rating": 1.186,
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "BUF": {
+      "sos_score": 46.7,
+      "sos_rank": 17,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "MIA",
+          "home": true,
+          "opp_def_rating": 1.009,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "CAR": {
+      "sos_score": 43.3,
+      "sos_rank": 18,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "TB",
+          "home": false,
+          "opp_def_rating": 1.02,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "CHI": {
+      "sos_score": 76.7,
+      "sos_rank": 8,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "GB",
+          "home": true,
+          "opp_def_rating": 0.894,
+          "difficulty": "hard"
+        }
+      ]
+    },
+    "CIN": {
+      "sos_score": 56.7,
+      "sos_rank": 14,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "BAL",
+          "home": false,
+          "opp_def_rating": 0.972,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "CLE": {
+      "sos_score": 66.7,
+      "sos_rank": 11,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "PIT",
+          "home": true,
+          "opp_def_rating": 0.94,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "DAL": {
+      "sos_score": 23.3,
+      "sos_rank": 24,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "NYG",
+          "home": true,
+          "opp_def_rating": 1.094,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "DEN": {
+      "sos_score": 20.0,
+      "sos_rank": 25,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "LV",
+          "home": false,
+          "opp_def_rating": 1.109,
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "DET": {
+      "sos_score": 86.7,
+      "sos_rank": 5,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "MIN",
+          "home": true,
+          "opp_def_rating": 0.852,
+          "difficulty": "hard"
+        }
+      ]
+    },
+    "GB": {
+      "sos_score": 73.3,
+      "sos_rank": 9,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "PHI",
+          "home": false,
+          "opp_def_rating": 0.804,
+          "difficulty": "hard"
+        },
+        {
+          "week": 1,
+          "opp": "CHI",
+          "home": false,
+          "opp_def_rating": 1.005,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "HOU": {
+      "sos_score": 53.3,
+      "sos_rank": 15,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "JAX",
+          "home": true,
+          "opp_def_rating": 0.988,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "IND": {
+      "sos_score": 3.3,
+      "sos_rank": 30,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "TEN",
+          "home": true,
+          "opp_def_rating": 1.201,
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "JAX": {
+      "sos_score": 83.3,
+      "sos_rank": 6,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "HOU",
+          "home": false,
+          "opp_def_rating": 0.854,
+          "difficulty": "hard"
+        }
+      ]
+    },
+    "KC": {
+      "sos_score": 96.7,
+      "sos_rank": 2,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "LAC",
+          "home": true,
+          "opp_def_rating": 0.821,
+          "difficulty": "hard"
+        }
+      ]
+    },
+    "LAC": {
+      "sos_score": 93.3,
+      "sos_rank": 3,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "KC",
+          "home": false,
+          "opp_def_rating": 0.838,
+          "difficulty": "hard"
+        }
+      ]
+    },
+    "LV": {
+      "sos_score": 100.0,
+      "sos_rank": 1,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "DEN",
+          "home": true,
+          "opp_def_rating": 0.797,
+          "difficulty": "hard"
+        }
+      ]
+    },
+    "MIA": {
+      "sos_score": 70.0,
+      "sos_rank": 10,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "BUF",
+          "home": false,
+          "opp_def_rating": 0.939,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "MIN": {
+      "sos_score": 60.0,
+      "sos_rank": 13,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "DET",
+          "home": false,
+          "opp_def_rating": 0.967,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "NE": {
+      "sos_score": 13.3,
+      "sos_rank": 27,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "NYJ",
+          "home": true,
+          "opp_def_rating": 1.162,
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "NO": {
+      "sos_score": 33.3,
+      "sos_rank": 21,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "ATL",
+          "home": false,
+          "opp_def_rating": 1.055,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "NYG": {
+      "sos_score": 0.0,
+      "sos_rank": 31,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "DAL",
+          "home": false,
+          "opp_def_rating": 1.254,
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "NYJ": {
+      "sos_score": 63.3,
+      "sos_rank": 12,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "NE",
+          "home": false,
+          "opp_def_rating": 0.944,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "PHI": {
+      "sos_score": 80.0,
+      "sos_rank": 7,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "GB",
+          "home": true,
+          "opp_def_rating": 0.894,
+          "difficulty": "hard"
+        }
+      ]
+    },
+    "PIT": {
+      "sos_score": 36.7,
+      "sos_rank": 20,
+      "sos_tier": "avg",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "CLE",
+          "home": false,
+          "opp_def_rating": 1.043,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "SEA": {
+      "sos_score": 26.7,
+      "sos_rank": 23,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "WAS",
+          "home": false,
+          "opp_def_rating": 1.078,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "SF": {
+      "sos_score": 16.7,
+      "sos_rank": 26,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "ARI",
+          "home": true,
+          "opp_def_rating": 1.111,
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "TB": {
+      "sos_score": 10.0,
+      "sos_rank": 28,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "CAR",
+          "home": true,
+          "opp_def_rating": 1.171,
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "TEN": {
+      "sos_score": 30.0,
+      "sos_rank": 22,
+      "sos_tier": "easy",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "IND",
+          "home": false,
+          "opp_def_rating": 1.075,
+          "difficulty": "avg"
+        }
+      ]
+    },
+    "WAS": {
+      "sos_score": 90.0,
+      "sos_rank": 4,
+      "sos_tier": "tough",
+      "matchups": [
+        {
+          "week": 1,
+          "opp": "SEA",
+          "home": true,
+          "opp_def_rating": 0.845,
+          "difficulty": "hard"
+        }
+      ]
+    }
+  }
+}

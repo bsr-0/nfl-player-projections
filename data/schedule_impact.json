@@ -1,6 +1,10 @@
 {
-  "schedule_incorporated": false,
-  "reason": "The 2026 NFL schedule has not been released. Projections will be available once the schedule is out. No extrapolations are used.",
+  "schedule_incorporated": true,
   "season": 2026,
-  "schedule_available": false
+  "weeks_available": 1,
+  "weeks_total": 18,
+  "partial": true,
+  "teams_with_sos": 31,
+  "generated_at": "2026-06-08T14:24:12Z",
+  "reason": "Schedule incorporated from 1/18 weeks."
 }
