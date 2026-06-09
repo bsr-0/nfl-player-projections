@@ -357,12 +357,13 @@ def patch_board(sos_data: dict[str, dict], weeks_available: int) -> None:
         why = [w for w in (p.get("why") or [])
                if "schedule" not in w.lower() and "sos" not in w.lower()]
         if abs(delta) >= MIN_DELTA_WHY:
-            sign  = "+" if delta > 0 else ""
+            delta_pgm = round(delta / 17, 2)
+            sign  = "+" if delta_pgm > 0 else ""
             tier  = sos["sos_tier"]
             rank  = sos["sos_rank"]
             n_wks = weeks_available
             why.append(
-                f"2026 schedule: {sign}{delta} pts ({tier} slate, "
+                f"2026 schedule: {sign}{delta_pgm} pts/gm ({tier} slate, "
                 f"SoS rank {rank}/32, {n_wks}-wk data)"
             )
         p["why"] = why
