@@ -55,7 +55,7 @@ from config.settings import (
 )
 from src.utils.database import DatabaseManager
 from src.utils.helpers import calculate_fantasy_points
-from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week, current_season_has_weeks_played
+from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week, current_season_has_weeks_played, is_offseason
 from src.data.schema_validator import validate_weekly_data, validate_schedule_data
 from src.data.lineage import persist_dataframe_artifact, set_artifact_id
 from src.data.entity_resolver import resolver
@@ -238,9 +238,14 @@ class NFLDataLoader:
                     if pbp_df is not None and not pbp_df.empty:
                         df = pbp_df.copy()
                         print(f"  Current season {season}: loaded from PBP ({len(df)} records)")
-                        # Optionally merge with weekly if available (prefer weekly for same player/week)
+                        # Optionally merge with weekly if available (prefer weekly for same player/week).
+                        # Skip during offseason — PBP is already the complete season data, and the
+                        # nfl_data_py weekly parquet for the finished season often returns 404 until
+                        # the data provider re-publishes it. Use a direct (non-retrying) call.
                         try:
-                            weekly_df = _fetch_weekly_data([season])
+                            if is_offseason():
+                                raise RuntimeError("offseason — skip weekly merge")
+                            weekly_df = _get_nfl().import_weekly_data([season])
                             if not weekly_df.empty and len(weekly_df) >= 10:
                                 weekly_df = self._standardize_weekly_columns(weekly_df)
                                 key_cols = ["player_id", "season", "week"]
