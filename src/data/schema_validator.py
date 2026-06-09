@@ -82,16 +82,21 @@ COLUMN_TYPE_EXPECTATIONS: Dict[str, str] = {
 
 VALID_POSITIONS: Set[str] = {"QB", "RB", "WR", "TE", "K", "DST"}
 
-NEGATIVE_DISALLOWED_COLUMNS: Set[str] = {
+# These columns legitimately have negative values in NFL data (tackles behind LOS
+# produce negative rushing/receiving yards; avoid treating them as critical errors).
+NEGATIVE_WARN_COLUMNS: Set[str] = {
     "passing_yards",
+    "rushing_yards",
+    "receiving_yards",
+}
+
+NEGATIVE_DISALLOWED_COLUMNS: Set[str] = {
     "passing_attempts",
     "passing_completions",
     "passing_tds",
-    "rushing_yards",
     "rushing_attempts",
     "rushing_tds",
     "receptions",
-    "receiving_yards",
     "receiving_tds",
     "targets",
     "fumbles_lost",
@@ -245,7 +250,18 @@ def validate_weekly_data(
                 )
                 break
 
-    # No negative values for count/attempt/yardage fields
+    # Yardage columns: negative values are valid NFL data (tackles behind LOS) — warn only
+    for col in NEGATIVE_WARN_COLUMNS:
+        if col not in df.columns:
+            continue
+        numeric_col = pd.to_numeric(df[col], errors="coerce")
+        neg_count = (numeric_col < 0).sum()
+        if neg_count > 0:
+            issues.append(
+                f"WARNING: Column '{col}' has {int(neg_count)} negative values (valid for tackles behind LOS)"
+            )
+
+    # No negative values for count/attempt fields
     for col in NEGATIVE_DISALLOWED_COLUMNS:
         if col not in df.columns:
             continue
