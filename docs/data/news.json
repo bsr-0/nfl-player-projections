@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-08T20:24:12Z",
+  "updated": "2026-06-09T20:11:38Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -18,12 +18,6 @@
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "TE",
       "team": "GB"
-    },
-    "Cam Skattebo": {
-      "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
-      "pos": "RB",
-      "team": "NYG"
     },
     "Kenyon Sadiq": {
       "status": "Questionable",
@@ -79,6 +73,12 @@
       "pos": "QB",
       "team": "IND"
     },
+    "Chris Rodriguez Jr.": {
+      "status": "Questionable",
+      "note": "Foot",
+      "pos": "RB",
+      "team": "JAC"
+    },
     "Troy Franklin": {
       "status": "Questionable",
       "note": "Hamstring",
@@ -133,12 +133,6 @@
       "pos": "QB",
       "team": "KC"
     },
-    "Tetairoa McMillan": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "WR",
-      "team": "CAR"
-    },
     "AJ Barner": {
       "status": "Questionable",
       "note": "Undisclosed",
@@ -156,6 +150,12 @@
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "QB",
       "team": "ATL"
+    },
+    "Harold Fannin Jr.": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "TE",
+      "team": "CLE"
     },
     "Zach Charbonnet": {
       "status": "Questionable",
