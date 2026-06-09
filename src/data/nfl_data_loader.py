@@ -427,6 +427,10 @@ class NFLDataLoader:
             return d
         all_dfs = [_unique_columns(d) for d in all_dfs]
         df = pd.concat(all_dfs, ignore_index=True)
+        before = len(df)
+        df = df.drop_duplicates(subset=["player_id", "season", "week"], keep="first")
+        if len(df) < before:
+            print(f"  Dropped {before - len(df)} duplicate (player_id, season, week) rows")
         print(f"  Loaded {len(df)} offensive records total")
         
         print(f"  Total: {len(df)} records for {POSITIONS}")
