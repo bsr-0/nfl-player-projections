@@ -376,6 +376,20 @@ class NFLDataLoader:
                                     df = df.drop(columns=['sched_home_away'])
                     except Exception as e:
                         print(f"  Schedule backfill for {season}: {e}")
+                # Collapse any remaining duplicate player-weeks before validation
+                # (can arise from stale PBP cache built before the aggregator dedup fix)
+                _dup_key = ["player_id", "season", "week"]
+                if df.duplicated(subset=_dup_key, keep=False).any():
+                    _valid = df["player_id"].astype(str).str.strip() != ""
+                    _to_merge = df[_valid & df.duplicated(subset=_dup_key, keep=False)]
+                    _keep = df[~_valid | ~df.duplicated(subset=_dup_key, keep=False)]
+                    if not _to_merge.empty:
+                        _num = _to_merge.select_dtypes(include="number").columns.difference(_dup_key).tolist()
+                        _str = _to_merge.columns.difference(_dup_key).difference(_num).tolist()
+                        _agg2 = {c: "sum" for c in _num}
+                        _agg2.update({c: "first" for c in _str})
+                        _to_merge = _to_merge.groupby(_dup_key, as_index=False, sort=False).agg(_agg2)
+                        df = pd.concat([_keep, _to_merge], ignore_index=True)
                 validate_weekly_data(df, strict=True)
                 # nfl_data_py weekly data only has offensive positions
                 df = df[df['position'].isin(OFFENSIVE_POSITIONS)]
