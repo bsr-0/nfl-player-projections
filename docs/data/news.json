@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-10T20:36:02Z",
+  "updated": "2026-06-11T20:27:10Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -133,6 +133,18 @@
       "pos": "QB",
       "team": "KC"
     },
+    "Chris Olave": {
+      "status": "Questionable",
+      "note": "Illness",
+      "pos": "WR",
+      "team": "NO"
+    },
+    "Tetairoa McMillan": {
+      "status": "Questionable",
+      "note": "Ankle \u2014 Soreness",
+      "pos": "WR",
+      "team": "CAR"
+    },
     "AJ Barner": {
       "status": "Questionable",
       "note": "Undisclosed",
@@ -169,9 +181,15 @@
       "pos": "TE",
       "team": "SF"
     },
+    "Eli Stowers": {
+      "status": "Questionable",
+      "note": "Lower Body",
+      "pos": "TE",
+      "team": "PHI"
+    },
     "Quinshon Judkins": {
       "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
+      "note": "Ankle",
       "pos": "RB",
       "team": "CLE"
     },
