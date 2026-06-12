@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-11T20:27:10Z",
+  "updated": "2026-06-12T20:16:19Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -133,6 +133,12 @@
       "pos": "QB",
       "team": "KC"
     },
+    "Jerry Jeudy": {
+      "status": "Questionable",
+      "note": "Hamstring",
+      "pos": "WR",
+      "team": "CLE"
+    },
     "Chris Olave": {
       "status": "Questionable",
       "note": "Illness",
@@ -210,12 +216,6 @@
       "note": "Achilles \u2014 Surgery",
       "pos": "TE",
       "team": "SF"
-    },
-    "Jerome Ford": {
-      "status": "Questionable",
-      "note": "Shoulder",
-      "pos": "RB",
-      "team": "WAS"
     },
     "Makai Lemon": {
       "status": "Questionable",
