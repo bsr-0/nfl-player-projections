@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-15T21:09:10Z",
+  "updated": "2026-06-16T20:57:23Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -204,6 +204,12 @@
       "note": "Ankle \u2014 Surgery",
       "pos": "WR",
       "team": "IND"
+    },
+    "RJ Harvey": {
+      "status": "Questionable",
+      "note": "Shoulder",
+      "pos": "RB",
+      "team": "DEN"
     },
     "Rashod Bateman": {
       "status": "Questionable",
