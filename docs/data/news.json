@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-16T20:57:23Z",
+  "updated": "2026-06-17T20:19:56Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -79,17 +79,17 @@
       "pos": "RB",
       "team": "JAC"
     },
-    "Troy Franklin": {
-      "status": "Questionable",
-      "note": "Hamstring",
-      "pos": "WR",
-      "team": "DEN"
-    },
     "Kendre Miller": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "RB",
       "team": "NO"
+    },
+    "Drake London": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "WR",
+      "team": "ATL"
     },
     "Darius Slayton": {
       "status": "Questionable",
@@ -114,6 +114,18 @@
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "MIA"
+    },
+    "Dak Prescott": {
+      "status": "Questionable",
+      "note": "Knee \u2014 Soreness",
+      "pos": "QB",
+      "team": "DAL"
+    },
+    "Devin Neal": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "RB",
+      "team": "NO"
     },
     "Joe Mixon": {
       "status": "Questionable",
@@ -205,12 +217,6 @@
       "pos": "WR",
       "team": "IND"
     },
-    "RJ Harvey": {
-      "status": "Questionable",
-      "note": "Shoulder",
-      "pos": "RB",
-      "team": "DEN"
-    },
     "Rashod Bateman": {
       "status": "Questionable",
       "note": "Personal",
@@ -222,6 +228,12 @@
       "note": "Achilles \u2014 Surgery",
       "pos": "TE",
       "team": "SF"
+    },
+    "Ladd McConkey": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "WR",
+      "team": "LAC"
     },
     "Makai Lemon": {
       "status": "Questionable",
@@ -246,12 +258,6 @@
       "note": "Shoulder - Labrum",
       "pos": "WR",
       "team": "KC"
-    },
-    "Jacory Croskey-Merritt": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "RB",
-      "team": "WAS"
     }
   }
 }
