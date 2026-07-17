@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-16T19:18:18Z",
+  "updated": "2026-07-17T19:16:07Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -217,12 +217,6 @@
       "pos": "WR",
       "team": "IND"
     },
-    "Rashod Bateman": {
-      "status": "Questionable",
-      "note": "Personal",
-      "pos": "WR",
-      "team": "BAL"
-    },
     "George Kittle": {
       "status": "Questionable",
       "note": "Achilles \u2014 Surgery",
@@ -234,12 +228,6 @@
       "note": "Undisclosed",
       "pos": "WR",
       "team": "LAC"
-    },
-    "Makai Lemon": {
-      "status": "Questionable",
-      "note": "Hamstring",
-      "pos": "WR",
-      "team": "PHI"
     },
     "Jordyn Tyson": {
       "status": "Questionable",
