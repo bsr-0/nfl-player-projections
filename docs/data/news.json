@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-21T19:36:48Z",
+  "updated": "2026-07-22T19:26:36Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -61,12 +61,6 @@
       "pos": "WR",
       "team": "KC"
     },
-    "Sam LaPorta": {
-      "status": "Questionable",
-      "note": "Back \u2014 Surgery",
-      "pos": "TE",
-      "team": "DET"
-    },
     "Tank Dell": {
       "status": "Questionable",
       "note": "Knee - ACL + MCL \u2014 Surgery",
@@ -116,7 +110,7 @@
       "team": "DEN"
     },
     "Chris Bell": {
-      "status": "Questionable",
+      "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "MIA"
@@ -188,7 +182,7 @@
       "team": "CLE"
     },
     "Zach Charbonnet": {
-      "status": "Questionable",
+      "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "RB",
       "team": "SEA"
