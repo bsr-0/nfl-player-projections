@@ -1,17 +1,11 @@
 {
-  "updated": "2026-07-23T19:23:34Z",
+  "updated": "2026-07-24T19:34:52Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "NYG"
-    },
-    "James Conner": {
-      "status": "Questionable",
-      "note": "Foot",
-      "pos": "RB",
-      "team": "ARI"
     },
     "Tucker Kraft": {
       "status": "Questionable",
@@ -36,12 +30,6 @@
       "note": "Achilles",
       "pos": "RB",
       "team": "LAC"
-    },
-    "Trey Benson": {
-      "status": "Questionable",
-      "note": "Knee - Meniscus \u2014 Surgery",
-      "pos": "RB",
-      "team": "ARI"
     },
     "Tyreek Hill": {
       "status": "Questionable",
@@ -192,12 +180,6 @@
       "note": "Lower Body",
       "pos": "TE",
       "team": "PHI"
-    },
-    "Quinshon Judkins": {
-      "status": "Questionable",
-      "note": "Ankle",
-      "pos": "RB",
-      "team": "CLE"
     },
     "Alec Pierce": {
       "status": "Questionable",
