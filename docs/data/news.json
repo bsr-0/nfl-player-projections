@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-24T19:34:52Z",
+  "updated": "2026-07-25T19:13:49Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -42,12 +42,6 @@
       "note": "Knee \u2014 Surgery",
       "pos": "WR",
       "team": "JAC"
-    },
-    "Rashee Rice": {
-      "status": "Questionable",
-      "note": "Knee",
-      "pos": "WR",
-      "team": "KC"
     },
     "Tank Dell": {
       "status": "Questionable",
@@ -146,8 +140,8 @@
       "team": "SEA"
     },
     "Isaac Guerendo": {
-      "status": "Questionable",
-      "note": "Pectoral",
+      "status": "PUP",
+      "note": "Pectoral \u2014 Surgery",
       "pos": "RB",
       "team": "SF"
     },
@@ -188,7 +182,7 @@
       "team": "IND"
     },
     "George Kittle": {
-      "status": "Questionable",
+      "status": "PUP",
       "note": "Achilles \u2014 Surgery",
       "pos": "TE",
       "team": "SF"
