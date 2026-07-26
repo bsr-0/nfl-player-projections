@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-25T19:13:49Z",
+  "updated": "2026-07-26T19:16:58Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -138,6 +138,12 @@
       "note": "Undisclosed",
       "pos": "TE",
       "team": "SEA"
+    },
+    "Chris Brazzell II": {
+      "status": "Questionable",
+      "note": "Knee \u2014 Soreness",
+      "pos": "WR",
+      "team": "CAR"
     },
     "Isaac Guerendo": {
       "status": "PUP",
