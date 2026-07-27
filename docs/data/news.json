@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-26T19:16:58Z",
+  "updated": "2026-07-27T19:40:29Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -49,12 +49,6 @@
       "pos": "WR",
       "team": "HOU"
     },
-    "Daniel Jones": {
-      "status": "Questionable",
-      "note": "Achilles \u2014 Surgery",
-      "pos": "QB",
-      "team": "IND"
-    },
     "Chris Rodriguez Jr.": {
       "status": "Questionable",
       "note": "Foot",
@@ -91,6 +85,12 @@
       "pos": "QB",
       "team": "DEN"
     },
+    "Marvin Harrison Jr.": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "WR",
+      "team": "ARI"
+    },
     "Chris Bell": {
       "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
@@ -115,12 +115,6 @@
       "pos": "RB",
       "team": "FA"
     },
-    "Tory Horton": {
-      "status": "Questionable",
-      "note": "Shin \u2014 Surgery",
-      "pos": "WR",
-      "team": "SEA"
-    },
     "Patrick Mahomes II": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
@@ -132,12 +126,6 @@
       "note": "Hamstring",
       "pos": "WR",
       "team": "CLE"
-    },
-    "AJ Barner": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "TE",
-      "team": "SEA"
     },
     "Chris Brazzell II": {
       "status": "Questionable",
@@ -169,12 +157,6 @@
       "pos": "RB",
       "team": "SEA"
     },
-    "Jake Tonges": {
-      "status": "Questionable",
-      "note": "Foot",
-      "pos": "TE",
-      "team": "SF"
-    },
     "Eli Stowers": {
       "status": "Questionable",
       "note": "Lower Body",
@@ -198,6 +180,12 @@
       "note": "Undisclosed",
       "pos": "WR",
       "team": "LAC"
+    },
+    "Christian Kirk": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "WR",
+      "team": "SF"
     },
     "Jordyn Tyson": {
       "status": "Questionable",
