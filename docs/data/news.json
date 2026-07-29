@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-28T19:38:05Z",
+  "updated": "2026-07-29T19:22:36Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -7,23 +7,23 @@
       "pos": "WR",
       "team": "NYG"
     },
+    "Tua Tagovailoa": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "QB",
+      "team": "ATL"
+    },
+    "James Conner": {
+      "status": "Questionable",
+      "note": "Foot",
+      "pos": "RB",
+      "team": "ARI"
+    },
     "Tucker Kraft": {
       "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "TE",
       "team": "GB"
-    },
-    "Cam Skattebo": {
-      "status": "Questionable",
-      "note": "Ankle",
-      "pos": "RB",
-      "team": "NYG"
-    },
-    "Kenyon Sadiq": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "TE",
-      "team": "NYJ"
     },
     "Najee Harris": {
       "status": "Questionable",
@@ -49,17 +49,11 @@
       "pos": "WR",
       "team": "HOU"
     },
-    "Chris Rodriguez Jr.": {
+    "Ricky Pearsall": {
       "status": "Questionable",
-      "note": "Foot",
-      "pos": "RB",
-      "team": "JAC"
-    },
-    "Kendre Miller": {
-      "status": "Questionable",
-      "note": "Knee - ACL \u2014 Surgery",
-      "pos": "RB",
-      "team": "NO"
+      "note": "Knee",
+      "pos": "WR",
+      "team": "SF"
     },
     "Drake London": {
       "status": "Questionable",
@@ -73,41 +67,11 @@
       "pos": "WR",
       "team": "NYG"
     },
-    "Bucky Irving": {
-      "status": "Questionable",
-      "note": "Shoulder \u2014 Surgery",
-      "pos": "RB",
-      "team": "TB"
-    },
-    "Bo Nix": {
-      "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
-      "pos": "QB",
-      "team": "DEN"
-    },
-    "Marvin Harrison Jr.": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "WR",
-      "team": "ARI"
-    },
     "Chris Bell": {
       "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "MIA"
-    },
-    "Dak Prescott": {
-      "status": "Questionable",
-      "note": "Knee \u2014 Soreness",
-      "pos": "QB",
-      "team": "DAL"
-    },
-    "Devin Neal": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "RB",
-      "team": "NO"
     },
     "Joe Mixon": {
       "status": "Questionable",
@@ -128,8 +92,8 @@
       "team": "CLE"
     },
     "Chris Brazzell II": {
-      "status": "Questionable",
-      "note": "Knee \u2014 Soreness",
+      "status": "Out",
+      "note": "Knee",
       "pos": "WR",
       "team": "CAR"
     },
@@ -145,17 +109,23 @@
       "pos": "QB",
       "team": "ATL"
     },
-    "Harold Fannin Jr.": {
+    "Jordan James": {
       "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "TE",
-      "team": "CLE"
+      "note": "Ribs \u2014 Fracture",
+      "pos": "RB",
+      "team": "SF"
     },
     "Zach Charbonnet": {
       "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "RB",
       "team": "SEA"
+    },
+    "Jaylin Noel": {
+      "status": "PUP",
+      "note": "Undisclosed",
+      "pos": "WR",
+      "team": "HOU"
     },
     "Eli Stowers": {
       "status": "Questionable",
@@ -187,23 +157,11 @@
       "pos": "WR",
       "team": "SF"
     },
-    "Jordyn Tyson": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "WR",
-      "team": "NO"
-    },
     "Chris Brooks": {
       "status": "PUP",
       "note": "Undisclosed",
       "pos": "RB",
       "team": "GB"
-    },
-    "Xavier Worthy": {
-      "status": "Questionable",
-      "note": "Shoulder - Labrum",
-      "pos": "WR",
-      "team": "KC"
     }
   }
 }
