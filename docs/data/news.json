@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-29T19:22:36Z",
+  "updated": "2026-07-30T19:38:16Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -55,17 +55,11 @@
       "pos": "WR",
       "team": "SF"
     },
-    "Drake London": {
+    "Chris Rodriguez Jr.": {
       "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "WR",
-      "team": "ATL"
-    },
-    "Darius Slayton": {
-      "status": "Questionable",
-      "note": "Abdomen",
-      "pos": "WR",
-      "team": "NYG"
+      "note": "Foot",
+      "pos": "RB",
+      "team": "JAC"
     },
     "Chris Bell": {
       "status": "PUP",
@@ -84,12 +78,6 @@
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "QB",
       "team": "KC"
-    },
-    "Jerry Jeudy": {
-      "status": "Questionable",
-      "note": "Hamstring",
-      "pos": "WR",
-      "team": "CLE"
     },
     "Chris Brazzell II": {
       "status": "Out",
@@ -127,23 +115,11 @@
       "pos": "WR",
       "team": "HOU"
     },
-    "Eli Stowers": {
-      "status": "Questionable",
-      "note": "Lower Body",
-      "pos": "TE",
-      "team": "PHI"
-    },
     "Alec Pierce": {
       "status": "PUP",
       "note": "Ankle \u2014 Surgery",
       "pos": "WR",
       "team": "IND"
-    },
-    "Rhamondre Stevenson": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "RB",
-      "team": "NE"
     },
     "George Kittle": {
       "status": "PUP",
@@ -162,6 +138,12 @@
       "note": "Undisclosed",
       "pos": "RB",
       "team": "GB"
+    },
+    "Jahmyr Gibbs": {
+      "status": "Questionable",
+      "note": "Back",
+      "pos": "RB",
+      "team": "DET"
     }
   }
 }
