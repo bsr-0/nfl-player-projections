@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-30T19:38:16Z",
+  "updated": "2026-07-31T19:39:45Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
@@ -20,7 +20,7 @@
       "team": "ARI"
     },
     "Tucker Kraft": {
-      "status": "PUP",
+      "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "TE",
       "team": "GB"
@@ -36,12 +36,6 @@
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "TEN"
-    },
-    "Travis Hunter": {
-      "status": "Questionable",
-      "note": "Knee \u2014 Surgery",
-      "pos": "WR",
-      "team": "JAC"
     },
     "Tank Dell": {
       "status": "Questionable",
@@ -80,7 +74,7 @@
       "team": "KC"
     },
     "Chris Brazzell II": {
-      "status": "Out",
+      "status": "IR",
       "note": "Knee",
       "pos": "WR",
       "team": "CAR"
@@ -120,6 +114,12 @@
       "note": "Ankle \u2014 Surgery",
       "pos": "WR",
       "team": "IND"
+    },
+    "Kyle Monangai": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "RB",
+      "team": "CHI"
     },
     "George Kittle": {
       "status": "PUP",
