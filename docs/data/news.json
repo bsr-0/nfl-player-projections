@@ -1,11 +1,17 @@
 {
-  "updated": "2026-06-07T19:39:01Z",
+  "updated": "2026-07-31T19:39:45Z",
   "players": {
     "Malik Nabers": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "NYG"
+    },
+    "Tua Tagovailoa": {
+      "status": "Questionable",
+      "note": "Undisclosed",
+      "pos": "QB",
+      "team": "ATL"
     },
     "James Conner": {
       "status": "Questionable",
@@ -19,29 +25,11 @@
       "pos": "TE",
       "team": "GB"
     },
-    "Cam Skattebo": {
-      "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
-      "pos": "RB",
-      "team": "NYG"
-    },
-    "Kenyon Sadiq": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "TE",
-      "team": "NYJ"
-    },
     "Najee Harris": {
       "status": "Questionable",
       "note": "Achilles",
       "pos": "RB",
       "team": "LAC"
-    },
-    "Trey Benson": {
-      "status": "Questionable",
-      "note": "Knee - Meniscus \u2014 Surgery",
-      "pos": "RB",
-      "team": "ARI"
     },
     "Tyreek Hill": {
       "status": "Questionable",
@@ -49,74 +37,26 @@
       "pos": "WR",
       "team": "TEN"
     },
-    "Travis Hunter": {
-      "status": "Questionable",
-      "note": "Knee \u2014 Surgery",
-      "pos": "WR",
-      "team": "JAC"
-    },
-    "Rashee Rice": {
-      "status": "Questionable",
-      "note": "Knee",
-      "pos": "WR",
-      "team": "KC"
-    },
-    "Sam LaPorta": {
-      "status": "Questionable",
-      "note": "Back \u2014 Surgery",
-      "pos": "TE",
-      "team": "DET"
-    },
     "Tank Dell": {
       "status": "Questionable",
       "note": "Knee - ACL + MCL \u2014 Surgery",
       "pos": "WR",
       "team": "HOU"
     },
-    "Daniel Jones": {
+    "Ricky Pearsall": {
       "status": "Questionable",
-      "note": "Achilles \u2014 Surgery",
-      "pos": "QB",
-      "team": "IND"
-    },
-    "Troy Franklin": {
-      "status": "Questionable",
-      "note": "Hamstring",
+      "note": "Knee",
       "pos": "WR",
-      "team": "DEN"
+      "team": "SF"
     },
-    "Kendre Miller": {
+    "Chris Rodriguez Jr.": {
       "status": "Questionable",
-      "note": "Knee - ACL \u2014 Surgery",
+      "note": "Foot",
       "pos": "RB",
-      "team": "NO"
-    },
-    "Calvin Ridley": {
-      "status": "Questionable",
-      "note": "Lower Leg \u2014 Surgery",
-      "pos": "WR",
-      "team": "TEN"
-    },
-    "Darius Slayton": {
-      "status": "Questionable",
-      "note": "Abdomen",
-      "pos": "WR",
-      "team": "NYG"
-    },
-    "Bucky Irving": {
-      "status": "Questionable",
-      "note": "Shoulder \u2014 Surgery",
-      "pos": "RB",
-      "team": "TB"
-    },
-    "Bo Nix": {
-      "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
-      "pos": "QB",
-      "team": "DEN"
+      "team": "JAC"
     },
     "Chris Bell": {
-      "status": "Questionable",
+      "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "WR",
       "team": "MIA"
@@ -127,33 +67,21 @@
       "pos": "RB",
       "team": "FA"
     },
-    "Tory Horton": {
-      "status": "Questionable",
-      "note": "Shin \u2014 Surgery",
-      "pos": "WR",
-      "team": "SEA"
-    },
     "Patrick Mahomes II": {
       "status": "Questionable",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "QB",
       "team": "KC"
     },
-    "Tetairoa McMillan": {
-      "status": "Questionable",
-      "note": "Undisclosed",
+    "Chris Brazzell II": {
+      "status": "IR",
+      "note": "Knee",
       "pos": "WR",
       "team": "CAR"
     },
-    "AJ Barner": {
-      "status": "Questionable",
-      "note": "Undisclosed",
-      "pos": "TE",
-      "team": "SEA"
-    },
     "Isaac Guerendo": {
-      "status": "Questionable",
-      "note": "Pectoral",
+      "status": "PUP",
+      "note": "Pectoral \u2014 Surgery",
       "pos": "RB",
       "team": "SF"
     },
@@ -163,77 +91,59 @@
       "pos": "QB",
       "team": "ATL"
     },
-    "Zach Charbonnet": {
+    "Jordan James": {
       "status": "Questionable",
+      "note": "Ribs \u2014 Fracture",
+      "pos": "RB",
+      "team": "SF"
+    },
+    "Zach Charbonnet": {
+      "status": "PUP",
       "note": "Knee - ACL \u2014 Surgery",
       "pos": "RB",
       "team": "SEA"
     },
-    "Jake Tonges": {
-      "status": "Questionable",
-      "note": "Foot",
-      "pos": "TE",
-      "team": "SF"
-    },
-    "Quinshon Judkins": {
-      "status": "Questionable",
-      "note": "Ankle \u2014 Surgery",
-      "pos": "RB",
-      "team": "CLE"
+    "Jaylin Noel": {
+      "status": "PUP",
+      "note": "Undisclosed",
+      "pos": "WR",
+      "team": "HOU"
     },
     "Alec Pierce": {
-      "status": "Questionable",
+      "status": "PUP",
       "note": "Ankle \u2014 Surgery",
       "pos": "WR",
       "team": "IND"
     },
-    "Rashod Bateman": {
+    "Kyle Monangai": {
       "status": "Questionable",
-      "note": "Personal",
-      "pos": "WR",
-      "team": "BAL"
+      "note": "Undisclosed",
+      "pos": "RB",
+      "team": "CHI"
     },
     "George Kittle": {
-      "status": "Questionable",
+      "status": "PUP",
       "note": "Achilles \u2014 Surgery",
       "pos": "TE",
       "team": "SF"
     },
-    "Jerome Ford": {
-      "status": "Questionable",
-      "note": "Shoulder",
-      "pos": "RB",
-      "team": "WAS"
-    },
-    "Makai Lemon": {
-      "status": "Questionable",
-      "note": "Hamstring",
-      "pos": "WR",
-      "team": "PHI"
-    },
-    "Jordyn Tyson": {
+    "Christian Kirk": {
       "status": "Questionable",
       "note": "Undisclosed",
       "pos": "WR",
-      "team": "NO"
+      "team": "SF"
     },
-    "De'Von Achane": {
-      "status": "Questionable",
-      "note": "Shoulder \u2014 Surgery",
-      "pos": "RB",
-      "team": "MIA"
-    },
-    "Xavier Worthy": {
-      "status": "Questionable",
-      "note": "Shoulder - Labrum",
-      "pos": "WR",
-      "team": "KC"
-    },
-    "Jacory Croskey-Merritt": {
-      "status": "Questionable",
+    "Chris Brooks": {
+      "status": "PUP",
       "note": "Undisclosed",
       "pos": "RB",
-      "team": "WAS"
+      "team": "GB"
+    },
+    "Jahmyr Gibbs": {
+      "status": "Questionable",
+      "note": "Back",
+      "pos": "RB",
+      "team": "DET"
     }
   }
 }

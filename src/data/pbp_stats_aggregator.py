@@ -526,7 +526,22 @@ class PBPStatsAggregator:
         for col in numeric_cols:
             if col in all_stats.columns:
                 all_stats[col] = all_stats[col].fillna(0)
-        
+
+        # QBs who rush appear in both passing and skill groups — merge duplicate rows
+        # by summing numeric stats and taking the first value for string columns.
+        _key = ["player_id", "season", "week"]
+        if all_stats.duplicated(subset=_key, keep=False).any():
+            valid_id = all_stats["player_id"].astype(str).str.strip() != ""
+            to_collapse = all_stats[valid_id & all_stats.duplicated(subset=_key, keep=False)]
+            keep = all_stats[~valid_id | ~all_stats.duplicated(subset=_key, keep=False)]
+            if not to_collapse.empty:
+                _num = to_collapse.select_dtypes(include="number").columns.difference(_key).tolist()
+                _str = to_collapse.columns.difference(_key).difference(_num).tolist()
+                _agg = {c: "sum" for c in _num}
+                _agg.update({c: "first" for c in _str})
+                to_collapse = to_collapse.groupby(_key, as_index=False, sort=False).agg(_agg)
+                all_stats = pd.concat([keep, to_collapse], ignore_index=True)
+
         # Extract opponent from PBP data
         if self.pbp_data is not None and 'defteam' in self.pbp_data.columns and 'posteam' in self.pbp_data.columns:
             opp_map = self.pbp_data.groupby(['season', 'week', 'posteam'])['defteam'].agg(
