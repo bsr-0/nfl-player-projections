@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lineup Optimizer 2026</title>
+<style>
+:root {
+  --bg:            #0f1117;
+  --surface:       #1e2130;
+  --surface-hover: #252840;
+  --border:        #2a2d3e;
+  --text:          #e8eaf0;
+  --text-muted:    #888ba0;
+  --text-dim:      #555870;
+  --qb:            #4f8ef7;
+  --rb:            #4caf82;
+  --wr:            #f7934f;
+  --te:            #b06ef7;
+  --flex:          #f7cf4f;
+  --value:         #4caf82;
+  --avoid:         #e05252;
+  --radius:        10px;
+  --transition:    0.15s ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ---- Header ---- */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: rgba(15, 17, 23, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.back-link {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color var(--transition);
+}
+.back-link:hover { color: var(--text); }
+
+.header-title { font-size: 1rem; font-weight: 700; letter-spacing: 0.3px; }
+.header-sub   { font-size: 0.7rem; color: var(--text-muted); margin-top: 1px; }
+
+/* ---- Main layout ---- */
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+/* ---- Banner ---- */
+.banner {
+  background: linear-gradient(135deg, rgba(76, 175, 130, 0.12), rgba(31, 35, 52, 0.9));
+  border: 1px solid rgba(76, 175, 130, 0.25);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 0.8rem;
+  color: var(--value);
+  margin-bottom: 20px;
+  display: none;
+}
+.banner.visible { display: block; }
+
+/* ---- Settings row ---- */
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.settings-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.ctrl-select {
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.ctrl-select:focus { border-color: var(--text-muted); }
+
+.ctrl-check-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.ctrl-check-label input[type="checkbox"] {
+  accent-color: var(--value);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.settings-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+/* ---- Section headers ---- */
+.section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+/* ---- Roster form ---- */
+.roster-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.slot-row {
+  position: relative;
+}
+
+.slot-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 5px;
+}
+.slot-label.qb  { color: var(--qb); }
+.slot-label.rb  { color: var(--rb); }
+.slot-label.wr  { color: var(--wr); }
+.slot-label.te  { color: var(--te); }
+.slot-label.flex { color: var(--flex); }
+.slot-label.bench { color: var(--text-dim); }
+
+.slot-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.slot-input:focus { border-color: var(--text-muted); }
+.slot-input.matched { border-color: rgba(76, 175, 130, 0.45); }
+.slot-input::placeholder { color: var(--text-dim); }
+
+/* ---- Autocomplete dropdown ---- */
+.autocomplete-wrap {
+  position: relative;
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 300;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: none;
+}
+.autocomplete-list.open { display: block; }
+
+.ac-item {
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 0.83rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition);
+}
+.ac-item:hover, .ac-item.focused {
+  background: var(--surface-hover);
+}
+.ac-name { flex: 1; font-weight: 500; }
+.ac-meta { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+
+/* ---- Form actions ---- */
+.form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-primary {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: none;
+  background: var(--value);
+  color: #0f1117;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity var(--transition);
+}
+.btn-primary:hover { opacity: 0.88; }
+
+.btn-secondary {
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--transition), color var(--transition);
+}
+.btn-secondary:hover { border-color: var(--text-muted); color: var(--text); }
+
+.btn-ghost {
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(79, 142, 247, 0.3);
+  background: rgba(79, 142, 247, 0.07);
+  color: var(--qb);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color var(--transition), background var(--transition);
+}
+.btn-ghost:hover {
+  border-color: rgba(79, 142, 247, 0.55);
+  background: rgba(79, 142, 247, 0.12);
+}
+
+/* ---- Results ---- */
+#results { display: none; }
+#results.visible { display: block; }
+
+.results-section {
+  margin-bottom: 24px;
+}
+
+/* ---- Starters table ---- */
+.starters-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.starters-table thead th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.starters-table thead th:last-child,
+.starters-table thead th:nth-last-child(2) {
+  text-align: right;
+}
+.starters-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+.starters-table tbody tr:last-child { border-bottom: none; }
+.starters-table tbody tr:hover { background: var(--surface-hover); }
+.starters-table td {
+  padding: 10px 14px;
+  vertical-align: middle;
+}
+.starters-table td:last-child,
+.starters-table td:nth-last-child(2) {
+  text-align: right;
+}
+
+.slot-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.slot-badge.qb   { background: rgba(79, 142, 247, 0.15);  color: var(--qb); }
+.slot-badge.rb   { background: rgba(76, 175, 130, 0.15);  color: var(--rb); }
+.slot-badge.wr   { background: rgba(247, 147, 79, 0.15);  color: var(--wr); }
+.slot-badge.te   { background: rgba(176, 110, 247, 0.15); color: var(--te); }
+.slot-badge.flex { background: rgba(247, 207, 79, 0.15);  color: var(--flex); }
+.slot-badge.op   { background: rgba(79, 142, 247, 0.08);  color: var(--qb); border: 1px solid rgba(79,142,247,0.25); }
+
+.player-name { font-weight: 600; }
+.team-abbr   { font-size: 0.75rem; color: var(--text-muted); margin-left: 5px; }
+.proj-num    { font-size: 0.85rem; font-weight: 600; }
+.proj-weekly { font-size: 0.8rem; color: var(--text-muted); }
+
+/* ---- Bench list ---- */
+.bench-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.bench-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+.bench-item:last-child { border-bottom: none; }
+.bench-item:hover { background: var(--surface-hover); }
+
+.pos-badge {
+  display: inline-block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pos-badge.qb { background: rgba(79, 142, 247, 0.15);  color: var(--qb); }
+.pos-badge.rb { background: rgba(76, 175, 130, 0.15);  color: var(--rb); }
+.pos-badge.wr { background: rgba(247, 147, 79, 0.15);  color: var(--wr); }
+.pos-badge.te { background: rgba(176, 110, 247, 0.15); color: var(--te); }
+
+.bench-name { flex: 1; font-size: 0.85rem; font-weight: 500; }
+.bench-weekly { font-size: 0.8rem; color: var(--text-muted); }
+.bench-upgrade {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #f7cf4f;
+  background: rgba(247, 207, 79, 0.1);
+  border: 1px solid rgba(247, 207, 79, 0.25);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* ---- Swap cards ---- */
+.swap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.swap-card {
+  background: var(--surface);
+  border: 1px solid rgba(76, 175, 130, 0.2);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.swap-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.swap-player-in {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--value);
+  white-space: nowrap;
+}
+.swap-player-out {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.swap-gain {
+  margin-left: auto;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--value);
+  white-space: nowrap;
+}
+
+.swap-arrow {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.no-swaps {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  font-size: 0.85rem;
+  color: var(--value);
+}
+
+/* ---- Error / loading states ---- */
+.error-box {
+  background: rgba(224, 82, 82, 0.1);
+  border: 1px solid rgba(224, 82, 82, 0.3);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  font-size: 0.85rem;
+  color: var(--avoid);
+  margin-bottom: 20px;
+  display: none;
+}
+.error-box.visible { display: block; }
+
+/* ---- Footer ---- */
+.footer {
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  padding: 28px 20px 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 600px) {
+  .header { padding: 10px 14px; }
+  .page   { padding: 16px 14px 40px; }
+  .slot-grid { grid-template-columns: 1fr; }
+  .settings-sep { display: none; }
+}
+
+/* ---- Confidence tier badges ---- */
+.conf-strong {
+  display: inline-block;
+  background: rgba(76, 175, 130, 0.18);
+  color: #4caf82;
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+.conf-lean {
+  display: inline-block;
+  background: rgba(251, 188, 5, 0.18);
+  color: #fbc415;
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+.conf-reason {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+/* ---- Injury badges ---- */
+.inj-badge {
+  display: inline-block;
+  font-size: 0.55rem;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-left: 3px;
+  cursor: help;
+}
+.inj-q { background: rgba(251,188,5,0.18); color: #fbc415; }
+.inj-d { background: rgba(255,140,0,0.18); color: #ff8c00; }
+.inj-o { background: rgba(224,82,82,0.18); color: #e05252; }
+.inj-i { background: rgba(224,82,82,0.25); color: #ff4444; }
+.inj-p, .inj-s { background: rgba(136,139,160,0.18); color: #888ba0; }
+.inj-warning-banner {
+  background: rgba(224,82,82,0.08);
+  border: 1px solid rgba(224,82,82,0.3);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.75rem;
+  color: #e05252;
+  margin-bottom: 12px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <a class="back-link" href="index.html">&#8592; Draft Board</a>
+    <div>
+      <div class="header-title">Lineup Optimizer 2026</div>
+      <div class="header-sub">Start/sit decisions from your roster</div>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="error-box" id="errorBox"></div>
+  <div class="banner" id="espnBanner"></div>
+
+  <!-- Settings -->
+  <div class="settings-row">
+    <span class="settings-label">League Settings</span>
+    <div class="settings-sep"></div>
+
+    <label class="ctrl-check-label" style="gap:6px">
+      <span style="color:var(--text-muted);font-size:0.8rem">FLEX slots:</span>
+      <select class="ctrl-select" id="flexSlots" style="padding:4px 8px">
+        <option value="1" selected>1</option>
+        <option value="0">0</option>
+      </select>
+    </label>
+
+    <label class="ctrl-check-label">
+      <input type="checkbox" id="superflexEnabled">
+      <span>SuperFlex (OP)</span>
+    </label>
+
+    <div class="settings-sep"></div>
+
+    <label class="ctrl-check-label" style="gap:6px">
+      <span style="color:var(--text-muted);font-size:0.8rem">Scoring:</span>
+      <select class="ctrl-select" id="scoringFormat" style="padding:4px 8px">
+        <option value="ppr" selected>PPR</option>
+        <option value="half">Half-PPR</option>
+        <option value="std">Standard</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- Roster form -->
+  <div class="roster-form">
+    <div class="section-title" style="margin-bottom:16px">Your Roster</div>
+
+    <div class="slot-grid" id="slotGrid">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-primary" type="button" onclick="runOptimizer()">Optimize Lineup</button>
+      <button class="btn-ghost" type="button" onclick="loadFromESPN()">Load from ESPN</button>
+      <button class="btn-secondary" type="button" onclick="clearRoster()">Clear</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+
+    <div id="injuryWarning"></div>
+
+    <div class="results-section">
+      <div class="section-title">Optimal Starters</div>
+      <table class="starters-table">
+        <thead>
+          <tr>
+            <th>Slot</th>
+            <th>Player</th>
+            <th style="text-align:right">Season Proj</th>
+            <th style="text-align:right">Est. Weekly</th>
+          </tr>
+        </thead>
+        <tbody id="startersBody"></tbody>
+      </table>
+    </div>
+
+    <div class="results-section">
+      <div class="section-title">Bench</div>
+      <div class="bench-list" id="benchList"></div>
+    </div>
+
+    <div class="results-section">
+      <div class="section-title">Swap Recommendations</div>
+      <div id="swapSection"></div>
+    </div>
+
+  </div>
+
+</div><!-- /page -->
+
+<div class="footer">
+  Projections from ML models trained on 2006&ndash;2025 NFL data.
+  Weekly estimate = season total &divide; 17.
+</div>
+
+<script>
+"use strict";
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let board = [];         // all players from board.json
+let nameIndex = {};     // lowercase name → player
+let NEWS = {};          // injury/status data from news.json
+let TIERS = null;       // confidence tier config from confidence_tiers.json
+
+// Slot definitions (static ordering)
+const CORE_SLOTS = [
+  { key: "QB",    pos: ["QB"], label: "QB",    count: 1 },
+  { key: "RB1",   pos: ["RB"], label: "RB 1",  count: 1 },
+  { key: "RB2",   pos: ["RB"], label: "RB 2",  count: 1 },
+  { key: "WR1",   pos: ["WR"], label: "WR 1",  count: 1 },
+  { key: "WR2",   pos: ["WR"], label: "WR 2",  count: 1 },
+  { key: "TE",    pos: ["TE"], label: "TE",    count: 1 },
+];
+const FLEX_SLOT    = { key: "FLEX", pos: ["RB","WR","TE"], label: "FLEX" };
+const SUPERFLEX_SLOT = { key: "OP", pos: ["QB","RB","WR","TE"], label: "SuperFlex (OP)" };
+const BENCH_COUNT  = 6;
+
+// Slot DOM registry: key → { input, hiddenId, acList, acIndex }
+const slots = {};
+
+// ─── Initialise ──────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const [boardData, newsData, tiersData] = await Promise.all([
+      fetch("data/board.json").then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+      fetch("data/news.json").then(r => r.json()).catch(() => ({})),
+      fetch("data/confidence_tiers.json").then(r => r.json()).catch(() => null),
+    ]);
+    board = boardData;
+    NEWS  = newsData;
+    TIERS = tiersData || { strong_threshold_edge: 4.0, by_position: {} };
+    buildNameIndex();
+    buildSlotGrid();
+    loadFromLocalStorage();
+    await tryAutoESPN();
+  } catch (e) {
+    showError("Could not load player data (board.json). " + e.message);
+  }
+}
+
+function statusBadge(name) {
+  const players = (NEWS && NEWS.players) || {};
+  const info = players[name];
+  if (!info) return "";
+  const status = info.status || "";
+  const note   = info.note   || status;
+  const cls    = status.toLowerCase()[0] || "";
+  return `<span class="inj-badge inj-${cls}" title="${note}">${status[0] || ""}</span>`;
+}
+
+function buildNameIndex() {
+  nameIndex = {};
+  for (const p of board) {
+    nameIndex[p.n.toLowerCase()] = p;
+  }
+}
+
+// ─── Slot grid construction ───────────────────────────────────────────────────
+function buildSlotGrid() {
+  const grid = document.getElementById("slotGrid");
+  grid.innerHTML = "";
+
+  const slotDefs = getSlotDefs();
+  for (const def of slotDefs) {
+    const wrap = document.createElement("div");
+    wrap.className = "slot-row";
+
+    const posClass = def.pos.length === 1 ? def.pos[0].toLowerCase() :
+                     def.key === "FLEX" ? "flex" :
+                     def.key === "OP"   ? "qb" : "bench";
+
+    const labelText = def.label;
+
+    wrap.innerHTML = `
+      <label class="slot-label ${posClass}" data-slot="${def.key}">${labelText}</label>
+      <div class="autocomplete-wrap">
+        <input
+          class="slot-input"
+          type="text"
+          placeholder="Player name…"
+          autocomplete="off"
+          data-slot="${def.key}"
+        >
+        <div class="autocomplete-list" id="ac-${def.key}"></div>
+      </div>
+    `;
+
+    grid.appendChild(wrap);
+
+    const input = wrap.querySelector("input");
+    const acList = wrap.querySelector(".autocomplete-list");
+
+    slots[def.key] = { input, acList, matchedId: null, acIndex: -1 };
+
+    input.addEventListener("input", () => onSlotInput(def.key));
+    input.addEventListener("keydown", (e) => onSlotKeydown(e, def.key));
+    input.addEventListener("blur", () => {
+      // delay so click on ac-item registers first
+      setTimeout(() => closeAC(def.key), 150);
+    });
+  }
+}
+
+function getSlotDefs() {
+  const flexCount = parseInt(document.getElementById("flexSlots").value, 10);
+  const sfEnabled = document.getElementById("superflexEnabled").checked;
+  const defs = [...CORE_SLOTS];
+  if (flexCount > 0) defs.push(FLEX_SLOT);
+  if (sfEnabled)     defs.push(SUPERFLEX_SLOT);
+  for (let i = 1; i <= BENCH_COUNT; i++) {
+    defs.push({ key: `BENCH${i}`, pos: ["QB","RB","WR","TE"], label: `Bench ${i}` });
+  }
+  return defs;
+}
+
+// Rebuild grid when settings change (preserve existing input values)
+function rebuildGrid() {
+  const saved = {};
+  for (const [k, s] of Object.entries(slots)) {
+    saved[k] = { val: s.input.value, id: s.matchedId };
+  }
+  buildSlotGrid();
+  // restore what we can
+  for (const [k, s] of Object.entries(slots)) {
+    if (saved[k]) {
+      s.input.value = saved[k].val;
+      s.matchedId = saved[k].id;
+      if (s.matchedId) s.input.classList.add("matched");
+    }
+  }
+}
+
+document.getElementById("flexSlots").addEventListener("change", rebuildGrid);
+document.getElementById("superflexEnabled").addEventListener("change", rebuildGrid);
+
+// ─── Autocomplete ─────────────────────────────────────────────────────────────
+function onSlotInput(key) {
+  const s = slots[key];
+  const q = s.input.value.trim().toLowerCase();
+
+  // Clear match if user is typing
+  s.matchedId = null;
+  s.input.classList.remove("matched");
+
+  if (!q || q.length < 1) { closeAC(key); return; }
+
+  const results = board
+    .filter(p => p.n.toLowerCase().includes(q))
+    .slice(0, 8);
+
+  if (!results.length) { closeAC(key); return; }
+
+  s.acIndex = -1;
+  s.acList.innerHTML = "";
+  s.acList.classList.add("open");
+
+  for (const p of results) {
+    const item = document.createElement("div");
+    item.className = "ac-item";
+    item.dataset.id = p.id;
+
+    const posClass = p.p.toLowerCase();
+    item.innerHTML = `
+      <span class="pos-badge ${posClass}">${p.p}</span>
+      <span class="ac-name">${p.n}${statusBadge(p.n)}</span>
+      <span class="ac-meta">${p.t}</span>
+    `;
+    item.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      selectPlayer(key, p);
+    });
+    s.acList.appendChild(item);
+  }
+}
+
+function onSlotKeydown(e, key) {
+  const s = slots[key];
+  const items = s.acList.querySelectorAll(".ac-item");
+  if (!items.length) return;
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    s.acIndex = Math.min(s.acIndex + 1, items.length - 1);
+    highlightAC(key);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    s.acIndex = Math.max(s.acIndex - 1, -1);
+    highlightAC(key);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (s.acIndex >= 0 && items[s.acIndex]) {
+      const id = parseInt(items[s.acIndex].dataset.id, 10);
+      const p = board.find(x => x.id === id);
+      if (p) selectPlayer(key, p);
+    }
+  } else if (e.key === "Escape") {
+    closeAC(key);
+  }
+}
+
+function highlightAC(key) {
+  const s = slots[key];
+  const items = s.acList.querySelectorAll(".ac-item");
+  items.forEach((item, i) => {
+    item.classList.toggle("focused", i === s.acIndex);
+  });
+}
+
+function selectPlayer(key, player) {
+  const s = slots[key];
+  s.input.value = player.n;
+  s.matchedId = player.id;
+  s.input.classList.add("matched");
+  closeAC(key);
+}
+
+function closeAC(key) {
+  const s = slots[key];
+  s.acList.classList.remove("open");
+  s.acList.innerHTML = "";
+  s.acIndex = -1;
+}
+
+// ─── Persistence ──────────────────────────────────────────────────────────────
+const LS_KEY = "lineupRoster";
+
+function saveToLocalStorage() {
+  const data = {};
+  for (const [k, s] of Object.entries(slots)) {
+    data[k] = { val: s.input.value, id: s.matchedId };
+  }
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {}
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    for (const [k, s] of Object.entries(slots)) {
+      if (data[k]?.val) {
+        s.input.value = data[k].val;
+        s.matchedId = data[k].id || null;
+        if (s.matchedId) s.input.classList.add("matched");
+      }
+    }
+  } catch (_) {}
+}
+
+function clearRoster() {
+  try { localStorage.removeItem(LS_KEY); } catch (_) {}
+  for (const s of Object.values(slots)) {
+    s.input.value = "";
+    s.matchedId = null;
+    s.input.classList.remove("matched");
+    closeAC(Object.keys(slots).find(k => slots[k] === s));
+  }
+  document.getElementById("results").classList.remove("visible");
+  const iw = document.getElementById("injuryWarning");
+  if (iw) iw.innerHTML = "";
+  hideBanner();
+}
+
+// ─── ESPN auto-load ───────────────────────────────────────────────────────────
+async function tryAutoESPN() {
+  try {
+    const res = await fetch("data/my_roster.json");
+    if (!res.ok) return; // file not present — silently skip
+    const roster = await res.json();
+    if (!Array.isArray(roster) || !roster.length) return;
+    populateFromESPN(roster);
+  } catch (_) {
+    // my_roster.json not found or malformed — silently skip
+  }
+}
+
+function loadFromESPN() {
+  fetch("data/my_roster.json")
+    .then(res => {
+      if (!res.ok) throw new Error("my_roster.json not found");
+      return res.json();
+    })
+    .then(roster => {
+      if (!Array.isArray(roster) || !roster.length) throw new Error("Empty roster file");
+      populateFromESPN(roster);
+    })
+    .catch(e => {
+      showError("Could not load ESPN roster: " + e.message);
+    });
+}
+
+function populateFromESPN(roster) {
+  // clear inputs first
+  for (const s of Object.values(slots)) {
+    s.input.value = "";
+    s.matchedId = null;
+    s.input.classList.remove("matched");
+  }
+
+  let matched = 0;
+  const benchSlots = Array.from({ length: BENCH_COUNT }, (_, i) => `BENCH${i + 1}`);
+  let nextBench = 0;
+
+  for (const entry of roster) {
+    const player = resolvePlayerName(entry.name);
+    if (!player) continue;
+
+    const slot = (entry.slot || "BENCH").toUpperCase();
+    let targetKey = null;
+
+    if (slot === "QB")   targetKey = "QB";
+    else if (slot === "RB") {
+      targetKey = !slots["RB1"]?.matchedId ? "RB1" : "RB2";
+    } else if (slot === "WR") {
+      targetKey = !slots["WR1"]?.matchedId ? "WR1" : "WR2";
+    } else if (slot === "TE")   targetKey = "TE";
+    else if (slot === "FLEX")   targetKey = "FLEX";
+    else if (slot === "OP")     targetKey = "OP";
+    else {
+      // BENCH or unrecognised
+      if (nextBench < benchSlots.length) {
+        targetKey = benchSlots[nextBench++];
+      }
+    }
+
+    if (targetKey && slots[targetKey]) {
+      slots[targetKey].input.value = player.n;
+      slots[targetKey].matchedId = player.id;
+      slots[targetKey].input.classList.add("matched");
+      matched++;
+    }
+  }
+
+  showBanner(`Roster loaded from ESPN sync — ${matched} player${matched !== 1 ? "s" : ""} matched`);
+  saveToLocalStorage();
+  runOptimizer();
+}
+
+function resolvePlayerName(name) {
+  if (!name) return null;
+  // 1. exact match
+  if (nameIndex[name.toLowerCase()]) return nameIndex[name.toLowerCase()];
+  // 2. case-insensitive substring of full name
+  const lower = name.toLowerCase();
+  const ci = board.find(p => p.n.toLowerCase() === lower);
+  if (ci) return ci;
+  // 3. first-initial + last name (e.g. "P. Mahomes" or "Patrick Mahomes" → last token match)
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1].toLowerCase();
+    const firstInit = parts[0][0].toLowerCase();
+    const fuzzy = board.find(p => {
+      const pParts = p.n.toLowerCase().split(/\s+/);
+      if (pParts.length < 2) return false;
+      return pParts[pParts.length - 1] === last && pParts[0][0] === firstInit;
+    });
+    if (fuzzy) return fuzzy;
+  }
+  return null;
+}
+
+// ─── Confidence tiers ────────────────────────────────────────────────────────
+function confidence(starterProj, benchProj, position) {
+  const edge = benchProj - starterProj;
+  if (edge <= 0) return null;
+
+  const tiers = TIERS || { strong_threshold_edge: 7.0, by_position: {} };
+
+  // All positions use the same threshold — QB accuracy at 7pt edge (77.9%)
+  // matches every other position. No position-based overrides.
+  const posThreshold = tiers.by_position?.[position]?.strong_threshold ?? tiers.strong_threshold_edge ?? 7.0;
+  const posAccuracy  = tiers.by_position?.[position]?.strong_accuracy  ?? tiers.strong_accuracy  ?? null;
+
+  if (edge >= posThreshold) {
+    const accLabel = posAccuracy ? `${Math.round(posAccuracy * 100)}% historically correct at this edge` : "Large edge — historically reliable";
+    return { tier: "STRONG", edge, accuracy: posAccuracy, reason: accLabel };
+  }
+  return { tier: "LEAN", edge, reason: "Edge too small to call with confidence" };
+}
+
+// ─── Optimizer ───────────────────────────────────────────────────────────────
+function runOptimizer() {
+  // Collect entered players
+  const rosterIds = new Set();
+  const entered = []; // { player, slotKey, isCore }
+
+  const coreKeys = new Set(["QB","RB1","RB2","WR1","WR2","TE"]);
+  const flexEnabled = parseInt(document.getElementById("flexSlots").value, 10) > 0;
+  const sfEnabled = document.getElementById("superflexEnabled").checked;
+
+  for (const [key, s] of Object.entries(slots)) {
+    if (!s.matchedId) continue;
+    const player = board.find(p => p.id === s.matchedId);
+    if (!player) continue;
+    if (!rosterIds.has(player.id)) {
+      rosterIds.add(player.id);
+      entered.push({ player, slotKey: key, isCore: coreKeys.has(key) });
+    }
+  }
+
+  if (!entered.length) {
+    showError("Enter at least one player to optimize.");
+    return;
+  }
+  clearError();
+  saveToLocalStorage();
+
+  // Pool of all entered players (by weekly proj)
+  const pool = entered.map(e => e.player).sort((a, b) => weekly(b) - weekly(a));
+
+  // Fill core slots greedily: best available for each position
+  const used = new Set();
+  const starters = []; // { slotKey, slotLabel, posClass, player }
+
+  function pickBest(positions) {
+    return pool.find(p => !used.has(p.id) && positions.includes(p.p)) || null;
+  }
+
+  const coreOrder = [
+    { key: "QB",  pos: ["QB"],           label: "QB",   cls: "qb" },
+    { key: "RB1", pos: ["RB"],           label: "RB 1", cls: "rb" },
+    { key: "RB2", pos: ["RB"],           label: "RB 2", cls: "rb" },
+    { key: "WR1", pos: ["WR"],           label: "WR 1", cls: "wr" },
+    { key: "WR2", pos: ["WR"],           label: "WR 2", cls: "wr" },
+    { key: "TE",  pos: ["TE"],           label: "TE",   cls: "te" },
+  ];
+
+  for (const def of coreOrder) {
+    const p = pickBest(def.pos);
+    if (p) {
+      used.add(p.id);
+      starters.push({ slotKey: def.key, label: def.label, cls: def.cls, player: p });
+    }
+  }
+
+  if (flexEnabled) {
+    const p = pickBest(["RB","WR","TE"]);
+    if (p) {
+      used.add(p.id);
+      starters.push({ slotKey: "FLEX", label: "FLEX", cls: "flex", player: p });
+    }
+  }
+
+  if (sfEnabled) {
+    const p = pickBest(["QB","RB","WR","TE"]);
+    if (p) {
+      used.add(p.id);
+      starters.push({ slotKey: "OP", label: "SuperFlex", cls: "op", player: p });
+    }
+  }
+
+  const bench = pool.filter(p => !used.has(p.id));
+
+  // ── Swap recommendations ─────────────────────────────────────────────────
+  // Compare what user entered in core slots vs what optimizer picked
+  // "user's core" = the player matched in each core slot input
+  const userStarters = {}; // slotKey → player
+  for (const [key, s] of Object.entries(slots)) {
+    if (!s.matchedId) continue;
+    const p = board.find(x => x.id === s.matchedId);
+    if (p) userStarters[key] = p;
+  }
+
+  const swaps = [];
+
+  // For each core slot, check if user has a different player than optimal
+  for (const def of coreOrder) {
+    const optimal = starters.find(s => s.slotKey === def.key);
+    const userPick = userStarters[def.key];
+    if (!optimal || !userPick) continue;
+    if (optimal.player.id === userPick.id) continue;
+    // Check if userPick is on bench
+    const isOnBench = bench.some(p => p.id === userPick.id);
+    // Only recommend if optimal player is actually better
+    if (weekly(optimal.player) > weekly(userPick)) {
+      const conf = confidence(weekly(userPick), weekly(optimal.player), optimal.player.p);
+      swaps.push({
+        slotLabel: def.label,
+        start:  optimal.player,
+        sit:    userPick,
+        gain:   weekly(optimal.player) - weekly(userPick),
+        userPickOnBench: isOnBench,
+        conf,
+      });
+    }
+  }
+
+  // Also check bench upgrades: bench player > a starting slot player of same position type
+  // (already handled above, but let's also catch cross-position flex cases)
+  // For flex: if user put a lower player in flex and a better one is on bench
+  const flexOptimal = starters.find(s => s.slotKey === "FLEX");
+  const flexUser = userStarters["FLEX"];
+  if (flexOptimal && flexUser && flexOptimal.player.id !== flexUser.player.id) {
+    if (weekly(flexOptimal.player) > weekly(flexUser)) {
+      const conf = confidence(weekly(flexUser), weekly(flexOptimal.player), flexOptimal.player.p);
+      swaps.push({
+        slotLabel: "FLEX",
+        start: flexOptimal.player,
+        sit:   flexUser,
+        gain:  weekly(flexOptimal.player) - weekly(flexUser),
+        userPickOnBench: bench.some(p => p.id === flexUser.id),
+        conf,
+      });
+    }
+  }
+
+  // Bench highlight: flag any bench player who beats a same-pos starter
+  const starterByPos = {};
+  for (const s of starters) {
+    const pos = s.player.p;
+    if (!starterByPos[pos] || weekly(s.player) < weekly(starterByPos[pos])) {
+      starterByPos[pos] = s.player;
+    }
+  }
+  const benchHighlight = new Set();
+  for (const p of bench) {
+    const worstStarter = starterByPos[p.p];
+    if (worstStarter && weekly(p) > weekly(worstStarter)) {
+      benchHighlight.add(p.id);
+    }
+    // also flag if they'd beat a flex-eligible starter
+    if (["RB","WR","TE"].includes(p.p)) {
+      const flexSt = starters.find(s => s.slotKey === "FLEX");
+      if (flexSt && weekly(p) > weekly(flexSt.player)) {
+        benchHighlight.add(p.id);
+      }
+    }
+  }
+
+  renderResults(starters, bench, swaps, benchHighlight);
+}
+
+function weekly(player) {
+  return (player.proj || 0) / 17;
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderResults(starters, bench, swaps, benchHighlight) {
+  const scoringLabel = {
+    ppr:  "PPR",
+    half: "Half-PPR",
+    std:  "Standard",
+  }[document.getElementById("scoringFormat").value] || "PPR";
+
+  // Starters table
+  const tbody = document.getElementById("startersBody");
+  tbody.innerHTML = starters.map(s => {
+    const w = weekly(s.player).toFixed(1);
+    const total = (s.player.proj || 0).toFixed(1);
+    return `<tr>
+      <td><span class="slot-badge ${s.cls}">${s.label}</span></td>
+      <td>
+        <span class="player-name">${esc(s.player.n)}${statusBadge(s.player.n)}</span>
+        <span class="team-abbr">${esc(s.player.t)}</span>
+      </td>
+      <td class="proj-num">${total}</td>
+      <td class="proj-weekly">${w}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="4" style="color:var(--text-dim);padding:14px">No players matched</td></tr>`;
+
+  // Update header labels with scoring format
+  const headers = document.querySelectorAll(".starters-table thead th");
+  if (headers[2]) headers[2].textContent = `Season ${scoringLabel}`;
+
+  // Injury warning banner
+  const injuryWarning = document.getElementById("injuryWarning");
+  if (injuryWarning) {
+    const flaggedCount = starters.filter(s => statusBadge(s.player.n) !== "").length;
+    if (flaggedCount > 0) {
+      injuryWarning.innerHTML = `<div class="inj-warning-banner">⚠ ${flaggedCount} starter${flaggedCount !== 1 ? "s" : ""} have injury flags — check before locking in.</div>`;
+    } else {
+      injuryWarning.innerHTML = "";
+    }
+  }
+
+  // Bench
+  const benchList = document.getElementById("benchList");
+  if (!bench.length) {
+    benchList.innerHTML = `<div class="bench-item" style="color:var(--text-dim);font-size:0.82rem">No bench players entered</div>`;
+  } else {
+    benchList.innerHTML = bench.map(p => {
+      const w = weekly(p).toFixed(1);
+      const isHot = benchHighlight.has(p.id);
+      return `<div class="bench-item">
+        <span class="pos-badge ${p.p.toLowerCase()}">${p.p}</span>
+        <span class="bench-name">${esc(p.n)}<span class="team-abbr">${esc(p.t)}</span></span>
+        <span class="bench-weekly">${w} pts/wk</span>
+        ${isHot ? `<span class="bench-upgrade">▲ Upgrade</span>` : ""}
+      </div>`;
+    }).join("");
+  }
+
+  // Swaps
+  const swapSection = document.getElementById("swapSection");
+  if (!swaps.length) {
+    swapSection.innerHTML = `<div class="no-swaps">No swaps needed — your starters are optimal.</div>`;
+  } else {
+    const hasStrong = swaps.some(sw => sw.conf?.tier === "STRONG");
+    const noSwapsMsg = hasStrong
+      ? ""
+      : `<div class="no-swaps" style="margin-bottom:8px">No confident swaps — all alternatives are within the model's margin of error.</div>`;
+
+    swapSection.innerHTML = noSwapsMsg + `<div class="swap-list">${
+      swaps.map(sw => {
+        const badgeHtml = sw.conf
+          ? `<span class="conf-${sw.conf.tier.toLowerCase()}">${sw.conf.tier}</span>`
+          : "";
+        const reasonHtml = sw.conf?.reason
+          ? `<div class="conf-reason">${esc(sw.conf.reason)}</div>`
+          : "";
+        return `
+        <div class="swap-card" style="flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap">
+            <span class="swap-label">Start</span>
+            <span class="swap-player-in">${esc(sw.start.n)} <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">(${weekly(sw.start).toFixed(1)} pts/wk)</span></span>
+            <span class="swap-arrow">over</span>
+            <span class="swap-player-out">${esc(sw.sit.n)} <span style="font-size:0.72rem;color:var(--text-dim)">(${weekly(sw.sit).toFixed(1)} pts/wk)</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            ${badgeHtml}
+            <span class="swap-gain">+${sw.gain.toFixed(1)} pts/wk</span>
+          </div>
+          ${reasonHtml ? `<div style="flex-basis:100%">${reasonHtml}</div>` : ""}
+        </div>
+      `;
+      }).join("")
+    }</div>`;
+  }
+
+  document.getElementById("results").classList.add("visible");
+}
+
+// ─── Utility ─────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function showError(msg) {
+  const box = document.getElementById("errorBox");
+  box.textContent = msg;
+  box.classList.add("visible");
+}
+
+function clearError() {
+  const box = document.getElementById("errorBox");
+  box.textContent = "";
+  box.classList.remove("visible");
+}
+
+function showBanner(msg) {
+  const b = document.getElementById("espnBanner");
+  b.textContent = msg;
+  b.classList.add("visible");
+}
+
+function hideBanner() {
+  document.getElementById("espnBanner").classList.remove("visible");
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "_comment": "Paper-prototype roster for scripts/start_sit_prototype.py. 'starters' is what the user actually fielded that week; 'bench' is everyone else on their roster. Names match walk-forward predictions CSV (usually 'F.Last' or 'FirstName Last').",
+  "league": {
+    "format": "PPR",
+    "scoring_notes": "1 point per reception; standard TD values",
+    "starters_slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1},
+    "roster_size": 15
+  },
+  "starters": [
+    {"name": "P.Mahomes",    "position": "QB"},
+    {"name": "C.McCaffrey",  "position": "RB"},
+    {"name": "J.Gibbs",      "position": "RB"},
+    {"name": "C.Lamb",       "position": "WR"},
+    {"name": "J.Chase",      "position": "WR"},
+    {"name": "T.Kelce",      "position": "TE"}
+  ],
+  "bench": [
+    {"name": "J.Allen",      "position": "QB"},
+    {"name": "D.Henry",      "position": "RB"},
+    {"name": "B.Robinson",   "position": "RB"},
+    {"name": "A.Brown",      "position": "WR"},
+    {"name": "M.Nabers",     "position": "WR"},
+    {"name": "G.Kittle",     "position": "TE"}
+  ]
+}
