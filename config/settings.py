@@ -311,7 +311,7 @@ CAUSAL_FEATURES = {
         "rush_epa_per_play_roll3_mean",
         "opp_fpts_allowed", "implied_team_total", "spread",
         "team_prior_season_wins",
-        "injury_score", "prev_season_ppg", "preseason_ecr",
+        "injury_score", "prev_season_ppg",
         "age_curve", "team_changed", "availability_3yr",
         "career_year_flag", "bayesian_prior_ppg",
         "fp_late6_vs_season",
@@ -341,7 +341,7 @@ CAUSAL_FEATURES = {
         "team_prior_season_wins",
         # QB identity EPA: actual QB1 assigned to team (roster-sourced for 2026+)
         "current_qb_epa_per_att",
-        "injury_score", "prev_season_ppg", "preseason_ecr",
+        "injury_score", "prev_season_ppg",
         "age_curve", "team_changed", "availability_3yr",
         "career_year_flag", "bayesian_prior_ppg",
         "fp_late6_vs_season",
@@ -371,7 +371,7 @@ CAUSAL_FEATURES = {
         "team_prior_season_wins",
         # QB identity EPA: actual QB1 assigned to team (roster-sourced for 2026+)
         "current_qb_epa_per_att",
-        "injury_score", "prev_season_ppg", "preseason_ecr",
+        "injury_score", "prev_season_ppg",
         "age_curve", "team_changed", "availability_3yr",
         "career_year_flag", "bayesian_prior_ppg",
         "fp_late6_vs_season",
@@ -402,7 +402,7 @@ CAUSAL_FEATURES = {
         "opp_fpts_allowed", "implied_team_total", "spread",
         "team_prior_season_wins",
         # Player context
-        "injury_score", "prev_season_ppg", "preseason_ecr",
+        "injury_score", "prev_season_ppg",
         "age_curve", "team_changed", "availability_3yr",
         "career_year_flag", "bayesian_prior_ppg",
         "fp_late6_vs_season",

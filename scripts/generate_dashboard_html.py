@@ -461,13 +461,8 @@ def _calibrate_projection(
     position = getattr(sr, "position", "")
     ecr = float(getattr(sr, "ecr", 999.0) or 999.0)
 
-    blend_weight = _compute_blend_weight(
-        position, ecr, raw_proj, market_proj,
-        team_changed=bool(team_change_data),
-    )
-    calibrated_proj = raw_proj if market_proj <= 0 else (
-        blend_weight * raw_proj + (1.0 - blend_weight) * market_proj
-    )
+    # Pure ML: no blending with market consensus. ML projection is the base.
+    calibrated_proj = raw_proj
 
     structural_delta, manual_delta, adj_breakdown, adj_flags = _apply_structured_adjustments(
         sr=sr,
@@ -482,61 +477,24 @@ def _calibrate_projection(
         sos_label=sos_label,
         sos_mult=sos_mult,
     )
-    unclamped_structural = calibrated_proj + structural_delta
 
-    clamp_delta = 0.0
-    clamp_hit = False
-    elite_consensus = ecr <= CALIBRATION_POLICY["elite_ecr_cutoff"]
-    if market_proj > 0:
-        band_pct = CALIBRATION_POLICY["elite_band_pct"].get(position, 0.14) if elite_consensus else (
-            CALIBRATION_POLICY["market_band_pct"].get(position, 0.18)
-        )
-        band = max(
-            CALIBRATION_POLICY["min_band_points"].get(position, 10.0),
-            market_proj * band_pct,
-        )
-        lower = max(0.0, market_proj - band)
-        upper = market_proj + band
-        clamped_structural = _clamp(unclamped_structural, lower, upper)
-        clamp_delta = round(clamped_structural - unclamped_structural, 2)
-        clamp_hit = abs(clamp_delta) > 1e-9
-    else:
-        clamped_structural = max(0.0, unclamped_structural)
+    # No market-based clamping — structural adjustments apply directly
+    final_display = max(0.0, calibrated_proj + structural_delta + manual_delta)
 
-    # Manual override applied after clamp — bypasses market band by design
-    final_display = max(0.0, clamped_structural + manual_delta)
-
+    # ADP divergence as informational signal (not used for blending)
     divergence_pct = (
         abs(raw_proj - market_proj) / max(abs(market_proj), 1.0)
         if market_proj > 0 else 0.0
     )
-    final_divergence_pct = (
-        abs(final_display - market_proj) / max(abs(market_proj), 1.0)
-        if market_proj > 0 else 0.0
-    )
-    elite_override_check = bool(
-        elite_consensus and market_proj > 0 and divergence_pct > CALIBRATION_POLICY["elite_band_pct"].get(position, 0.14)
-    )
-
-    if clamp_hit:
-        adj_breakdown.append({
-            "signal": "market_clamp",
-            "label": "Market band clamp",
-            "delta": round(clamp_delta, 2),
-            "pct": round(clamp_delta / max(calibrated_proj, 1.0), 4),
-            "requestedPct": round(clamp_delta / max(calibrated_proj, 1.0), 4),
-            "capHit": True,
-        })
 
     final_adj_delta = round(final_display - calibrated_proj, 2)
     why = [
         f"Our rank #{int(getattr(sr, 'model_rank', 999))} vs consensus #{int(round(ecr))}",
-        (
-            f"Base projection {round(calibrated_proj, 1):.1f} from "
-            f"{blend_weight:.0%} model {raw_proj:.1f} and "
-            f"{1.0 - blend_weight:.0%} market {market_proj:.1f}"
-        ),
+        f"Pure ML projection {round(raw_proj, 1):.1f}",
     ]
+    if market_proj > 0:
+        direction = "higher" if raw_proj > market_proj else "lower"
+        why.append(f"ML is {abs(raw_proj - market_proj):.1f} pts {direction} than ADP consensus ({market_proj:.1f})")
     for item in adj_breakdown:
         if abs(item["delta"]) < 0.05:
             continue
@@ -544,16 +502,7 @@ def _calibrate_projection(
     why = why[:5]
 
     flags = {
-        "largeDivergence": _is_large_divergence(position, raw_proj, market_proj),
-        "unresolvedDisplayDivergence": _is_unresolved_display_divergence(
-            position,
-            final_display,
-            market_proj,
-            elite_consensus=elite_consensus,
-        ),
-        "clampHit": clamp_hit,
         "ageCapHit": adj_flags["ageCapHit"],
-        "eliteConsensusOverrideCheck": elite_override_check,
         "positionBiasCheck": False,
         "totalAdjustmentCapHit": adj_flags["totalAdjustmentCapHit"],
         "manualCapHit": adj_flags["manualCapHit"],
@@ -562,14 +511,14 @@ def _calibrate_projection(
 
     return {
         "raw_projection": round(raw_proj, 2),
-        "market_anchor_projection": round(market_proj, 2),
+        "market_consensus_projection": round(market_proj, 2),
+        "adp_divergence_pct": round(divergence_pct, 4),
         "calibrated_projection": round(calibrated_proj, 2),
         "final_display_projection": round(final_display, 2),
         "adjustment_delta": round(final_adj_delta, 2),
         "adjustment_breakdown": adj_breakdown,
         "calibration_flags": flags,
         "why": why,
-        "blend_weight": round(blend_weight, 4),
     }
 
 
@@ -2097,9 +2046,9 @@ def build_board_data(season: int):
             "sp": sr.rank_spread,
             "proj": round(calibration["final_display_projection"], 1),
             "rawProj": round(calibration["raw_projection"], 1),
-            "marketProj": round(calibration["market_anchor_projection"], 1),
+            "marketProj": round(calibration["market_consensus_projection"], 1),
+            "adpDivergencePct": round(calibration["adp_divergence_pct"] * 100, 1),
             "calibratedProj": round(calibration["calibrated_projection"], 1),
-            "blendProj": round(calibration["calibrated_projection"], 1),
             "adjDelta": round(calibration["adjustment_delta"], 1),
             "adjBreakdown": calibration["adjustment_breakdown"],
             "calibrationFlags": calibration["calibration_flags"],

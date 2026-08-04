@@ -39,8 +39,6 @@ env/
 
 # Data – all generated/binary files; regenerate locally
 data/
-Tests/
-src/
 *.db
 *.joblib
 *.pkl
