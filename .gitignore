@@ -38,7 +38,12 @@ ENV/
 env/
 
 # Data – all generated/binary files; regenerate locally
-data/
+# NOTE: anchored to repo root — a bare "data/" also matched src/data/ and
+# scripts/data/, silently untracking real pipeline source code for the
+# entire life of the repo. Only the top-level data/ (DB + model artifacts)
+# is meant to be ignored.
+/data/
+scripts/data/cache/
 *.db
 *.joblib
 *.pkl
