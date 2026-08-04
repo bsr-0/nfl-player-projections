@@ -85,3 +85,4 @@ config/__pycache__/
 # Walk-forward validation artifact (generated, uploaded as workflow artifact)
 walk-forward-validation.md
 
+src/
