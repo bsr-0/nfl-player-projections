@@ -86,3 +86,4 @@ config/__pycache__/
 walk-forward-validation.md
 
 src/
+tests/
