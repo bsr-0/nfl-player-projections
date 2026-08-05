@@ -21,41 +21,17 @@ weekly and season-long — built on play-by-play and weekly player data from
 
 ```bash
 pip install -r requirements.txt
-```
-
-Data lives in a local SQLite database at `data/nfl_data.db`, loaded from
-`nfl-data-py`/nflverse. To populate it from scratch:
-
-```bash
-python -m src.data.nfl_data_loader
+python -m src.data.nfl_data_loader   # populate data/nfl_data.db from nflverse
 ```
 
 ## Usage
 
-**Train models:**
 ```bash
-python -m src.models.train              # full training run
-python -m src.models.train --fast --no-tune   # quick iteration, skips Optuna
-```
-
-**Generate draft board / app data:**
-```bash
-python scripts/generate_app_data.py      # weekly/season predictions
-python scripts/generate_draft_data.py    # draft board JSON
-```
-
-**Draft advisor:**
-```bash
+python -m src.models.train                     # full training run
+python -m src.models.train --fast --no-tune     # quick iteration, skips Optuna
+python scripts/generate_app_data.py             # weekly/season predictions
+python scripts/generate_draft_data.py           # draft board JSON
 python scripts/draft_advisor.py --mode spread --season 2025
-```
-
-**Dashboard:**
-```bash
-streamlit run scripts/analytics_dashboard.py
-```
-
-**Tests:**
-```bash
 pytest
 ```
 

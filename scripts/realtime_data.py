@@ -286,31 +286,6 @@ class AutoRefreshManager:
 
 
 # ============================================================================
-# STREAMLIT INTEGRATION HELPERS
-# ============================================================================
-
-def setup_streamlit_cache():
-    """
-    Setup Streamlit caching decorators for real-time data.
-    
-    Add this to your dashboard:
-    
-    @st.cache_data(ttl=21600)  # 6 hours
-    def load_realtime_data():
-        manager = AutoRefreshManager(refresh_interval_hours=6)
-        return manager.get_data()
-    """
-    import streamlit as st
-    
-    @st.cache_data(ttl=21600)  # 6 hours = 21600 seconds
-    def load_realtime_data():
-        manager = AutoRefreshManager(refresh_interval_hours=6)
-        return manager.get_data()
-    
-    return load_realtime_data
-
-
-# ============================================================================
 # USAGE EXAMPLES
 # ============================================================================
 

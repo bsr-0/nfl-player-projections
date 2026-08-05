@@ -41,7 +41,6 @@ matplotlib==3.8.2
 seaborn==0.13.1
 
 # Web application
-streamlit>=1.30.0
 plotly>=5.18.0
 
 # NFL data source

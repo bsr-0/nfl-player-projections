@@ -46,7 +46,6 @@ REQUIRED_PACKAGES = [
     ("sqlalchemy", "sqlalchemy", "2.0.0"),
     
     # Web application
-    ("streamlit", "streamlit", "1.20.0"),
     ("plotly", "plotly", "5.0.0"),
     
     # NFL data
