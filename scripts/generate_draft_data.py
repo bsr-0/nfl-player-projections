@@ -31,6 +31,83 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 MODELS_DIR = DATA_DIR / "models"
 BACKTEST_DIR = DATA_DIR / "backtest_results"
 
+# Floor/ceiling spread formula for _resolve_projection() (GAPS.md §7.4
+# follow-up, 2026-08-05).
+#
+# History: the original formula was `spread = 1.5 * fp_std * sqrt(17)`,
+# where fp_std is a player's own prior-season week-to-week volatility.
+# Checked against 3,060 real player-seasons (2019-2025, real production
+# PreseasonProjector predictions vs real season totals): only 42.2%
+# empirical coverage against the ~86.6% the 1.5 constant implied (a
+# Gaussian z=1.5). A first fix (bumping the constant to empirically-
+# derived z=4.0) corrected the AVERAGE coverage but left a second,
+# deeper problem: fp_std turned out to be a weak, backwards-tilted
+# confidence signal -- once you control for the SIZE of the projection
+# (pred_total), fp_std explains almost nothing about how wrong a
+# prediction turns out to be (partial correlation ~0.05, noise), and
+# coverage grouped by fp_std quintile ranged from 76% (low fp_std,
+# under-covered) to 96% (high fp_std, over-covered) even after the z=4.0
+# fix -- calibrated on average, badly miscalibrated player-by-player.
+#
+# What actually predicts relative error well: log(pred_total) itself
+# (bigger/more-established projections are proportionally more accurate,
+# Spearman rho=-0.47) and the model's own confidence_score (rho=-0.26 in
+# a quantile-regression fit, right-signed and significant, p<1e-5).
+# fp_std was dropped entirely -- it added no independent signal once
+# these two were included.
+#
+# Coefficients below are from a quantile regression (q=0.866, matching
+# the original z=1.5-implied target) of relative error
+# (|actual-pred_total|/pred_total) on log(pred_total) + confidence_score,
+# fit on all 3,060 available player-seasons. Validated on a genuine
+# holdout split (fit 2019-2022, tested on unseen 2023-2025): coverage
+# 89.1% (vs 87.9% for the old fp_std z=4.0 formula on the same holdout),
+# and critically, coverage-by-fp_std-quintile spread dropped from 22
+# points (73%-95%) to 4 points (87%-91%) -- the miscalibration-by-tier
+# problem is actually fixed, not just re-averaged. Spread-vs-actual-error
+# correlation also improved slightly (0.36 vs 0.32).
+#
+# Follow-up: checked coverage by position for the pooled (position-blind)
+# fit above and found a real, if smaller, residual gap -- QB 82.5%, RB
+# 83.5%, WR 85.9%, TE 92.1% (TE over-covered, QB/RB under-covered).
+# Refit with position as a covariate (QB as the reference level): closed
+# the gap to QB 84.6% / RB 86.3% / TE 86.6% / WR 86.2%, all within ~2pp
+# of the 86.6% target, with fp_std-quintile coverage unchanged (still a
+# tight ~5pp range). Cheap to add and a clear improvement, so shipped.
+FLOOR_CEILING_REL_SPREAD_INTERCEPT = 2.620
+FLOOR_CEILING_REL_SPREAD_LOG_PRED_COEF = -0.335
+FLOOR_CEILING_REL_SPREAD_CONF_COEF = 0.022
+FLOOR_CEILING_REL_SPREAD_POSITION_COEF = {"QB": 0.0, "RB": -0.121, "WR": -0.172, "TE": -0.295}
+FLOOR_CEILING_REL_SPREAD_MIN = 0.15
+FLOOR_CEILING_REL_SPREAD_MAX = 3.0
+# Used only for the weekly_18w fallback branch, which has no per-player
+# confidence_score (that's specific to PreseasonProjector's
+# predict_with_details) -- a fixed neutral value rather than omitting
+# the confidence term entirely, since the fitted formula was calibrated
+# with a confidence term present.
+FLOOR_CEILING_DEFAULT_CONFIDENCE = 0.7
+
+
+def _floor_ceiling_spread(total: float, confidence, position: str = None) -> float:
+    """Absolute spread for floor/ceiling, given a season-total projection,
+    (optionally) a per-player model confidence score, and position. See
+    FLOOR_CEILING_REL_SPREAD_* above for how these coefficients were derived."""
+    conf = (
+        FLOOR_CEILING_DEFAULT_CONFIDENCE
+        if confidence is None or pd.isna(confidence)
+        else float(confidence)
+    )
+    pos_coef = FLOOR_CEILING_REL_SPREAD_POSITION_COEF.get(position, 0.0)
+    log_total = np.log(max(float(total), 1.0))
+    rel_spread = (
+        FLOOR_CEILING_REL_SPREAD_INTERCEPT
+        + FLOOR_CEILING_REL_SPREAD_LOG_PRED_COEF * log_total
+        + FLOOR_CEILING_REL_SPREAD_CONF_COEF * conf
+        + pos_coef
+    )
+    rel_spread = max(FLOOR_CEILING_REL_SPREAD_MIN, min(FLOOR_CEILING_REL_SPREAD_MAX, rel_spread))
+    return rel_spread * float(total)
+
 
 def _load_authoritative_position_map():
     """Load authoritative position labels from roster snapshots."""
@@ -465,25 +542,16 @@ def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions:
     schedule drops, instead of waiting on a tier that doesn't actually need
     the schedule to begin with.
     """
-    std = row.get("fp_std", 0)
-    has_std = pd.notna(std) and std > 0
-
     if has_preseason_projection:
         preseason_total = row.get("preseason_projection_total")
         if pd.notna(preseason_total):
             total = float(preseason_total)
-            spread_multiplier = 1.0
             confidence = row.get("preseason_confidence")
-            if pd.notna(confidence):
-                spread_multiplier = 1.0 + (1.0 - float(confidence))
             proj_total = round(total, 1)
             proj_ppg = round(total / 17, 1)
-            proj_floor = None
-            proj_ceiling = None
-            if has_std:
-                spread = 1.5 * float(std) * (17 ** 0.5) * spread_multiplier
-                proj_floor = round(max(0, total - spread), 1)
-                proj_ceiling = round(total + spread, 1)
+            spread = _floor_ceiling_spread(total, confidence, row.get("position"))
+            proj_floor = round(max(0, total - spread), 1)
+            proj_ceiling = round(total + spread, 1)
             return proj_total, proj_ppg, proj_floor, proj_ceiling, "preseason_model"
 
     if has_ml_predictions and schedule_available:
@@ -492,12 +560,12 @@ def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions:
             total = float(p18)
             proj_total = round(total, 1)
             proj_ppg = round(total / 17, 1)
-            proj_floor = None
-            proj_ceiling = None
-            if has_std:
-                spread = 1.5 * float(std) * (17 ** 0.5)
-                proj_floor = round(max(0, total - spread), 1)
-                proj_ceiling = round(total + spread, 1)
+            # No per-player confidence_score available on this path (that's
+            # specific to PreseasonProjector's predict_with_details) --
+            # _floor_ceiling_spread falls back to FLOOR_CEILING_DEFAULT_CONFIDENCE.
+            spread = _floor_ceiling_spread(total, None, row.get("position"))
+            proj_floor = round(max(0, total - spread), 1)
+            proj_ceiling = round(total + spread, 1)
             return proj_total, proj_ppg, proj_floor, proj_ceiling, "weekly_18w"
 
     return None, None, None, None, None

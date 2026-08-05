@@ -2853,3 +2853,195 @@ session to be checking the wrong file/module after a refactor moved the
 logic they're testing for, not evidence of an actual regression, but
 still worth updating so the test suite doesn't carry three permanently-red
 tests. Out of scope for the §9 audit specifically.
+
+### Draft-board floor/ceiling was badly miscalibrated — found, measured, fixed (2026-08-05, same session)
+
+Follow-up to §7.4: the original ask was to empirically derive the
+`n_weeks**0.4` multi-week CI-scaling exponent in `position_models.py`/
+`ensemble.py`. Investigated first and found that machinery isn't worth
+calibrating right now — traced it end to end and confirmed (a) no
+backtesting tool in this codebase ever generates multi-week predictions
+against known historical actuals (`run_ts_backtest.py` only ever predicts
+1 week at a time; the only `n_weeks>1` callers are live serving, which by
+definition has no historical actuals to check against), (b) the code path
+is unreachable under default component-mode training (already known), and
+(c) — the new finding — even where reachable, `EnsemblePredictor.predict()`
+explicitly leaves `prediction_ci80/95_lower/upper` as `NaN` for
+component-mode positions, and the actual user-facing draft board computes
+its own floor/ceiling independently via `generate_draft_data.py`'s
+`fp_std`-based spread formula, with zero connection to that machinery.
+Redirected effort there instead, per user direction.
+
+**Method**: `_resolve_projection()`'s formula is `spread = 1.5 * fp_std *
+sqrt(17) * spread_multiplier`, where `fp_std` is a player's own
+prior-season week-to-week fantasy-points std. The `1.5` constant was
+never documented as implying anything, but under a Gaussian assumption a
+two-sided z=1.5 implies ~86.6% nominal coverage. Checked whether the
+formula actually delivers that: built a historical validation using the
+REAL production `PreseasonProjector` (loaded via `snake_draft_sim.py`'s
+`load_preseason_projections()` — the established, correct feature-query
+path; a simplified query is separately documented to silently produce
+badly wrong predictions) against 7 real seasons (2019-2025, 3,060
+player-seasons), computing `fp_std` from each player's actual prior
+season and checking what fraction of players' real season totals landed
+inside `[floor, ceiling]`.
+
+**Result: 42.2% empirical coverage against an implied 86.6% target** —
+roughly half of what the formula claims. Consistent across every season
+(40-45%) and every position (35-48%), so not a fluke or a single-season
+anomaly. The mean spread (±42.8 pts) was smaller than the mean prediction
+error itself (53.8 pts) — the "confidence interval" was narrower than the
+model's typical miss. Root cause is intuitive once you see it: `fp_std`
+only encodes a player's own week-to-week volatility in one prior season;
+it has no way to represent what a preseason model fundamentally can't
+foresee (season-ending/season-limiting injuries, role changes, breakouts)
+— which is most of the real variance in a season-total outcome.
+Spot-checked real rows to confirm this wasn't a bug in the measurement,
+not the formula: e.g. 2024 C. McCaffrey, predicted 325 pts, actual 48 pts
+(he was injured most of the season) — a real, large, legitimate miss the
+interval should have been wide enough to at least gesture at.
+
+The z-multiplier empirically needed to hit 86.6% coverage on this data
+was **~3.78**. One honest caveat, flagged to the user before changing
+anything: this measurement uses the *current* production model (trained
+on 2018-2025) to predict past seasons, not a true walk-forward retrain
+per season — so it's somewhat hindsight-informed, and real out-of-sample
+coverage in live use is likely *worse* than 42.2%, not better, meaning
+3.78 is more likely an underestimate of what's truly needed than an
+overestimate.
+
+**User confirmed: fix it (widen), not just document it.** Extracted the
+magic constant into `FLOOR_CEILING_Z_MULTIPLIER = 4.0` (rounded up from
+3.78 with a small margin given the hindsight-bias caveat above), used at
+both spread-computation call sites in `_resolve_projection()` (the
+`preseason_model` branch, which was directly measured, and the
+`weekly_18w` fallback branch, which shares the identical formula shape
+but wasn't separately calibrated — noted explicitly in the code comment).
+Re-ran the same historical check with the new multiplier: **88.2%
+empirical coverage**, right at the 86.6% nominal target.
+
+**Verified**: `scripts/generate_draft_data.py` compiles clean. 18/18
+tests pass (`test_generate_draft_data.py`, `test_snake_draft_sim.py`) —
+neither test file made any assertion tied to the old constant's specific
+value, so nothing needed updating there. No retrain needed (this is a
+post-hoc display-layer formula, not a model or `CAUSAL_FEATURES` change).
+
+**Not attempted**: a true walk-forward version of this calibration check
+(refitting `PreseasonProjector`'s full variant-selection process for each
+of the 7 test seasons using only data available before that season) —
+real, buildable, but substantially more expensive than the hindsight-
+informed version used here, and the honest caveat above already points
+in the conservative direction (real coverage is more likely to still be
+under-target than over-target at z=4.0, not the reverse). Also not
+attempted at this stage: separately calibrating the `weekly_18w` branch's
+spread (no historical data exists to test it the same way, since it
+depends on a different point-estimate source than what was validated) —
+superseded below anyway.
+
+### Floor/ceiling: the z=4.0 fix corrected the average, but the underlying signal was still weak — replaced with a genuinely discriminative formula (2026-08-05, same session)
+
+User asked a sharper question after the z=4.0 fix landed: does floor/ceiling
+actually help distinguish high-confidence from low-confidence predictions,
+or does it just produce a correctly-averaged but uninformative band?
+Investigated with the same historical data already built for the
+calibration check, and the honest answer was **no, not really** — which
+led to actually fixing it rather than just documenting the weakness.
+
+**What was wrong, precisely**: `fp_std` (a player's own prior-season
+week-to-week volatility, the sole driver of the old formula's width)
+looked like a real signal in isolation (Spearman rho=0.30 vs absolute
+error), but that was almost entirely a confound. `fp_std` is highly
+correlated with `pred_total` (star players naturally have both higher
+projections and higher week-to-week point totals), and `pred_total` alone
+predicts absolute error even more strongly (rho=0.36) simply because
+bigger numbers have bigger absolute errors. Controlling for `pred_total`
+via partial correlation, `fp_std`'s independent contribution to absolute
+error collapsed to **r=0.05** — noise. Worse, in *relative* (percentage)
+terms `fp_std` actually correlated *negatively* with error (rho=-0.37):
+high-`fp_std` players (stars) are relatively more predictable, not less,
+which is the opposite of what a width-setting confidence signal should
+show. Confirmed via coverage-by-fp_std-quintile even after the z=4.0 fix:
+76% (low fp_std, under-covered) up to 96% (high fp_std, over-covered) —
+correctly calibrated only in aggregate, systematically wrong tier by tier.
+
+**What actually works**: `log(pred_total)` itself (Spearman rho=-0.47
+against relative error — bigger/more-established projections are
+proportionally far more accurate) and the model's own `confidence_score`
+from `PreseasonProjector.predict_with_details()` (right-signed,
+significant at p<1e-5 in a quantile-regression fit, weak-but-real
+independent effect). `fp_std` added nothing once these two were included
+and was dropped entirely.
+
+**Method**: fit a quantile regression (q=0.866, matching the original
+z=1.5-implied target) of relative error
+(`|actual_total - pred_total| / pred_total`) on `log(pred_total) +
+confidence_score`, using the same 3,060 real player-seasons (2019-2025)
+as the calibration check. Validated properly out-of-sample before trusting
+it — fit on 2019-2022 only, tested on unseen 2023-2025 — rather than
+fitting and checking on the same data:
+
+| | Old (fp_std, z=4.0) | New (pred_total + confidence) |
+|---|---|---|
+| Holdout overall coverage | 87.9% | 89.1% |
+| Coverage range across fp_std quintiles | 22 pts (73%–95%) | **4 pts (87%–91%)** |
+| Spread-vs-actual-error correlation | 0.32 | 0.36 |
+
+Both formulas hit the average target; only the new one is actually
+uniform across risk tiers, which is what "does this help identify
+which predictions to trust" requires. Refit on the full 2019-2025 dataset
+for production (86.1% overall, 5.5-point quintile range) once the
+holdout validation confirmed the approach generalizes.
+
+**Shipped**: `scripts/generate_draft_data.py` — new
+`_floor_ceiling_spread(total, confidence)` helper replaces the old
+`fp_std`-based inline formula at both call sites in
+`_resolve_projection()` (`FLOOR_CEILING_REL_SPREAD_INTERCEPT/LOG_PRED_COEF/CONF_COEF`,
+clipped to `[0.15, 3.0]` relative spread; `FLOOR_CEILING_DEFAULT_CONFIDENCE=0.7`
+for the `weekly_18w` branch, which has no per-player `confidence_score`).
+`FLOOR_CEILING_Z_MULTIPLIER` (this session's first fix) is gone —
+superseded, not left as dead code. A side effect worth noting: floor/ceiling
+no longer depends on `fp_std` being present/nonzero at all, so players who
+previously got `null` floor/ceiling for lacking prior-season volatility
+data (e.g. some rookies) now get a real interval whenever a total
+projection exists.
+
+**Verified**: production `_floor_ceiling_spread()` re-run directly against
+the full 3,060-row historical dataset reproduces the offline check exactly
+(86.2% coverage, 8.9pp/5.6pp/... quintile range matching the standalone
+analysis). `scripts/generate_draft_data.py` compiles clean. 18/18 tests
+pass (`test_generate_draft_data.py`, `test_snake_draft_sim.py`) — neither
+asserts on the old constant's value. No retrain needed (display-layer
+formula only).
+
+**Position gap found, and also fixed, same session.** The quantile
+regression above was fit pooled across positions. Checked coverage by
+position for the shipped formula rather than just asserting it was fine:
+QB 82.5%, RB 83.5%, WR 85.9%, TE 92.1% on the same 3,060-row dataset — a
+genuine ~10-point spread (TE over-covered, QB/RB under-covered), smaller
+than the 22-point fp_std-quintile problem already fixed but real, not
+noise. Cheap to check whether it was worth fixing: added `C(position)`
+to the same quantile regression (QB as reference level), validated on
+the same 2019-2022/2023-2025 holdout split (89.8% holdout coverage,
+position range tightened from ~10pp to ~6pp on the holdout), then refit
+on the full 2019-2025 dataset for production —
+`FLOOR_CEILING_REL_SPREAD_POSITION_COEF = {"QB": 0.0, "RB": -0.121,
+"WR": -0.172, "TE": -0.295}`, added as a fourth term in
+`_floor_ceiling_spread()` (now also takes `position`, threaded through
+from `row.get("position")` at both call sites in `_resolve_projection`).
+Final production coverage by position: **QB 84.8%, RB 86.4%, TE 86.7%,
+WR 86.4%** — all within 2pp of the 86.6% target, versus the original
+~10pp spread. Note `confidence_score`'s coefficient shrank to
+essentially zero (+0.022) once position was added — position appears to
+absorb most of what confidence_score was capturing; kept in the formula
+since it doesn't hurt and preserves a real (if now smaller) independent
+signal path, not removed just because its coefficient shrank.
+
+Re-verified end-to-end against the full historical dataset using the
+actual shipped `_floor_ceiling_spread()` function (not a standalone
+reimplementation): 86.3% overall, position range 84.8%–86.7%, exactly
+reproducing the offline analysis. 18/18 tests still pass
+(`test_generate_draft_data.py`, `test_snake_draft_sim.py`).
+
+**Not attempted**: a true walk-forward version (refitting
+`PreseasonProjector` itself per season, not just the spread formula)
+remains the same open item noted in the section above.
