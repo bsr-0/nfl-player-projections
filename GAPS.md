@@ -1929,3 +1929,164 @@ Root-causing why the full-dataset run showed a still-somewhat-elevated
 rookie rate (worth checking whether real `_prepare_training_data` loads
 deeper history than the `season >= 2018` slice used for this session's
 verification, which would resolve it without any code change).
+
+### Both dormant leakage bugs from §7.2 — FIXED (2026-08-04, new session)
+
+Both bugs flagged above as "not attempted" are fixed. Neither feature is in
+`CAUSAL_FEATURES` yet, so this is a correctness fix to dead code, not a
+retrain-triggering change — no model artifacts touched, no `FEATURE_VERSION`
+bump. Both are still explicitly *not* promoted this session; that remains a
+separate decision.
+
+**Bug 1 — `calculate_opportunity_score` full-season leakage
+(`src/features/advanced_rookie_injury.py`).** Previously summed
+`fantasy_points` across the entire df with no time filter, computed once per
+rookie *player*, then broadcast to every row of that player including week 1.
+Fix:
+- `calculate_opportunity_score` gained optional `as_of_season`/`as_of_week`
+  params; when given, `team_data` is filtered to strictly-prior
+  (season, week) rows before computing the position share.
+- New `_compute_prior_opportunity_scores(df)` — a vectorized equivalent
+  (team-week and team-position-week fantasy-point totals via
+  `groupby(...).shift(1).cumsum()`, the same idiom already established in
+  this file's DVOA/team-offense work, merged back onto every row) — needed
+  because the fix also moves `add_advanced_rookie_features`'s loop from
+  once-per-player to once-per-rookie-*row* (each week now gets its own
+  opportunity value instead of one value broadcast across the season), and
+  re-filtering the full frame per row via the non-vectorized path would have
+  been slow at that granularity.
+- `project_rookie()` gained an `opportunity_score` passthrough param so the
+  per-row caller can hand in the precomputed value directly instead of
+  re-deriving it from `df` per call.
+
+**Bug 2 — same-week workload in `add_advanced_injury_features`.**
+`weekly_workload` used the row's own `rushing_attempts`/`targets` (the
+outcome of the game being predicted) and `season_workload` was an unshifted
+`cumsum` that included that same value. Fix: sort by
+`(player_id, season, week)`, shift `weekly_workload` by 1 within
+player-season before use, and derive `season_workload` as the cumsum of the
+*shifted* series (so it only ever sums weeks strictly before the current
+row). Falls back to the old unshifted behavior only if `week` isn't present
+in `df` (can't safely order without it) — same defensive pattern as the rest
+of this module.
+
+**Verified**:
+- Synthetic tests for both: a 4-week rookie with weeks 2-4 having much higher
+  output than week 1 now gets `rookie_opportunity_score == 0.5` (the no-data
+  default) at week 1, rising only as prior weeks accrue — confirmed it no
+  longer front-loads future performance. A 3-week workload synthetic
+  confirms `weekly_workload`/`season_workload` are both 0 at week 1 and
+  correctly reflect only prior weeks thereafter.
+- Real-data run (`get_all_players_for_training()` → `create_causal_features()`,
+  2022+, 21,889 rows): `add_advanced_rookie_features` now runs in 0.6s
+  (8,254 rookie-rows, 843 unique rookies), `add_advanced_injury_features` in
+  0.8s — both comfortably inside the existing `--fast --no-tune` training
+  budget, confirming the per-row loop (up from per-player) didn't reintroduce
+  the earlier performance problem from this module's history.
+  `rookie_opportunity_score` has real spread (mean 0.58, std 0.23, range
+  [0, 1]) and — checked directly — is *not* constant across a given player's
+  weeks anymore, it's cumulative team-history-to-date so it drifts smoothly
+  week to week rather than being either a flat broadcast value or a hard
+  reset to 0.5 every season (matches the original design intent of "team's
+  historical usage," now just without the future leak).
+- 149/149 relevant tests pass (`test_preseason_projector.py`,
+  `test_quality_gates.py`, `test_target_and_history_causality.py`,
+  `test_advanced_analytics.py`, `test_matchup_aware_prediction.py`,
+  `test_missing_data_and_new_features.py`, `test_rookie_projections.py`).
+- `git status`: only `src/features/advanced_rookie_injury.py` touched.
+
+**Not attempted / still open**: promoting `rookie_opportunity_score`,
+`rookie_breakout_prob`, `rookie_ceiling_ppg`, `rookie_floor_ppg` to
+`CAUSAL_FEATURES` now that they're leakage-safe — a separate decision (would
+need its own retrain + verification pass, same as every other promotion this
+project has done). The "still-somewhat-elevated rookie rate on a truncated
+window" question from the prior entry also remains unexamined.
+
+### `rookie_opportunity_score`/`rookie_breakout_prob`/`rookie_ceiling_ppg`/`rookie_floor_ppg` — PROMOTED to v28 (2026-08-04, new session)
+
+Closed out the item flagged above as "not attempted" — the four rookie
+features excluded from v27 specifically because of the two leakage bugs are
+now leakage-safe, so promoted them.
+
+Added to `CAUSAL_FEATURES` for all 4 positions in `config/settings.py`,
+`FEATURE_VERSION` bumped to `"28"`.
+
+**A verification wrinkle worth recording**: an initial standalone repro
+(`create_causal_features()` → `add_advanced_features()` directly, skipping
+`add_season_long_features()`) showed `rookie_floor_ppg` completely
+degenerate (nunique=1, always 0.0) for TE and QB specifically. Traced this
+to `draft_round`/`draft_pick` not existing in that shortened pipeline at
+all — `add_advanced_rookie_features()` silently defaults every rookie to
+`draft_round=5, draft_pick=150` (worst tier) when those columns are
+missing, and for TE/QB's `round_3_plus` archetype the floor formula
+(`max(0, adjusted_ppg - 1.5*std)`) is mathematically negative for every
+possible opportunity value in [0,1] — so it's *always* 0 regardless of the
+leakage fix, purely a downstream artifact of my simplified repro skipping
+`season_long_features.add_season_long_features()` (which is what actually
+merges real `draft_round`/`draft_pick` from the `draft_picks_v2` table,
+step "0. Merge draft data before rookie features" in that module, and does
+run before `add_advanced_features()` in the real training path via
+`feature_preparation.py`'s `_prepare_training_data`). Re-ran through the
+correct real-pipeline order and all four features showed real spread for
+every position (e.g. TE `rookie_floor_ppg`: nunique=535, mean=0.218,
+std=0.491; QB: nunique=642, mean=2.779, std=2.995) — not a real bug, but a
+reminder (yet again) that a shortened verification script that skips a
+real pipeline stage can manufacture a false-positive "degenerate feature"
+finding. Worth remembering for the next session that reaches for a quick
+repro instead of the full `_prepare_training_data` path.
+
+**Retrain**: `python -m src.models.train --fast --no-tune`, exit 0,
+`feature_version.txt` = 28, previous version archived. All 4 new features
+confirmed present in `data/models/component_{qb,rb,wr,te}.json`
+`feature_names` (QB 55, RB 59, WR 60, TE 59 total). 149/149 relevant tests
+pass post-retrain (same suite as the leakage-fix entry above).
+
+### v23–v28 accuracy-lift measurement — DONE, honest result: flat since v25
+
+The standing caveat repeated after every version bump since v23 ("worth
+doing before leaning on this for real draft decisions") finally measured,
+covering v26/v27/v28 (v23-v25 were already covered by the earlier
+mid-session checkpoint). Same tool/methodology as that checkpoint:
+`python scripts/run_ts_backtest.py --season 2025 --model ridge --alpha
+10000` (2025 holdout, expanding-window, weekly refit, 22 weeks, 5,612
+predictions).
+
+| Metric | v28 (this run) | v25 checkpoint | Pre-v22 documented baseline |
+|---|---|---|---|
+| Overall R² | 0.346 | 0.345 | 0.269 |
+| Overall MAE | 4.79 | — | — |
+| Overall RMSE | 6.38 | — | — |
+| QB R² | 0.226 | 0.223 | 0.092 |
+| RB R² | 0.366 | 0.364 | 0.258 |
+| WR R² | 0.277 | 0.276 | 0.257 |
+| TE R² | 0.264 | 0.263 | 0.152 |
+
+**Honest verdict: v26 (DVOA-adjusted opponent FPA), v27 (rookie
+identity/draft-capital/combine), and v28 (rookie opportunity/breakout/
+ceiling/floor) show no measurable aggregate lift over v25 on this
+backtest** — every number above is within noise of the v25 checkpoint, not
+a regression but not a detected improvement either. The big, real jump
+(0.269 → 0.345) happened between the documented baseline and v25; nothing
+shipped since has moved this particular metric.
+
+This does not mean v26-v28 were wasted work — plausible reasons the signal
+doesn't show up here, none of them chased down further this session:
+- Ridge α=10,000 is heavy regularization; a handful of new features among
+  55-60 total per position get shrunk hard, especially sparse/rookie-only
+  columns that are the default value for ~75-85% of non-rookie rows.
+- Single holdout season, single model type (Ridge) — not the higher-
+  fidelity `--model ensemble` path, which is too slow to run routinely
+  (PROJECT_NOTES Phase 4: ~12.8h wall clock, killed by a pre-registered
+  kill gate). A real but nonlinear-only signal would wash out here.
+  Same caveat as the v25 checkpoint: this isn't a precise paired A/B
+  (aggregate R² across all players), so it wouldn't isolate a rookie-
+  specific effect even if one exists — a rookie-only-rows slice would be
+  the right instrument for that, not attempted here.
+
+**Not attempted**: per-version ablation (training with v26/v27/v28
+features individually excluded to isolate which, if any, helped or hurt)
+— explicitly scoped out before as a "further-refinement question, not a
+production-readiness blocker," and that scoping still holds. This
+measurement closes out the repeated "worth doing" caveat honestly rather
+than leaving it to roll forward again, but doesn't replace a real
+ablation study if one is ever wanted.

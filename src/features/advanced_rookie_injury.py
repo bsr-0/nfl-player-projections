@@ -239,44 +239,112 @@ class AdvancedRookieProjector:
         # Linear interpolation
         return np.interp(draft_pick, picks, values)
     
-    def calculate_opportunity_score(self, df: pd.DataFrame, player_id: str) -> float:
+    def calculate_opportunity_score(self, df: pd.DataFrame, player_id: str,
+                                     as_of_season: int = None, as_of_week: int = None) -> float:
         """
         Calculate opportunity score based on team situation.
-        
+
         Factors:
         - Depth chart position (starter vs backup)
         - Team's historical usage of position
         - Vacated targets/carries from previous season
         - Offensive scheme fit
+
+        When as_of_season/as_of_week are given, only rows strictly before
+        that (season, week) are used. Without this filter, this method sums
+        fantasy_points across the player's/team's entire season — including
+        weeks that haven't been played yet relative to the row being
+        featurized — which leaks future performance into what's supposed to
+        be a pre-game opportunity signal.
         """
         # Simplified: use team's historical position usage
         player_data = df[df['player_id'] == player_id]
         if player_data.empty:
             return 0.5
-        
+
         position = player_data['position'].iloc[0]
         team = player_data['team'].iloc[0]
-        
+
         # Get team's position usage
         team_data = df[df['team'] == team]
+        if as_of_season is not None and as_of_week is not None:
+            team_data = team_data[
+                (team_data['season'] < as_of_season)
+                | ((team_data['season'] == as_of_season) & (team_data['week'] < as_of_week))
+            ]
         if team_data.empty:
             return 0.5
-        
+
         # Calculate share of team's fantasy points by position
         pos_data = team_data[team_data['position'] == position]
         if pos_data.empty:
             return 0.5
-        
+
         # Higher opportunity if team historically uses this position heavily
         team_total = team_data['fantasy_points'].sum()
         pos_total = pos_data['fantasy_points'].sum()
-        
+
         if team_total > 0:
             pos_share = pos_total / team_total
             # Normalize to 0-1 scale
             return min(pos_share * 2, 1.0)
-        
+
         return 0.5
+
+    def _compute_prior_opportunity_scores(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Vectorized, leakage-safe equivalent of calculate_opportunity_score for
+        every row in df: each row's value uses only (team, position)
+        fantasy-point totals from weeks strictly before that row's own
+        (season, week) — never the row's own week or any future week.
+
+        Used by add_advanced_rookie_features so the per-row opportunity
+        lookup in its rookie loop doesn't have to re-filter the full frame
+        once per rookie-week (see calculate_opportunity_score's as_of_season/
+        as_of_week params for the non-vectorized equivalent).
+        """
+        required = {'team', 'position', 'season', 'week', 'fantasy_points'}
+        if not required.issubset(df.columns):
+            return pd.Series(0.5, index=df.index)
+
+        team_week = (
+            df.groupby(['team', 'season', 'week'])['fantasy_points']
+            .sum().reset_index(name='team_fp')
+            .sort_values(['team', 'season', 'week'])
+        )
+        team_week['team_fp_shift'] = team_week.groupby('team')['team_fp'].shift(1).fillna(0)
+        team_week['team_fp_prior'] = team_week.groupby('team')['team_fp_shift'].cumsum()
+
+        team_pos_week = (
+            df.groupby(['team', 'position', 'season', 'week'])['fantasy_points']
+            .sum().reset_index(name='team_pos_fp')
+            .sort_values(['team', 'position', 'season', 'week'])
+        )
+        team_pos_week['team_pos_fp_shift'] = (
+            team_pos_week.groupby(['team', 'position'])['team_pos_fp'].shift(1).fillna(0)
+        )
+        team_pos_week['team_pos_fp_prior'] = (
+            team_pos_week.groupby(['team', 'position'])['team_pos_fp_shift'].cumsum()
+        )
+
+        df_index = df.index
+        work = df[['team', 'position', 'season', 'week']].merge(
+            team_week[['team', 'season', 'week', 'team_fp_prior']],
+            on=['team', 'season', 'week'], how='left',
+        ).merge(
+            team_pos_week[['team', 'position', 'season', 'week', 'team_pos_fp_prior']],
+            on=['team', 'position', 'season', 'week'], how='left',
+        )
+        work.index = df_index
+
+        team_fp_prior = work['team_fp_prior'].fillna(0).to_numpy()
+        team_pos_fp_prior = work['team_pos_fp_prior'].fillna(0).to_numpy()
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            pos_share = np.where(team_fp_prior > 0, team_pos_fp_prior / team_fp_prior, np.nan)
+
+        opportunity = np.where(np.isnan(pos_share), 0.5, np.minimum(pos_share * 2, 1.0))
+        return pd.Series(opportunity, index=df_index)
     
     def calculate_combine_score(
         self, 
@@ -798,7 +866,9 @@ class AdvancedRookieProjector:
                        draft_round: int, draft_pick: int,
                        df: pd.DataFrame = None,
                        combine_score: float = None,
-                       use_comparables: bool = True) -> RookieProfile:
+                       use_comparables: bool = True,
+                       as_of_season: int = None, as_of_week: int = None,
+                       opportunity_score: float = None) -> RookieProfile:
         """
         Generate complete rookie projection using multiple signals.
         
@@ -817,20 +887,33 @@ class AdvancedRookieProjector:
             df: Optional DataFrame for opportunity calculation
             combine_score: Optional athletic composite score
             use_comparables: Whether to use historical comparables
-            
+            as_of_season: When computing opportunity from df, only use rows
+                strictly before this season/as_of_week (leakage guard).
+            as_of_week: See as_of_season.
+            opportunity_score: Precomputed opportunity score, bypassing the
+                df-based calculation entirely (e.g. from
+                _compute_prior_opportunity_scores for a per-row caller).
+
         Returns:
             RookieProfile with complete projection
         """
         # Get draft tier
         tier = self.get_draft_tier(draft_round, draft_pick)
-        
+
         # Get baseline projection
         baseline = self.ROOKIE_PPG_BY_DRAFT.get(position, self.ROOKIE_PPG_BY_DRAFT['WR'])
         tier_stats = baseline.get(tier, baseline['round_3_plus'])
-        
+
         # Calculate modifiers
         draft_value = self.calculate_draft_capital_value(draft_pick)
-        opportunity = self.calculate_opportunity_score(df, player_id) if df is not None else 0.5
+        if opportunity_score is not None:
+            opportunity = opportunity_score
+        elif df is not None:
+            opportunity = self.calculate_opportunity_score(
+                df, player_id, as_of_season=as_of_season, as_of_week=as_of_week,
+            )
+        else:
+            opportunity = 0.5
         breakout_prob = self.calculate_breakout_probability(draft_pick, position, opportunity)
         bust_prob = self.calculate_bust_probability(draft_pick, position)
         
@@ -934,46 +1017,53 @@ class AdvancedRookieProjector:
         
         # Calculate for rookies
         rookies = result[result['is_rookie'] == 1]
-        
-        for player_id in rookies['player_id'].unique():
-            player_data = result[result['player_id'] == player_id].iloc[0]
-            
-            draft_round = int(player_data.get('draft_round', 5)) if pd.notna(player_data.get('draft_round')) else 5
-            draft_pick = int(player_data.get('draft_pick', 150)) if pd.notna(player_data.get('draft_pick')) else 150
-            
+
+        # calculate_opportunity_score's "team's historical usage of position"
+        # signal was previously computed once per rookie player from the
+        # *entire* df (all weeks, including future ones) and broadcast onto
+        # every row of that player — so a rookie's week-1 feature already
+        # "knew" how their whole season played out. Precompute a leakage-safe,
+        # per-row opportunity value (only weeks strictly before that row's own
+        # season/week) once for the whole frame, then loop per row instead of
+        # per player so each week gets its own value.
+        opportunity_by_row = self._compute_prior_opportunity_scores(result)
+
+        for idx, row in rookies.iterrows():
+            player_id = row['player_id']
+
+            draft_round = int(row.get('draft_round', 5)) if pd.notna(row.get('draft_round')) else 5
+            draft_pick = int(row.get('draft_pick', 150)) if pd.notna(row.get('draft_pick')) else 150
+
             profile = self.project_rookie(
                 player_id=player_id,
-                name=player_data.get('name', 'Unknown'),
-                position=player_data['position'],
+                name=row.get('name', 'Unknown'),
+                position=row['position'],
                 draft_round=draft_round,
                 draft_pick=draft_pick,
-                df=result,
+                opportunity_score=opportunity_by_row.loc[idx],
                 # use_comparables=True triggers get_comparable_projection(),
                 # which calls _load_historical_rookies() — a fresh, uncached
                 # nfl_data_py network fetch PER ROOKIE (no caching at all),
                 # and one of its two calls (import_draft_picks for the
                 # current, not-yet-happened season) reliably 404s. Only
                 # rookie_opportunity_score/rookie_ceiling_ppg/rookie_floor_ppg
-                # consume the comparable-player blend (see GAPS.md §7.2 —
-                # those are also separately excluded from CAUSAL_FEATURES
-                # due to a target-leakage bug in calculate_opportunity_score),
-                # so disabling this costs nothing for the features actually
-                # promoted, and avoids ~0.5s of wasted network I/O per
-                # rookie on every training run.
+                # consume the comparable-player blend, so disabling this costs
+                # nothing for the features actually promoted, and avoids
+                # wasted network I/O per rookie-week on every training run.
                 use_comparables=False,
             )
-            
-            # Update DataFrame
-            mask = result['player_id'] == player_id
-            result.loc[mask, 'rookie_draft_value'] = profile.college_production_score
-            result.loc[mask, 'rookie_opportunity_score'] = profile.opportunity_score
-            result.loc[mask, 'rookie_breakout_prob'] = profile.breakout_probability
-            result.loc[mask, 'rookie_bust_prob'] = profile.bust_probability
-            result.loc[mask, 'rookie_ceiling_ppg'] = profile.ceiling_ppg
-            result.loc[mask, 'rookie_floor_ppg'] = profile.floor_ppg
-        
+
+            # Update this row only — not the whole player, since opportunity
+            # (and everything derived from it) is now week-specific.
+            result.at[idx, 'rookie_draft_value'] = profile.college_production_score
+            result.at[idx, 'rookie_opportunity_score'] = profile.opportunity_score
+            result.at[idx, 'rookie_breakout_prob'] = profile.breakout_probability
+            result.at[idx, 'rookie_bust_prob'] = profile.bust_probability
+            result.at[idx, 'rookie_ceiling_ppg'] = profile.ceiling_ppg
+            result.at[idx, 'rookie_floor_ppg'] = profile.floor_ppg
+
         print(f"  Added: rookie_draft_value, rookie_opportunity_score, rookie_breakout_prob, rookie_bust_prob")
-        
+
         return result
 
 
@@ -1356,14 +1446,33 @@ class AdvancedInjuryPredictor:
         if 'age' not in result.columns:
             result['age'] = 26  # Default
 
-        # Calculate workload proxies
+        # Calculate workload proxies. weekly_workload/season_workload must
+        # reflect workload from *before* the row's own week — using this
+        # week's own rushing_attempts/targets (the outcome of the game being
+        # predicted) as a same-week injury-risk input is target leakage.
+        # Shift by 1 within each player-season (sorted by week) so both
+        # columns only ever see weeks strictly prior to the row being
+        # featurized.
         if 'rushing_attempts' in result.columns and 'targets' in result.columns:
-            result['weekly_workload'] = result['rushing_attempts'].fillna(0) + result['targets'].fillna(0)
+            raw_weekly_workload = result['rushing_attempts'].fillna(0) + result['targets'].fillna(0)
         else:
-            result['weekly_workload'] = 15  # Default
+            raw_weekly_workload = pd.Series(15.0, index=result.index)
 
-        # Season cumulative workload
-        result['season_workload'] = result.groupby(['player_id', 'season'])['weekly_workload'].cumsum()
+        if 'week' in result.columns:
+            order = result.sort_values(['player_id', 'season', 'week']).index
+            shifted = raw_weekly_workload.loc[order].groupby(
+                [result.loc[order, 'player_id'], result.loc[order, 'season']]
+            ).shift(1).fillna(0)
+            result['weekly_workload'] = shifted.reindex(result.index)
+            season_cum = shifted.groupby(
+                [result.loc[order, 'player_id'], result.loc[order, 'season']]
+            ).cumsum()
+            result['season_workload'] = season_cum.reindex(result.index)
+        else:
+            # No week column to order by — can't safely shift, fall back to
+            # the (unshifted) raw values rather than guessing an order.
+            result['weekly_workload'] = raw_weekly_workload
+            result['season_workload'] = result.groupby(['player_id', 'season'])['weekly_workload'].cumsum()
 
         # Compute actual prior injury counts from historical data
         result = self._compute_prior_injury_counts(result)
