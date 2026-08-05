@@ -38,7 +38,7 @@ def _team_alias(team: str) -> str:
     """Normalize team codes to match pws conventions."""
     aliases = {
         "OAK": "LV", "SD": "LAC", "STL": "LA", "LAR": "LA",
-        "JAX": "JAC",
+        "JAC": "JAX",
     }
     return aliases.get(team, team)
 

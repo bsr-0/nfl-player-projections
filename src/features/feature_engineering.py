@@ -188,6 +188,9 @@ class FeatureEngineer:
         # Vegas features (creates implied_team_total)
         df = self._create_vegas_game_script_features(df)
 
+        # Weather (creates wind_speed_mph, is_dome, precipitation_flag, temperature_bucket)
+        df = self._add_weather_features(df)
+
         # Team quality: prior-season wins (causal — known before season starts)
         df = self._add_prior_season_wins(df)
         # Prior-season QB efficiency (benefits WR/TE predictions)
@@ -230,6 +233,9 @@ class FeatureEngineer:
         df = self._add_availability_3yr(df)
         df = self._add_career_year_flag(df)
         df = self._add_bayesian_prior_ppg(df)
+
+        # v24: head-coach identity + coaching-change detection (GAPS.md §4.G).
+        df = self._add_coaching_change_features(df)
 
         # v14: late-season momentum + contracts + depth chart + scheme + combine
         df = self._add_combine_features(df)
@@ -566,6 +572,47 @@ class FeatureEngineer:
         df["team_motion_rate"] = motion_vals
         df["team_play_action_rate"] = pa_vals
         df["team_shotgun_rate"] = sg_vals
+        return df
+
+    def _add_coaching_change_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add head-coach identity + coaching-change detection (GAPS.md §4.G).
+
+        head_coach is pre-game, publicly known information for every week
+        of the season it's used in (not a same-week outcome stat), so
+        merging it in directly and diffing week-over-week is leakage-safe.
+
+        Merges from team_coaching_staff if ``head_coach`` isn't already on
+        ``df`` (get_all_players_for_training joins it in for the main
+        training path, but this method stays self-contained for other
+        callers). CoachingChangeDetector.add_coaching_change_features()
+        also emits ``scheme_fit_score``, which collides with the
+        destination-team-aware column of the same name already produced by
+        _create_team_change_features — that one is more specific (accounts
+        for team changes), so it's preserved across this call rather than
+        silently overwritten.
+        """
+        if "head_coach" not in df.columns:
+            if not all(c in df.columns for c in ["team", "season", "week"]):
+                return df
+            try:
+                import sqlite3
+                from config.settings import DB_PATH
+                conn = sqlite3.connect(str(DB_PATH))
+                coach_df = pd.read_sql_query(
+                    "SELECT team, season, week, head_coach FROM team_coaching_staff",
+                    conn,
+                )
+                conn.close()
+            except Exception:
+                coach_df = pd.DataFrame()
+            if not coach_df.empty:
+                df = df.merge(coach_df, on=["team", "season", "week"], how="left")
+
+        from src.features.advanced_analytics import CoachingChangeDetector
+        prior_scheme_fit = df["scheme_fit_score"].copy() if "scheme_fit_score" in df.columns else None
+        df = CoachingChangeDetector().add_coaching_change_features(df)
+        if prior_scheme_fit is not None:
+            df["scheme_fit_score"] = prior_scheme_fit
         return df
 
     def _add_depth_chart_rank(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1000,11 +1047,25 @@ class FeatureEngineer:
             "pass_epa_per_play", "pass_success_rate",
             "pass_wpa_per_play", "rush_epa_per_play",
             "td_rate", "int_rate",
+            # Receiving EPA (from PBP, 2018+) — declared in CAUSAL_FEATURES
+            # for WR/TE but was only ever rolled in the full-mode pipeline
+            # (_create_rolling_features), never here. Dead feature in causal
+            # mode until now.
+            "recv_epa_per_target",
             # Position shares — computed in _create_base_features from
             # raw totals; roll3 of a same-week share is the leakage-
             # safe draftable signal (prior three games' average share).
             "target_share_pct", "rush_share_pct",
             "snap_share_pct", "air_yards_share_pct",
+            "redzone_target_share_pct", "goal_line_carry_share_pct",
+            # v24: team position-target allocation, concentration, lead-back
+            # share (GAPS.md §4.A) — same leakage pattern (this-week team
+            # share -> roll3 of the player's own game history).
+            "team_rb_target_share", "team_wr_target_share", "team_te_target_share",
+            "team_target_concentration", "team_rb_lead_share",
+            # v24: tempo/plays-per-game (GAPS.md §4.D) — already joined onto
+            # the raw frame from team_stats, just needs rolling to be causal.
+            "team_plays", "team_pace_sec_per_play",
         ]
         for col in roll_cols:
             if col not in df.columns:
@@ -1013,6 +1074,14 @@ class FeatureEngineer:
             df[col_name] = (
                 df.groupby("player_id")[col]
                 .transform(lambda x: x.shift(1).rolling(window, min_periods=1).mean())
+            )
+
+        # WOPR (Weighted Opportunity Rating), built from the already-rolled,
+        # leakage-safe shares rather than this-week raw shares.
+        if {"target_share_pct_roll3_mean", "air_yards_share_pct_roll3_mean"} <= set(df.columns):
+            df["wopr_roll3"] = (
+                1.5 * (df["target_share_pct_roll3_mean"] / 100)
+                + 0.7 * (df["air_yards_share_pct_roll3_mean"] / 100)
             )
 
         # v19 Exp 1: fp_volatility_roll5 — rolling std of actual PPR FP over 5 weeks (lag-1).
@@ -1197,6 +1266,68 @@ class FeatureEngineer:
                 new_cols["air_yards_share_pct"] = (
                     safe_divide(df["air_yards"], team_grp["air_yards"].transform("sum"))
                     * 100
+                )
+            if "redzone_targets" in df.columns:
+                new_cols["redzone_target_share_pct"] = (
+                    safe_divide(df["redzone_targets"], team_grp["redzone_targets"].transform("sum"))
+                    * 100
+                )
+            if "rush_inside_5" in df.columns:
+                new_cols["goal_line_carry_share_pct"] = (
+                    safe_divide(df["rush_inside_5"], team_grp["rush_inside_5"].transform("sum"))
+                    * 100
+                )
+            # GAPS.md §4.A: position-specific target allocation within team.
+            # A 65% team pass rate means different things for a spread vs.
+            # heavy-personnel team; these say WHO the targets go to.
+            if "targets" in df.columns and "position" in df.columns:
+                pos_target_sums = (
+                    df.groupby(["team", "season", "week", "position"])["targets"]
+                    .transform("sum")
+                )
+                team_target_totals = team_grp["targets"].transform("sum")
+                for pos_code, col_name in [
+                    ("RB", "team_rb_target_share"),
+                    ("WR", "team_wr_target_share"),
+                    ("TE", "team_te_target_share"),
+                ]:
+                    pos_mask = df["position"] == pos_code
+                    pos_sum_this_pos = pos_target_sums.where(pos_mask)
+                    # pos_target_sums is already scoped to each row's own
+                    # position group, so restrict to rows of pos_code and
+                    # broadcast that team-week's value to the whole team
+                    # (including non-pos_code rows) via a team-week map.
+                    per_team_week = (
+                        pos_sum_this_pos.groupby(
+                            [df["team"], df["season"], df["week"]]
+                        ).transform("max")  # single value per team-week, NaN elsewhere
+                    )
+                    new_cols[col_name] = safe_divide(per_team_week, team_target_totals) * 100
+
+                # Herfindahl index of target distribution (0-1): higher =
+                # concentrated on fewer players, lower = spread across many.
+                player_target_share = safe_divide(df["targets"], team_target_totals)
+                new_cols["team_target_concentration"] = (
+                    (player_target_share ** 2)
+                    .groupby([df["team"], df["season"], df["week"]])
+                    .transform("sum")
+                )
+
+            # Lead-back vs. committee: the top RB's share of the team's
+            # RB rushing attempts that week (100 = true bell-cow, ~50 = even
+            # committee split).
+            if "rushing_attempts" in df.columns and "position" in df.columns:
+                rb_mask = df["position"] == "RB"
+                rb_rush_sum = (
+                    df["rushing_attempts"].where(rb_mask)
+                    .groupby([df["team"], df["season"], df["week"]])
+                    .transform("sum")
+                )
+                rb_share = safe_divide(df["rushing_attempts"].where(rb_mask), rb_rush_sum)
+                new_cols["team_rb_lead_share"] = (
+                    (rb_share * 100)
+                    .groupby([df["team"], df["season"], df["week"]])
+                    .transform("max")
                 )
         if "snap_count" in df.columns and "team_snaps" in df.columns:
             new_cols["snap_share_pct"] = safe_divide(
@@ -1417,6 +1548,11 @@ class FeatureEngineer:
         # each independently.
         df = self._add_opp_fpts_allowed_s2d_lag1(df)
 
+        # DVOA-style opponent-adjustment (GAPS.md §11.1.F): corrects the
+        # s2d FPA-allowed figure for the strength of offenses actually
+        # faced. Both features coexist, same rationale as above.
+        df = self._add_opp_fpts_allowed_dvoa_adjusted_lag1(df)
+
         # Add comprehensive team-level features (TeamA = player's team, TeamB = opponent)
         df = self._add_team_matchup_features(df)
 
@@ -1538,7 +1674,272 @@ class FeatureEngineer:
             df = df.drop(columns=drop_cols)
 
         return df
-    
+
+    def _add_opp_fpts_allowed_dvoa_adjusted_lag1(self, df: pd.DataFrame) -> pd.DataFrame:
+        """DVOA-style opponent-adjusted defensive FPA (GAPS.md §11.1.F).
+
+        opp_fpts_allowed_s2d_lag1 (above) is contaminated by schedule
+        strength: a defense that "allows" 25 PPG to RBs looks bad even if
+        it faced Derrick Henry/Saquon Barkley/Josh Jacobs — that's expected
+        given who it played, not a defensive weakness. This computes, for
+        each defense-week, the residual between what it actually allowed
+        and what an average-strength offense would have been expected to
+        produce against it (based on that specific opponent's own
+        season-to-date output through the prior week), then takes a
+        causal expanding mean of that residual per defense — i.e. "does
+        this defense over- or under-perform its raw FPA-allowed number,
+        once you account for who it's actually played."
+
+        Two-pass computation, entirely on team-week-deduplicated,
+        (team, season, week)-sorted tables — NEVER on the per-player `df`
+        directly. df is typically sorted by player_id first (see
+        create_causal_features), so a groupby("team").shift() run directly
+        on it would compare whichever rows happen to be adjacent for a
+        team — i.e. two different players' unrelated weeks — instead of
+        consecutive team-weeks. This exact bug was found and fixed in
+        CoachingChangeDetector (advanced_analytics.py) earlier in this
+        project; same risk class here, avoided by construction.
+
+        Pass 1: each team's own offensive output by position, season-to-
+        date through the prior week (off_s2d_lag1_{pos}), from
+        team_offense_stats.
+        Pass 2: for each defense-week, look up the opponent it actually
+        faced (team_stats.opponent) and that opponent's own pre-game
+        expected output (off_s2d_lag1_{pos}, as of that same week — no
+        additional lag needed, Pass 1's shift(1) already makes it causal).
+        residual = actual_fpts_allowed - opponent_expected_output.
+        Expanding-mean the residual per defense, season (shift(1) first),
+        merge onto df by (opponent, season, week), resolve per position —
+        same pattern as opp_fpts_allowed_s2d_lag1 above.
+        """
+        required = {"opponent", "season", "week", "position"}
+        if not required.issubset(df.columns):
+            df["opp_fpts_allowed_dvoa_adjusted_lag1"] = 0.0
+            return df
+
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            from src.utils.database import DatabaseManager
+            db = DatabaseManager()
+            seasons = sorted(pd.to_numeric(df["season"], errors="coerce").dropna().unique())
+            if not seasons:
+                raise ValueError("No seasons")
+            season_list = ",".join(str(int(s)) for s in seasons)
+            with db._get_connection() as conn:
+                off = pd.read_sql_query(
+                    "SELECT team, season, week, "
+                    "fantasy_points_produced_qb, fantasy_points_produced_rb, "
+                    "fantasy_points_produced_wr, fantasy_points_produced_te "
+                    f"FROM team_offense_stats WHERE season IN ({season_list}) "
+                    "ORDER BY team, season, week",
+                    conn,
+                )
+                deff = pd.read_sql_query(
+                    "SELECT team, season, week, "
+                    "fantasy_points_allowed_qb, fantasy_points_allowed_rb, "
+                    "fantasy_points_allowed_wr, fantasy_points_allowed_te "
+                    f"FROM team_defense_stats WHERE season IN ({season_list})",
+                    conn,
+                )
+                opp_link = pd.read_sql_query(
+                    "SELECT team, season, week, opponent "
+                    f"FROM team_stats WHERE season IN ({season_list}) "
+                    "AND opponent IS NOT NULL AND opponent != ''",
+                    conn,
+                )
+        except Exception as e:
+            logger.warning(
+                "team_offense_stats/team_defense_stats/team_stats load failed "
+                "(%s: %s); opp_fpts_allowed_dvoa_adjusted_lag1 will default "
+                "to 0.0 for every row. Run DatabaseManager.ensure_team_offense_stats() "
+                "and ensure_team_defense_stats() to populate.",
+                type(e).__name__, e,
+            )
+            df["opp_fpts_allowed_dvoa_adjusted_lag1"] = 0.0
+            return df
+
+        if off.empty or deff.empty or opp_link.empty:
+            logger.warning(
+                "team_offense_stats/team_defense_stats/team_stats returned "
+                "zero rows for seasons %s; opp_fpts_allowed_dvoa_adjusted_lag1 "
+                "will default to 0.0.", seasons,
+            )
+            df["opp_fpts_allowed_dvoa_adjusted_lag1"] = 0.0
+            return df
+
+        # Pass 1: each team's own causal season-to-date offensive output.
+        for pos in POSITIONS:
+            col = f"fantasy_points_produced_{pos.lower()}"
+            if col not in off.columns:
+                continue
+            off[f"{col}_s2d_lag1"] = (
+                off.groupby(["team", "season"])[col]
+                .transform(lambda x: x.shift(1).expanding(min_periods=1).mean())
+            )
+
+        # opp_link: one row per (defense-team, season, week) -> opponent
+        # faced that week. Deduplicate defensively (team_stats is already
+        # one row per team-week by construction, but don't assume it).
+        opp_link = opp_link.drop_duplicates(subset=["team", "season", "week"])
+
+        # Pass 2: attach the opponent's pre-game expected output to each
+        # defense-week, compute the residual against what was actually
+        # allowed, then causally expanding-mean the residual per defense.
+        s2d_cols = [f"fantasy_points_produced_{p.lower()}_s2d_lag1" for p in POSITIONS]
+        s2d_cols = [c for c in s2d_cols if c in off.columns]
+        off_for_join = off[["team", "season", "week"] + s2d_cols].rename(
+            columns={"team": "opponent_team"}
+        )
+
+        merged = opp_link.merge(
+            off_for_join,
+            left_on=["opponent", "season", "week"],
+            right_on=["opponent_team", "season", "week"],
+            how="left",
+        )
+        merged = merged.merge(
+            deff, on=["team", "season", "week"], how="left",
+        )
+        merged = merged.sort_values(["team", "season", "week"])
+
+        for pos in POSITIONS:
+            allowed_col = f"fantasy_points_allowed_{pos.lower()}"
+            expected_col = f"fantasy_points_produced_{pos.lower()}_s2d_lag1"
+            if allowed_col not in merged.columns or expected_col not in merged.columns:
+                continue
+            residual_col = f"_residual_{pos.lower()}"
+            merged[residual_col] = merged[allowed_col] - merged[expected_col]
+            dvoa_col = f"opp_fpts_allowed_dvoa_adjusted_{pos.lower()}_lag1"
+            merged[dvoa_col] = (
+                merged.groupby(["team", "season"])[residual_col]
+                .transform(lambda x: x.shift(1).expanding(min_periods=1).mean())
+            )
+
+        dvoa_cols = [f"opp_fpts_allowed_dvoa_adjusted_{p.lower()}_lag1" for p in POSITIONS]
+        dvoa_cols = [c for c in dvoa_cols if c in merged.columns]
+        merge_right = merged[["team", "season", "week"] + dvoa_cols].rename(
+            columns={"team": "opponent"}
+        )
+
+        before_cols = set(df.columns)
+        df = df.merge(merge_right, on=["opponent", "season", "week"], how="left")
+
+        df["opp_fpts_allowed_dvoa_adjusted_lag1"] = np.nan
+        for pos in POSITIONS:
+            src_col = f"opp_fpts_allowed_dvoa_adjusted_{pos.lower()}_lag1"
+            if src_col not in df.columns:
+                continue
+            mask = df["position"] == pos
+            df.loc[mask, "opp_fpts_allowed_dvoa_adjusted_lag1"] = pd.to_numeric(
+                df.loc[mask, src_col], errors="coerce"
+            )
+
+        n_total = len(df)
+        n_missing = int(df["opp_fpts_allowed_dvoa_adjusted_lag1"].isna().sum())
+        if n_total and n_missing / n_total > 0.10:
+            logger.warning(
+                "opp_fpts_allowed_dvoa_adjusted_lag1 defaulted on %.1f%% of "
+                "rows (>10%% threshold). team_offense_stats/team_defense_stats "
+                "may be missing weeks for the seasons in scope (%s).",
+                n_missing / n_total * 100, seasons,
+            )
+
+        df["opp_fpts_allowed_dvoa_adjusted_lag1"] = df["opp_fpts_allowed_dvoa_adjusted_lag1"].fillna(0.0)
+
+        drop_cols = [c for c in df.columns if c not in before_cols and c != "opp_fpts_allowed_dvoa_adjusted_lag1"]
+        if drop_cols:
+            df = df.drop(columns=drop_cols)
+
+        return df
+
+    def _add_opp_fpts_allowed_from_db(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Serving-path variant of the opp_fpts_allowed feature.
+
+        The inline version in _create_opponent_features() (used for
+        training) relies on fantasy_points_allowed_{pos} columns already
+        joined onto df by get_all_players_for_training()'s bulk SQL join —
+        efficient for training, but those columns reflect whatever
+        `opponent` the row had AT JOIN TIME. refresh_matchup_features()
+        overwrites `opponent` afterward (for an upcoming, not-yet-played
+        game), so the inline version would silently keep serving the
+        player's last-played opponent's defensive stats. This queries
+        team_defense_stats directly by (opponent, season, week - 1) —
+        same leakage-safe "prior week" semantic as the SQL join it
+        mirrors — so it's correct to call after an opponent overwrite.
+        """
+        required = {"opponent", "season", "week", "position"}
+        if not required.issubset(df.columns):
+            df["opp_fpts_allowed"] = np.nan
+            return df
+
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            from src.utils.database import DatabaseManager
+            db = DatabaseManager()
+            seasons = sorted(pd.to_numeric(df["season"], errors="coerce").dropna().unique())
+            if not seasons:
+                raise ValueError("No seasons")
+            season_list = ",".join(str(int(s)) for s in seasons)
+            with db._get_connection() as conn:
+                tds = pd.read_sql_query(
+                    "SELECT team, season, week, "
+                    "fantasy_points_allowed_qb, fantasy_points_allowed_rb, "
+                    "fantasy_points_allowed_wr, fantasy_points_allowed_te "
+                    f"FROM team_defense_stats WHERE season IN ({season_list})",
+                    conn,
+                )
+        except Exception as e:
+            logger.warning(
+                "team_defense_stats load failed (%s: %s); opp_fpts_allowed "
+                "will default to NaN in refresh_matchup_features(). Run "
+                "DatabaseManager.ensure_team_defense_stats() to populate.",
+                type(e).__name__, e,
+            )
+            df["opp_fpts_allowed"] = np.nan
+            return df
+
+        if tds.empty:
+            df["opp_fpts_allowed"] = np.nan
+            return df
+
+        # Defense D's week-(W-1) stats apply to a game in week W — shift the
+        # defense frame's week forward by 1 so it lands on the right join key.
+        merge_right = tds.rename(columns={"team": "opponent"}).copy()
+        merge_right["week"] = merge_right["week"] + 1
+        fp_cols = [f"fantasy_points_allowed_{p.lower()}" for p in POSITIONS]
+        fp_cols = [c for c in fp_cols if c in merge_right.columns]
+
+        # df may already carry fantasy_points_allowed_{pos} columns from the
+        # original (now-stale, pre-opponent-overwrite) bulk SQL join in
+        # get_all_players_for_training() — drop them first so the merge
+        # below actually lands on the unsuffixed column name instead of
+        # silently becoming fantasy_points_allowed_{pos}_x/_y.
+        df = df.drop(columns=[c for c in fp_cols if c in df.columns])
+
+        before_cols = set(df.columns)
+        df = df.merge(
+            merge_right[["opponent", "season", "week"] + fp_cols],
+            on=["opponent", "season", "week"], how="left",
+        )
+
+        df["opp_fpts_allowed"] = np.nan
+        for pos in POSITIONS:
+            col = f"fantasy_points_allowed_{pos.lower()}"
+            if col not in df.columns:
+                continue
+            mask = df["position"] == pos
+            df.loc[mask, "opp_fpts_allowed"] = pd.to_numeric(df.loc[mask, col], errors="coerce")
+
+        drop_cols = [c for c in df.columns if c not in before_cols and c != "opp_fpts_allowed"]
+        if drop_cols:
+            df = df.drop(columns=drop_cols)
+
+        return df
+
     def _add_team_matchup_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Add team-level features for both player's team (TeamA) and opponent (TeamB).
@@ -2311,6 +2712,15 @@ class FeatureEngineer:
             return df
         df = self._add_schedule_features(df)
         df = self._add_team_matchup_features(df)
+        # opp_fpts_allowed / opp_fpts_allowed_s2d_lag1 are also
+        # opponent-dependent and must be recomputed here — otherwise they
+        # silently keep reflecting whichever opponent the row had before
+        # `opponent` was overwritten for the upcoming game (a real bug
+        # found and fixed 2026-08-04: see GAPS.md).
+        if 'opponent' in df.columns and 'position' in df.columns:
+            df = self._add_opp_fpts_allowed_from_db(df)
+            df = self._add_opp_fpts_allowed_s2d_lag1(df)
+            df = self._add_opp_fpts_allowed_dvoa_adjusted_lag1(df)
         # Ensure neutral defaults for any matchup columns the model might expect
         for col, default in [
             ('team_sos', 50.0), ('matchup_difficulty', 50.0), ('opponent_rating', 50.0),
@@ -2822,6 +3232,72 @@ class FeatureEngineer:
         if derived_cols:
             df = df.assign(**derived_cols)
 
+        return df
+
+    def _add_weather_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Merge per-game weather from the ``game_weather`` table.
+
+        Pre-game weather is known before kickoff, so it's treated like the
+        Vegas game-script features (unrolled, current-week values) rather
+        than rolled/lagged. Dome games have no recorded wind/precip/temp —
+        those rows get the "no weather effect" defaults, not the outdoor
+        column median.
+        """
+        if not all(c in df.columns for c in ["season", "week", "team"]):
+            return df
+
+        try:
+            import sqlite3
+            from config.settings import DB_PATH
+            seasons = sorted(df["season"].dropna().unique().tolist())
+            if not seasons:
+                raise ValueError("No seasons")
+            season_list = ",".join(str(int(s)) for s in seasons)
+            conn = sqlite3.connect(str(DB_PATH))
+            weather = pd.read_sql_query(
+                "SELECT season, week, home_team, away_team, is_dome, "
+                "temp_f, wind_mph, precip_mm FROM game_weather "
+                f"WHERE season IN ({season_list})",
+                conn,
+            )
+            conn.close()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Weather load from game_weather failed (%s: %s); "
+                "wind_speed_mph/is_dome/precipitation_flag/temperature_bucket "
+                "will default to 'no weather effect' for every row.",
+                type(e).__name__, e,
+            )
+            weather = pd.DataFrame(columns=["season", "week", "team", "is_dome", "temp_f", "wind_mph", "precip_mm"])
+
+        if not weather.empty:
+            home = weather.rename(columns={"home_team": "team"}).drop(columns=["away_team"])
+            away = weather.rename(columns={"away_team": "team"}).drop(columns=["home_team"])
+            by_team = pd.concat([home, away], ignore_index=True).drop_duplicates(
+                subset=["season", "week", "team"]
+            )
+            df = df.merge(by_team, on=["season", "week", "team"], how="left", suffixes=("", "_wx"))
+
+        is_dome = df.get("is_dome", pd.Series(0, index=df.index)).fillna(0).astype(int)
+        wind_speed_mph = df.get("wind_mph", pd.Series(np.nan, index=df.index))
+        precip_mm = df.get("precip_mm", pd.Series(np.nan, index=df.index))
+        temp_f = df.get("temp_f", pd.Series(np.nan, index=df.index))
+
+        # Dome games: no wind/precip, and temperature is climate-controlled
+        # (bucketed as mild regardless of a missing/placeholder temp_f).
+        weather_cols = {
+            "wind_speed_mph": wind_speed_mph.where(is_dome == 0, 0.0).fillna(0.0),
+            "precipitation_flag": ((precip_mm.fillna(0.0) > 0) & (is_dome == 0)).astype(int),
+            "temperature_bucket": pd.cut(
+                temp_f.where(is_dome == 0, 65.0).fillna(65.0),
+                bins=[-100, 20, 32, 50, 200],
+                labels=[3, 2, 1, 0],
+            ).astype(int),
+            "is_dome": is_dome,
+        }
+        df = df.assign(**weather_cols)
+        df = df.drop(columns=[c for c in ["temp_f", "wind_mph", "precip_mm"] if c in df.columns])
         return df
 
     # ------------------------------------------------------------------

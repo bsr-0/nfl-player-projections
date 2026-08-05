@@ -44,7 +44,6 @@ def residual_report() -> dict:
                 pos_df[column] = details[column].to_numpy()
         pos_df["error"] = pos_df["pred"] - pos_df["season_total"]
         pos_df["base_error"] = pos_df["base_pred"] - pos_df["season_total"]
-        pos_df["market_delta"] = pos_df["pred"] - pos_df["market_anchor"]
         correlations = {}
         for col in [
             "age",
@@ -75,7 +74,6 @@ def residual_report() -> dict:
                             "ppg",
                             "games_played",
                             "confidence_score",
-                            "market_anchor",
                             "base_pred",
                             "pred",
                             "season_total",

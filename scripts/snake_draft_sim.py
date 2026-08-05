@@ -637,18 +637,35 @@ def load_preseason_projections(
                     from src.models.preseason_projector import PreseasonProjector
                     _proj = PreseasonProjector.load(_projector_path)
                     _ml_preds = []
+                    _ml_conf = []
+                    _ml_support = []
                     for pos in ("QB", "RB", "WR", "TE"):
                         pos_mask = prior_df["position"] == pos
                         if pos_mask.any() and pos in _proj.models:
                             pos_df = prior_df[pos_mask].copy()
-                            preds = _proj.predict(pos_df, pos)
-                            _ml_preds.extend(zip(pos_df.index, preds))
+                            # predict_with_details() also carries confidence_score/
+                            # support_class, which predict() (a thin wrapper around
+                            # it, see preseason_projector.py) discards — callers that
+                            # want per-player confidence for e.g. floor/ceiling
+                            # sizing need this richer form.
+                            details = _proj.predict_with_details(pos_df, pos)
+                            for idx, pred, conf, support in zip(
+                                pos_df.index, details["pred"],
+                                details["confidence_score"], details["support_class"],
+                            ):
+                                _ml_preds.append((idx, pred))
+                                _ml_conf.append((idx, conf))
+                                _ml_support.append((idx, support))
                     if _ml_preds:
                         ml_series = {idx: val for idx, val in _ml_preds}
+                        conf_series = {idx: val for idx, val in _ml_conf}
+                        support_series = {idx: val for idx, val in _ml_support}
                         prior_df["model_rank_value"] = prior_df.index.map(
                             lambda i: ml_series.get(i, prior_df.loc[i, "ppg"] * 17)
                         )
                         prior_df["pred_total"] = prior_df["model_rank_value"]
+                        prior_df["confidence_score"] = prior_df.index.map(conf_series)
+                        prior_df["support_class"] = prior_df.index.map(support_series)
                         prior_df = prior_df.drop(columns=["ppg"])
                     else:
                         raise ValueError("No ML predictions produced")

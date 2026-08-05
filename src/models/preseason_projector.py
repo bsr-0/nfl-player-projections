@@ -912,7 +912,6 @@ class PreseasonProjector:
         report: Dict[str, Any] = {
             "overall": {},
             "by_position": {},
-            "cohort_market_error": {},
         }
         if df.empty:
             return report
@@ -1101,12 +1100,15 @@ class PreseasonProjector:
         return True
 
     @classmethod
-    def _market_objective_score(cls, summary: Dict[str, Any]) -> float:
+    def _outcome_objective_score(cls, summary: Dict[str, Any]) -> float:
+        # Candidates are already gated on MAE/bias/top-N tolerance in
+        # _candidate_passes_gate; this just ranks the survivors.
         overall = summary.get("overall", {})
-        market_mae = float(overall.get("pred_market_mae", 1e9))
-        large_div = float(overall.get("pred_large_divergence_share", 1.0))
-        gap_excess = abs(float(overall.get("pred_rb_wr_gap_excess", 1e9)))
-        return market_mae + 40.0 * large_div + gap_excess
+        if not overall:
+            return float("inf")
+        pred_mae = float(overall.get("pred_mae", 1e9))
+        pred_bias = abs(float(overall.get("pred_bias", 0.0)))
+        return pred_mae + pred_bias
 
     @classmethod
     def _draft_sim_candidate_score(cls, summary: Dict[str, Any]) -> float:
@@ -1143,7 +1145,7 @@ class PreseasonProjector:
         for spec in specs:
             summary = results[spec.name]["summary"]
             passes_gate = spec.name == "ridge_baseline" or cls._candidate_passes_gate(baseline, summary)
-            score = cls._market_objective_score(summary) if passes_gate else float("inf")
+            score = cls._outcome_objective_score(summary) if passes_gate else float("inf")
             gated.append((spec, summary, passes_gate, score))
 
         gated_valid = [row for row in gated if row[2]]
@@ -1255,7 +1257,7 @@ class PreseasonProjector:
                 passing_names,
                 key=lambda name: (
                     results[name].get("draft_sim_candidate_score", float("inf")),
-                    cls._market_objective_score(results[name]["summary"]),
+                    cls._outcome_objective_score(results[name]["summary"]),
                 ),
             )
             promoted_projector = candidate_projectors[selected_name]
@@ -1297,7 +1299,7 @@ class PreseasonProjector:
                 **{
                     spec.name: {
                         "passes_gate": passes_gate,
-                        "market_objective_score": None if not np.isfinite(score) else round(score, 4),
+                        "outcome_objective_score": None if not np.isfinite(score) else round(score, 4),
                         "draft_sim_passes_gate": results[spec.name].get("draft_sim_passes_gate"),
                         "draft_sim_candidate_score": cls._safe_round(
                             results[spec.name].get("draft_sim_candidate_score")
@@ -1311,8 +1313,8 @@ class PreseasonProjector:
                     {
                         name: {
                             "passes_gate": results[name].get("passes_gate"),
-                            "market_objective_score": cls._safe_round(
-                                cls._market_objective_score(results[name]["summary"])
+                            "outcome_objective_score": cls._safe_round(
+                                cls._outcome_objective_score(results[name]["summary"])
                             ),
                             "draft_sim_passes_gate": results[name].get("draft_sim_passes_gate"),
                             "draft_sim_candidate_score": cls._safe_round(

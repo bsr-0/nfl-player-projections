@@ -1,8 +1,10 @@
 """
-One-time backfill: populate player_weekly_stats.opponent for LAR and JAC rows in 2025.
+One-time backfill: populate player_weekly_stats.opponent for LAR/JAC and LA/JAX rows in 2025.
 
-Root cause: nflverse schedule uses 'LA' (not 'LAR') and 'JAX' (not 'JAC'), so the
-original opponent backfill join silently missed both teams. 386 rows left empty.
+Root cause: nflverse schedule uses 'LA'/'JAX'; canonical player_weekly_stats
+convention (see entity_resolver.TEAM_CODE_ALIASES) is also 'LA'/'JAX' as of
+the 2026-08 team-code normalization fix, so this backfill no longer needs to
+translate codes — it just fills opponent from the schedule directly.
 
 Safe to re-run: UPDATE only touches rows where opponent IS NULL OR opponent = ''.
 """
@@ -10,10 +12,6 @@ import sqlite3
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nfl_data.db")
-
-# Maps schedule team codes → player_weekly_stats team codes
-_SCHED_TO_PWS = {"LA": "LAR", "JAX": "JAC"}
-
 
 def main():
     conn = sqlite3.connect(DB_PATH)
@@ -33,11 +31,9 @@ def main():
 
     updates = []
     for home, away, week, season in schedule_rows:
-        home_norm = _SCHED_TO_PWS.get(home, home)
-        away_norm = _SCHED_TO_PWS.get(away, away)
-        # home team's opponent is away (normalized); away team's opponent is home (normalized)
-        updates.append((away_norm, home_norm, season, week))
-        updates.append((home_norm, away_norm, season, week))
+        # home team's opponent is away; away team's opponent is home
+        updates.append((away, home, season, week))
+        updates.append((home, away, season, week))
 
     cur.executemany("""
         UPDATE player_weekly_stats

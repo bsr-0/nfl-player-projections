@@ -309,7 +309,8 @@ CAUSAL_FEATURES = {
         "ngs_rush_yards_over_expected_per_att_roll3_mean",
         # PBP efficiency (2018+) — EPA captures play value in context
         "rush_epa_per_play_roll3_mean",
-        "opp_fpts_allowed", "implied_team_total", "spread",
+        "opp_fpts_allowed", "opp_fpts_allowed_s2d_lag1", "opp_fpts_allowed_dvoa_adjusted_lag1",
+        "implied_team_total", "spread",
         "team_prior_season_wins",
         "injury_score", "prev_season_ppg",
         "age_curve", "team_changed", "availability_3yr",
@@ -325,6 +326,15 @@ CAUSAL_FEATURES = {
         "fp_volatility_roll5", "target_share_accel", "snap_share_accel",
         # v22: destination team positional usage (zero for non-changers)
         "dest_team_pos_tgt_pg", "dest_team_pos_carry_pg",
+        # v23: red zone / goal-line per-player allocation, weather
+        "redzone_target_share_pct_roll3_mean", "goal_line_carry_share_pct_roll3_mean",
+        "wind_speed_mph", "is_dome", "precipitation_flag", "temperature_bucket",
+        # v24: team position-target allocation, lead-back share, tempo
+        "team_rb_target_share_roll3_mean", "team_rb_lead_share_roll3_mean",
+        "team_plays_roll3_mean", "team_pace_sec_per_play_roll3_mean",
+        # v24: head-coach identity + coaching-change detection
+        "coaching_change", "coaching_adaptation_score", "coaching_stability",
+        "coaching_change_impact",
     ],
     "WR": [
         "snap_share_pct_roll3_mean",
@@ -337,7 +347,8 @@ CAUSAL_FEATURES = {
         "ngs_avg_yac_above_expectation_roll3_mean",
         # PBP efficiency (2018+) — receiving EPA per target
         "recv_epa_per_target_roll3_mean",
-        "opp_fpts_allowed", "implied_team_total", "spread",
+        "opp_fpts_allowed", "opp_fpts_allowed_s2d_lag1", "opp_fpts_allowed_dvoa_adjusted_lag1",
+        "implied_team_total", "spread",
         "team_prior_season_wins",
         # QB identity EPA: actual QB1 assigned to team (roster-sourced for 2026+)
         "current_qb_epa_per_att",
@@ -355,6 +366,15 @@ CAUSAL_FEATURES = {
         "fp_volatility_roll5", "target_share_accel", "snap_share_accel",
         # v22: destination team positional target volume (zero for non-changers)
         "dest_team_pos_tgt_pg",
+        # v23: red zone target share, WOPR, weather
+        "redzone_target_share_pct_roll3_mean", "wopr_roll3",
+        "wind_speed_mph", "is_dome", "precipitation_flag", "temperature_bucket",
+        # v24: team position-target allocation/concentration, tempo
+        "team_wr_target_share_roll3_mean", "team_target_concentration_roll3_mean",
+        "team_plays_roll3_mean", "team_pace_sec_per_play_roll3_mean",
+        # v24: head-coach identity + coaching-change detection
+        "coaching_change", "coaching_adaptation_score", "coaching_stability",
+        "coaching_change_impact",
     ],
     "TE": [
         "snap_share_pct_roll3_mean",
@@ -367,7 +387,8 @@ CAUSAL_FEATURES = {
         "ngs_avg_yac_above_expectation_roll3_mean",
         # PBP efficiency (2018+) — receiving EPA per target
         "recv_epa_per_target_roll3_mean",
-        "opp_fpts_allowed", "implied_team_total", "spread",
+        "opp_fpts_allowed", "opp_fpts_allowed_s2d_lag1", "opp_fpts_allowed_dvoa_adjusted_lag1",
+        "implied_team_total", "spread",
         "team_prior_season_wins",
         # QB identity EPA: actual QB1 assigned to team (roster-sourced for 2026+)
         "current_qb_epa_per_att",
@@ -385,6 +406,15 @@ CAUSAL_FEATURES = {
         "fp_volatility_roll5", "target_share_accel", "snap_share_accel",
         # v22: destination team positional target volume (zero for non-changers)
         "dest_team_pos_tgt_pg",
+        # v23: red zone target share, WOPR, weather
+        "redzone_target_share_pct_roll3_mean", "wopr_roll3",
+        "wind_speed_mph", "is_dome", "precipitation_flag", "temperature_bucket",
+        # v24: team position-target allocation/concentration, tempo
+        "team_te_target_share_roll3_mean", "team_target_concentration_roll3_mean",
+        "team_plays_roll3_mean", "team_pace_sec_per_play_roll3_mean",
+        # v24: head-coach identity + coaching-change detection
+        "coaching_change", "coaching_adaptation_score", "coaching_stability",
+        "coaching_change_impact",
     ],
     "QB": [
         # Volume (3-week rolling)
@@ -399,7 +429,8 @@ CAUSAL_FEATURES = {
         "ngs_completion_percentage_above_expectation_roll3_mean",
         "ngs_avg_time_to_throw_roll3_mean",
         # Game context
-        "opp_fpts_allowed", "implied_team_total", "spread",
+        "opp_fpts_allowed", "opp_fpts_allowed_s2d_lag1", "opp_fpts_allowed_dvoa_adjusted_lag1",
+        "implied_team_total", "spread",
         "team_prior_season_wins",
         # Player context
         "injury_score", "prev_season_ppg",
@@ -416,6 +447,13 @@ CAUSAL_FEATURES = {
         "ngs_aggressiveness_roll3_mean", "ngs_avg_air_yards_to_sticks_roll3_mean",
         # v19: ceiling volatility signal
         "fp_volatility_roll5",
+        # v23: weather
+        "wind_speed_mph", "is_dome", "precipitation_flag", "temperature_bucket",
+        # v24: tempo — more plays/game means more dropbacks and rush attempts
+        "team_plays_roll3_mean", "team_pace_sec_per_play_roll3_mean",
+        # v24: head-coach identity + coaching-change detection
+        "coaching_change", "coaching_adaptation_score", "coaching_stability",
+        "coaching_change_impact",
         # prior_season_late_ppg removed in v20 — caused +3.6pt upward bias for
         # benched QBs whose high late-2019 scores don't reflect 2020 backup role.
         # prev_season_ppg + depth_chart_rank already cover prior quality.
@@ -558,7 +596,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "22"  # v22: dest_team_pos_tgt_pg/carry_pg for RB; dest_team_pos_tgt_pg for WR/TE — new-team scheme signal for team-changers
+FEATURE_VERSION = "26"  # v26: opp_fpts_allowed_s2d_lag1, opp_fpts_allowed_dvoa_adjusted_lag1 (DVOA-style opponent-adjustment, GAPS.md §11.1.F) + fixed a live serving-path bug where opp_fpts_allowed/_s2d_lag1 reflected the player's last-played opponent instead of the upcoming one
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

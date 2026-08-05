@@ -111,15 +111,29 @@ class NFLPredictor:
     def initialize(self):
         """Load models and prepare for predictions."""
         print("Initializing NFL Predictor...")
-        
+
+        # Refresh team_defense_stats so opp_fpts_allowed/opp_fpts_allowed_s2d_lag1
+        # (recomputed in refresh_matchup_features for the upcoming opponent)
+        # reflect the most recently completed week, not a stale training-time
+        # snapshot. Only the training path called this before (feature_preparation.py);
+        # serving never did.
+        try:
+            self.db.ensure_team_defense_stats()
+        except Exception as e:
+            print(f"  Warning: team_defense_stats refresh skipped: {e}")
+        try:
+            self.db.ensure_team_offense_stats()
+        except Exception as e:
+            print(f"  Warning: team_offense_stats refresh skipped: {e}")
+
         # Load trained models
         self.predictor.load_models()
-        
+
         if not self.predictor.is_loaded:
             print("Warning: No trained models found. Please run training first.")
             print("  python -m src.models.train")
             return False
-        
+
         self.is_initialized = True
         print("Predictor initialized successfully.")
         return True

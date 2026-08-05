@@ -472,33 +472,55 @@ class CoachingChangeDetector:
         return result
 
     def _detect_hc_changes(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Detect head-coach changes per team."""
-        team_grp = df.groupby("team", sort=False)
-        prev_coach = team_grp["head_coach"].shift(1)
-        coach_changed = (
-            (df["head_coach"] != prev_coach) & prev_coach.notna()
+        """Detect head-coach changes per team.
+
+        Computed on a team-week table de-duplicated from ``df`` and sorted
+        by (team, season, week), then merged back onto every player row for
+        that team-week. ``df`` itself is typically sorted by player_id
+        first (see ``add_coaching_change_features``), so a naive
+        ``df.groupby("team")[...].shift(1)`` on the raw per-player frame
+        would compare whichever two rows happen to be index-adjacent within
+        a team group — i.e. two different players' unrelated season/weeks —
+        instead of consecutive team-weeks. Doing the shift on the
+        deduplicated, properly-sorted team-week table avoids that.
+        """
+        team_week = (
+            df[["team", "season", "week", "head_coach"]]
+            .drop_duplicates(subset=["team", "season", "week"])
+            .sort_values(["team", "season", "week"])
+            .reset_index(drop=True)
+        )
+        prev_coach = team_week.groupby("team", sort=False)["head_coach"].shift(1)
+        team_week["coaching_change"] = (
+            (team_week["head_coach"] != prev_coach) & prev_coach.notna()
         ).astype(int)
 
-        df["coaching_change"] = coach_changed
-
         # Weeks since most recent HC change for this team.
-        df["_cc_cumsum"] = df.groupby("team")["coaching_change"].cumsum()
-        df["weeks_since_coaching_change"] = (
-            df.groupby(["team", "_cc_cumsum"]).cumcount()
+        team_week["_cc_cumsum"] = team_week.groupby("team")["coaching_change"].cumsum()
+        team_week["weeks_since_coaching_change"] = (
+            team_week.groupby(["team", "_cc_cumsum"]).cumcount()
         )
-        df.drop(columns=["_cc_cumsum"], inplace=True)
+        team_week.drop(columns=["_cc_cumsum"], inplace=True)
 
         # Exponential adaptation decay (not linear).
         half_life = self.ADAPTATION_WEEKS / 2.0
-        df["coaching_adaptation_score"] = np.exp(
-            -0.693 * df["weeks_since_coaching_change"] / half_life
+        team_week["coaching_adaptation_score"] = np.exp(
+            -0.693 * team_week["weeks_since_coaching_change"] / half_life
         ).clip(0.0, 1.0)
 
         # Binary new-coaching-staff flag.
-        df["new_coaching_staff"] = (
-            df["weeks_since_coaching_change"] < self.ADAPTATION_WEEKS
+        team_week["new_coaching_staff"] = (
+            team_week["weeks_since_coaching_change"] < self.ADAPTATION_WEEKS
         ).astype(int)
 
+        merge_cols = [
+            "coaching_change", "weeks_since_coaching_change",
+            "coaching_adaptation_score", "new_coaching_staff",
+        ]
+        df = df.merge(
+            team_week[["team", "season", "week"] + merge_cols],
+            on=["team", "season", "week"], how="left",
+        )
         return df
 
     def _detect_coordinator_changes(
@@ -567,14 +589,27 @@ class CoachingChangeDetector:
         return df
 
     def _compute_coaching_tenure(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Coaching tenure: how long the current coach has been in place."""
+        """Coaching tenure: how long the current coach has been in place.
+
+        Same per-player-frame ordering issue as ``_detect_hc_changes``: the
+        cumulative "weeks under this coach" count must be computed on a
+        team-week table sorted by (team, season, week), not on ``df``
+        directly (typically sorted by player_id first), or the cumsum/
+        cumcount accumulate in the wrong order.
+        """
         if "head_coach" in df.columns:
-            # Tenure = cumulative weeks under same coach (per team).
-            df["_coach_stint"] = df.groupby("team")["coaching_change"].cumsum()
-            df["coaching_tenure_weeks"] = (
-                df.groupby(["team", "_coach_stint"]).cumcount() + 1
+            team_week = (
+                df[["team", "season", "week", "coaching_change"]]
+                .drop_duplicates(subset=["team", "season", "week"])
+                .sort_values(["team", "season", "week"])
+                .reset_index(drop=True)
             )
-            df.drop(columns=["_coach_stint"], inplace=True)
+            team_week["_coach_stint"] = team_week.groupby("team")["coaching_change"].cumsum()
+            team_week["coaching_tenure_weeks"] = (
+                team_week.groupby(["team", "_coach_stint"]).cumcount() + 1
+            )
+            team_week.drop(columns=["_coach_stint", "coaching_change"], inplace=True)
+            df = df.merge(team_week, on=["team", "season", "week"], how="left")
 
             # Stability score: longer tenure → higher stability (log scale).
             df["coaching_stability"] = np.log1p(df["coaching_tenure_weeks"]) / np.log1p(52)

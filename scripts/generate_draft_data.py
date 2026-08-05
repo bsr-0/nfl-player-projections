@@ -394,6 +394,47 @@ def _load_ml_predictions(upcoming_season: int):
         return None
 
 
+def _load_preseason_projections(upcoming_season: int, prev_season: int):
+    """Load PreseasonProjector season-total predictions for upcoming_season.
+
+    Reuses scripts/snake_draft_sim.py's load_preseason_projections() rather
+    than re-deriving the DB query it depends on — that function's feature
+    query exactly mirrors PreseasonProjector's training-time query on
+    purpose (see the comment above it): a simplified/partial query silently
+    produces severely under-estimated projections (missing features
+    zero-fill, which after StandardScaler centering skews everything low).
+
+    Returns a DataFrame indexed by player_id with pred_total (and
+    confidence_score/support_class when available), or None if the
+    projector/DB path fails for any reason — callers should treat that as
+    "fall back to the existing projection_18w tier", not an error.
+    """
+    from scripts.snake_draft_sim import load_preseason_projections
+
+    # season - 1 is queried internally as the "prior" (completed) season, so
+    # passing prev_season + 1 guarantees it queries prev_season itself, even
+    # when main()'s own prev_season fallback (prev_season - 1) has fired
+    # because the naive prev_season had no weekly data yet.
+    #
+    # projection_mode="ml" (not "auto") is deliberate: "auto" silently
+    # degrades to ppg*17 internally when the model file is missing/broken,
+    # and its return value doesn't distinguish that from a real ML
+    # prediction — which would make every player in this file look like it
+    # came from "preseason_model" even when the model was never loaded.
+    # "ml" raises instead, so a missing/broken model surfaces here and this
+    # function can correctly report "no preseason projections" and let the
+    # caller fall through to the projection_18w/ppg tiers.
+    try:
+        df = load_preseason_projections(
+            season=prev_season + 1, adp_df=None, projection_mode="ml",
+        )
+    except Exception:
+        return None
+    if df is None or df.empty or "pred_total" not in df.columns:
+        return None
+    return df
+
+
 def _load_oos_prediction_map():
     """Load OOS predictions from model_performance.json for enriching player files."""
     perf_path = DATA_DIR / "model_performance.json"
@@ -410,13 +451,70 @@ def _load_oos_prediction_map():
         return {}
 
 
+def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions: bool,
+                        schedule_available: bool):
+    """Pick a season-total projection for one player, preferring the
+    PreseasonProjector season-total model over the projection_18w fallback.
+
+    Returns (proj_total, proj_ppg, proj_floor, proj_ceiling, source_label).
+
+    PreseasonProjector consumes no schedule/matchup data (it's trained on
+    prior-season aggregate stats only), so unlike projection_18w it is NOT
+    gated behind schedule_available — that's a deliberate behavior change:
+    players get a real number earlier in the offseason, before the
+    schedule drops, instead of waiting on a tier that doesn't actually need
+    the schedule to begin with.
+    """
+    std = row.get("fp_std", 0)
+    has_std = pd.notna(std) and std > 0
+
+    if has_preseason_projection:
+        preseason_total = row.get("preseason_projection_total")
+        if pd.notna(preseason_total):
+            total = float(preseason_total)
+            spread_multiplier = 1.0
+            confidence = row.get("preseason_confidence")
+            if pd.notna(confidence):
+                spread_multiplier = 1.0 + (1.0 - float(confidence))
+            proj_total = round(total, 1)
+            proj_ppg = round(total / 17, 1)
+            proj_floor = None
+            proj_ceiling = None
+            if has_std:
+                spread = 1.5 * float(std) * (17 ** 0.5) * spread_multiplier
+                proj_floor = round(max(0, total - spread), 1)
+                proj_ceiling = round(total + spread, 1)
+            return proj_total, proj_ppg, proj_floor, proj_ceiling, "preseason_model"
+
+    if has_ml_predictions and schedule_available:
+        p18 = row.get("projection_18w")
+        if pd.notna(p18):
+            total = float(p18)
+            proj_total = round(total, 1)
+            proj_ppg = round(total / 17, 1)
+            proj_floor = None
+            proj_ceiling = None
+            if has_std:
+                spread = 1.5 * float(std) * (17 ** 0.5)
+                proj_floor = round(max(0, total - spread), 1)
+                proj_ceiling = round(total + spread, 1)
+            return proj_total, proj_ppg, proj_floor, proj_ceiling, "weekly_18w"
+
+    return None, None, None, None, None
+
+
 def output_position_files(agg, upcoming_season: int, schedule_available: bool,
-                          has_ml_predictions: bool, prev_season: int):
+                          has_ml_predictions: bool, prev_season: int,
+                          has_preseason_projection: bool = False):
     """Write per-position JSON files.
 
-    When ML predictions are available, use projection_18w for full-season totals.
-    When no schedule is available for the upcoming season, set projection fields
-    to null so the frontend shows a "pending" state.
+    Season-total projections prefer the PreseasonProjector season-total
+    model (see _resolve_projection); projection_18w (a single-week
+    prediction scaled by 18, not a season-level model) is the fallback when
+    the preseason projector is unavailable for a player/position. When no
+    schedule is available for the upcoming season, projection_18w-sourced
+    fields are null so the frontend shows a "pending" state — the preseason
+    model's fields are not schedule-gated (see _resolve_projection).
 
     During the off-season, enriches each player with out-of-sample prediction
     data from the previous season (model_predicted_total, actual_total, error).
@@ -427,8 +525,16 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
     for pos in ["QB", "RB", "WR", "TE"]:
         pos_df = agg[agg["position"] == pos].copy()
 
-        # Sort: if ML predictions available, by projection; else by previous-season PPG
-        if has_ml_predictions and "projection_18w" in pos_df.columns:
+        # Sort: prefer preseason-model projection, then projection_18w, then previous-season PPG
+        pos_has_preseason = (
+            has_preseason_projection
+            and "preseason_projection_total" in pos_df.columns
+            and pos_df["preseason_projection_total"].notna().any()
+        )
+        if pos_has_preseason:
+            sort_col = "preseason_projection_total"
+            pos_df = pos_df.sort_values(sort_col, ascending=False, na_position="last")
+        elif has_ml_predictions and "projection_18w" in pos_df.columns:
             sort_col = "projection_18w"
             pos_df = pos_df.sort_values(sort_col, ascending=False, na_position="last")
         else:
@@ -436,21 +542,10 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
 
         players = []
         for rank, (_, row) in enumerate(pos_df.iterrows(), 1):
-            # ML prediction values (null if not available)
-            proj_total = None
-            proj_ppg = None
-            proj_floor = None
-            proj_ceiling = None
-
-            if has_ml_predictions and schedule_available:
-                p18 = row.get("projection_18w")
-                if pd.notna(p18):
-                    proj_total = round(float(p18), 1)
-                    proj_ppg = round(float(p18) / 17, 1)
-                    std = row.get("fp_std", 0)
-                    if pd.notna(std) and std > 0:
-                        proj_floor = round(max(0, float(p18) - 1.5 * float(std) * (17 ** 0.5)), 1)
-                        proj_ceiling = round(float(p18) + 1.5 * float(std) * (17 ** 0.5), 1)
+            proj_total, proj_ppg, proj_floor, proj_ceiling, projection_source = (
+                _resolve_projection(row, has_preseason_projection, has_ml_predictions,
+                                   schedule_available)
+            )
 
             # OOS prediction data from ts_backtest (for off-season display)
             player_id = str(row["player_id"])
@@ -467,6 +562,8 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
                 "projection_points_per_game": proj_ppg,
                 "projection_floor": proj_floor,
                 "projection_ceiling": proj_ceiling,
+                "projection_source": projection_source,
+                "support_class": row.get("preseason_support_class") or None,
                 "risk_score": int(row["risk_score"]) if pd.notna(row.get("risk_score")) else None,
                 "injury_flag": False,
                 "age": None,
@@ -486,8 +583,11 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
         out_path = DATA_DIR / f"players_{pos}.json"
         with open(out_path, "w") as f:
             json.dump(players, f, indent=2)
+        n_preseason = sum(1 for p in players if p["projection_source"] == "preseason_model")
+        n_weekly = sum(1 for p in players if p["projection_source"] == "weekly_18w")
         print(f"  Wrote {len(players)} players to {out_path.name}"
-              f" (ML predictions: {'yes' if has_ml_predictions and schedule_available else 'pending'})")
+              f" (preseason model: {n_preseason}, weekly_18w fallback: {n_weekly},"
+              f" pending: {len(players) - n_preseason - n_weekly})")
 
 
 def generate_schedule_impact(upcoming_season: int, schedule_available: bool):
@@ -710,8 +810,32 @@ def main():
     else:
         print(f"  No ML predictions available for {upcoming_season} season")
 
+    # Preseason season-total model (PreseasonProjector) — preferred over
+    # projection_18w when available; see _load_preseason_projections().
+    has_preseason_projection = False
+    preseason_df = None
+    try:
+        preseason_df = _load_preseason_projections(upcoming_season, prev_season)
+    except Exception as e:
+        print(f"  Preseason projector unavailable, falling back: {e}")
+    if preseason_df is not None and not preseason_df.empty:
+        pred_map = preseason_df.set_index("player_id")["pred_total"].to_dict()
+        agg["preseason_projection_total"] = agg["player_id"].map(pred_map)
+        if "confidence_score" in preseason_df.columns:
+            conf_map = preseason_df.set_index("player_id")["confidence_score"].to_dict()
+            agg["preseason_confidence"] = agg["player_id"].map(conf_map)
+        if "support_class" in preseason_df.columns:
+            support_map = preseason_df.set_index("player_id")["support_class"].to_dict()
+            agg["preseason_support_class"] = agg["player_id"].map(support_map)
+        has_preseason_projection = bool(agg["preseason_projection_total"].notna().any())
+        print(f"  Loaded preseason season-total projections for {upcoming_season} season"
+              f" ({int(agg['preseason_projection_total'].notna().sum())} players)")
+    else:
+        print(f"  No preseason season-total projections available for {upcoming_season} season")
+
     output_position_files(agg, upcoming_season, schedule_available,
-                          has_ml_predictions, prev_season)
+                          has_ml_predictions, prev_season,
+                          has_preseason_projection=has_preseason_projection)
     generate_schedule_impact(upcoming_season, schedule_available)
     generate_model_metadata_frontend(upcoming_season, prev_season,
                                      schedule_available, has_ml_predictions)

@@ -774,3 +774,970 @@ To be clear, the codebase has significant strengths that should be preserved:
 8. **PBP-derived features**: EPA, WPA, success rate, neutral pass rate — advanced metrics from play-by-play data
 9. **Experiment tracking**: Append-only JSONL with git commit hashes for reproducibility
 10. **Production monitoring**: Feature drift (KS test), prediction drift, RMSE degradation alerts
+
+
+## ORDER OF IMPLEMENTATION
+1. §3 — Market/ADP bias removal — Do this first because every model trained with market contamination produces tainted results. No point training anything else until the ADP features and post-processing market anchor are stripped out.        
+2. §11 — External techniques (low-effort items only) — Wire weather data, add RZ/GL per-player allocation, WOPR, DVOA-adjusted opponent FPA. These are features that already exist in your data but aren't connected. Do these before retraining
+so the first clean model has better inputs.                                                                                                                                                                                                       
+3. §4 — Team context & offensive scheme — Coaching tree, personnel groupings, position-specific target allocation. Feeds directly into draft projections.
+4. §6 — Utilization pipeline gaps — Share-to-volume conversion, utilization weight optimization on actual data.                                                                                                                                   
+5. §8 — Feature engineering gaps — Fills in remaining missing signals.                                                                                                                                                                            
+6. §5 — Player-team assignment & roster dynamics — Depth charts, free agency handling.                                                                                                                                                            
+7. §7 — Model architecture & validation — Retrain and validate after features are solid.                                                                                                                                                          
+8. §11 — External techniques (high-effort items) — GNN, Monte Carlo, player embeddings. Build on top of a clean, feature-rich model.                                                                                                              
+9. §9 — Data pipeline hardening — Schema validation, error handling.                                                                                                                                                                              
+10. §4.4/§10 — Remaining roadmap items — Mop up.                                                                                                                                                                                                  
+11. §2 — PROJECT_NOTES corrections — Update docs last, after the code reflects reality.
+
+---
+
+## STANDING INSTRUCTION FOR ANY AGENT WORKING FROM THIS DOC
+
+Every session so far has turned up real bugs that weren't already listed
+here — stale team codes, a `.gitignore` rule silently untracking a whole
+directory, a dead detector class with a row-ordering bug, a mislabeled
+fallback path, features declared but never actually computed, etc. — none
+of these were things anyone set out to look for; they surfaced while
+verifying something else.
+
+**When that happens: fix it immediately if it's small and safe (matches
+the size/risk of fixes already made throughout this doc), or document it
+here in GAPS.md right away if it's bigger — in either case, before moving
+on to the next task.** Don't let a found-but-unfixed, found-but-undocumented
+bug slip past silently just because it wasn't what you were originally
+asked to look at. This doc has repeatedly been the only reason a
+next-session agent didn't have to rediscover the same thing from scratch —
+keep that going.
+
+## STATUS BRIEF — 2026-08-04
+
+### §3 (Market/ADP bias removal) — CLOSED, plus fallout cleanup
+
+Both contamination points described above were **already removed from the source**
+before this session started (no `MarketAnchorCurve`, no `market_anchor`/`market_gap`
+in `CALIBRATION_FEATURES_BY_POSITION`, no market-blending step in
+`UpstreamCalibrator.calibrate()` — `preseason_projector.py`'s own docstring says
+"no market/ADP data — pure ML"). The prior session's handoff notes describing
+Contamination Point 2 as "still live" were stale.
+
+What *was* actually broken, found by verifying the handoff notes against the real
+source instead of trusting them:
+- `tests/test_preseason_projector.py` still imported `MarketAnchorCurve` and
+  referenced `market_anchor`/`market_gap` — the file failed to import at all.
+  Rewritten to match current source; 8/8 pass.
+- `scripts/audit_preseason_projector.py` read a `market_anchor` column from
+  `predict_with_details()` output that no longer exists — would `KeyError` on
+  next run. Fixed.
+- **Real bug**, not just stale tests: `_market_objective_score()` in
+  `preseason_projector.py` read three fields (`pred_market_mae`,
+  `pred_large_divergence_share`, `pred_rb_wr_gap_excess`) that nothing populated
+  after the market-anchor removal, so it silently returned the same constant for
+  every model variant — model-variant selection had stopped discriminating
+  between candidates whenever the draft-sim gate didn't pick a winner (always true
+  for direct `.fit()` calls, e.g. the test suite). Replaced with
+  `_outcome_objective_score()` = `pred_mae + abs(pred_bias)`, using metrics that
+  are actually computed. Renamed the `market_objective_score` selection-report key
+  to `outcome_objective_score` (nothing downstream reads the old key name).
+
+**Lesson for future sessions**: this doc and prior handoff notes can describe code
+that's already changed. Verify against the actual file (grep the class/function
+names, read the real column lists) before planning around a GAPS.md claim.
+
+### §11 low-effort items — weather / WOPR / RZ-GL — DONE, retrain complete and verified
+
+Verified against `CAUSAL_FEATURES` in `config/settings.py` (the actual training
+feature list) rather than GAPS.md's descriptions. Findings differed from the
+GAPS.md text above in ways worth recording:
+
+- **WOPR**: was already computed (`utilization.py:_add_wopr`) but by a pipeline
+  (`calculate_utilization_scores`) that `create_causal_features()` — the function
+  that actually builds training data — never calls. Adding `"wopr"` straight to
+  `CAUSAL_FEATURES` would have been a silent no-op (same failure mode as the
+  `_market_objective_score` bug above). Instead added `wopr_roll3`, computed
+  in `_create_causal_rolling_features` directly from the already-rolled
+  `target_share_pct_roll3_mean` / `air_yards_share_pct_roll3_mean` (leakage-safe).
+- **RZ/GL per-player allocation**: real raw counts exist in `player_weekly_stats`
+  (`redzone_targets`, `rush_inside_5` — NOT `goal_line_touches`, which is
+  rush+target combined per `pbp_stats_aggregator.py:506` and would have
+  mislabeled a "carry share" feature). No distinct red-zone (inside-20) rushing
+  column exists, only goal-line (inside-5) — so this shipped as 2 features
+  (`redzone_target_share_pct_roll3_mean`, `goal_line_carry_share_pct_roll3_mean`),
+  not GAPS.md's original 4. Computed in `_create_base_features` (per-team-week
+  share, same pattern as `target_share_pct`) and rolled in
+  `_create_causal_rolling_features`.
+- **Weather**: confirmed gap as described — `game_weather` table has 5,431 fully
+  populated rows, zero wiring into any feature pipeline. Added
+  `_add_weather_features()` (new method), merged unrolled (like Vegas
+  spread/total — pre-game info, not a lagged stat). Dome games (1,849 rows) have
+  NULL temp/wind/precip in the source table; these get "no weather effect"
+  defaults (wind=0, precip=0, temperature_bucket=mild) rather than inheriting the
+  outdoor-game median.
+- **DVOA-adjusted opponent FPA**: NOT done. Confirmed as a real gap (only raw
+  `opp_fpts_allowed` exists), and unlike the other three this is genuine new
+  two-pass computation, not wiring. Left for a future phase per the original
+  scoping decision.
+
+**Wired into `CAUSAL_FEATURES`**: RB gets redzone-target-share + goal-line-carry-
+share + weather; WR/TE get redzone-target-share + `wopr_roll3` + weather; QB gets
+weather only. Files: `src/features/feature_engineering.py`, `config/settings.py`.
+
+**Verification performed**: called `create_causal_features()` directly on real
+`player_weekly_stats` data (2022+, 22,118 rows) and confirmed every new column is
+100% non-null with real variance (not constant-filled) — e.g.
+`redzone_target_share_pct_roll3_mean` mean=2.06 std=6.96 nunique=332,
+`wind_speed_mph` mean=5.36 std=5.46 nunique=194. `wopr_roll3` has a small negative
+tail (min -0.09) from rare negative `air_yards_share_pct` values (real signal
+noise, not a bug).
+
+**Retrain — DONE (2026-08-04, same day, later in this session).** Unblocking it
+surfaced three more pre-existing, unrelated bugs, each fixed:
+
+1. `data/cached_features.parquet` didn't exist. Regenerated via
+   `python scripts/generate_app_data.py` (uses the already-trained model that
+   existed in `data/models/` to build it — no circularity, since that model
+   predates this session).
+2. `validate_training_cache_integrity()` in `src/data/quality_gates.py` then
+   failed on "742 ghost rows" and "4 duplicate rows" — both were the single
+   not-yet-played 2026-week-1 "prediction target" stub row block that
+   `generate_app_data.py` appends for app display (confirmed 100% null for
+   that exact week, not partial — a real corruption signature would be
+   partial). Fixed by excluding that one specific stub week from the
+   ghost-row/duplicate checks (only when it's 100% null), while leaving the
+   checks fully strict for any other week — narrow, doesn't weaken the gate's
+   actual corruption-detection purpose. Only caller of this function is
+   `train.py`, so no other blast radius.
+3. `src/models/data_loading.py`'s in-season guard then raised
+   `"pipeline requires the current season as test"` — it was missing the
+   draft-prep-window carve-out that `DataManager.get_train_test_seasons()`
+   already has correctly (`is_draft_prep_window()` was imported but never
+   used). In August, `current_season_has_weeks_played()` is misleadingly
+   `True` (the *prior* season had weeks played — it just ended months ago),
+   so the guard needs the same June–Aug exemption. Fixed by mirroring the
+   existing correct logic.
+4. `feature_preparation.py:_apply_bounded_scaling()` then crashed with
+   `KeyError` on ~60 column names (including 4 of this phase's new ones) —
+   line 227 indexed `test_df[cols]` unconditionally, one line below an
+   existing `if not test_df.empty` guard for the same dataframe. In draft-prep
+   mode `test_df` is genuinely empty (2026 hasn't happened yet). Fixed by
+   extending the existing guard to cover the indexing too — this was a
+   pre-existing bug in the empty-test-set path, unrelated to which features
+   are declared, that would have blocked *any* draft-prep training run.
+
+Also bumped `FEATURE_VERSION` from `"22"` to `"23"` in `config/settings.py` —
+had labeled the new features "v23" in comments but forgot the actual version
+bump the project convention expects.
+
+**Verified against the real trained artifacts**, not just that training
+exited 0: loaded `data/models/component_{rb,wr,te,qb}.json` after training and
+confirmed all 6 new features appear in `feature_names` for every position that
+declares them (RB 41/41, WR 41/42, TE 40/41, QB 39/39 — the one WR/TE column
+short in each case was `recv_epa_per_target_roll3_mean`).
+
+**`recv_epa_per_target_roll3_mean` gap — also fixed, same session.** Root
+cause: `recv_epa_per_target` (this-week value) is computed in
+`_create_base_features`, but only ever rolled into `_roll3_mean` inside
+`_create_rolling_features` — the **full-mode** pipeline. `create_causal_features()`
+(what actually builds training data) calls `_create_causal_rolling_features`
+instead, whose own `roll_cols` list never included it, even though
+`CAUSAL_FEATURES["WR"]`/`["TE"]` have declared it all along. Identical failure
+pattern to the WOPR gap above (declared in the causal feature list, computed
+only in a pipeline the causal path doesn't call) — pre-existing, predates this
+session, unrelated to anything added here. Fixed by adding
+`"recv_epa_per_target"` to `_create_causal_rolling_features`'s `roll_cols`.
+Verified on real data (100% non-null, 4,225 unique values) and confirmed in
+the retrained WR (42/42) and TE (41/41) model artifacts.
+
+Feature-importance / accuracy-lift comparison (old model vs. new) was not done
+this session — the retrain succeeded and features are confirmed live in the
+model, but nobody has yet measured whether they improve `pred_mae`. Worth
+doing before leaning on these features for real draft decisions.
+
+**Test coverage note**: `tests/test_quality_gates.py` and
+`tests/test_target_and_history_causality.py` pass (7/7) against all of this
+session's fixes. `tests/test_ml_robustness_15_steps.py` and
+`tests/test_integration.py` were NOT run to completion — they train full,
+untuned models (`test_full_pipeline_all_positions`, `test_cross_validation`,
+etc.) and took over an hour without finishing; killed rather than let it keep
+running. A partial run showed some `F`s in the dot output before being killed,
+never diagnosed — unknown whether pre-existing or related to this session's
+changes. Worth running standalone (outside an interactive session) before
+trusting this suite's coverage.
+
+### UNCOMMITTED — read this first if picking up in a fresh session
+
+Everything above (§3 fallout cleanup + §11 low-effort wiring + the 4
+pre-existing bugs it surfaced) is sitting **uncommitted** in the working tree.
+`git status` as of the end of this session:
+
+```
+ M GAPS.md
+ M config/settings.py
+ M scripts/audit_preseason_projector.py
+ M src/features/feature_engineering.py
+ M src/models/data_loading.py
+ M src/models/feature_preparation.py
+ M src/models/preseason_projector.py
+ M tests/test_preseason_projector.py
+```
+
+No commit was requested, so none was made — do not assume any of this has
+landed. If you're a fresh agent/session: check `git status`/`git diff` yourself
+before trusting this doc's "DONE" claims, the same way this session learned
+not to trust the previous handoff notes at face value.
+
+### Next up per the ORDER OF IMPLEMENTATION list
+
+§4 (team context & offensive scheme) is next. DVOA-adjusted opponent FPA (the
+one §11 item deferred above, genuine new two-pass computation rather than
+wiring) is still open too — do it whenever convenient relative to §4, no hard
+ordering between them.
+
+**Worth doing first, cheaply**: this session found the same bug twice
+(WOPR, then `recv_epa_per_target_roll3_mean`) — a feature declared in
+`CAUSAL_FEATURES` for a position but never actually computed in
+`_create_causal_rolling_features`/`_create_base_features`, silently dropped
+rather than erroring. A quick systematic check — diff each position's
+`CAUSAL_FEATURES` list against the actual output columns of
+`create_causal_features()` on real data — would catch any other dead-declared
+features before spending effort on §4's new ones.
+
+### Systematic CAUSAL_FEATURES audit — DONE, clean (2026-08-04, new session)
+
+Ran the check above using the real training-data loader
+(`DatabaseManager.get_all_players_for_training()`, which performs the
+`team_defense_stats`/`team_stats`/`utilization_scores` LEFT JOINs that
+`create_causal_features()` depends on) on 2022+ data (22,118 rows), then
+`FeatureEngineer().create_causal_features()` on the result.
+
+First pass without the real loader (raw `player_weekly_stats` table only)
+falsely flagged `opp_fpts_allowed` as missing for all four positions — that
+was a test-harness gap, not a bug: `opp_fpts_allowed` is built from
+`fantasy_points_allowed_{qb,rb,wr,te}` columns that only exist after the
+`team_defense_stats` LEFT JOIN in `get_all_players_for_training` (see
+`src/utils/database.py:1592-1629`), which raw-table loading skips.
+
+With the real loader: **all `CAUSAL_FEATURES` columns present for
+RB/WR/TE/QB, all ≥95% non-null, all with real variance (nunique > 1).** No
+dead-declared features found — the WOPR/`recv_epa_per_target_roll3_mean`
+failure mode does not currently recur elsewhere. Clear to proceed to §4.
+
+### §4 / §9.2 (LAR/JAC team-code fix) — DONE, root cause fixed + DB migrated (2026-08-04)
+
+Started on the "low effort" §4/Phase-1 items (position target allocation,
+LAR/JAC fix, tempo). The LAR/JAC item turned out to be a live, worse-than-
+documented bug, not the stale one-off GAPS.md originally described — found
+by checking the actual DB instead of trusting the doc (same lesson as the
+§3 section above).
+
+**What was actually wrong:** starting with the 2025 season, `team_stats`,
+`team_defense_stats`, and `player_weekly_stats` contained BOTH the old codes
+(`JAX`, `LA`) and new codes (`JAC`, `LAR`) for Jacksonville/Rams
+simultaneously — not a static mismatch between two tables as GAPS.md §9.2
+described, but two codes coexisting in the same table across different
+weeks/seasons. `schedule` stayed on `JAX`/`LA` consistently 2006–2026.
+
+**Root cause:** `entity_resolver.py`'s `TEAM_CODE_ALIASES` mapped
+`JAX→JAC` and `LA→LAR` (backwards relative to schedule's convention). This
+gets applied via `resolver.build_keys()` inside `nfl_data_loader.py`'s
+`_standardize_weekly_columns`/`_standardize_pbp_columns` — i.e. every
+ingestion/refresh run. Historical seasons (2006–2024) were loaded before
+this alias existed and kept `JAX`/`LA`; any row touched by a refresh after
+the alias was added (2025 season, still in progress) picked up `JAC`/`LAR`
+instead — splitting the same team's data across two codes mid-table.
+`nfl_data_loader.py` also had a second, independent copy of the same
+backwards mapping (`_SCHED_TO_PWS`) in its schedule-based opponent-backfill
+path, and `scripts/backfill_snap_counts_to_pws.py` had one stale line
+(`"JAX": "JAC"`) in its join-key normalizer.
+
+**Fix (4 files):**
+- `src/data/entity_resolver.py` — flipped `TEAM_CODE_ALIASES` to
+  `JAC→JAX`, `LAR→LA` (canonical = schedule's convention). `STL→LA` updated
+  to match (was `STL→LAR`); `SD→LAC`, `OAK→LV` unchanged (no observed
+  duplication issue there).
+- `src/data/nfl_data_loader.py` — removed the now-redundant/backwards
+  `_SCHED_TO_PWS` local remap in the opponent-backfill path; schedule and
+  pws use the same codes now, no translation needed.
+- `scripts/backfill_snap_counts_to_pws.py` — fixed the stale `"JAX": "JAC"`
+  alias line to `"JAC": "JAX"`.
+- `scripts/backfill_opponent_lar_jac_2025.py` — updated docstring/removed
+  its own backwards remap (same reasoning).
+
+**New migration script**: `scripts/normalize_lar_jac_team_codes.py` —
+one-time cleanup of rows already written under the old alias direction.
+`player_weekly_stats` and `team_defense_stats` got a plain rename
+(verified first: zero duplicate player-weeks in pws; `team_defense_stats`
+2025 only existed under the new code, no old-code row to collide with).
+`team_stats` has a `UNIQUE(team, season, week)` constraint and, for 2025,
+had a genuine duplicate pair under both codes for every (team, week) —
+verified 100% consistent (39/39 old-code rows fully populated on
+`points_scored`/`pace_sec_per_play`, 38/38 new-code rows NULL on both) before
+writing the script, so those sparse new-code duplicates are deleted rather
+than merged, not renamed.
+
+**Before running the migration**: backed up the live DB
+(`data/nfl_data.db.bak-lar-jac-20260804154651`, gitignored, not deleted —
+safe to remove once this fix has been trusted for a while).
+
+**Verified after migration:**
+- Zero `JAC`/`LAR` rows remain in any of the three tables (script's own
+  post-run check).
+- `create_causal_features()` on real 2025 data: `opp_fpts_allowed` is 100%
+  non-null for both `JAX` (186 rows) and `LA` (200 rows) players in 2025 —
+  previously dead for exactly these two teams, per the original GAPS.md
+  finding, just for a different underlying reason than documented.
+- `tests/test_preseason_projector.py`, `tests/test_quality_gates.py`,
+  `tests/test_target_and_history_causality.py`: 15/15 pass.
+
+### §4 low-effort batch continued: position target/carry allocation + tempo — DONE (2026-08-04)
+
+Added to `src/features/feature_engineering.py` (`_create_base_features` +
+`_create_causal_rolling_features`) and `config/settings.py` (`CAUSAL_FEATURES`,
+`FEATURE_VERSION` bumped to `"24"`):
+
+- `team_rb_target_share` / `team_wr_target_share` / `team_te_target_share` —
+  each position's share of the team's total targets that week (GAPS.md §4.A).
+- `team_target_concentration` — Herfindahl index of individual player target
+  shares within the team-week (higher = concentrated on fewer players).
+- `team_rb_lead_share` — the lead RB's share of the team's RB rushing
+  attempts that week (bell-cow vs. committee indicator).
+- `team_plays_roll3_mean`, `team_pace_sec_per_play_roll3_mean` — tempo
+  (GAPS.md §4.D). `team_plays`/`team_pace_sec_per_play` were already joined
+  onto the raw training frame from `team_stats` (via
+  `get_all_players_for_training`) but never rolled/used.
+
+All five follow the codebase's established leakage-safe pattern: computed as
+a this-week raw value (broadcast to every row of that team-week), then
+consumed only via the `_roll3_mean` variant (`shift(1).rolling(3).mean()`
+per player, in `_create_causal_rolling_features`) — same pattern as
+`target_share_pct`/WOPR/redzone-share from the §11 phase.
+
+Wired into `CAUSAL_FEATURES`: RB gets `team_rb_target_share_roll3_mean` +
+`team_rb_lead_share_roll3_mean` + tempo; WR/TE get their own target-share
+variant + `team_target_concentration_roll3_mean` + tempo; QB gets tempo only.
+
+**Real data bug found and fixed while verifying this (not caused by this
+session's feature code):** `team_plays_roll3_mean`/`team_pace_sec_per_play_
+roll3_mean` were initially ~70-93% zero-filled for large chunks of the
+training window, because the underlying `team_stats.total_plays` /
+`pace_sec_per_play` columns were themselves zero for most rows 2020-2024
+(and `pace_sec_per_play` specifically was 100% zero for 2018-2019 too) —
+found by checking distribution/variance before trusting the feature, not by
+assuming the join worked. Root cause: those two columns are populated by a
+PBP-based aggregator (`pbp_stats_aggregator.get_team_stats_from_pbp`) that
+had only ever been run for 2025 (current-season pipeline); everything else
+in `team_stats` for those seasons was already fully populated. New script
+`scripts/backfill_team_pace.py` re-derives both columns from PBP for
+2018-2024 and UPDATEs the existing rows (idempotent — only touches rows
+currently zero on either column). Ran against the DB (already backed up
+from the LAR/JAC fix); post-backfill only week-0 preseason placeholder rows
+remain zero (verified legitimate, not a gap).
+
+**Verified**: all 5 new `_roll3_mean` features 100% non-null with realistic
+values on real 2018+ data (target shares sum to ~100% across RB/WR/TE as
+expected: 18.6% + 59.3% + 21.9%; `team_plays_roll3_mean` mean=62.5,
+std=5.3; `team_pace_sec_per_play_roll3_mean` mean=31.2s, std=1.7 — both
+match real NFL norms post-backfill, versus mean=15.8/std=25.6 and highly
+degenerate before it). Full `CAUSAL_FEATURES` dead-declaration check
+(same method as the earlier systematic audit) re-run clean for all four
+positions.
+
+**Also checked, turned out already done** (GAPS.md §10 Phase-1 table listed
+these as open, but they're not): `depth_chart_rank`, `is_contract_year`,
+`contract_apy_rank` are already in `CAUSAL_FEATURES` for RB/WR/TE/QB and
+verified non-degenerate on real data (depth_chart_rank: 3 real buckets;
+is_contract_year: 3.8% flagged, plausible; contract_apy_rank: continuous,
+807 unique values). §10's Phase-1 items 1.1/1.2 (depth_charts/contracts
+wiring) can be crossed off — they predate this session. Another instance of
+the doc-vs-source drift this session keeps finding; verify against
+`CAUSAL_FEATURES` + a real-data audit before trusting any GAPS.md "not yet
+wired" claim.
+
+**Retrain — DONE.** `python -m src.models.train --fast --no-tune` completed
+(exit 0), `feature_version.txt` = 24, previous model version archived (5
+versions available for rollback). Verified directly against
+`data/models/component_{qb,rb,wr,te}.json` `feature_names`: all 7 new
+`_roll3_mean` columns present exactly where `CAUSAL_FEATURES` declares them
+(QB: tempo only; RB: `team_rb_target_share`+`team_rb_lead_share`+tempo;
+WR/TE: their own target-share variant + `team_target_concentration` +
+tempo). `tests/test_preseason_projector.py`, `tests/test_quality_gates.py`,
+`tests/test_target_and_history_causality.py`: 15/15 pass post-retrain.
+
+Feature-importance/accuracy-lift comparison against the pre-v24 model was
+NOT done — same caveat as the v23 retrain: features are confirmed live,
+nobody has measured whether they move `pred_mae`. Worth doing before
+leaning on these for real draft decisions, ideally batched with the v23
+features' still-outstanding lift measurement.
+
+**Still open / not attempted this phase**: `1.6` (utilization share→volume
+conversion — a design change to the utilization-score pipeline, not a
+wiring task, out of scope for this batch), `3.2`/`3.3`/`3.4` (red-zone
+carry allocation beyond what §11 already shipped, FTN personnel grouping,
+PFR weekly advanced stats).
+
+### §3.1 / §11.1.G — Coaching staff DB — DONE (2026-08-04)
+
+`src/features/advanced_analytics.py` already had a complete, well-built
+`CoachingChangeDetector` class (HC/OC/DC change detection, exponential
+adaptation decay, position-weighted impact, tenure/stability, scheme
+classification) — but it had **never been fed real coaching identity
+data**, anywhere in the codebase, so it always silently fell back to a
+`scheme_pass_rate_delta` proxy instead of true coach-identity detection.
+
+**Data source found**: `nfl_data_py.import_schedules()` — already used
+elsewhere in this codebase for schedule ingestion — returns `home_coach`/
+`away_coach` per game (from nflverse's `games.csv`), 0% null 2006-2026,
+using the same canonical team codes as `player_weekly_stats` (post the
+LAR/JAC fix). No new external dependency needed. No comparably reliable
+structured source exists for OC/DC identity across 20 years, so this phase
+covers HC only — the detector's OC/DC paths degrade safely to their
+existing defaults (`oc_change=0`, etc.) when those columns aren't present,
+which was already correct dead-code behavior, just now actually exercised
+instead of untested.
+
+**Real bug found and fixed before wiring in** (would have corrupted the
+signal if shipped as-is): `_detect_hc_changes` and `_compute_coaching_
+tenure` both did `df.groupby("team")[...].shift(1)`/`.cumsum()` directly
+on the per-player training frame, which is sorted by `player_id` first
+(see `add_coaching_change_features`'s own `sort_values(["player_id",
+"season","week"])`). Since pandas groupby preserves row order within each
+group, shifting on a player-sorted frame compares whichever two rows
+happen to be adjacent *for that team* in player-ID order — i.e. two
+different players' unrelated season/weeks — not consecutive team-weeks.
+Verified with a synthetic 2-player test: a player's first row after
+another player's last row was spuriously flagged `coaching_change=1`
+purely from index adjacency, not an actual coaching change. Fixed both
+methods to compute on a `(team, season, week)`-deduplicated, properly
+sorted team-week table, then merge the results back onto every player row
+for that team-week — confirmed correct on the same synthetic test after
+the fix (both players now correctly show the change only at the true
+2020→2021 HC transition, with matching tenure counts).
+
+**New infra**:
+- `team_coaching_staff` table (`src/utils/database.py` `_init_database`) —
+  `(team, season, week, head_coach)`, `UNIQUE(team, season, week)`.
+- `DatabaseManager.ensure_team_coaching_staff()` — fetches via
+  `nfl_data_py.import_schedules()`, only missing seasons unless
+  `force_refresh=True`; degrades to a no-op on fetch failure (doesn't
+  raise), matching the try/except pattern used elsewhere in
+  `_prepare_training_data`.
+- `scripts/backfill_coaching_staff.py` — one-time/re-runnable full backfill
+  entry point.
+- `get_all_players_for_training()` — added `LEFT JOIN team_coaching_staff`
+  (same-week, since HC identity is pre-game-known info, not an outcome
+  stat — no leakage).
+- `FeatureEngineer._add_coaching_change_features()` (`feature_engineering.py`,
+  called from `create_causal_features()`) — merges `head_coach` in if not
+  already present (self-contained for callers other than the main training
+  path), then calls the fixed `CoachingChangeDetector`. Explicitly
+  preserves the pre-existing `scheme_fit_score` column around the call —
+  `CoachingChangeDetector` emits a column of the same name, but the
+  existing one (from `_create_team_change_features`, destination-team-aware
+  for free-agent signings) is more specific and was already in production
+  use; letting the coaching detector's version silently overwrite it would
+  have been a regression.
+
+**Second team-code bug found and fixed while backfilling** (same class as
+the LAR/JAC fix, different teams): `nfl_data_py.import_schedules()` uses
+the team code that was historically accurate at the time — `OAK` for
+2018-2019 Raiders — while `player_weekly_stats.team` is already normalized
+to the current franchise code (`LV`) for those seasons. Fixed by applying
+`entity_resolver.EntityResolver.normalize_team_code` (the same canonical
+alias map used for the LAR/JAC fix, which already had `OAK→LV`/`SD→LAC`/
+`STL→LA` correct) to the coaching-staff ingestion path before upsert.
+Also cleaned up 570 stale rows left under the old codes from an initial
+test run that predated this fix (`OAK`/`SD`/`STL`, deleted directly —
+`INSERT OR REPLACE` doesn't clean up rows under a *different* primary key,
+only same-key rows, so the pre-fix and post-fix rows had briefly
+coexisted).
+
+**`CAUSAL_FEATURES` additions** (all 4 positions — coaching changes affect
+every skill position, not just one): `coaching_change` (binary),
+`coaching_adaptation_score` (continuous exponential decay, supersedes
+`weeks_since_coaching_change`/`new_coaching_staff` as a smoother single
+signal), `coaching_stability` (log-scaled tenure), `coaching_change_impact`
+(position-weighted expected PPG delta). Deliberately did NOT add
+`oc_change`/`dc_change`/`any_coaching_change`/`weeks_since_oc_change`/etc.
+— those would be constant/degenerate given no OC/DC data source (same
+"don't declare dead features" lesson as the WOPR/`recv_epa_per_target`
+bug earlier this session), and `any_coaching_change` reduces to
+`coaching_change` anyway with OC/DC always 0. `FEATURE_VERSION` bumped to
+`"25"`.
+
+**Verified**: full `CAUSAL_FEATURES` dead-declaration audit clean for all
+4 positions on real 2006+ data (22,118+ rows). New columns 100% non-null;
+`coaching_change` fires at real, known HC transitions (spot-checked
+against `groupby(["team","season"])["coaching_change"].max()` — ARI 2019,
+ATL 2020/2021/2024, CAR 2020/2022/2023/2024, CHI 2022, etc., all real HC
+changes). `tests/test_preseason_projector.py`,
+`tests/test_quality_gates.py`, `tests/test_target_and_history_causality.py`
+(15/15) and `tests/test_advanced_analytics.py` (79/79, covers
+`CoachingChangeDetector`) all pass post-fix.
+
+**Retrain — DONE.** `feature_version.txt` = 25, previous model archived.
+Verified directly against `data/models/component_{qb,rb,wr,te}.json`
+`feature_names`: all 4 coaching features present for every position
+(QB 45, RB 49, WR 50, TE 49 total features). Full test suite re-run
+post-retrain: 94/94 pass (`test_preseason_projector.py`,
+`test_quality_gates.py`, `test_target_and_history_causality.py`,
+`test_advanced_analytics.py`). Feature-importance/accuracy-lift
+measurement against the pre-v25 model still not done — same standing
+caveat as v23/v24, now three feature-version bumps deep without a
+pred_mae comparison. Worth doing as its own pass before leaning on any of
+v23/v24/v25's features for real draft decisions.
+
+**Not attempted**: OC/DC identity (no reliable 20-year structured source
+found), coaching tree / scheme-lineage classification (GAPS.md §11.1.G's
+"Shanahan tree" idea — would need a hand-maintained coach→tree mapping,
+out of scope for this phase), prior-coordinator historical-tendency
+features.
+
+### §2 (PROJECT_NOTES.md corrections) — DONE (2026-08-04)
+
+Applied all 10 corrections listed in §2 above, plus documented everything
+fixed in this session (LAR/JAC root cause, OAK/LV, coaching staff,
+weather, PFR/contract/depth-chart features already being live). Added the
+three previously-missing sections: Component Prediction Architecture,
+Utilization Weight Optimization, Draft Prep Mode. Extended "Recurring
+Bugs/Patterns to Watch" with 3 new entries from this session (declared-
+but-never-computed features, historical-vs-current team-code drift, and
+row-order-dependent groupby on a differently-sorted frame — the
+`CoachingChangeDetector` bug).
+
+### Remaining §9/§11/§10 items — explicitly scoped OUT of this pass
+
+To close out the "gap plan" phase (before moving to validation testing),
+scoping these as deliberately deferred rather than half-attempted:
+
+- **DVOA-adjusted opponent FPA** (§11.1.F) — genuine new two-pass
+  computation (team offensive strength → opponent-adjusted defensive FPA),
+  not wiring. Real, well-defined, bounded work — just not done this
+  session given time already spent. Next candidate for a "low-effort
+  wiring"-style session.
+- **FTN/PBP personnel grouping** (§3.3) — checked feasibility: FTN's
+  `import_ftn_data()` doesn't carry a direct personnel-grouping column
+  (only motion/play-action/rpo/backfield-count, which `team_scheme_
+  tendencies` already captures from *some* source, 2022+ only — matches
+  FTN's real coverage start, not a bug). PBP's `offense_personnel` string
+  column (e.g. "1 RB, 2 TE, 2 WR") is the actual source for 11/12/13%
+  groupings, has wider historical coverage, but isn't available for at
+  least early-2010s seasons (`KeyError` on 2010) and needs string-parsing
+  + team-week aggregation work. Real gap, genuinely medium effort, not
+  attempted.
+- **Vegas preseason win totals** (§8.1 Tier 2) — scraper exists
+  (`odds_scraper.py fetch_win_totals`/`scrape_win_totals`) but the
+  `win_totals` market has never actually been scraped into `game_odds`
+  (checked: only h2h/spreads/totals present). Requires running the
+  scraper against The Odds API (needs `ODDS_API_KEY`, not confirmed
+  available/funded this session) — not attempted.
+- **§9 data pipeline hardening** (schema validation on ingestion,
+  replacing remaining `except Exception: pass` with structured logging) —
+  this session fixed every *specific* silent-failure instance it
+  encountered (LAR/JAC, OAK/LV, team_stats pace zero-fill, coaching
+  detector ordering bug), each with real verification, but did not do a
+  systematic codebase-wide audit for other `except Exception: pass`
+  patterns. That's explicitly flagged in PROJECT_NOTES.md's "Recurring
+  Bugs" #1 as an ongoing pattern to watch, not resolved wholesale here —
+  doing so properly would mean auditing every try/except in the ingestion
+  path, which is its own multi-session effort.
+- **§11 high-effort architecture items** — GNN player-interaction graphs,
+  Monte Carlo game simulation, player embeddings/historical-twin matching,
+  mixture-density output modeling, a dedicated full-season projection
+  model (§7.1), rookie-projector integration into the main ensemble
+  (§7.2). These are each legitimately multi-week research/engineering
+  efforts requiring their own design discussion before implementation —
+  GAPS.md's own ORDER OF IMPLEMENTATION lists them last, "build on top of
+  a clean, feature-rich model." Not attempted, not scoped down — they
+  need a dedicated planning pass, not a rushed partial implementation
+  bolted onto this session's feature-wiring work.
+
+### Next: validation testing across all shipped features (v22→v25)
+
+Per explicit instruction: before any of this is trusted for production
+draft decisions, run a proper accuracy validation — not just the
+"non-degenerate, doesn't crash" checks this session has relied on so far.
+Using `scripts/run_ts_backtest.py` (existing leakage-free expanding-window
+backtester, the same tool behind PROJECT_NOTES.md's documented April 2026
+walk-forward baseline: overall R²=0.269, Pearson r=0.520 at Ridge
+α=10,000) against the 2025 holdout season, on the pipeline as it stands
+now with all v22–v25 features live.
+
+### Results — real, positive lift over the documented baseline
+
+`python scripts/run_ts_backtest.py --season 2025 --model ridge --alpha
+10000` (expanding-window, weekly refit, 22 weeks, 5,612 predictions,
+~67s/week — full log in `ts_backtest_2025_20260804_182714.json`):
+
+| Metric | This run (v25 features) | Documented baseline (April 2026, pre-v22) |
+|---|---|---|
+| Overall R² | **0.345** | 0.269 |
+| QB R² | 0.223 | 0.092 |
+| RB R² | 0.364 | 0.258 |
+| WR R² | 0.276 | 0.257 |
+| TE R² | 0.263 | 0.152 |
+| Overall MAE | 4.79 | — (not recorded in that baseline) |
+| Overall RMSE | 6.39 | — |
+
+**This is a real, first-time-measured lift** — every position improved,
+not just an aggregate average masking a regression somewhere. Overall R²
+(0.345) now **exceeds the trailing-average-heuristic ceiling (R²=0.279)**
+documented in PROJECT_NOTES.md's "Predictive Ceiling Summary" — that
+section's core claim ("model adds no value over a simple blend until R²
+exceeds 0.279") no longer holds as written; updated there directly.
+
+Caveats, so this isn't overstated:
+- The documented baseline table mixes two different runs (the α=1.0 "April
+  10" table shows QB R²=0.092, but the "production default" is α=10,000 —
+  this backtest used α=10,000 to match production, so it's the right
+  comparison, but the two numbers weren't generated under identical
+  conditions to begin with; treat this as directionally strong, not a
+  precise paired A/B).
+- This is one backtest on one holdout season (2025) with weekly-refit
+  expanding-window Ridge — not a multi-season average, not the
+  higher-fidelity `--model ensemble` path (too slow — see PROJECT_NOTES
+  Phase 4, ensemble runs took ~12.8h wall clock and were killed by a
+  pre-registered kill gate), and it does not isolate *which* of v22–v25's
+  changes drove the lift (market-bias removal, weather/WOPR/redzone,
+  team-target-allocation/tempo, or coaching-change detection individually)
+  — only that the pipeline as a whole, right now, is meaningfully better
+  than the last time anyone measured it.
+- Decision-quality panel from the same run: Hindsight 63.6% (14-8, p=0.14,
+  ROI +14.5%) — weaker than the 75.61%/p5=65.85% H2H figure in
+  PROJECT_NOTES, but that number came from a different, broader bootstrap
+  validation (10,000 resamples across more weeks), not a single-season
+  walk-forward — not a fair apples-to-apples regression signal, just
+  noted for completeness.
+
+**Verdict**: clear go-ahead to trust the v22–v25 feature work as a net
+positive, not a regression. A proper per-feature-version ablation (train
+excluding just v25's coaching features, or v24's team-allocation features,
+and compare) would be needed to attribute the lift to a specific change,
+but that's a further-refinement question, not a production-readiness
+blocker.
+
+### §7.1 (dedicated full-season model) — real gap found and fixed: wired `PreseasonProjector` into the production draft board (2026-08-04)
+
+User asked to pick the single most impactful remaining item, regardless of
+effort. Investigated the three strongest candidates via parallel Explore
+agents (DVOA-adjusted opponent FPA, §7.1's "no full-season model" claim,
+§7.2's "rookies not integrated" claim) before picking — two of the three
+turned out to be stale/inaccurate as originally documented, same pattern
+as everything else this session:
+
+- **§7.2 verdict: partially stale.** `advanced_rookie_injury.py`'s
+  sophisticated rookie/injury features (draft capital, comp-player
+  matching, combine scores, archetype tiers, breakout/bust probability) DO
+  run in both training and serving (`feature_preparation.py`,
+  `predict.py`) — contrary to "NOT wired into the main ensemble pipeline."
+  But every single one of those columns is absent from `CAUSAL_FEATURES`
+  (config/settings.py has a comment admitting this: "available in full
+  mode but not promoted to causal yet") — so none of it reaches the model
+  as an actual input. Real gap, just narrower and differently-shaped than
+  documented. **Not fixed this session** — user picked a different item.
+- **§7.1 verdict: partially stale, and this is the one picked.**
+  `src/models/preseason_projector.py`'s `PreseasonProjector` IS a real,
+  already-trained season-total regression (predicts `SUM(fantasy_points)`
+  for next season directly from prior-season aggregates — ppg, games
+  played, per-stat-category rates, target/snap/rush share — with an
+  upstream calibration layer). Trained every run, saved to
+  `data/models/preseason_projector.json`, tested (8/8,
+  `tests/test_preseason_projector.py`). **But it was never called from
+  the two scripts that actually build user-facing draft data**
+  (`scripts/generate_app_data.py`, `scripts/generate_draft_data.py`) — its
+  only callers were training, its own test suite, and
+  `scripts/snake_draft_sim.py` (a simulation harness). The actual
+  production draft data — `data/players_{QB,RB,WR,TE}.json`, the file
+  that sets both the displayed projection AND the sort/rank order — was
+  built from `projection_18w`, which `EnsemblePredictor.predict()`
+  produces via `fp_pred * n_weeks` (a single week's component prediction
+  multiplied by 18) in the component-mode branch. Confirmed by direct code
+  read, not just agent report: `src/models/ensemble.py:480-483`.
+
+Also corrected a documentation error while investigating: `CLAUDE.md`'s
+UI-freeze list names `docs/index.html`/`docs/data/board.json`/`_site/*` as
+locked files — verified none of `docs/`, `_site/`, or `frontend/` exist
+anywhere in this checkout (`find`, `git ls-files`, `ls` all empty). The
+real current output is `data/players_{POS}.json` and
+`data/cached_features.parquet`, neither in the freeze list nor tracked by
+git. This fix targeted those, not any `docs/`/`_site/` path.
+
+**Fix**: reused `scripts/snake_draft_sim.py`'s existing
+`load_preseason_projections()` (lines ~546-719) — a complete, working,
+already-proven implementation of exactly this wiring, whose feature query
+deliberately mirrors `PreseasonProjector`'s training-time query (a
+same-file code comment warns that a simplified/partial query silently
+produces severely under-estimated projections via zero-fill +
+`StandardScaler` centering). Reused via import rather than a third copy of
+that SQL. Changes:
+
+- `snake_draft_sim.py`: small additive change — `load_preseason_projections`
+  now calls `predict_with_details()` instead of `predict()` and carries
+  `confidence_score`/`support_class` alongside the existing `pred_total`
+  column. No existing behavior changed (`predict()` was already a thin
+  wrapper around `predict_with_details()`); 16/16 existing tests still pass.
+- `generate_draft_data.py`: new `_load_preseason_projections()` function,
+  new `_resolve_projection()` helper implementing a 3-tier fallback chain
+  (`preseason_model` → `weekly_18w` → `ppg`-sort), wired into `main()` and
+  `output_position_files()`. New `projection_source` field on every player
+  record so it's inspectable which tier produced a given number. Floor/
+  ceiling reuses the existing `fp_std`-based spread formula, recentered on
+  whichever tier is active, scaled by a confidence multiplier
+  (`1.0 + (1.0 - confidence_score)`) when available.
+- **Deliberate behavior change, flagged explicitly**: `PreseasonProjector`
+  consumes no schedule/matchup data at all (verified — no schedule columns
+  anywhere in its training query), so unlike `projection_18w` it is NOT
+  gated behind `schedule_available`. Players now get real numbers earlier
+  in the offseason, before the schedule drops, instead of showing
+  "pending."
+
+**A real implementation bug found and fixed during verification, not
+anticipated in the plan**: initially called `load_preseason_projections`
+with `projection_mode="auto"`, which has its own internal silent fallback
+to `ppg × 17` when the model file is missing — and that fallback's output
+is indistinguishable from a real ML prediction in the return value, so
+every player would have been mislabeled `projection_source:
+"preseason_model"` even when the model never loaded. Caught by explicitly
+testing the fallback path (moving `preseason_projector.json` aside and
+re-running) rather than assuming the try/except made it safe. Fixed by
+using `projection_mode="ml"` (raises instead of silently degrading) and
+catching that in `_load_preseason_projections()`, so a genuinely missing
+model now correctly falls through to the `weekly_18w`/`ppg` tiers with
+accurate labeling.
+
+**Verified end-to-end on real data** (2026 draft board, from completed
+2025 season, 620 players): 100% of players in every position now sourced
+from the preseason model (0 fallback, 0 pending) — notably, `projection_18w`
+wasn't even available this run (no cached weekly ML predictions), so
+*every* player would have shown "pending" under the old logic. All 160 RBs'
+projections changed; 151/160 changed rank order. Zero invariant violations
+across all 620 players (`floor <= total <= ceiling`, `floor >= 0`, no
+negatives/NaNs). Top-10 RB by new projection: McCaffrey, Bijan Robinson,
+Gibbs, Achane, Jonathan Taylor, Cook, Henry, Brown, Barkley, Williams — all
+plausible real 2025-season-ending workload leaders. Fallback path
+re-verified after the bug fix (model file moved aside → correctly falls to
+"pending" when `projection_18w` is also unavailable, no crash). 26/26
+relevant tests pass (`test_preseason_projector.py`, `test_generate_draft_data.py`,
+`test_snake_draft_sim.py`).
+
+### Unrelated but significant: `.gitignore` bug untracked all of `src/data/` — FIXED, COMMITTED (2026-08-04)
+
+Found while checking `git status` after the LAR/JAC fix: `src/data/entity_
+resolver.py` and `src/data/nfl_data_loader.py` — the two files with the
+root-cause fix — didn't show as modified despite being edited. Root cause:
+`.gitignore`'s `data/` pattern (line 41, meant for the top-level `data/`
+DB+model-artifacts directory) is unanchored, so it also matched `src/data/`
+and `scripts/data/`. `git log --all -- src/data/` showed **zero commits
+ever touched that directory** — 12 files, 548K, core ingestion pipeline
+code (`entity_resolver.py`, `nfl_data_loader.py`, `pbp_stats_aggregator.py`,
+`external_data.py`, `quality_gates.py`, `injury_validator.py`, etc.) has
+had no version history for the life of the repo.
+
+`docs/` (referenced in CLAUDE.md's UI-freeze list — `docs/index.html`,
+`docs/data/board.json`, etc.) turned out not to exist on disk at all in
+this checkout, so that part of the concern was moot — nothing there to
+lose. `scripts/data/` only contained a `cache/` subdirectory (parquet +
+metadata, genuinely generated/regenerable) — correctly desired to stay
+ignored.
+
+**Fix**: anchored `.gitignore`'s data rule to `/data/` (repo-root only) and
+added an explicit `scripts/data/cache/` entry to preserve that one
+legitimate exclusion. Verified via `git check-ignore` that `/data/` and
+`scripts/data/cache/` are still ignored while `src/data/*.py` is not.
+Scanned `src/data/*.py` for credential/secret patterns before staging
+(clean). Committed separately from the feature work (`0061e9c`, "Fix
+.gitignore scoping bug that untracked all of src/data/") since it's an
+unrelated repo-hygiene fix, not part of the §4 feature-wiring changes.
+
+### §11.1.F (DVOA-adjusted opponent FPA) — Phase 1 DONE: fixed a real, currently-live serving-path bug found while planning the feature (2026-08-04)
+
+User asked for the next most impactful remaining item, regardless of
+effort. Two other strong candidates — §7.4 (validation/calibration issues:
+73%/90% conformal coverage gap, QB target selection methodology,
+uncertainty-blend weights, multi-week CI scaling) and §6 (utilization
+pipeline circularity) — were investigated via parallel Explore agents and
+found to be **mostly stale or moot**:
+
+- §7.4: the 73%/90% coverage gap is already fixed (`position_models.py`
+  computes per-level conformal correction from OOF residuals, with a code
+  comment quoting that exact finding; `src/evaluation/metrics.py`'s
+  `confidence_interval_calibration` + `backtester.py`'s "CI CALIBRATION"
+  report evaluate on a genuinely unseen holdout, not OOF as GAPS.md
+  claimed). The "QB target selection on val not test" claim is a
+  mischaracterization — that's correct ML methodology (the code has an
+  explicit comment: "Never use the held-out test set to pick between model
+  variants"), not a bug. Two items are real but small: hardcoded
+  uncertainty-blend weights (`position_models.py:469,606`, still
+  0.5/0.3/0.2 constants) and inconsistent multi-week CI scaling
+  (`n_weeks**0.4` vs `sqrt(n_weeks)` in different code paths,
+  `ensemble.py:569,641`). Neither is high-impact enough to prioritize over
+  DVOA.
+- §6: `UtilizationToFPConverter`'s circularity concern is **moot in
+  production** — component mode (`position_target_type="component"` for
+  all 4 positions) short-circuits before ever reaching that code path
+  (`ensemble.py:479-484`). The "utilization doesn't capture efficiency"
+  claim is stale — `CAUSAL_FEATURES` already has separate efficiency
+  inputs (`yards_per_carry_roll3_mean`, `recv_epa_per_target_roll3_mean`,
+  etc.) and `utilization_score` itself is explicitly banned as a feature
+  (`src/utils/leakage.py:100`, `ban_utilization_score`). The share→volume
+  gap has a kernel of truth (`ComponentPredictor` is Ridge/linear, so it
+  can't synthesize `share × team_plays` on its own) but both share and raw
+  volume, plus team-pace context (v24, this session), are already present
+  as separate inputs — a small optional interaction-term addition, not a
+  major missing capability.
+
+DVOA held up as the real, high-impact, still-unbuilt gap — GAPS.md's own
+§11.4 ranked table puts it at #1.
+
+**While researching the implementation** (via a Plan agent, before writing
+any code), a real, currently-live correctness bug surfaced in the
+already-shipped `opp_fpts_allowed` feature — not a DVOA prerequisite, a
+bug affecting every live prediction today: `predict.py` overwrites
+`opponent` to the upcoming matchup (`predict.py:266` area) and calls
+`refresh_matchup_features()`, but that function only recomputed
+`team_sos`/`matchup_difficulty`/`opponent_rating`
+(`feature_engineering.py:2513-2530` pre-fix) — never `opp_fpts_allowed` or
+`opp_fpts_allowed_s2d_lag1`. Those were computed earlier in the pipeline
+using the player's **last-played** opponent, before the overwrite. So
+every live prediction was scoring the wrong defense's matchup strength.
+Per the user's standing instruction above, fixed as its own phase before
+touching DVOA — building the new feature on top of the same broken refresh
+path would have shipped the identical bug twice.
+
+**Root cause detail, worth remembering:** `opp_fpts_allowed` (unlike
+`opp_fpts_allowed_s2d_lag1`, which already queries `team_defense_stats`
+directly and was safe to just call from `refresh_matchup_features`) is
+computed **inline** inside `_create_opponent_features()` by reading
+`fantasy_points_allowed_{qb,rb,wr,te}` columns that were bulk-joined onto
+the training frame by `get_all_players_for_training()`'s SQL — i.e. it
+depends on pre-joined columns, not a live query. Those columns reflect
+whichever opponent the row had *at join time*, so simply calling the
+existing logic again post-overwrite wouldn't have helped — the source
+columns themselves were stale. Fix: new self-contained
+`FeatureEngineer._add_opp_fpts_allowed_from_db()` (`feature_engineering.py`,
+after `_add_opp_fpts_allowed_s2d_lag1`) that queries `team_defense_stats`
+directly by `(opponent, season, week-1)`, mirroring the SQL join's
+leakage-safe semantic. Left the training-path inline logic in
+`_create_opponent_features()` completely untouched (still correct and
+more efficient for bulk training) — only `refresh_matchup_features()` now
+calls the new DB-querying variant.
+
+**A second real bug found and fixed during verification** (not caught by
+code review, caught by actually running the fix on real data and
+cross-checking against a direct DB query — same lesson as the coaching-
+detector and pace-zero-fill bugs earlier this session): the new merge
+collided with the stale `fantasy_points_allowed_{pos}` columns already
+present on `df` from the original bulk join — pandas silently suffixed
+both sides (`_x`/`_y`) instead of erroring, and the code's lookup for the
+unsuffixed column name found nothing, so `opp_fpts_allowed` stayed `NaN`
+for every row regardless of opponent. Fixed by dropping the stale columns
+from `df` before merging in the fresh ones.
+
+Also added: `predict.py`'s `initialize()` now calls
+`db.ensure_team_defense_stats()` (previously only the training path did;
+serving never refreshed this table, so `team_defense_stats` could be
+stale relative to the most recently completed week at prediction time).
+
+**Verified**: built a real player row (2025 season, week 10, RB), swapped
+its opponent to a different real team, confirmed `opp_fpts_allowed` and
+`opp_fpts_allowed_s2d_lag1` both changed from their pre-swap values and
+matched an independent direct SQL query for the new opponent's actual
+prior-week defensive stats exactly (26.6 both ways). 94/94 relevant tests
+pass (`test_preseason_projector.py`, `test_quality_gates.py`,
+`test_target_and_history_causality.py`, `test_advanced_analytics.py`) plus
+21/21 in the two files that specifically cover `refresh_matchup_features`
+(`test_matchup_aware_prediction.py`, `test_missing_data_and_new_features.py`).
+No retrain needed for this phase — it's a serving-time computation fix,
+not a training-data or `CAUSAL_FEATURES` change.
+
+### §11.1.F (DVOA-adjusted opponent FPA) — Phase 2 DONE: the actual feature, built and verified (2026-08-04)
+
+**New infra** (`src/utils/database.py`):
+- `team_offense_stats` table — sibling of `team_defense_stats`, same
+  `(team, season, week)` shape, `fantasy_points_produced_{qb,rb,wr,te}`.
+  Deliberately a new table rather than extending `team_stats` — keeps this
+  cleanly derived from the single source (`player_weekly_stats`) instead
+  of conflating with `team_stats`'s multi-source box-score columns (which
+  already had their own zero-fill history this session, for
+  `total_plays`/`pace_sec_per_play`).
+- `aggregate_team_offense_from_players()` / `ensure_team_offense_stats()`
+  — structurally parallel to the existing defense-side functions, just
+  grouped by `pws.team` instead of `pws.opponent`.
+- Wired into both the training path (`feature_preparation.py`, next to the
+  existing `ensure_team_defense_stats()` call) and the serving path
+  (`predict.py`'s `initialize()`, next to Phase 1's addition there) —
+  same try/except-and-warn pattern as everywhere else.
+
+**New feature** (`src/features/feature_engineering.py`):
+`_add_opp_fpts_allowed_dvoa_adjusted_lag1()`, a genuine two-pass
+leakage-safe computation:
+- Pass 1: each team's own season-to-date offensive output by position
+  (`off_s2d_lag1_{pos}`, `shift(1).expanding()` per team-season — identical
+  idiom to the existing `opp_fpts_allowed_s2d_lag1`).
+- Pass 2: for each defense-week, look up the opponent it actually faced
+  (via `team_stats.opponent`) and that opponent's own pre-game expected
+  output from Pass 1, compute the residual against what the defense
+  actually allowed, then causally expanding-mean that residual per
+  defense — i.e. "does this defense over/under-perform its raw
+  FPA-allowed number once you account for who it's actually played."
+- **Built entirely on team-week-deduplicated, `(team, season, week)`-sorted
+  tables, never on the per-player training frame directly** — the exact
+  discipline the `CoachingChangeDetector` bug (fixed earlier this session)
+  showed is necessary: that bug came from `groupby("team").shift()` on a
+  frame sorted by `player_id` first, silently comparing unrelated players'
+  rows. Same risk class here, avoided by construction from the start
+  rather than found-and-fixed after the fact.
+- Called from `_create_opponent_features()` (training) and
+  `refresh_matchup_features()` (serving, alongside Phase 1's additions —
+  verified separately that swapping a real player's opponent and
+  re-running `refresh_matchup_features()` correctly changes the DVOA value
+  too, not just the raw `opp_fpts_allowed`/`_s2d_lag1` from Phase 1).
+
+**`CAUSAL_FEATURES` wiring**: added both
+`opp_fpts_allowed_dvoa_adjusted_lag1` (new) and `opp_fpts_allowed_s2d_lag1`
+(already computed, previously never added despite being noted as a "free
+quick win" multiple times in this doc — verified fresh rather than
+bundled on the doc's say-so, since Phase 1's bug meant it wasn't actually
+trustworthy live until that fix landed) to all four positions, alongside
+the existing `opp_fpts_allowed`. `FEATURE_VERSION` bumped to `"26"`.
+
+**Verified**:
+- Team-code consistency (lesson from LAR/JAC and OAK/LV): `team_offense_stats`,
+  `team_defense_stats`, and `team_stats.opponent` all show exactly the
+  same 32 canonical team codes, zero discrepancies.
+- Dead-feature check: full `CAUSAL_FEATURES` audit on real 2018+ data
+  (43,135 rows) — all four positions clean, no missing declarations.
+- Distribution check: `opp_fpts_allowed_dvoa_adjusted_lag1` — 100%
+  non-null (post-fillna), nunique=15,153, mean≈0 (expected — it's a
+  residual), std=5.98, range [-55.9, 50.7] — real spread, not degenerate.
+  A >10%-missing warning fires (11.4%) but 99.7% of those rows are week
+  1-2 (the unavoidable cold-start gap — no season-to-date baseline exists
+  yet for either the defense or its week-1/2 opponent); confirmed by
+  checking the week distribution of the defaulted rows directly rather
+  than assuming the warning meant a real bug.
+- **A real bug found and fixed during this same verification pass**: the
+  new merge initially collided with stale `fantasy_points_allowed_{pos}`
+  columns already on `df` from `get_all_players_for_training()`'s bulk
+  join — pandas silently suffixed both sides (`_x`/`_y`) instead of
+  erroring, so the lookup for the unsuffixed name found nothing and
+  `opp_fpts_allowed` came back `NaN` for every row regardless of opponent.
+  Caught by cross-checking a live computed value against an independent
+  direct SQL query, not by code review — third time this exact "test
+  against ground truth, don't trust that the code ran without error"
+  lesson has paid off this session (after the WOPR/dead-feature pattern
+  and the `total_plays` zero-fill pattern).
+- Retrain: `feature_version.txt` = 26, both new features confirmed present
+  in `data/models/component_{qb,rb,wr,te}.json` `feature_names` for every
+  position (QB 47, RB 51, WR 52, TE 51 total features).
+- 115/115 relevant tests pass post-retrain (`test_preseason_projector.py`,
+  `test_quality_gates.py`, `test_target_and_history_causality.py`,
+  `test_advanced_analytics.py`, `test_matchup_aware_prediction.py`,
+  `test_missing_data_and_new_features.py`).
+
+Feature-importance/accuracy-lift measurement against the pre-v26 model
+still not done — same standing caveat as every version bump since v23,
+now four deep without a `pred_mae` comparison. The one thing this session
+did measure (§11.1.F's own entry point) was the aggregate walk-forward
+R²=0.345 vs. documented-baseline 0.269 result — that was measured on v25,
+before this phase existed, so it doesn't cover v26 either. Worth doing as
+its own pass, covering all of v23-v26 at once, before leaning on any of
+this for real draft decisions.

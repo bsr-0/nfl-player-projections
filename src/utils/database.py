@@ -388,7 +388,43 @@ class DatabaseManager:
                     UNIQUE(team, season, week)
                 )
             """)
+
+            # Team offensive output per position, for DVOA-style
+            # opponent-adjustment of team_defense_stats (GAPS.md §11.1.F):
+            # "was this defense's FPA-allowed history against strong or
+            # weak offenses?" A sibling of team_defense_stats, same shape,
+            # derived from the single source of truth (player_weekly_stats)
+            # rather than the multi-source team_stats table.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS team_offense_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team TEXT NOT NULL,
+                    season INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    fantasy_points_produced_qb REAL DEFAULT 0,
+                    fantasy_points_produced_rb REAL DEFAULT 0,
+                    fantasy_points_produced_wr REAL DEFAULT 0,
+                    fantasy_points_produced_te REAL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(team, season, week)
+                )
+            """)
             
+            # Head coach identity per team-week (GAPS.md §4.G / §11.1.G).
+            # Sourced from nflverse games.csv home_coach/away_coach — the
+            # same file already used for schedule/Vegas ingestion.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS team_coaching_staff (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team TEXT NOT NULL,
+                    season INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    head_coach TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(team, season, week)
+                )
+            """)
+
             # Player team history
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS player_team_history (
@@ -1531,7 +1567,155 @@ class DatabaseManager:
                     pass
             conn.commit()
         return count
-    
+
+    def aggregate_team_offense_from_players(self, season: int = None) -> pd.DataFrame:
+        """
+        Aggregate team_offense_stats from player_weekly_stats: fantasy
+        points PRODUCED by each team's offense, by position, per team-week.
+
+        Sibling of aggregate_team_defense_from_players (same shape, same
+        source table), but grouped by pws.team instead of pws.opponent —
+        this measures offensive output, not points allowed. Used as Pass 1
+        of the DVOA-style opponent-adjustment (GAPS.md §11.1.F): a
+        defense's FPA-allowed history is only meaningful once corrected for
+        how strong the offenses it faced actually were.
+        """
+        fp_query = """
+            SELECT
+                pws.team AS team,
+                pws.season,
+                pws.week,
+                SUM(CASE WHEN p.position = 'QB' THEN pws.fantasy_points ELSE 0 END) AS fantasy_points_produced_qb,
+                SUM(CASE WHEN p.position = 'RB' THEN pws.fantasy_points ELSE 0 END) AS fantasy_points_produced_rb,
+                SUM(CASE WHEN p.position = 'WR' THEN pws.fantasy_points ELSE 0 END) AS fantasy_points_produced_wr,
+                SUM(CASE WHEN p.position = 'TE' THEN pws.fantasy_points ELSE 0 END) AS fantasy_points_produced_te
+            FROM player_weekly_stats pws
+            JOIN players p ON pws.player_id = p.player_id
+            WHERE pws.team IS NOT NULL AND pws.team != ''
+        """
+        params = []
+        if season is not None:
+            fp_query += " AND pws.season = ?"
+            params.append(season)
+        fp_query += " GROUP BY pws.team, pws.season, pws.week ORDER BY pws.season, pws.week"
+
+        with self._get_connection() as conn:
+            return pd.read_sql_query(fp_query, conn, params=params)
+
+    def ensure_team_offense_stats(self, season: int = None) -> int:
+        """Populate team_offense_stats from player_weekly_stats. Returns number of rows upserted."""
+        agg = self.aggregate_team_offense_from_players(season=season)
+        if agg.empty:
+            return 0
+        count = 0
+        with self._get_connection() as conn:
+            cur = conn.cursor()
+            for _, row in agg.iterrows():
+                try:
+                    cur.execute("""
+                        INSERT OR REPLACE INTO team_offense_stats
+                        (team, season, week, fantasy_points_produced_qb, fantasy_points_produced_rb,
+                         fantasy_points_produced_wr, fantasy_points_produced_te)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row["team"], int(row["season"]), int(row["week"]),
+                        float(row.get("fantasy_points_produced_qb", 0)),
+                        float(row.get("fantasy_points_produced_rb", 0)),
+                        float(row.get("fantasy_points_produced_wr", 0)),
+                        float(row.get("fantasy_points_produced_te", 0)),
+                    ))
+                    count += 1
+                except Exception:
+                    pass
+            conn.commit()
+        return count
+
+    def ensure_team_coaching_staff(self, seasons: Optional[List[int]] = None,
+                                    force_refresh: bool = False) -> int:
+        """Populate team_coaching_staff (head coach identity per team-week).
+
+        Unlike ensure_team_defense_stats, this isn't derivable from local
+        player_weekly_stats — it fetches nflverse's games.csv (via
+        nfl_data_py.import_schedules, the same source already used for
+        schedule/Vegas ingestion) which carries home_coach/away_coach per
+        game. Only fetches seasons not already present unless
+        force_refresh=True (coaching changes are rare enough — a season
+        already in the table is refreshed on-demand elsewhere if a
+        mid-season change happens; see backfill_coaching_staff.py for a
+        manual full refresh). Network failures degrade gracefully to a
+        no-op (existing data, if any, is left as-is) rather than raising,
+        matching the try/except pattern used for other external-data calls
+        in _prepare_training_data.
+        """
+        with self._get_connection() as conn:
+            existing_seasons = set(
+                pd.read_sql_query(
+                    "SELECT DISTINCT season FROM team_coaching_staff", conn
+                )["season"].tolist()
+            )
+
+        if seasons is None:
+            with self._get_connection() as conn:
+                seasons = [
+                    int(s) for s in pd.read_sql_query(
+                        "SELECT DISTINCT season FROM player_weekly_stats", conn
+                    )["season"].tolist()
+                ]
+
+        target_seasons = seasons if force_refresh else [
+            s for s in seasons if s not in existing_seasons
+        ]
+        if not target_seasons:
+            return 0
+
+        try:
+            import nfl_data_py as nfl
+            games = nfl.import_schedules(target_seasons)
+        except Exception as e:
+            print(f"  WARNING: team_coaching_staff refresh skipped (fetch failed): {e}")
+            return 0
+
+        if games.empty or "home_coach" not in games.columns:
+            return 0
+
+        team_week = pd.concat([
+            games[["season", "week", "home_team", "home_coach"]].rename(
+                columns={"home_team": "team", "home_coach": "head_coach"}
+            ),
+            games[["season", "week", "away_team", "away_coach"]].rename(
+                columns={"away_team": "team", "away_coach": "head_coach"}
+            ),
+        ], ignore_index=True)
+        team_week = team_week.dropna(subset=["team", "head_coach"])
+
+        # nfl_data_py.import_schedules() uses the team code that was
+        # historically accurate at the time (e.g. "OAK" for 2018-2019),
+        # while player_weekly_stats.team is already normalized to the
+        # current franchise code (e.g. "LV") for those same seasons — same
+        # class of mismatch as the JAX/LA fix earlier this session. Apply
+        # the same canonical alias map so the two join cleanly.
+        from src.data.entity_resolver import EntityResolver
+        team_week["team"] = team_week["team"].map(EntityResolver.normalize_team_code)
+
+        count = 0
+        with self._get_connection() as conn:
+            cur = conn.cursor()
+            for _, row in team_week.iterrows():
+                try:
+                    cur.execute("""
+                        INSERT OR REPLACE INTO team_coaching_staff
+                        (team, season, week, head_coach)
+                        VALUES (?, ?, ?, ?)
+                    """, (
+                        str(row["team"]), int(row["season"]), int(row["week"]),
+                        str(row["head_coach"]),
+                    ))
+                    count += 1
+                except Exception:
+                    pass
+            conn.commit()
+        return count
+
     def populate_player_team_history(self) -> int:
         """Derive player_team_history from player_weekly_stats.
 
@@ -1617,7 +1801,8 @@ class DatabaseManager:
                    ts.pace_sec_per_play as team_pace_sec_per_play,
                    tds.fantasy_points_allowed_qb, tds.fantasy_points_allowed_rb,
                    tds.fantasy_points_allowed_wr, tds.fantasy_points_allowed_te,
-                   tds.week as opp_defense_week
+                   tds.week as opp_defense_week,
+                   tcs.head_coach
             FROM player_weekly_stats pws
             JOIN players p ON pws.player_id = p.player_id
             LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
@@ -1626,6 +1811,8 @@ class DatabaseManager:
                 AND pws.season = ts.season AND pws.week = ts.week
             LEFT JOIN team_defense_stats tds ON pws.opponent = tds.team
                 AND tds.season = pws.season AND tds.week = pws.week - 1
+            LEFT JOIN team_coaching_staff tcs ON pws.team = tcs.team
+                AND pws.season = tcs.season AND pws.week = tcs.week
         """
         params = []
         

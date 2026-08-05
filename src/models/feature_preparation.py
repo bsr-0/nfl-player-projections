@@ -224,9 +224,10 @@ def _apply_bounded_scaling(
         if not test_df.empty and pd.api.types.is_integer_dtype(test_df[col]):
             test_df[col] = test_df[col].astype(float)
     train_vals = train_df[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
-    test_vals = test_df[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
     train_df.loc[:, cols] = scaler.fit_transform(train_vals)
-    test_df.loc[:, cols] = scaler.transform(test_vals)
+    if not test_df.empty:
+        test_vals = test_df[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
+        test_df.loc[:, cols] = scaler.transform(test_vals)
     artifact["scaler"] = scaler
     try:
         import joblib
@@ -265,6 +266,15 @@ def _prepare_training_data(
         db.ensure_team_defense_stats()
     except Exception as e:
         logger.warning("Team defense stats (DVP) skipped: %s", e)
+
+    # Team offensive output, for DVOA-style opponent-adjustment of the
+    # above (GAPS.md §11.1.F).
+    try:
+        from src.utils.database import DatabaseManager
+        db = DatabaseManager()
+        db.ensure_team_offense_stats()
+    except Exception as e:
+        logger.warning("Team offense stats (DVOA adjustment) skipped: %s", e)
 
     # External (Vegas, injury, weather) with shared train/test temporal context.
     try:

@@ -8,7 +8,6 @@ import pandas as pd
 from src.models.preseason_projector import (
     BASE_FEATURES_BY_POSITION,
     CALIBRATION_FEATURES_BY_POSITION,
-    MarketAnchorCurve,
     PreseasonProjector,
     UpstreamCalibrator,
 )
@@ -47,15 +46,6 @@ def _rb_rows() -> pd.DataFrame:
                         "rush_share": min(0.85, snap + 0.08),
                         "target_share": min(0.22, 0.08 + targets / 60.0),
                         "season_total": total_base + season_bump + 1.7 * replica,
-                        "preseason_ecr": (
-                            16 + replica + (curr_season - 2024) * 3
-                            if group == "starter"
-                            else 78 + replica + (curr_season - 2024) * 5
-                            if group == "committee"
-                            else 170 + replica + (curr_season - 2024) * 9
-                            if group == "backup"
-                            else 118 + replica + (curr_season - 2024) * 6
-                        ),
                     }
                 )
     return pd.DataFrame(rows)
@@ -90,15 +80,6 @@ def _wr_rows() -> pd.DataFrame:
                         "air_yards_pg": 88.0 + 4.1 * replica,
                         "target_share": min(0.34, 0.09 + targets / 40.0),
                         "season_total": total_base + season_bump + 1.8 * replica,
-                        "preseason_ecr": (
-                            12 + replica + (curr_season - 2024) * 2
-                            if group == "starter"
-                            else 65 + replica + (curr_season - 2024) * 4
-                            if group == "committee"
-                            else 165 + replica + (curr_season - 2024) * 8
-                            if group == "backup"
-                            else 108 + replica + (curr_season - 2024) * 5
-                        ),
                     }
                 )
     return pd.DataFrame(rows)
@@ -131,7 +112,6 @@ def _qb_rows() -> pd.DataFrame:
                         "rushing_yards_pg": 22.0 + 1.2 * replica,
                         "completion_pct": 66.0 + 0.2 * replica,
                         "season_total": total_base + season_bump + 2.0 * replica,
-                        "preseason_ecr": 15 + replica if group == "starter" else 145 + replica,
                     }
                 )
     return pd.DataFrame(rows)
@@ -164,7 +144,6 @@ def _te_rows() -> pd.DataFrame:
                         "receiving_yards_pg": 39.0 + 2.2 * replica + targets * 4.6,
                         "target_share": min(0.28, 0.08 + targets / 35.0),
                         "season_total": total_base + season_bump + 1.5 * replica,
-                        "preseason_ecr": 28 + replica if group == "starter" else 95 + replica if group == "committee" else 182 + replica,
                     }
                 )
     return pd.DataFrame(rows)
@@ -200,23 +179,7 @@ def test_prepare_feature_frame_derives_interactions_and_support_features():
     assert out.loc[0, "low_information_score"] == 1.0 - out.loc[0, "confidence_score"]
 
 
-def test_market_anchor_curve_predicts_from_preseason_ecr():
-    curve = MarketAnchorCurve(
-        position="RB",
-        intercept=420.0,
-        coef_log_ecr=-42.0,
-        coef_inv_sqrt_ecr=60.0,
-        sample_size=40,
-    )
-    ecr = pd.Series([5.0, 25.0, np.nan, 100.0])
-
-    pred = curve.predict_series(ecr)
-
-    assert pred.iloc[0] > pred.iloc[1] > pred.iloc[3]
-    assert np.isnan(pred.iloc[2])
-
-
-def test_upstream_calibrator_is_bounded_and_market_aware():
+def test_upstream_calibrator_is_bounded_by_confidence():
     prepared = pd.DataFrame(
         {
             "confidence_score": [0.15, 0.90],
@@ -232,27 +195,22 @@ def test_upstream_calibrator_is_bounded_and_market_aware():
             "targets_pg": [2.0, 4.6],
             "ppg_x_carries_pg": [44.0, 272.0],
             "low_volume_efficiency_flag": [1.0, 0.0],
-            "market_anchor": [120.0, 240.0],
-            "market_gap": [0.0, 0.0],
             "raw_pred_x_confidence": [0.0, 0.0],
-            "market_gap_x_low_information": [0.0, 0.0],
         }
     )
     raw = np.array([60.0, 230.0])
     prepared["raw_pred"] = raw
-    prepared["market_gap"] = prepared["market_anchor"] - raw
     prepared["raw_pred_x_confidence"] = raw * prepared["confidence_score"]
-    prepared["market_gap_x_low_information"] = prepared["market_gap"] * prepared["low_information_score"]
 
+    features = [f for f in CALIBRATION_FEATURES_BY_POSITION["RB"] if f in prepared.columns]
     calibrator = UpstreamCalibrator(
         position="RB",
-        features=[f for f in CALIBRATION_FEATURES_BY_POSITION["RB"] if f in prepared.columns],
-        coef=[0.0] * len([f for f in CALIBRATION_FEATURES_BY_POSITION["RB"] if f in prepared.columns]),
+        features=features,
+        coef=[0.0] * len(features),
         intercept=500.0,
-        scaler_mean=[0.0] * len([f for f in CALIBRATION_FEATURES_BY_POSITION["RB"] if f in prepared.columns]),
-        scaler_scale=[1.0] * len([f for f in CALIBRATION_FEATURES_BY_POSITION["RB"] if f in prepared.columns]),
+        scaler_mean=[0.0] * len(features),
+        scaler_scale=[1.0] * len(features),
         max_adjustment_share=0.30,
-        market_weight_cap=0.36,
         sample_size=20,
         train_mae_before=20.0,
         train_mae_after=15.0,
@@ -260,12 +218,13 @@ def test_upstream_calibrator_is_bounded_and_market_aware():
 
     pred = calibrator.calibrate(prepared, raw)
 
+    # Low-confidence row gets pulled up toward the (constant) calibrated
+    # candidate; high-confidence row is barely adjusted.
     assert pred[0] > raw[0]
-    assert pred[0] < 120.0
     assert pred[1] <= raw[1] + 20.0
 
 
-def test_upstream_calibrator_handles_scalar_market_anchor():
+def test_upstream_calibrator_handles_missing_features_gracefully():
     prepared = pd.DataFrame(
         {
             "confidence_score": [0.35, 0.85],
@@ -282,11 +241,10 @@ def test_upstream_calibrator_handles_scalar_market_anchor():
             "ppg_x_carries_pg": [54.0, 225.0],
             "low_volume_efficiency_flag": [1.0, 0.0],
             "raw_pred_x_confidence": [0.0, 0.0],
-            "market_gap_x_low_information": [0.0, 0.0],
         }
     )
     raw = np.array([80.0, 210.0])
-    features = [f for f in CALIBRATION_FEATURES_BY_POSITION["RB"] if f in prepared.columns or f == "market_anchor"]
+    features = CALIBRATION_FEATURES_BY_POSITION["RB"]
     calibrator = UpstreamCalibrator(
         position="RB",
         features=features,
@@ -295,13 +253,12 @@ def test_upstream_calibrator_handles_scalar_market_anchor():
         scaler_mean=[0.0] * len(features),
         scaler_scale=[1.0] * len(features),
         max_adjustment_share=0.20,
-        market_weight_cap=0.20,
         sample_size=20,
         train_mae_before=20.0,
         train_mae_after=15.0,
     )
 
-    out = calibrator.calibrate(prepared.assign(market_anchor=np.float64(180.0)), raw)
+    out = calibrator.calibrate(prepared, raw)
 
     assert out.shape == (2,)
     assert np.all(np.isfinite(out))
@@ -324,7 +281,7 @@ def test_fit_learns_position_specific_models_and_calibration():
     assert projector.audit_report["overall"]["pred_mae"] <= projector.audit_report["overall"]["base_mae"] + 3.0
 
 
-def test_predict_keeps_public_contract_and_can_use_market_when_present():
+def test_predict_keeps_public_contract():
     projector = PreseasonProjector().fit(_training_pairs())
     players = pd.DataFrame(
         [
@@ -345,7 +302,6 @@ def test_predict_keeps_public_contract_and_can_use_market_when_present():
                 "receiving_yards_pg": 28.0,
                 "rush_share": 0.70,
                 "target_share": 0.14,
-                "preseason_ecr": 18.0,
             },
             {
                 "player_id": "rb_test_2",
@@ -364,7 +320,6 @@ def test_predict_keeps_public_contract_and_can_use_market_when_present():
                 "receiving_yards_pg": 13.0,
                 "rush_share": 0.24,
                 "target_share": 0.07,
-                "preseason_ecr": 170.0,
             },
         ]
     )
@@ -377,11 +332,10 @@ def test_predict_keeps_public_contract_and_can_use_market_when_present():
     assert list(details.columns) == [
         "base_pred",
         "pred",
-        "market_anchor",
         "confidence_score",
         "support_class",
     ]
-    assert details.loc[players.index[0], "market_anchor"] > details.loc[players.index[1], "market_anchor"]
+    assert details.loc[players.index[0], "pred"] > details.loc[players.index[1], "pred"]
 
 
 def test_save_and_load_round_trip_new_schema(tmp_path):
@@ -458,12 +412,11 @@ def test_load_legacy_schema_remains_supported(tmp_path):
     assert pred[0] > pred[1]
 
 
-def test_upstream_audit_contains_market_alignment_fields():
+def test_upstream_audit_contains_outcome_fields():
     projector = PreseasonProjector().fit(_training_pairs())
     audit = projector.get_upstream_audit_report()
 
     assert "overall" in audit
-    assert "pred_market_mae" in audit["overall"]
-    assert "pred_large_divergence_share" in audit["overall"]
-    assert "pred_rb_wr_gap_excess" in audit["overall"]
-    assert "cohort_market_error" in audit
+    assert "pred_mae" in audit["overall"]
+    assert "pred_bias" in audit["overall"]
+    assert "by_position" in audit
