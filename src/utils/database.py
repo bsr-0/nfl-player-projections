@@ -149,8 +149,16 @@ class DatabaseManager:
                             f"ALTER TABLE player_weekly_stats ADD COLUMN "
                             f"{_validate_identifier(col)} {_validate_ddl(ddl)}"
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                # Unlike the schedule-table migration below, this loop
+                # already pre-checks existing_cols before each ALTER, so
+                # "duplicate column" should never happen here -- any
+                # exception reaching this except is a genuine, unexpected
+                # migration failure. A silent failure here means a column
+                # later code assumes exists silently doesn't (GAPS.md §9
+                # audit; this exact shape -- schema not actually matching
+                # what code expects -- has caused real bugs this session).
+                print(f"  WARNING: player_weekly_stats column migration failed: {e}")
 
             # Team stats
             cursor.execute("""
@@ -212,8 +220,13 @@ class DatabaseManager:
                             f"ALTER TABLE team_stats ADD COLUMN "
                             f"{_validate_identifier(col)} {_validate_ddl(ddl)}"
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                # Same reasoning as the player_weekly_stats migration
+                # above: existing_team_cols is pre-checked, so "duplicate
+                # column" shouldn't happen -- anything reaching here is
+                # a real, unexpected migration failure worth seeing
+                # (GAPS.md §9 audit).
+                print(f"  WARNING: team_stats column migration failed: {e}")
             
             # NFL Schedule
             cursor.execute("""
@@ -246,8 +259,14 @@ class DatabaseManager:
             ):
                 try:
                     cursor.execute(col_sql)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # "duplicate column" is the expected/common case here
+                    # (this loop always runs, unlike the pre-checked
+                    # migrations above) -- swallow only that; anything
+                    # else is a real, unexpected failure worth seeing
+                    # (GAPS.md §9 audit).
+                    if "duplicate column" not in str(e).lower():
+                        print(f"  WARNING: schedule column migration failed ({col_sql}): {e}")
 
             # Injury reports — point-in-time pre-game status per (player, week).
             # Populated by scripts/backfill_injuries.py from nfl_data_py's
@@ -410,6 +429,33 @@ class DatabaseManager:
                 )
             """)
             
+            # Offensive personnel grouping usage per team-week (GAPS.md
+            # §3.3/§11.1.E). Parsed from PBP's offense_personnel string
+            # column (e.g. "1 RB, 2 TE, 2 WR") on pass/run plays only.
+            # pct_11/12/21/13 are shares of that team-week's pass/run plays
+            # in each grouping (backfield count = RB+FB, per standard
+            # personnel notation); pct_other covers everything else
+            # (empty/heavy/unusual groupings). This is a same-week OUTCOME
+            # stat (what personnel a team actually used that week isn't
+            # known pre-game), so it must be consumed via a shifted rolling
+            # feature downstream, never as a same-week raw value.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS team_personnel_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team TEXT NOT NULL,
+                    season INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    pct_11 REAL DEFAULT 0,
+                    pct_12 REAL DEFAULT 0,
+                    pct_21 REAL DEFAULT 0,
+                    pct_13 REAL DEFAULT 0,
+                    pct_other REAL DEFAULT 0,
+                    n_plays INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(team, season, week)
+                )
+            """)
+
             # Head coach identity per team-week (GAPS.md §4.G / §11.1.G).
             # Sourced from nflverse games.csv home_coach/away_coach — the
             # same file already used for schedule/Vegas ingestion.
@@ -905,8 +951,11 @@ class DatabaseManager:
             try:
                 from src.utils.leakage import sanitize_schedule_df
                 df = sanitize_schedule_df(df)
-            except Exception:
-                pass
+            except Exception as e:
+                # Caller explicitly asked for scores stripped
+                # (include_scores=False); a silent failure here means
+                # score columns leak through anyway (GAPS.md §9 audit).
+                print(f"  WARNING: schedule sanitization failed, score columns may leak through: {e}")
         return df
     
     def import_schedule_from_csv(self, csv_path: str) -> int:
@@ -1716,6 +1765,77 @@ class DatabaseManager:
             conn.commit()
         return count
 
+    def ensure_team_personnel_stats(self, seasons: Optional[List[int]] = None,
+                                     force_refresh: bool = False) -> int:
+        """Populate team_personnel_stats (11/12/21/13/other personnel usage %).
+
+        Sourced from PBP's offense_personnel column via
+        get_personnel_groupings_from_pbp (GAPS.md §3.3/§11.1.E) — not
+        derivable from local player_weekly_stats, requires a PBP fetch per
+        season. Only fetches seasons not already present unless
+        force_refresh=True. Seasons before 2016 (where the PBP column
+        doesn't exist) return an empty frame and are silently skipped, not
+        an error. Network/parse failures degrade to a no-op per season,
+        matching the try/except pattern used for other external-data calls.
+        """
+        with self._get_connection() as conn:
+            existing_seasons = set(
+                pd.read_sql_query(
+                    "SELECT DISTINCT season FROM team_personnel_stats", conn
+                )["season"].tolist()
+            )
+
+        if seasons is None:
+            with self._get_connection() as conn:
+                seasons = [
+                    int(s) for s in pd.read_sql_query(
+                        "SELECT DISTINCT season FROM player_weekly_stats", conn
+                    )["season"].tolist()
+                ]
+
+        # PBP's offense_personnel column doesn't exist before 2016 — skip
+        # those seasons outright rather than paying a network fetch that's
+        # guaranteed to come back empty on every call.
+        PERSONNEL_COVERAGE_START = 2016
+        seasons = [s for s in seasons if s >= PERSONNEL_COVERAGE_START]
+
+        target_seasons = seasons if force_refresh else [
+            s for s in seasons if s not in existing_seasons
+        ]
+        if not target_seasons:
+            return 0
+
+        from src.data.pbp_stats_aggregator import get_personnel_groupings_from_pbp
+
+        count = 0
+        for season in target_seasons:
+            try:
+                df = get_personnel_groupings_from_pbp(season)
+            except Exception as e:
+                print(f"  WARNING: team_personnel_stats refresh skipped for {season} (fetch failed): {e}")
+                continue
+            if df.empty:
+                continue
+            with self._get_connection() as conn:
+                cur = conn.cursor()
+                for _, row in df.iterrows():
+                    try:
+                        cur.execute("""
+                            INSERT OR REPLACE INTO team_personnel_stats
+                            (team, season, week, pct_11, pct_12, pct_21, pct_13, pct_other, n_plays)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            str(row["team"]), int(row["season"]), int(row["week"]),
+                            float(row["pct_11"]), float(row["pct_12"]),
+                            float(row["pct_21"]), float(row["pct_13"]),
+                            float(row["pct_other"]), int(row["n_plays"]),
+                        ))
+                        count += 1
+                    except Exception:
+                        pass
+                conn.commit()
+        return count
+
     def populate_player_team_history(self) -> int:
         """Derive player_team_history from player_weekly_stats.
 
@@ -1802,7 +1922,9 @@ class DatabaseManager:
                    tds.fantasy_points_allowed_qb, tds.fantasy_points_allowed_rb,
                    tds.fantasy_points_allowed_wr, tds.fantasy_points_allowed_te,
                    tds.week as opp_defense_week,
-                   tcs.head_coach
+                   tcs.head_coach,
+                   tps.pct_11 as team_pct_11_personnel, tps.pct_12 as team_pct_12_personnel,
+                   tps.pct_21 as team_pct_21_personnel, tps.pct_13 as team_pct_13_personnel
             FROM player_weekly_stats pws
             JOIN players p ON pws.player_id = p.player_id
             LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
@@ -1813,6 +1935,8 @@ class DatabaseManager:
                 AND tds.season = pws.season AND tds.week = pws.week - 1
             LEFT JOIN team_coaching_staff tcs ON pws.team = tcs.team
                 AND pws.season = tcs.season AND pws.week = tcs.week
+            LEFT JOIN team_personnel_stats tps ON pws.team = tps.team
+                AND pws.season = tps.season AND pws.week = tps.week
         """
         params = []
         

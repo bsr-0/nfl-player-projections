@@ -41,8 +41,11 @@ def load_data():
         try:
             from src.utils.leakage import drop_leakage_columns
             df = drop_leakage_columns(df)
-        except Exception:
-            pass
+        except Exception as e:
+            # drop_leakage_columns exists specifically to strip leakage-prone
+            # columns before evaluation; a silent failure means they stay in
+            # (GAPS.md §9 audit).
+            print(f"  WARNING: leakage column drop failed, leaky columns may remain: {e}")
         print(f"Loaded {len(df):,} records")
         print(f"Seasons: {sorted(df['season'].unique())}")
         return df

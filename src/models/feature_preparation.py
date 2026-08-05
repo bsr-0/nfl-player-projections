@@ -276,6 +276,16 @@ def _prepare_training_data(
     except Exception as e:
         logger.warning("Team offense stats (DVOA adjustment) skipped: %s", e)
 
+    # Offensive personnel grouping usage (GAPS.md §3.3/§11.1.E). Only
+    # fetches seasons not already present, so this is cheap after the
+    # initial backfill; new weeks in the current season get picked up here.
+    try:
+        from src.utils.database import DatabaseManager
+        db = DatabaseManager()
+        db.ensure_team_personnel_stats()
+    except Exception as e:
+        logger.warning("Team personnel grouping stats skipped: %s", e)
+
     # External (Vegas, injury, weather) with shared train/test temporal context.
     try:
         from src.data.external_data import add_external_features

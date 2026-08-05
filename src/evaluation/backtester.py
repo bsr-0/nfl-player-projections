@@ -1603,8 +1603,15 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     try:
         from src.data.external_data import add_external_features
         test_data = add_external_features(test_data, seasons=list(test_data["season"].unique()))
-    except Exception:
-        pass
+    except Exception as e:
+        # A silent failure here means this backtest eval quietly runs
+        # without Vegas/weather/game-script features and nobody would
+        # know from the results alone -- worth surfacing (GAPS.md §9
+        # audit; this is the same class of blind spot that produced a
+        # false "flat" conclusion for the rookie-features ablation
+        # earlier this project until traced back to a missing pipeline
+        # stage).
+        print(f"  WARNING: external (Vegas/weather) features failed to load for backtest eval: {e}")
     test_data = add_advanced_features(add_engineered_features(test_data))
     
     # Create target columns for alignment with model expectations

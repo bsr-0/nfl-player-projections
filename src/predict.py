@@ -125,6 +125,10 @@ class NFLPredictor:
             self.db.ensure_team_offense_stats()
         except Exception as e:
             print(f"  Warning: team_offense_stats refresh skipped: {e}")
+        try:
+            self.db.ensure_team_personnel_stats()
+        except Exception as e:
+            print(f"  Warning: team_personnel_stats refresh skipped: {e}")
 
         # Load trained models
         self.predictor.load_models()

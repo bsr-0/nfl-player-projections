@@ -344,6 +344,9 @@ CAUSAL_FEATURES = {
         # v24: head-coach identity + coaching-change detection
         "coaching_change", "coaching_adaptation_score", "coaching_stability",
         "coaching_change_impact",
+        # v29: offensive personnel grouping usage (GAPS.md §3.3/§11.1.E).
+        # 12/21 personnel = extra blocker/2-back sets -> more RB opportunity.
+        "team_pct_12_personnel_roll3_mean", "team_pct_21_personnel_roll3_mean",
     ],
     "WR": [
         "snap_share_pct_roll3_mean",
@@ -393,6 +396,9 @@ CAUSAL_FEATURES = {
         # v24: head-coach identity + coaching-change detection
         "coaching_change", "coaching_adaptation_score", "coaching_stability",
         "coaching_change_impact",
+        # v29: offensive personnel grouping usage (GAPS.md §3.3/§11.1.E).
+        # 11 personnel (3 WR) is a spread-offense signal, ceiling for WR3+.
+        "team_pct_11_personnel_roll3_mean", "team_pct_12_personnel_roll3_mean",
     ],
     "TE": [
         "snap_share_pct_roll3_mean",
@@ -442,6 +448,10 @@ CAUSAL_FEATURES = {
         # v24: head-coach identity + coaching-change detection
         "coaching_change", "coaching_adaptation_score", "coaching_stability",
         "coaching_change_impact",
+        # v29: offensive personnel grouping usage (GAPS.md §3.3/§11.1.E).
+        # 12/13 personnel (2-3 TE sets) directly determines TE snap/route
+        # ceiling versus a 3-WR spread offense.
+        "team_pct_12_personnel_roll3_mean", "team_pct_13_personnel_roll3_mean",
     ],
     "QB": [
         # Volume (3-week rolling)
@@ -632,7 +642,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "28"  # v28: rookie_opportunity_score, rookie_breakout_prob, rookie_ceiling_ppg, rookie_floor_ppg (GAPS.md §7.2 follow-up) — promoted after fixing two dormant leakage bugs (full-season opportunity-score sum; same-week injury workload)
+FEATURE_VERSION = "29"  # v29: offensive personnel grouping usage (team_pct_11/12/21/13_personnel_roll3_mean, GAPS.md §3.3/§11.1.E) — parsed from PBP offense_personnel, 2016+ coverage
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

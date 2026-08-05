@@ -67,7 +67,13 @@ class InjuryImpactModel:
                 self.last_fetch = datetime.now()
                 
                 return pd.DataFrame(injuries)
-        except:
+        except Exception:
+            # NOTE: the parsing above is an unimplemented TODO stub --
+            # `injuries` is always [] regardless of what the API returns,
+            # so this function is currently a no-op either way. Narrowed
+            # from a bare `except:` (was catching SystemExit/KeyboardInterrupt
+            # too) during the GAPS.md §9 audit; the real fix here is
+            # implementing the parsing, which is out of scope for that audit.
             pass
         
         # Fallback: Return empty DataFrame

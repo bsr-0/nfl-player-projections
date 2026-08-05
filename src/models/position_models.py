@@ -120,6 +120,64 @@ class _IdentityScaler:
         return X
 
 
+# Historical hardcoded defaults (GAPS.md §7.4: "never tuned/validated").
+# Used as the fallback when OOF data is too small to run the grid search
+# below, so behavior is unchanged in that case.
+DEFAULT_BLEND_WEIGHTS_FULL = (0.5, 0.3, 0.2)     # (hetero, conformal, ensemble)
+DEFAULT_BLEND_WEIGHTS_NO_HETERO = (0.7, 0.3)     # (conformal, ensemble)
+
+# Coarse grid of candidate weight combinations (step 0.1, all >= 0, sum to 1).
+_WEIGHT_GRID_3WAY = [
+    (round(a / 10, 1), round(b / 10, 1), round((10 - a - b) / 10, 1))
+    for a in range(0, 11) for b in range(0, 11 - a)
+]
+_WEIGHT_GRID_2WAY = [(round(a / 10, 1), round((10 - a) / 10, 1)) for a in range(0, 11)]
+
+
+def _calibration_loss(oof_abs_resid: np.ndarray, blended_std: np.ndarray,
+                       nominal_levels, norm_dist) -> float:
+    """Mean squared log-ratio between each nominal CI level's empirical
+    quantile and its Gaussian z-score, using ``blended_std`` as the scale.
+
+    A blend that already matches the true residual distribution's shape
+    across quantiles needs the least per-level correction afterward — so
+    this is the same quantity the existing per-level conformal correction
+    (just below, in ``fit``) is designed to fix, used here as a search
+    objective to pick blend weights instead of accepting a fixed guess.
+    """
+    blended_std = np.maximum(blended_std, 1e-8)
+    standardized = oof_abs_resid / blended_std
+    losses = []
+    for level in nominal_levels:
+        z = norm_dist.ppf(0.5 + level / 2.0)
+        q = float(np.quantile(standardized, level))
+        if z <= 0 or q <= 0:
+            losses.append(10.0)
+            continue
+        losses.append(float(np.log(q / z)) ** 2)
+    return float(np.mean(losses))
+
+
+def _select_blend_weights(oof_abs_resid: np.ndarray, components: Dict[str, np.ndarray],
+                           order: List[str], grid, nominal_levels, norm_dist):
+    """Grid-search the blend weights (over ``order``, matching ``grid``'s
+    tuple order) that minimize ``_calibration_loss``. Returns the best
+    weight tuple; falls through to the caller's default if the grid is
+    empty or something goes wrong (caller decides the default)."""
+    best_weights = None
+    best_loss = np.inf
+    for weights in grid:
+        blended = np.zeros_like(oof_abs_resid, dtype=np.float64)
+        for name, w in zip(order, weights):
+            if w:
+                blended = blended + w * components[name]
+        loss = _calibration_loss(oof_abs_resid, blended, nominal_levels, norm_dist)
+        if loss < best_loss:
+            best_loss = loss
+            best_weights = weights
+    return best_weights, best_loss
+
+
 class PositionModel:
     """
     Position-specific ML model with hyperparameter tuning.
@@ -142,7 +200,12 @@ class PositionModel:
         self._uncertainty_model = None  # Heteroscedastic error model
         self._uncertainty_model_type = None
         self._uncertainty_scale_factor = 1.0  # Conformal recalibration factor
-    
+        # Uncertainty-blend weights (GAPS.md §7.4). None until fit() tunes
+        # them from OOF data; predict_with_uncertainty falls back to the
+        # historical hardcoded defaults when still None (e.g. insufficient
+        # OOF data, or a model loaded from before this was added).
+        self._uncertainty_blend_weights = None
+
     def fit(self, X: pd.DataFrame, y: pd.Series,
             tune_hyperparameters: bool = True,
             n_trials: int = None,
@@ -465,13 +528,55 @@ class PositionModel:
                 except Exception:
                     hetero_std_oof = None
 
-            if hetero_std_oof is not None:
-                blended_std = 0.5 * hetero_std_oof + 0.3 * conformal_std_fill + 0.2 * oof_ensemble_std
-            else:
-                blended_std = 0.7 * conformal_std_fill + 0.3 * oof_ensemble_std
-
             # Standardized absolute residuals
             oof_abs_resid = np.abs(y_train_inner[oof_valid] - oof_ensemble_pred)
+
+            # Tune the uncertainty-blend weights from OOF data (GAPS.md
+            # §7.4: previously a hardcoded, never-validated 0.5/0.3/0.2
+            # guess). Grid search over the same calibration objective the
+            # per-level correction factors below are designed to fix — a
+            # blend whose SHAPE across quantiles already matches the true
+            # residual distribution needs less correction afterward. Only
+            # tuned with enough OOF rows to trust a grid search over ~65
+            # candidates (3-way) without just overfitting the weight choice
+            # itself; falls back to the historical hardcoded default below
+            # that threshold, so behavior there is unchanged.
+            MIN_OOF_FOR_BLEND_TUNING = 300
+            if hetero_std_oof is not None:
+                if oof_valid.sum() >= MIN_OOF_FOR_BLEND_TUNING:
+                    weights, loss = _select_blend_weights(
+                        oof_abs_resid,
+                        {"hetero": hetero_std_oof, "conformal": conformal_std_fill, "ensemble": oof_ensemble_std},
+                        ["hetero", "conformal", "ensemble"],
+                        _WEIGHT_GRID_3WAY, [0.50, 0.80, 0.90, 0.95], _norm_dist,
+                    )
+                    weights = weights or DEFAULT_BLEND_WEIGHTS_FULL
+                else:
+                    weights = DEFAULT_BLEND_WEIGHTS_FULL
+                self._uncertainty_blend_weights = {"full": weights}
+                h, c, e = weights
+                blended_std = h * hetero_std_oof + c * conformal_std_fill + e * oof_ensemble_std
+                print(f"  Uncertainty blend weights (hetero/conformal/ensemble): "
+                      f"{h:.1f}/{c:.1f}/{e:.1f}"
+                      f"{' (tuned)' if oof_valid.sum() >= MIN_OOF_FOR_BLEND_TUNING else ' (default, insufficient OOF data to tune)'}")
+            else:
+                if oof_valid.sum() >= MIN_OOF_FOR_BLEND_TUNING:
+                    weights, loss = _select_blend_weights(
+                        oof_abs_resid,
+                        {"conformal": conformal_std_fill, "ensemble": oof_ensemble_std},
+                        ["conformal", "ensemble"],
+                        _WEIGHT_GRID_2WAY, [0.50, 0.80, 0.90, 0.95], _norm_dist,
+                    )
+                    weights = weights or DEFAULT_BLEND_WEIGHTS_NO_HETERO
+                else:
+                    weights = DEFAULT_BLEND_WEIGHTS_NO_HETERO
+                self._uncertainty_blend_weights = {"no_hetero": weights}
+                c, e = weights
+                blended_std = c * conformal_std_fill + e * oof_ensemble_std
+                print(f"  Uncertainty blend weights (conformal/ensemble): "
+                      f"{c:.1f}/{e:.1f}"
+                      f"{' (tuned)' if oof_valid.sum() >= MIN_OOF_FOR_BLEND_TUNING else ' (default, insufficient OOF data to tune)'}")
+
             standardized = oof_abs_resid / np.maximum(blended_std, 1e-8)
 
             # Per-level correction factors: for each nominal level, compute the
@@ -601,13 +706,25 @@ class PositionModel:
             if hetero_std is not None:
                 hetero_std = hetero_std * scale
 
-        # Blend uncertainties: heteroscedastic (if available) + conformal + ensemble spread
+        # Blend uncertainties: heteroscedastic (if available) + conformal +
+        # ensemble spread. Weights come from the OOF grid search in fit()
+        # (GAPS.md §7.4) when available; the two branches below with a
+        # hardcoded fallback correspond exactly to the two cases fit()
+        # tunes for ("full" 3-way, "no_hetero" 2-way conformal+ensemble).
+        # The hetero-only branch is a rarer edge case (conformal std
+        # unavailable at predict time even though it was at fit time) that
+        # fit() never computes calibration for either way, so it keeps the
+        # historical hardcoded default rather than an untuned guess dressed
+        # up as tuned.
+        blend_weights = getattr(self, "_uncertainty_blend_weights", None) or {}
         if hetero_std is not None and conformal_std_arr is not None:
-            std_pred = 0.5 * hetero_std + 0.3 * conformal_std_arr + 0.2 * ensemble_std
+            h, c, e = blend_weights.get("full", DEFAULT_BLEND_WEIGHTS_FULL)
+            std_pred = h * hetero_std + c * conformal_std_arr + e * ensemble_std
         elif hetero_std is not None:
             std_pred = 0.7 * hetero_std + 0.3 * ensemble_std
         elif conformal_std_arr is not None:
-            std_pred = 0.7 * conformal_std_arr + 0.3 * ensemble_std
+            c, e = blend_weights.get("no_hetero", DEFAULT_BLEND_WEIGHTS_NO_HETERO)
+            std_pred = c * conformal_std_arr + e * ensemble_std
         else:
             std_pred = ensemble_std
 
@@ -1117,8 +1234,9 @@ class PositionModel:
             "_uncertainty_model_type": getattr(self, "_uncertainty_model_type", None),
             "_uncertainty_scale_factor": getattr(self, "_uncertainty_scale_factor", 1.0),
             "_uncertainty_scale_factors_per_level": getattr(self, "_uncertainty_scale_factors_per_level", {}),
+            "_uncertainty_blend_weights": getattr(self, "_uncertainty_blend_weights", None),
         }
-        
+
         joblib.dump(model_data, filepath)
         print(f"Saved {self.position} model to {filepath}")
     
@@ -1151,6 +1269,9 @@ class PositionModel:
         model._uncertainty_scale_factors_per_level = model_data.get(
             "_uncertainty_scale_factors_per_level", {}
         )
+        # None for models saved before this was added — predict_with_uncertainty
+        # falls back to the historical hardcoded defaults in that case.
+        model._uncertainty_blend_weights = model_data.get("_uncertainty_blend_weights")
         # Reconstruct _uncertainty_scale_factor from per-level if missing from older models
         if model._uncertainty_scale_factor == 1.0 and model._uncertainty_scale_factors_per_level:
             model._uncertainty_scale_factor = model._uncertainty_scale_factors_per_level.get(

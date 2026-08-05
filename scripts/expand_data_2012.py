@@ -64,7 +64,7 @@ def load_injury_data():
                 all_injuries.append(df)
                 print(f"  {year}: {len(df):,} records")
         except Exception as e:
-            pass
+            print(f"  {year}: skipped ({e})")
     
     if all_injuries:
         combined = pd.concat(all_injuries, ignore_index=True)

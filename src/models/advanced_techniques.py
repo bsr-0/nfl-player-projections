@@ -226,6 +226,15 @@ class BayesianOptimizer:
                     self.best_score = score
                     self.best_params = params
             except Exception as e:
+                # NOTE: BayesianOptimizer._random_search is currently
+                # unreachable from the production training path (nothing
+                # imports it outside this file, confirmed via grep) --
+                # only PlayerEmbeddings from this module is live. Fixed
+                # anyway during the GAPS.md §9 logging-adequacy pass since
+                # it's a one-line change and this would otherwise let
+                # every single trial fail silently with zero diagnostic
+                # trace if this code is ever wired in.
+                print(f"  Trial failed, skipping: {e}")
                 continue
         
         return {

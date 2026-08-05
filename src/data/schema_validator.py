@@ -453,8 +453,12 @@ def check_data_freshness(
                     result["warnings"].append(
                         f"Data is {staleness} days old (SLA: {max_staleness_days} days)"
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            # A silent failure here would let a stale-data problem pass
+            # this freshness gate undetected (GAPS.md §9 audit) — record it
+            # in the report's own warnings list, matching this function's
+            # existing pattern, rather than swallowing it.
+            result["warnings"].append(f"Staleness check failed: {e}")
 
     if season_col in df.columns and week_col in df.columns:
         try:
@@ -462,8 +466,8 @@ def check_data_freshness(
             max_week = int(df[df[season_col] == max_season][week_col].max())
             result["latest_season"] = max_season
             result["latest_week"] = max_week
-        except Exception:
-            pass
+        except Exception as e:
+            result["warnings"].append(f"Latest season/week lookup failed: {e}")
 
     return result
 

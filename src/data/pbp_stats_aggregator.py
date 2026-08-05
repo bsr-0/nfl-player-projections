@@ -1095,6 +1095,78 @@ def get_team_stats_from_pbp(season: int,
     return team_stats
 
 
+def get_personnel_groupings_from_pbp(season: int, use_cache: bool = True) -> pd.DataFrame:
+    """Team-week offensive personnel grouping usage (GAPS.md §3.3/§11.1.E).
+
+    Parses PBP's ``offense_personnel`` string column (e.g. "1 RB, 2 TE, 2
+    WR") on pass/run plays only -- that column is 100% non-null for real
+    offensive snaps (verified on 2016-2025; it's populated starting 2016,
+    not ~2013 as originally guessed in GAPS.md, and pre-2016 seasons don't
+    carry the column at all). "Backfield count" sums RB+FB per standard
+    personnel notation (11 personnel = 1 RB/FB + 1 TE + 3 WR).
+
+    Returns one row per (team, season, week) with pct_11/12/21/13/other
+    and n_plays (the pass/run play count the percentages are computed
+    over). Empty DataFrame for seasons before the column exists.
+    """
+    import re
+
+    cache_path = RAW_DATA_DIR / f"pbp_personnel_{season}.parquet"
+    if use_cache and cache_path.exists():
+        try:
+            return pd.read_parquet(cache_path)
+        except Exception:
+            print(f"  Warning: corrupt personnel-grouping cache for season {season}, rebuilding")
+
+    import nfl_data_py as nfl
+    pbp = nfl.import_pbp_data([season])
+    if pbp.empty or "offense_personnel" not in pbp.columns:
+        return pd.DataFrame()
+
+    plays = pbp[pbp["play_type"].isin(["pass", "run"])].copy()
+    plays = plays[plays["offense_personnel"].notna()]
+    if plays.empty:
+        return pd.DataFrame()
+
+    def _grouping(s: str) -> str:
+        rb = re.search(r"(\d+)\s*RB", s)
+        fb = re.search(r"(\d+)\s*FB", s)
+        te = re.search(r"(\d+)\s*TE", s)
+        rb_n = (int(rb.group(1)) if rb else 0) + (int(fb.group(1)) if fb else 0)
+        te_n = int(te.group(1)) if te else 0
+        code = f"{rb_n}{te_n}"
+        return code if code in ("11", "12", "21", "13") else "other"
+
+    plays["personnel_group"] = plays["offense_personnel"].apply(_grouping)
+    plays = plays.rename(columns={"posteam": "team"})
+    plays = plays[plays["team"].notna() & (plays["team"] != "")]
+
+    counts = (
+        plays.groupby(["team", "season", "week", "personnel_group"])
+        .size()
+        .unstack(fill_value=0)
+    )
+    for col in ("11", "12", "21", "13", "other"):
+        if col not in counts.columns:
+            counts[col] = 0
+    counts["n_plays"] = counts[["11", "12", "21", "13", "other"]].sum(axis=1)
+    for col in ("11", "12", "21", "13", "other"):
+        counts[f"pct_{col}"] = counts[col] / counts["n_plays"]
+
+    result = counts.reset_index()[
+        ["team", "season", "week", "pct_11", "pct_12", "pct_21", "pct_13", "pct_other", "n_plays"]
+    ]
+    result["team"] = result["team"].apply(resolver.normalize_team_code)
+
+    if use_cache:
+        try:
+            _atomic_parquet_write(result, cache_path)
+        except Exception as e:
+            print(f"  Warning: failed to write personnel-grouping cache for {season}: {e}")
+
+    return result
+
+
 def load_current_season_stats_from_pbp() -> pd.DataFrame:
     """
     Load current NFL season stats from PBP data (convenience wrapper).

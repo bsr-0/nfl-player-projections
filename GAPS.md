@@ -2041,7 +2041,328 @@ confirmed present in `data/models/component_{qb,rb,wr,te}.json`
 `feature_names` (QB 55, RB 59, WR 60, TE 59 total). 149/149 relevant tests
 pass post-retrain (same suite as the leakage-fix entry above).
 
-### v23–v28 accuracy-lift measurement — DONE, honest result: flat since v25
+### CORRECTION (2026-08-05): the v27/v28 "flat" finding below is invalid — the backtest tool never included those features
+
+While running a rookie-slice ablation (requested to check whether v27/v28's
+rookie features helped rookies specifically even though the aggregate
+number below was flat), the ablation came back **bit-for-bit identical**
+between "rookie features included" and "rookie features stripped" — not
+just close, exactly 0.0 difference on every single prediction, including
+every rookie row. That's not a real negative result; it's a broken test.
+
+Root cause: `scripts/run_ts_backtest.py`'s feature pipeline
+(`leakage_safe_features()` in `src/evaluation/ts_backtester.py`) only
+calls `FeatureEngineer.create_features()` (→ `create_causal_features()`
+in causal mode). It **never calls `add_season_long_features()` or
+`add_advanced_features()`** — the separate pipeline stage in
+`feature_preparation.py`'s `_prepare_training_data` that actually computes
+`is_rookie`, `rookie_draft_value`, `rookie_bust_prob`, `combine_score`,
+`rookie_opportunity_score`, `rookie_breakout_prob`, `rookie_ceiling_ppg`,
+`rookie_floor_ppg`. Verified directly: calling `leakage_safe_features()`
+on real data shows `is_rookie` absent from the output columns entirely,
+while `opp_fpts_allowed_dvoa_adjusted_lag1` (v26, computed inside
+`create_causal_features()` itself) and `team_pct_11_personnel_roll3_mean`
+(v29, same) are both present as expected.
+
+**What this means for the "v26/v27/v28 flat" claim below**: the v26
+(DVOA) part is legitimate — that feature genuinely was present and tested
+by this backtest tool, and genuinely showed no aggregate lift. **The
+v27/v28 (rookie) part is not a valid measurement** — those features were
+never in scope for any `run_ts_backtest.py` run, including this one, so
+"no measurable lift" should never have been claimed for them. The
+production training path (`feature_preparation.py`) does compute and use
+these features correctly (confirmed by the v27/v28 promotion sessions'
+own model-artifact checks) — this is purely a blind spot in the
+*measurement* tool, not a defect in the features themselves or in
+production training/serving.
+
+**Fixed the same session, once the gap was found**: wired
+`add_season_long_features()` + `add_advanced_features()` into both passes
+of `leakage_safe_features()` (train-only, and the combined train+test
+block), in production's dependency order (season-long features, which
+merge `draft_round`/`draft_pick`, must run before `add_advanced_features`,
+which reads them). Verified fix: `is_rookie`/`rookie_*` columns now
+present in both `train_fe` and `test_fe` output on real data. 39/39 tests
+pass post-fix (`test_ts_backtester.py`, `test_baseline_comparison.py`,
+`test_backtest_validation.py`, `test_ml_audit.py -k ts_backtester`).
+
+### Rookie-slice ablation, re-run with the fixed harness — real, positive result (2026-08-05)
+
+Same `run_ts_backtest.py`-equivalent methodology (2025 holdout,
+expanding-window Ridge α=10,000, 22 weeks, 5,612 predictions), now with
+rookie features actually present, comparing "rookie features included"
+(current v28 `CAUSAL_FEATURES`) vs. the same run with the 8 rookie
+columns stripped back out — isolating their marginal effect on rookie
+rows specifically (n=1,056, 18.8% of all predictions), with veteran rows
+as a sanity check (should be ~unchanged, since rookie features are
+near-default for non-rookies).
+
+| Slice | Metric | With rookie feats | Without | Δ |
+|---|---|---|---|---|
+| All rows | R² | 0.350 | 0.347 | +0.003 |
+| **Rookie rows only** | **R²** | **0.267** | **0.244** | **+0.023** |
+| Rookie rows only | MAE | 4.37 | 4.51 | −0.14 |
+| Veteran rows only | R² | 0.350 | 0.349 | +0.001 (noise) |
+| QB rookie | R² | 0.190 | 0.167 | +0.023 |
+| RB rookie | R² | 0.282 | 0.265 | +0.017 |
+| WR rookie | R² | 0.189 | 0.147 | +0.042 |
+| TE rookie | R² | 0.257 | 0.243 | +0.014 |
+
+**Real, honest lift, confirming the original hypothesis**: every single
+position shows the same direction of improvement on rookie rows (higher
+R², lower MAE, lower RMSE), while veteran rows are essentially unchanged
+(+0.001 R², within noise) — exactly the isolation pattern you'd expect
+from features that are near-default for non-rookies. This directly
+confirms what the aggregate v23-v28 checkpoint's own caveat predicted:
+"rookies are ~5-15% of rows in a full-position backtest; a real signal
+would wash out in the aggregate." It did — the aggregate all-rows R² only
+moved +0.003, easily lost in that checkpoint's rounding, while the actual
+rookie-specific effect (+0.023 R², WR rookies +0.042) is real and
+consistent across positions.
+
+**Verdict**: v27/v28's rookie features (`is_rookie`, `rookie_draft_value`,
+`rookie_bust_prob`, `combine_score`, `rookie_opportunity_score`,
+`rookie_breakout_prob`, `rookie_ceiling_ppg`, `rookie_floor_ppg`) show a
+real, moderate accuracy lift specifically where they're designed to help
+— rookie draft/projection accuracy, the exact use case GAPS.md originally
+flagged as "25-35% of interesting draft picks" being poorly served. The
+"v23-v28 accuracy-lift measurement... flat since v25" verdict earlier in
+this doc should be read as **DVOA/v26-only** — the rookie portion of that
+claim was never actually tested until this fix, and now that it has been,
+it's a positive result, not a flat one.
+
+**Not attempted**: the same fix now means `run_ts_backtest.py` pays the
+rookie/injury module's real per-week cost (season-long features +
+combine-data lookups) inside the 22-iteration expanding-window loop,
+which wasn't profiled or optimized for repeated-call use — only for the
+once-per-training-run cost it was designed for. If backtests become a
+routine part of this project's workflow rather than an occasional
+checkpoint, that cost is worth revisiting (e.g. caching season-long/rookie
+features across weeks within a single backtest run, since a player's
+`draft_round`/`combine_score`/etc. don't change week to week).
+
+### §9 (silent-failure audit) — DONE: found and fixed a systemic pattern, 14 sites (2026-08-05)
+
+Picked as the next item after the personnel-grouping (v29) and rookie-
+ablation-harness-fix work, given how many real bugs this project has hit
+from the exact "declared/intended but silently never happened" shape —
+WOPR dead in the causal pipeline, the `CoachingChangeDetector` row-order
+bug, the DVOA merge column-suffix collision, today's TE `pct_13`
+omission, and the rookie-features-never-computed-by-the-backtester
+discovery above. All four of those were found by luck (someone happened
+to check the actual output against expectations) rather than by the code
+itself surfacing the problem. This was a scoped grep-and-triage pass over
+`src/data/`, `src/features/`, `src/utils/`, `src/models/` for that
+pattern specifically, not the full multi-session ingestion-wide audit
+GAPS.md §9 originally scoped (that remains open — see below).
+
+**Method**: parsed every `except Exception:` / `except:` block in those
+four directories (216 total `except` clauses), isolated the ones whose
+body is bare `pass` with zero logging (44 of 216). Read each with
+surrounding context and triaged into: legitimate resilient-fallback
+patterns (leave alone) vs. safety-net/correctness-critical checks whose
+failure should never be invisible (fix).
+
+**The single biggest finding — a systemic pattern, not a one-off**: 8
+separate call sites wrap `assert_no_leakage_columns()` (a function
+explicitly designed to `raise ValueError` when it detects a leakage-prone
+feature column — `src/utils/leakage.py:176-186`) in `except Exception:
+pass`. That means the project's own designed-to-fail-loud leakage safety
+gate has had its failure mode silently caught and discarded at every
+single place it's called, for as long as those call sites have existed.
+In the happy path this never fires (verified: `filter_feature_columns()`
+runs immediately before each `assert_no_leakage_columns()` call using the
+identical `is_leakage_feature()` predicate, so the assert is genuine
+defense-in-depth against a bug in the filter step, not a check that's
+expected to trip under normal operation) — but if it ever DID trip, the
+safety gate would have been rendered a no-op with no trace in any log.
+Fixed by adding a visible `print(f"  WARNING: ...")` in the `except`
+clause at each site — deliberately not changed to hard-crash training
+(these are training entry points, some of which may run unattended;
+changing pass/fail behavior is a bigger decision than this pass), but no
+longer silent. Sites fixed: `src/features/feature_engineering.py:4003`
+(filter-only, no assert — same risk, `self.feature_columns` would be
+left completely unfiltered on failure), `src/models/backtesting.py:230`,
+`advanced_ml_pipeline.py:1351`, `train_position_models.py:194`,
+`advanced_modeling.py:696`, `train_advanced.py:217`, `ensemble.py:1220`,
+`feature_engineering_pipeline.py:735`.
+
+**Second finding, same severity class**: 3 sites silently swallow
+`sanitize_schedule_df()` failures — a function that strips final-score
+columns from schedule data specifically to prevent leakage
+(`src/utils/leakage.py:207-214`). A silent failure here means unsanitized
+(leaky) schedule data flows downstream with no indication anything went
+wrong. Fixed: `src/data/external_data.py:342` (weather loader),
+`external_data.py:547` (Vegas lines loader), `src/utils/database.py:935`
+(`get_schedule(include_scores=False)` — the caller explicitly asked for
+scores stripped; a silent failure means they get scores anyway).
+
+**Third finding**: `src/models/robust_validation.py:263` — a leakage
+*detection* check (`find_leakage_columns`) inside a validation-report
+function, wrapped in `except Exception: pass`. If the check itself broke,
+`results['passed']` stayed at whatever value it already had — meaning a
+broken detector could report "passed" without ever actually running the
+check. Fixed to fail closed: append an error and set `passed = False`
+when the check itself can't complete, rather than silently reporting
+clean.
+
+**Fourth, lower-severity finding**: `src/data/schema_validator.py:456,465`
+— a data-freshness/staleness diagnostic (`check_data_freshness`) silently
+swallows exceptions in its staleness and latest-season/week computations.
+Not correctness-critical the way the leakage checks are, but this
+function's whole job is surfacing data-quality problems, so a silent
+internal failure defeats its purpose too. Fixed by appending to the
+function's own `result["warnings"]` list (its existing convention),
+rather than a bare `print`, since callers already read that field.
+
+**Deliberately left alone** (30 of the 44 silent sites) — genuine
+resilient-fallback / idempotent patterns matching established codebase
+convention, where adding visibility would be noise, not signal:
+per-row bulk-upsert loops in `database.py`'s `ensure_*` functions (bad
+row skipped, aggregate `count` already returned and printed by callers);
+`ALTER TABLE ADD COLUMN` idempotent-migration attempts (`database.py`
+init — column-already-exists is the expected/common case); cached-JSON
+load-with-default patterns (`data_manager.py`, `training_years_selector.py`,
+`weight_optimizer.py`, `utilization_weight_optimizer.py`); probe-a-season
+availability checks (`auto_refresh.py`, `nfl_data_loader.py`'s
+season-detection loops — "does data exist for this year yet" is
+expected to legitimately fail for most years checked); learned
+blend-weight optimization with a hardcoded fallback
+(`horizon_models.py:657,1039`); ensemble hybrid/deep-model prediction
+fallback to the traditional model on failure (`ensemble.py:196,524,538,609`)
+— each of these already degrades to a documented, sane default and isn't
+a case where the exception itself indicates something is silently wrong
+in the way the leakage/sanitization/freshness checks above are.
+
+**Verified**: all 12 edited files compile clean
+(`python -m py_compile`). Confirmed the fix is silent-when-healthy (ran
+`create_causal_features()` on real RB data, 2020+ — zero new WARNING
+lines fired, meaning none of these checks trip in the normal case, only
+under real failure). 150/150 relevant tests pass post-fix
+(`test_preseason_projector.py`, `test_quality_gates.py`,
+`test_target_and_history_causality.py`, `test_advanced_analytics.py`,
+`test_matchup_aware_prediction.py`, `test_missing_data_and_new_features.py`,
+`test_ts_backtester.py`, `test_baseline_comparison.py`,
+`test_backtest_validation.py`). Three pre-existing test failures
+(`test_ml_robustness_15_steps.py::test_target_uses_shift_neg1`,
+`::test_ensemble_weights_are_spec_mandated`,
+`test_schema_validator.py::test_validate_weekly_data_rejects_negative_stats_in_strict_mode`)
+confirmed identical on a clean `git stash` of this session's changes —
+unrelated pre-existing failures, not a regression from this fix.
+
+**Not attempted**: the remaining ~172 non-silent `except Exception as e:`
+clauses in these same directories weren't individually audited for
+whether their *logging* is adequate (only visible/invisible was
+triaged this pass) — some may log to a level or location that's easy to
+miss in practice even though they're not technically silent. The broader
+"replace every `except Exception: pass` codebase-wide, including
+`src/scripts/`, `src/evaluation/`, `src/analysis/` etc." scope from the
+original GAPS.md §9 item remains open — this pass covered the four
+directories where the real bugs have actually clustered this project's
+history, not the whole codebase. No retrain needed for this fix (it's
+error-visibility only, doesn't change any computed feature value in the
+happy path).
+
+### §7.4 (uncertainty-blend weights + CI scaling consistency) — DONE (2026-08-05)
+
+Two small, already-diagnosed items from the earlier §7.4 investigation:
+`position_models.py`'s uncertainty-blend weights were a hardcoded, never-
+tuned/validated `0.5/0.3/0.2` (hetero/conformal/ensemble) guess, and
+`ensemble.py:569,641` scaled multi-week CI width by `n_weeks**0.4` in one
+prediction path and `sqrt(n_weeks)` in another — same real quantity (the
+std of an n-week FP total), two different unreconciled assumptions
+depending on which underlying model type served a given position.
+
+**Blend weights — now grid-searched from OOF data, not guessed.** Added
+`_select_blend_weights()` (`src/models/position_models.py`): a coarse
+grid search (step 0.1, ~66 candidate weight triples for the 3-way
+hetero+conformal+ensemble case, 11 for the 2-way conformal+ensemble
+fallback) that minimizes the mean squared log-ratio between each nominal
+CI level's empirical quantile and its Gaussian z-score — the same
+objective the existing per-level conformal correction factors (computed
+immediately after, in the same `fit()` method) are designed to fix, used
+here as a search criterion instead of accepting a fixed guess. Gated on
+`oof_valid.sum() >= 300` (a fresh, explicit threshold — large enough that
+grid-searching ~66 candidates isn't just overfitting the weight choice to
+noise); below that, falls back to the historical hardcoded default
+unchanged, so small-sample behavior is untouched. Selected weights are
+stored on the model (`self._uncertainty_blend_weights`), persisted
+through `save()`/`load()` (falls back to the historical default when
+loading an older model file that predates this field), and consumed by
+`predict_with_uncertainty()` instead of the two hardcoded blend lines
+that used to live there.
+
+**Real result on real data, not just "doesn't crash"**: ran `PositionModel.fit()`
+on real RB data (2018+, 8,908 training rows) and real TE data (2024-2025,
+1,820 rows) — both comfortably above the tuning threshold. Both selected
+`(1.0, 0.0, 0.0)` — pure heteroscedastic-GBM weight, zero on conformal
+and ensemble-disagreement. This is a genuine corner solution, not a bug:
+the heteroscedastic model (trained specifically to predict per-player
+residual magnitude from features) evidently explains OOF residual spread
+far better than either the constant conformal std or the crude
+ensemble-disagreement spread, on this data. Worth flagging honestly as a
+corner solution rather than a soft blend — a grid search that lands
+exactly on a vertex isn't inherently suspicious (66 candidates evaluated
+on thousands of real OOF rows, not a small/noisy sample), but it does
+mean this specific run stopped using conformal/ensemble as a robustness
+hedge entirely; if that ever seems to hurt generalization on a future
+holdout, adding a small per-component weight floor to the grid would be
+the fix, not reverting to the hardcoded guess.
+
+**Verified**: synthetic sanity check confirms the search correctly
+recovers a hetero-dominated blend when the ground truth is
+hetero-driven. Real end-to-end `fit()` → `predict_with_uncertainty()` run
+produces finite, non-negative std predictions. `python -m src.models.train --fast --no-tune`
+completes clean (exit 0) — though see the production-path caveat below.
+62/62 relevant tests pass (`test_uncertainty_calibration.py`,
+`test_calibration_quality.py`, `test_models.py`,
+`test_config_code_alignment.py`, `test_fast_mode.py`,
+`test_preseason_projector.py`, `test_quality_gates.py`).
+
+**CI scaling — unified to one formula with a documented rationale.**
+Added `_multi_week_ci_scale(n_weeks)` (`src/models/ensemble.py`, module-level
+helper) returning `n_weeks ** 0.4`, with the rationale spelled out once
+in its docstring (weekly fantasy performance is autocorrelated — hot/cold
+stretches, role changes, matchup runs — so treating weeks as independent
+via `sqrt(n_weeks)` understates multi-week uncertainty). Both call sites
+(`self.position_models` branch, `self.single_week_models` branch) now
+call this one function instead of each having its own inline formula.
+Kept `n_weeks**0.4` (not `sqrt`) since it's the one of the two that
+already had a stated engineering rationale in-code; standardizing on the
+undocumented `sqrt` would have meant picking the less-justified value
+just because it happened to be simpler. Explicitly **not** claiming
+`0.4` is the "correct" exponent — deriving that properly would mean
+measuring actual multi-week CI coverage against nominal levels (the same
+kind of calibration study `fit()` already does for single-week CIs), a
+separate, bigger piece of work than closing out an inconsistency.
+
+**Production-path caveat, same shape as the §6 finding earlier in this
+doc**: production training runs with `position_target_type = "component"`
+for all four positions, which short-circuits `EnsemblePredictor.predict()`
+via `continue` before ever reaching either the `self.position_models` or
+`self.single_week_models` branches in `ensemble.py`, and before
+`PositionModel.fit()`'s uncertainty-blend code ever runs for a
+component-mode position either (component predictors use their own
+separate stat-line prediction path, not `predict_with_uncertainty()`).
+Confirmed via `grep` — nothing in `ensemble.py` populates
+`self.position_models`/`self.single_week_models` under the default
+training config. So **both fixes in this section are real, correct, and
+verified working — but neither is currently exercised by default
+production predictions**, the same "moot in production, live on other
+paths" shape as §6's `UtilizationToFPConverter` finding. They matter for:
+`scripts/run_ts_backtest.py --target-mode fp` (not `component`) runs
+using `--model ridge`/`--model gbm`, any future session that revisits the
+component-vs-ensemble architecture choice, and simply having a correct,
+non-contradictory uncertainty system on the shelf rather than a
+known-hardcoded one.
+
+**Not attempted**: re-deriving the multi-week scaling exponent from real
+coverage data (flagged above as separate, bigger work); auditing whether
+`ComponentPredictor`'s own uncertainty/CI computation (a different code
+path entirely, not touched by this session) has similar hardcoded-weight
+or scaling questions — out of scope for what was asked, not evaluated.
+
+### v23–v28 accuracy-lift measurement — DONE, honest result: flat since v25 (v26 only — see correction above)
 
 The standing caveat repeated after every version bump since v23 ("worth
 doing before leaning on this for real draft decisions") finally measured,
@@ -2090,3 +2411,445 @@ production-readiness blocker," and that scoping still holds. This
 measurement closes out the repeated "worth doing" caveat honestly rather
 than leaving it to roll forward again, but doesn't replace a real
 ablation study if one is ever wanted.
+
+### §3.3/§11.1.E (FTN/PBP personnel grouping) — DONE: promoted to v29 (2026-08-05)
+
+Picked as the next concrete feature gap after the v23-v28 checkpoint above
+showed the "just wire existing data" items mostly exhausted. A prior
+session had already checked feasibility and left this explicitly scoped
+out (see "Remaining §9/§11/§10 items — explicitly scoped OUT of this
+pass" above): FTN's `import_ftn_data()` doesn't carry a direct
+personnel-grouping column, and PBP's `offense_personnel` string column
+(e.g. "1 RB, 2 TE, 2 WR") was flagged as the real source but unverified
+on coverage (guessed "KeyError on 2010").
+
+**Coverage, checked directly against nfl_data_py rather than trusting the
+prior guess**: `offense_personnel` doesn't exist as a column at all before
+2016 (not present, not null-filled — absent). From 2016 on it's **100%
+non-null on real pass/run plays** (the ~77% "non-null" figure a naive
+check would show is diluted by kickoffs/punts/etc., which correctly don't
+carry personnel data and aren't used here). Verified format: full O-line
+breakdown (e.g. "1 C, 2 G, 1 QB, 1 RB, 2 T, 1 TE, 3 WR"), not a bare
+"11 personnel" code — parsed via regex (RB count + FB count = backfield,
+matching the traditional convention that a fullback counts toward the
+first digit of personnel notation; TE count is the second digit). Spot
+checked against known real distributions: 2023 real games came back 11
+personnel 64%, 12 personnel 20%, 21 personnel 7.7% — matches published
+league-wide personnel usage for that season.
+
+**New infra**:
+- `team_personnel_stats` table (`src/utils/database.py`) — `(team,
+  season, week, pct_11, pct_12, pct_21, pct_13, pct_other, n_plays)`,
+  `UNIQUE(team, season, week)`.
+- `get_personnel_groupings_from_pbp(season)` (`src/data/pbp_stats_aggregator.py`)
+  — loads PBP, filters to pass/run plays with non-null `offense_personnel`,
+  parses into the 4 tracked groupings + an `other` bucket, aggregates to
+  team-week percentages. Own parquet cache (`pbp_personnel_{season}.parquet`
+  in `RAW_DATA_DIR`), same idiom as the existing PBP aggregate caches.
+  Empty-frame return for pre-2016 seasons (no crash).
+- `DatabaseManager.ensure_team_personnel_stats()` — same shape as
+  `ensure_team_coaching_staff`/`ensure_team_offense_stats` (only fetches
+  seasons not already present unless `force_refresh=True`, per-season
+  try/except degrades to no-op rather than raising). Internally filters
+  out pre-2016 seasons up front so it doesn't pay a guaranteed-empty PBP
+  fetch on every call for seasons that will never have this data.
+- `scripts/backfill_team_personnel_groupings.py` — one-time/re-runnable
+  full backfill entry point, 2016-2025.
+- Wired into both the training path (`feature_preparation.py`, next to
+  the existing `ensure_team_offense_stats()` call) and the serving path
+  (`predict.py`'s `initialize()`) — same try/except-and-warn pattern as
+  everywhere else in this codebase.
+- `get_all_players_for_training()` — added `LEFT JOIN team_personnel_stats`
+  (same-week join, since — like `team_plays`/`team_pace_sec_per_play` from
+  the v24 tempo work — this-week personnel usage is an OUTCOME of that
+  week's game, not pre-game-known info; leakage safety comes entirely from
+  only ever consuming it via the shifted rolling feature downstream, never
+  as a same-week raw value).
+
+**Backfill run**: 5,514 rows across 2016-2025. Real, plausible trend
+confirmed: 12-personnel usage rose from 18.5% (2016) to 24.2% (2025)
+league-wide, matching the well-documented real-world shift toward
+12-personnel offenses over that span — not a data artifact.
+
+**`CAUSAL_FEATURES` wiring** (`config/settings.py`, `FEATURE_VERSION`
+bumped `"28"` → `"29"`): added `_roll3_mean` variants of the two most
+position-relevant groupings per position — RB gets `pct_12`/`pct_21`
+(heavier backfield sets signal more RB volume), WR gets `pct_11`/`pct_12`
+(11 personnel is the spread-offense/3-WR signal), TE gets `pct_12`/`pct_13`
+(2-3 TE sets directly determine TE snap/route ceiling). QB deliberately
+skipped — personnel grouping isn't a direct QB-volume signal beyond what
+pass-rate/tempo features already capture, and the "don't declare
+features you can't justify" lesson from the WOPR/rookie-feature history
+in this doc applies here too.
+
+**A real dead-feature bug found and fixed during verification** — the
+exact same failure mode as the WOPR and `recv_epa_per_target_roll3_mean`
+bugs earlier in this project (a column declared in `CAUSAL_FEATURES` but
+never actually computed by the function that builds training data):
+`team_pct_13_personnel_roll3_mean` was declared for TE, but the
+underlying raw `team_pct_13_personnel` column was left out of
+`_create_causal_rolling_features`'s `roll_cols` list (a copy-paste
+omission — only `pct_11`/`pct_12`/`pct_21` were added, `pct_13` was
+missed). Caught by the standard audit method this project now runs
+before trusting any new feature: calling `create_causal_features()` on
+real data via the actual training loader and checking every declared
+`CAUSAL_FEATURES` column is actually present in the output. Fixed by
+adding `team_pct_13_personnel` to `roll_cols`; re-verified 100% non-null
+with real variance (nunique=5,447, mean=0.042, std=0.048) after the fix.
+
+**Verified**:
+- Full `CAUSAL_FEATURES` dead-declaration audit (real `get_all_players_for_training()`
+  loader → `create_causal_features()`, 2016+ data) clean for all 6 new
+  columns across RB/WR/TE after the fix above. All 100% non-null with
+  real variance (e.g. WR `team_pct_11_personnel_roll3_mean`: nunique=13,021,
+  mean=0.622, std=0.140).
+- Retrain (`python -m src.models.train --fast --no-tune`): exit 0,
+  `feature_version.txt` = 29, previous version archived. Confirmed
+  directly against `data/models/component_{rb,wr,te}.json` `feature_names`:
+  all 6 personnel columns present exactly where declared (RB: pct_12 +
+  pct_21; WR: pct_11 + pct_12; TE: pct_12 + pct_13; QB: none, as intended).
+- 115/115 relevant tests pass post-retrain (`test_preseason_projector.py`,
+  `test_quality_gates.py`, `test_target_and_history_causality.py`,
+  `test_advanced_analytics.py`, `test_matchup_aware_prediction.py`,
+  `test_missing_data_and_new_features.py`).
+
+**Not attempted**: accuracy-lift measurement for v29 specifically (same
+standing caveat as every version bump since v23 — features are confirmed
+live and non-degenerate, nobody has yet measured whether they move
+`pred_mae` on a holdout backtest). Given the v26-v28 checkpoint just
+found those three version bumps flat on the aggregate 2025 backtest, v29
+is a reasonable candidate to fold into a future combined ablation/lift
+pass rather than running a full 2025 walk-forward backtest solely for
+this one feature group.
+
+### §9 audit extension: remaining directories — DONE, and found a real live bug (2026-08-05)
+
+Extended the silent-failure audit past the four directories covered
+earlier (`src/data`, `src/features`, `src/utils`, `src/models`) to the
+rest of the codebase: `scripts/`, `src/evaluation/`, `src/integrations/`,
+`src/scrapers/`, `config/` (106 files). Same method: parse every `except`
+block, isolate bare `except Exception: pass` / `except: pass` / silent
+typed excepts, triage each.
+
+Found 39 more silent sites. Most (≈30) are legitimate resilient-fallback
+patterns matching the same categories already accepted in the first pass
+— per-row bulk-insert loops (`odds_scraper.py`), cache-write-best-effort
+(`base_scraper.py`, `odds_scraper.py`), cascading availability-probe
+chains (`schedule_scraper.py`, matching `auto_refresh.py`'s precedent),
+tmp-file-cleanup-then-`raise` (`generate_app_data.py`, matching the
+established idiom), and fallback-to-sane-default patterns
+(`espn_sync.py`'s scoring/roster-slot defaults). Left alone.
+
+**Real, live, currently-active bug found**: `scripts/production_retrain_and_monitor.py`'s
+`_check_data_freshness()` — the automated retrain gate this script exists
+to run (`"Weekly retrain: run this script via cron"` per its own
+docstring) — queried `SELECT COUNT(*) FROM player_stats WHERE season = ?`
+to check whether the current season's data had arrived. **`player_stats`
+has never existed as a table in this database — only `player_weekly_stats`
+does** (confirmed directly: `sqlite3` query returns zero rows for
+`player_stats`, one row for `player_weekly_stats`). This query has
+therefore always raised `sqlite3.OperationalError`, always been caught by
+the silent `except Exception: pass` immediately below it, and
+`result["has_current_season"]` has always stayed `None` regardless of
+actual data state — meaning the `require_current_season_data` gate
+(**on by default** in `RETRAINING_CONFIG`) has never actually run, for as
+long as this script has existed. Fixed the table name
+(`player_weekly_stats`) and changed the except to fail closed
+(`result["fresh"] = False`) with the real error message surfaced, rather
+than silently keeping the optimistic default. Verified: calling
+`_check_data_freshness()` directly against the live DB now correctly
+returns `has_current_season: True` (previously always `None`).
+
+**Two more real risk sites in the same script, fixed for visibility**
+(no evidence either has actually tripped, unlike the bug above, but same
+"production automation decision gate" risk class): the DB-mtime
+staleness check and the `RETRAIN_STATUS_FILE`-based retrain-cadence check
+(`_is_retrain_day()`) both silently swallowed exceptions — a corrupted
+status file would have silently starved the cadence-based retrain
+trigger with nothing in the logs to explain why. Both now print a
+warning on failure; behavior (fail-open on staleness, "no retrain today"
+on cadence-file corruption) is unchanged, only visibility added.
+
+**Leakage-safety swallow pattern, same class as the primary audit**: two
+more `drop_leakage_columns()` calls silently swallowed
+(`scripts/evaluate_deep_learning.py:50`, `scripts/optimize_training_years.py:44`)
+— fixed the same way as the primary pass's `filter_feature_columns`/
+`sanitize_schedule_df` sites: visible warning, behavior unchanged.
+
+**Backtest-tooling blind spots, fixed for the same reason the rookie-
+ablation harness bug mattered**: `src/evaluation/backtester.py:1606`
+silently swallows `add_external_features()` (Vegas/weather/game-script)
+failures during backtest eval prep — a backtest could silently run
+without those features and produce a misleadingly worse result with
+nothing distinguishing "features genuinely don't help" from "features
+silently didn't load," which is exactly the failure mode already found
+once this session for the rookie-features ablation. `src/evaluation/metrics.py:317`
+silently drops CI-calibration metrics on failure (now recorded as
+`ci_calibration_error` in the returned metrics dict instead). `src/evaluation/ts_backtester.py:550`
+(schedule lookup for the opt-in `emit_inactive_predictions` phantom-row
+feature) now warns on failure instead of silently falling through to its
+already-documented last-known-opponent fallback.
+
+**Two trivial fixes**: `scripts/expand_data_2012.py:66` had `except
+Exception as e: pass` — the exception was already captured and then
+discarded; now printed. `scripts/advanced_features.py:70` had a bare
+`except:` (would catch `SystemExit`/`KeyboardInterrupt` too) around an
+ESPN injury-report fetch whose parsing is an unimplemented `# TODO: Full
+parsing logic` stub — narrowed to `except Exception:` with a comment
+noting the function is a no-op regardless of whether the request
+succeeds (the real fix is implementing the parser, out of scope here).
+This function is exercised by `tests/test_predictions.py` (confirmed via
+`scripts/` being on `sys.path`, not dead code as first suspected before
+checking).
+
+**Verified**: all 8 edited files compile clean. 45/45 tests pass in
+`test_predictions.py`/`test_ts_backtester.py`/`test_baseline_comparison.py`/
+`test_backtest_validation.py`, 10/10 in `test_metrics_evaluator.py`/
+`test_production_retrain.py`, 162/163 in the broader relevant suite
+(`test_preseason_projector.py`, `test_quality_gates.py`,
+`test_target_and_history_causality.py`, `test_advanced_analytics.py`,
+`test_matchup_aware_prediction.py`, `test_missing_data_and_new_features.py`,
+`test_ml_audit.py`) — the one failure
+(`test_utilization_weights_persistence`) confirmed pre-existing and
+unrelated via `git stash` (fails identically on a clean tree, checking
+for a literal string in `train.py` that predates this session).
+
+**Not attempted**: reviewing the ~191 already-non-silent
+`except Exception as e: print(...)`-style sites in these five newly-swept
+directories for logging adequacy (same scoping decision as the primary
+pass — visible-vs-invisible was triaged, message quality wasn't).
+Directories still never swept by any pass so far: none identified beyond
+what's now covered (`src/data`, `src/features`, `src/utils`, `src/models`,
+`scripts`, `src/evaluation`, `src/integrations`, `src/scrapers`,
+`config`) — this plus the primary pass now covers every `*.py` under
+`src/` and `scripts/`. `tests/` itself was not swept (test code silently
+swallowing an assertion failure would show up as a false pass, a
+different and arguably more serious problem, but a separate audit from
+this one).
+
+### §9 follow-up: two "print but don't record" fixes upgraded to actually fail loudly, plus a third real-bug-shaped pattern found and fixed (2026-08-05, same session)
+
+User pushback, and rightly so: the DB-staleness and retrain-cadence
+fixes above only added a `print()`. For `production_retrain_and_monitor.py`
+— a script whose own docstring says "run this via cron" — a `print()`
+alone isn't actually loud. Nobody watches unattended cron stdout, and
+critically, the error message wasn't landing in the one place a
+monitoring check would actually read: the structured `status` dict that
+`run_weekly_retrain()` persists to `RETRAIN_STATUS_FILE` via
+`_write_retrain_status()`. A `print`-only fix is only as loud as whoever
+happens to be staring at a terminal at the exact moment the cron job
+runs.
+
+**Fixed properly**:
+- `_check_data_freshness()`'s staleness-check except now fails closed
+  (`result["fresh"] = False`, with a `reason`) instead of just printing
+  — matching what the current-season-check fix already did correctly.
+  Because `result` is the function's return value and `run_weekly_retrain()`
+  does `status["data_freshness"] = freshness` before persisting `status`,
+  this now lands in the durable status file, not just stdout.
+- `_is_retrain_day()`'s cadence-check except used to fall through to
+  `return False` (silently "not retrain day today"), with no way for a
+  caller to distinguish "genuinely not due yet" from "the check itself
+  broke." Changed to `return True` on failure instead — a deliberate
+  fail-toward-action choice: an extra/early retrain attempt is cheap and
+  self-correcting (the freshness and data-quality gates downstream still
+  protect against training on bad data), whereas the old silent-False
+  behavior could in principle let retraining go indefinitely stale with
+  nothing in any log to explain why. Verified directly: pointed
+  `RETRAIN_STATUS_FILE` at a file containing malformed JSON and confirmed
+  `_is_retrain_day()` now returns `True` with a visible warning, instead
+  of the old silent `False`.
+
+**A third real pattern found while re-checking the rest of the file for
+the same shape**: `_init_database()`'s three schema-migration blocks
+(`player_weekly_stats` and `team_stats` column backfills, plus the
+`schedule` table's `spread_line`/`total_line` columns) all wrapped
+`ALTER TABLE ADD COLUMN` in a blanket `except Exception: pass`. Checked
+what these actually guard against: the `player_weekly_stats` and
+`team_stats` loops both pre-check `col not in existing_cols` before ever
+calling `ALTER TABLE` — meaning "duplicate column" (the only case a
+blanket catch is usually protecting against for this kind of migration)
+should **never** actually reach these except blocks in normal operation.
+Any exception that does reach them is therefore a genuine, unexpected
+migration failure — and a schema that silently didn't get a column later
+code assumes exists is precisely the "declared/expected but not actually
+there" bug shape that has caused real, confirmed bugs multiple times this
+session (WOPR, the TE `pct_13` personnel column, the DVOA merge
+collision, and now the `player_stats`/`player_weekly_stats` table-name
+bug above). Fixed both to print a warning on any exception, since none is
+expected to occur there at all.
+
+The third site (`schedule` table's `spread_line`/`total_line` migration)
+is genuinely different — its own comment explains it deliberately catches
+the duplicate-column error *instead of* pre-checking via introspection
+("SQLite has no IF NOT EXISTS on ALTER TABLE"), so hitting that except is
+the normal, expected path on every re-run after the first. Narrowed
+instead of widened: now only swallows the exception when the message
+contains "duplicate column"; anything else prints a warning. This
+preserves the existing idempotent-migration behavior exactly while still
+surfacing a genuinely different failure (disk full, permissions, a locked
+DB, a bug in `_validate_identifier`/`_validate_ddl`) instead of masking
+it identically to the expected case.
+
+**Verified**: all changes compile clean. Live-tested against the real
+(already-migrated) production DB — zero spurious warnings on
+`DatabaseManager()` construction, confirming neither the pre-checked
+migrations nor the narrowed duplicate-column catch false-positive on
+normal operation. Also tested a *fresh* in-memory-style DB (via a temp
+file) through two consecutive `DatabaseManager()` inits — the second init
+exercises the real duplicate-column path for the `schedule` table
+migration, confirmed silent (as intended) with no spurious warnings.
+`tests/test_production_retrain.py` (4/4),
+`tests/test_preseason_projector.py`, `tests/test_quality_gates.py`,
+`tests/test_target_and_history_causality.py` (19/19 combined) all pass.
+
+**Not attempted**: applying the same "should this actually fail loudly,
+not just print" scrutiny to the other ~14 sites fixed in the two earlier
+§9 passes today — those were reviewed and judged adequate as
+print-and-continue at the time, but weren't specifically re-examined
+against the "does this feed a durable, checkable record, or only
+ephemeral stdout" standard this follow-up established. Worth a quick
+pass if this project ever adds real monitoring/alerting on top of
+`RETRAIN_STATUS_FILE`/`drift_status.json`, since that's precisely the
+kind of consumer that would care about the distinction.
+
+### §9: all three remaining audit gaps closed (2026-08-05, same session)
+
+User asked to close out all three items flagged as "not attempted" at
+the end of the prior §9 passes: (1) logging adequacy of the ~191
+already-visible sites, (2) whether `tests/` itself silently swallows
+anything, (3) re-checking the earlier fixes against the durable-record
+standard. All three done.
+
+**(1) Logging adequacy — mostly already fine, 3 real gaps found and fixed.**
+Wrote a scanner for `except ... as VAR:` blocks where `VAR` is bound but
+never referenced in the block body (a message that's present but
+generic/unhelpful — the exception was captured and then thrown away
+anyway). Of 237 bound-exception sites across `src/` + `scripts/` +
+`config/`, only 2 failed to reference their own bound variable:
+- `src/models/advanced_techniques.py`'s `BayesianOptimizer._random_search`
+  — silently skipped every failed hyperparameter trial with no trace.
+  Fixed to print. Checked reachability first: confirmed via `grep` that
+  nothing outside this file calls `BayesianOptimizer`/`_random_search` —
+  it's currently dead code (only `PlayerEmbeddings` from this module is
+  live, imported by `feature_preparation.py`). Fixed anyway since it's a
+  one-line change and would otherwise silently fail every trial if ever
+  wired in.
+- `src/scrapers/schedule_scraper.py`'s `_parse_game_object` — returned
+  `None` on any per-game parse failure with the exception discarded, and
+  callers append `if parsed` with no count of how many games silently
+  failed. A partially-scraped week looked identical to a complete one.
+  Fixed to print the exception with year/week context. This scraper is a
+  fallback data source (used when `nfl_data_py` lacks schedule data), so
+  a quietly incomplete schedule could have propagated into the `schedule`
+  table unnoticed.
+
+A second, narrower scan checked for the "worse" version of this problem
+— an *unbound* `except Exception:` (no `as e` at all) followed by a
+`print`/`log` call using only a static string literal, meaning the
+exception was never even captured, not just discarded after capture.
+Zero found across all 168 files scanned. Combined with the 235
+already-adequate bound-exception sites, the codebase's exception
+messages are in solid shape outside the two fixes above.
+
+**(2) `tests/` swept — clean, nothing to fix.** Same silent-`except`-`pass`
+scan applied to all 60 files in `tests/`: zero found. Broadened to check
+for the more dangerous test-specific anti-pattern — `except AssertionError`
+(which would literally swallow a failed assertion and produce a false
+pass): zero found. The entire test suite has only 8 `except` clauses
+total, and all 8 checked individually: 5 are legitimate optional-dependency
+skip guards (`pytest.skip()` on missing `lightgbm`/`torch`, or "no data
+available") that produce a visible, correctly-labeled test skip rather
+than a false pass; 3 are `float(val)` parse-fallback-to-`0.0` blocks
+inside `test_webapp_rendering.py` that are themselves simulating frontend
+JS parsing behavior as part of what the test is checking, not swallowing
+a test assertion. No false-pass risk found anywhere in `tests/`.
+
+**(3) Durable-record re-check — evolved into a bigger, correct fix: making
+the 8 leakage-assert sites actually raise, not just print.** Re-examining
+the 8 `assert_no_leakage_columns` swallow sites fixed in the very first
+§9 pass against the "does this feed a durable/checkable record" question
+led to a better answer than upgrading the print message: **these should
+never have been caught at all**. `assert_no_leakage_columns` is
+*designed* to raise — it's not a soft warning, it's a hard safety gate —
+and "catch it, print a warning, keep going with possibly-leaky features"
+was always the wrong response to a gate whose entire contract is "stop if
+this fires."
+
+Checked whether raising is actually safe at each of the 8 sites before
+changing anything (the real question: does an unhandled exception here
+silently crash something unattended, or does it get caught durably
+somewhere upstream):
+- `src/features/feature_engineering.py` and `src/models/ensemble.py` (the
+  QB dual-target site) are on the live production training path. Traced
+  `run_weekly_retrain()` in `production_retrain_and_monitor.py`: its
+  `train_models()` call is *already* wrapped in `try/except Exception`
+  that records `status["error"] = f"training_failed: {e}"` into the
+  durably-persisted `RETRAIN_STATUS_FILE` and returns `False` cleanly —
+  confirmed by reading the actual code, not assumed. So letting these two
+  raise doesn't crash unattended cron automation; it gets caught,
+  recorded, and reported exactly where a monitoring check would look.
+  (`ensemble.py` also already had a *second*, unrelated
+  `assert_no_leakage_columns` call — the main per-position feature-build
+  path, around what's now line 1038 — that was never wrapped in a silent
+  except in the first place; the newly-fixed site is a second, QB-specific
+  check further down the file.)
+- The other 6 (`src/models/backtesting.py`, `advanced_ml_pipeline.py`,
+  `train_position_models.py`, `advanced_modeling.py`, `train_advanced.py`,
+  `feature_engineering_pipeline.py`) were checked for whether they're
+  actually reachable from the live pipeline at all. `grep` for who
+  imports each: none of the first four are imported anywhere outside
+  their own file; `train_advanced.py` is imported only by
+  `validate_methodology.py` (itself a standalone script); the
+  `feature_engineering_pipeline.py` swallow site sits inside
+  `run_feature_engineering_pipeline()`, a different function from the
+  only thing `ensemble.py` actually imports out of that file
+  (`StabilitySelector`). All 6 have `if __name__ == "__main__":` blocks —
+  they're standalone diagnostic/training tools run directly by a human,
+  where a raised traceback at the point of failure is strictly more
+  useful than a printed warning that might scroll past.
+
+All 8 sites changed from `try: ... except Exception as e: print(...)` to
+letting the call raise directly, with a comment at each explaining why
+raising is safe there specifically (not just "raising is good in
+general").
+
+**Deliberately left as print-and-continue, not upgraded to raise**: the
+`sanitize_schedule_df()` sites (`external_data.py:342,547`,
+`database.py:935`) and `backtester.py:1606`'s `add_external_features()`
+call. Reasoning: these aren't the last line of defense against leakage
+anymore now that the 8 `assert_no_leakage_columns` sites fail loud — a
+leaked schedule-score column that slipped past a failed sanitization
+would still get caught downstream by the now-raising leakage asserts
+before it could reach a trained model. Meanwhile, making these raise
+would mean losing Vegas/weather data *entirely* on a rare sanitization
+hiccup (the whole `load_weather_data`/`load_vegas_lines`/`add_external_features`
+call would abort), which is a worse practical outcome than the risk
+being guarded against. Print-and-continue is the right call here, not a
+leftover gap.
+
+**Verified**: all 10 edited files compile clean. Full real retrain
+(`python -m src.models.train --fast --no-tune`) completed with exit 0 —
+confirms none of the now-raising leakage asserts actually trip on real
+production data (they're defense-in-depth, expected to never fire in the
+happy path, and didn't). 147/147 tests pass across
+`test_preseason_projector.py`, `test_quality_gates.py`,
+`test_target_and_history_causality.py`, `test_advanced_analytics.py`,
+`test_matchup_aware_prediction.py`, `test_missing_data_and_new_features.py`,
+`test_uncertainty_calibration.py`, `test_calibration_quality.py`,
+`test_models.py`. 82/83 pass across `test_ts_backtester.py`,
+`test_baseline_comparison.py`, `test_backtest_validation.py`,
+`test_ml_audit.py` — the one failure
+(`test_utilization_weights_persistence`) is the same pre-existing,
+already-confirmed-unrelated stale-test failure noted earlier this
+session (checks `train.py`'s source text for a literal string that
+predates this session; the actual behavior it's checking for is real,
+just implemented in `feature_preparation.py` now).
+
+**Not attempted**: fixing the stale tests themselves
+(`test_ensemble_weights_are_spec_mandated`, `test_utilization_weights_persistence`,
+and a `shift(-1)` source-text check in the same file) — confirmed this
+session to be checking the wrong file/module after a refactor moved the
+logic they're testing for, not evidence of an actual regression, but
+still worth updating so the test suite doesn't carry three permanently-red
+tests. Out of scope for the §9 audit specifically.

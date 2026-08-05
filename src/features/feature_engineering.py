@@ -1066,6 +1066,16 @@ class FeatureEngineer:
             # v24: tempo/plays-per-game (GAPS.md §4.D) — already joined onto
             # the raw frame from team_stats, just needs rolling to be causal.
             "team_plays", "team_pace_sec_per_play",
+            # GAPS.md §3.3/§11.1.E: offensive personnel grouping usage
+            # (11/12/21 personnel %) — already joined onto the raw frame
+            # from team_personnel_stats (this-week outcome stat, like
+            # team_plays above), just needs rolling to be causal. Only
+            # populated 2016+ (PBP offense_personnel coverage start); NaN
+            # before that, which the roll3 mean/dropna handling downstream
+            # already tolerates the same way as other partial-coverage
+            # features (e.g. recv_epa_per_target, 2018+).
+            "team_pct_11_personnel", "team_pct_12_personnel",
+            "team_pct_21_personnel", "team_pct_13_personnel",
         ]
         for col in roll_cols:
             if col not in df.columns:
@@ -3987,11 +3997,18 @@ class FeatureEngineer:
             and not any(col.startswith(p) for p in exclude_prefixes)
             and df[col].dtype in [np.float64, np.int64, float, int]
         ]
-        try:
-            from src.utils.leakage import filter_feature_columns
-            self.feature_columns = filter_feature_columns(self.feature_columns)
-        except Exception:
-            pass
+        from src.utils.leakage import filter_feature_columns
+        # Deliberately NOT wrapped in try/except (GAPS.md §9 audit,
+        # 2026-08-05 follow-up): a failure here would leave
+        # self.feature_columns completely UNFILTERED (leakage columns like
+        # target_1w/utilization_score could remain), and this function is
+        # simple/stable enough that a failure means something is
+        # seriously wrong -- letting it raise is safer than training on
+        # unfiltered features with only a printed warning that could be
+        # missed. run_weekly_retrain() already catches and durably records
+        # any exception from train_models() in RETRAIN_STATUS_FILE, so
+        # raising here doesn't silently crash unattended automation.
+        self.feature_columns = filter_feature_columns(self.feature_columns)
     
     def get_feature_columns(self) -> List[str]:
         """Return list of feature column names."""

@@ -151,11 +151,25 @@ def leakage_safe_features(
     the same two-pass pattern implemented here.
     """
     from src.features.feature_engineering import FeatureEngineer
+    from src.features.season_long_features import add_season_long_features
+    from src.models.feature_preparation import add_advanced_features
 
     engineer = FeatureEngineer()
 
     # Step 1: Train features from train data only (no test contamination)
     train_out = engineer.create_features(train_df.copy(), include_target=False)
+    # Season-long draft/rookie context + advanced rookie/injury/combine
+    # features (is_rookie, rookie_opportunity_score, etc.) — these live in
+    # a separate pipeline stage that production training calls via
+    # feature_preparation._prepare_training_data but this backtester never
+    # called at all until this fix (found while running a rookie-feature
+    # ablation: both "with" and "without" arms came back bit-identical
+    # because the columns were absent from BOTH, not because the features
+    # have zero effect — see GAPS.md's dated correction entry). Order
+    # matches production: season-long features (draft_round/draft_pick)
+    # must run before add_advanced_features, which reads them.
+    train_out = add_season_long_features(train_out)
+    train_out = add_advanced_features(train_out)
 
     # Step 2: Test features from combined block (test rows see train history)
     if test_df.empty:
@@ -178,6 +192,8 @@ def leakage_safe_features(
     )
 
     combined = engineer.create_features(combined, include_target=False)
+    combined = add_season_long_features(combined)
+    combined = add_advanced_features(combined)
 
     test_out = combined[combined["_is_test"]].drop(columns=["_is_test"])
 
@@ -531,8 +547,13 @@ class TimeSeriesBacktester:
                         schedule_map[(home, int(self.season), int(week))] = away or ""
                     if away:
                         schedule_map[(away, int(self.season), int(week))] = home or ""
-        except Exception:
-            pass
+        except Exception as e:
+            # schedule_map staying {} isn't itself a bug -- downstream
+            # code already falls back to last-known opponent per the
+            # comment above -- but a query/connection failure here is
+            # worth a trace rather than looking identical to "this week's
+            # schedule just wasn't in the table" (GAPS.md §9 audit).
+            print(f"  WARNING: schedule lookup for phantom rows failed (week {week}): {e}")
 
         last_rows["week"] = int(week)
         last_rows["fantasy_points"] = np.nan

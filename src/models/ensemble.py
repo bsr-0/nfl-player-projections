@@ -81,6 +81,26 @@ def _warn_if_feature_version_mismatch() -> None:
         )
 
 
+def _multi_week_ci_scale(n_weeks: int) -> float:
+    """Scale factor applied to a single-week prediction std to get the std
+    of an n-week total (GAPS.md §7.4).
+
+    Uses n_weeks**0.4 rather than sqrt(n_weeks) (the textbook scaling for
+    a sum of n independent weeks). Weekly fantasy performance is
+    autocorrelated (hot/cold stretches, role changes, matchup runs), so
+    treating weeks as independent understates multi-week uncertainty;
+    0.4 was already in use on one of the two prediction paths in this
+    file with that rationale, while the other path used a bare
+    sqrt(n_weeks) with no documented justification — same real quantity
+    (the std of an n-week FP total), two different formulas depending on
+    which underlying model type served a given position. Standardized on
+    the one with a stated rationale rather than inventing a third value;
+    deriving the "correct" exponent from real multi-week coverage data is
+    a separate, bigger calibration study, not done here.
+    """
+    return float(n_weeks) ** 0.4
+
+
 class EnsemblePredictor:
     """
     Main prediction interface that coordinates position-specific models.
@@ -564,9 +584,8 @@ class EnsemblePredictor:
                         _, std = base_model.predict_with_uncertainty(pos_data)
                         pred_pts = results.loc[mask, "predicted_points"].values
 
-                        # Multi-week scaling: use n_weeks^0.4 instead of sqrt
-                        # to account for autocorrelation in weekly errors
-                        multi_week_scale = n_weeks ** 0.4
+                        # Multi-week scaling (GAPS.md §7.4: see _multi_week_ci_scale docstring)
+                        multi_week_scale = _multi_week_ci_scale(n_weeks)
 
                         # Per-level conformal calibration factors (preferred path)
                         per_level = getattr(base_model, "_uncertainty_scale_factors_per_level", {})
@@ -638,7 +657,10 @@ class EnsemblePredictor:
                     std_raw = std / global_factor
                 else:
                     std_raw = std
-                multi_week_scale = np.sqrt(n_weeks)
+                # Multi-week scaling (GAPS.md §7.4: unified with the other
+                # prediction path above — see _multi_week_ci_scale
+                # docstring; this used to be a bare sqrt(n_weeks) here.
+                multi_week_scale = _multi_week_ci_scale(n_weeks)
                 f80 = per_level.get(0.80, global_factor)
                 f95 = per_level.get(0.95, global_factor)
                 z80, z95 = 1.28, 1.96
@@ -1213,12 +1235,16 @@ class ModelTrainer:
                        if c not in exclude_cols
                        and not c.startswith("target_")
                        and pos_data[c].dtype in ['int64', 'float64', 'int32', 'float32']]
-        try:
-            from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-            feature_cols = filter_feature_columns(feature_cols)
-            assert_no_leakage_columns(feature_cols, context="QB dual-target features")
-        except Exception:
-            pass
+        # Deliberately NOT wrapped in try/except (GAPS.md §9 audit,
+        # 2026-08-05 follow-up): assert_no_leakage_columns is designed to
+        # raise, matching the sibling leakage check at line ~1038 above
+        # (which was never wrapped in the first place). run_weekly_retrain()
+        # already catches and durably records any exception from
+        # train_models() -- see production_retrain_and_monitor.py -- so
+        # letting this raise doesn't silently crash unattended automation.
+        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+        feature_cols = filter_feature_columns(feature_cols)
+        assert_no_leakage_columns(feature_cols, context="QB dual-target features")
         assert "fantasy_points" not in feature_cols and "utilization_score" not in feature_cols
 
         # Targets: util

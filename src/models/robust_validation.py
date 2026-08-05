@@ -260,9 +260,14 @@ def validate_no_leakage(df: pd.DataFrame, feature_cols: List[str],
         if leaked:
             results['errors'].append(f"Leakage columns present in features: {sorted(leaked)[:10]}")
             results['passed'] = False
-    except Exception:
-        pass
-    
+    except Exception as e:
+        # If the leakage check itself can't run, we have NOT verified the
+        # features are clean — silently swallowing this let the report
+        # claim "passed" when the check never actually completed
+        # (GAPS.md §9 audit). Fail closed, not open.
+        results['errors'].append(f"Leakage check itself failed to run: {e}")
+        results['passed'] = False
+
     return results
 
 

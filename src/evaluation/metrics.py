@@ -314,8 +314,11 @@ class ModelEvaluator:
                 for lvl in ci_cal.get("levels", []):
                     nom_key = f"ci_{int(lvl['nominal']*100)}_coverage"
                     metrics[nom_key] = lvl["actual_coverage"]
-            except Exception:
-                pass
+            except Exception as e:
+                # A silent failure here means CI calibration metrics are
+                # just absent from the report with nothing to distinguish
+                # "not applicable" from "broke" (GAPS.md §9 audit).
+                metrics["ci_calibration_error"] = str(e)
 
         # Expert RMSE lookup comparison by position (no expert predictions required)
         if expert_rmse_by_position and positions is not None:

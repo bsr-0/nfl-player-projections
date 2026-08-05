@@ -50,8 +50,22 @@ def _is_retrain_day() -> bool:
                 cadence = in_season_cadence
             if days_since >= cadence:
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            # GAPS.md §9 audit (2026-08-05): a corrupted/malformed
+            # RETRAIN_STATUS_FILE used to silently fall through to "no
+            # retrain today" with no trace. Fail toward action, not
+            # inaction: if we can't tell whether enough days have passed,
+            # treat it as "yes" rather than "no" -- an extra retrain
+            # attempt is cheap and self-correcting (the freshness/quality
+            # gates downstream still protect against training on bad
+            # data), whereas silently returning False here every day
+            # would mean retraining stops indefinitely until someone
+            # notices and manually fixes the status file.
+            print(
+                f"  WARNING: retrain-cadence check failed reading {RETRAIN_STATUS_FILE}: {e} "
+                f"-- treating as retrain-due rather than silently skipping"
+            )
+            return True
     return False
 
 
@@ -68,8 +82,14 @@ def _check_data_freshness() -> dict:
             if staleness_h > MAX_DATA_STALENESS_HOURS:
                 result["fresh"] = False
                 result["reason"] = f"Data is {staleness_h:.0f}h old (max {MAX_DATA_STALENESS_HOURS}h)"
-    except Exception:
-        pass
+    except Exception as e:
+        # Fail closed, matching the current-season-data check below: if we
+        # can't verify staleness at all, don't assume the data is fine.
+        # This also lands in the returned dict (and from there,
+        # run_weekly_retrain's persisted status file), not just stdout --
+        # a print alone isn't durable enough for an unattended cron run.
+        result["fresh"] = False
+        result["reason"] = f"Staleness check failed to run: {e}"
     if RETRAINING_CONFIG.get("require_current_season_data", True):
         try:
             from src.utils.nfl_calendar import get_current_nfl_season, current_season_has_weeks_played
@@ -81,15 +101,24 @@ def _check_data_freshness() -> dict:
                 import sqlite3
                 conn = sqlite3.connect(str(DATA_DIR / "nfl_data.db"))
                 count = conn.execute(
-                    "SELECT COUNT(*) FROM player_stats WHERE season = ?", (current,)
+                    "SELECT COUNT(*) FROM player_weekly_stats WHERE season = ?", (current,)
                 ).fetchone()[0]
                 conn.close()
                 result["has_current_season"] = count > 0
                 if count == 0:
                     result["fresh"] = False
                     result["reason"] = f"No data for current season {current}"
-        except Exception:
-            pass
+        except Exception as e:
+            # GAPS.md §9 audit (2026-08-05): this used to silently swallow
+            # a real bug -- the query referenced a "player_stats" table
+            # that has never existed (the real table is
+            # player_weekly_stats), so this check has ALWAYS thrown and
+            # ALWAYS been caught here, meaning "require_current_season_data"
+            # has never actually run despite being the default config.
+            # Fixed the table name; keeping this visible so a future
+            # regression here isn't invisible again.
+            result["fresh"] = False
+            result["reason"] = f"Current-season data check failed to run: {e}"
     return result
 
 

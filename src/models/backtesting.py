@@ -223,12 +223,14 @@ class FantasyBacktester:
                                     if c not in exclude and train_df[c].dtype in ['int64', 'float64']]
             else:
                 feature_cols_fold = [c for c in feature_cols if c in train_df.columns]
-            try:
-                from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-                feature_cols_fold = filter_feature_columns(feature_cols_fold)
-                assert_no_leakage_columns(feature_cols_fold, context="backtesting features")
-            except Exception:
-                pass
+            # Deliberately NOT wrapped in try/except (GAPS.md §9 audit,
+            # 2026-08-05 follow-up): this module is a standalone
+            # `python -m` script (see its `if __name__ == "__main__"`
+            # block), run directly by a human, so a raised traceback is
+            # more useful than a printed warning buried in scrollback.
+            from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+            feature_cols_fold = filter_feature_columns(feature_cols_fold)
+            assert_no_leakage_columns(feature_cols_fold, context="backtesting features")
             
             # Prepare data
             X_train = train_df[feature_cols_fold].fillna(0)

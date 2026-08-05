@@ -187,13 +187,13 @@ def train_position_model(position: str,
     # If position-specific features not available, use all numeric
     if len(feature_cols) < 5:
         feature_cols = available_features
-    try:
-        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-        feature_cols = filter_feature_columns(feature_cols)
-        assert_no_leakage_columns(feature_cols, context=f"train_position_models ({position})")
-    except Exception:
-        pass
-    
+    # Deliberately NOT wrapped in try/except (GAPS.md §9 audit, 2026-08-05
+    # follow-up): standalone `python -m` script, human-run -- a raised
+    # traceback is more useful than a printed warning.
+    from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+    feature_cols = filter_feature_columns(feature_cols)
+    assert_no_leakage_columns(feature_cols, context=f"train_position_models ({position})")
+
     print(f"Using {len(feature_cols)} features")
     
     # Prepare data

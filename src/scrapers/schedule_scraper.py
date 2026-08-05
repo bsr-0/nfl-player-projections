@@ -204,8 +204,14 @@ class NFLScheduleScraper(BaseScraper):
                 'venue': game.get('venue', {}).get('name') if isinstance(game.get('venue'), dict) else game.get('venue'),
             }
         except Exception as e:
+            # GAPS.md §9 audit (2026-08-05): callers append `if parsed`
+            # with no count of how many games silently failed to parse --
+            # a partially-scraped week looked identical to a complete one.
+            # This scraper is a fallback data source, so a quietly
+            # incomplete schedule could propagate downstream unnoticed.
+            print(f"    Game parse error ({year} wk{week}): {e}")
             return None
-    
+
     def _parse_html_schedule(self, soup: BeautifulSoup, year: int, week: int) -> List[Dict]:
         """Fallback: parse schedule from HTML structure."""
         games = []

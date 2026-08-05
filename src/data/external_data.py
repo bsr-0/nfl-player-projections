@@ -339,9 +339,12 @@ class WeatherDataLoader:
             try:
                 from src.utils.leakage import sanitize_schedule_df
                 schedules = sanitize_schedule_df(schedules)
-            except Exception:
-                pass
-            
+            except Exception as e:
+                # sanitize_schedule_df strips final-score columns to
+                # prevent leakage; a silent failure here means unsanitized
+                # (leaky) schedule data flows downstream (GAPS.md §9 audit).
+                print(f"  WARNING: schedule sanitization failed, score columns may leak through: {e}")
+
             if 'weather' in schedules.columns or 'temp' in schedules.columns:
                 print(f"  Found weather data in schedules")
             else:
@@ -544,8 +547,11 @@ class VegasLinesLoader:
             try:
                 from src.utils.leakage import sanitize_schedule_df
                 schedules = sanitize_schedule_df(schedules)
-            except Exception:
-                pass
+            except Exception as e:
+                # sanitize_schedule_df strips final-score columns to
+                # prevent leakage; a silent failure here means unsanitized
+                # (leaky) schedule data flows downstream (GAPS.md §9 audit).
+                print(f"  WARNING: schedule sanitization failed, score columns may leak through: {e}")
             if 'spread_line' in schedules.columns and 'total_line' in schedules.columns:
                 n_valid = schedules['spread_line'].notna().sum()
                 print(f"  Loaded {n_valid} line records from schedules")

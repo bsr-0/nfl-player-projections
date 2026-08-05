@@ -210,12 +210,13 @@ def get_feature_columns(df: pd.DataFrame, position: str = None) -> list:
         if is_allowed:
             feature_cols.append(col)
 
-    try:
-        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-        feature_cols = filter_feature_columns(feature_cols)
-        assert_no_leakage_columns(feature_cols, context="train_advanced feature selection")
-    except Exception:
-        pass
+    # Deliberately NOT wrapped in try/except (GAPS.md §9 audit, 2026-08-05
+    # follow-up): imported only by validate_methodology.py, a standalone
+    # human-run validation script -- a raised traceback is more useful
+    # than a printed warning.
+    from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+    feature_cols = filter_feature_columns(feature_cols)
+    assert_no_leakage_columns(feature_cols, context="train_advanced feature selection")
 
     return feature_cols
 

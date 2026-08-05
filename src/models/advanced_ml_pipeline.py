@@ -1344,13 +1344,13 @@ def run_comprehensive_evaluation():
 
         feature_cols.append(c)
 
-    try:
-        from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
-        feature_cols = filter_feature_columns(feature_cols)
-        assert_no_leakage_columns(feature_cols, context="advanced_ml_pipeline")
-    except Exception:
-        pass
-    
+    # Deliberately NOT wrapped in try/except (GAPS.md §9 audit, 2026-08-05
+    # follow-up): standalone `python -m` script, human-run -- a raised
+    # traceback is more useful than a printed warning.
+    from src.utils.leakage import filter_feature_columns, assert_no_leakage_columns
+    feature_cols = filter_feature_columns(feature_cols)
+    assert_no_leakage_columns(feature_cols, context="advanced_ml_pipeline")
+
     print(f"Total features available: {len(feature_cols)}")
     
     # Run evaluation
