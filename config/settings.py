@@ -318,6 +318,11 @@ CAUSAL_FEATURES = {
         "fp_late6_vs_season",
         "is_contract_year", "contract_apy_rank", "depth_chart_rank",
         "speed_score", "team_motion_rate", "team_play_action_rate",
+        # v27: rookie identity/draft-capital/combine (real target-leakage
+        # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2 -
+        # these 4 are confirmed leakage-safe; rookie_opportunity_score/
+        # breakout_prob/ceiling_ppg/floor_ppg are NOT, deliberately excluded)
+        "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
         # PFR contact quality (2018+) — OL quality vs individual elusiveness
         "rb_ybc_avg_roll3_mean", "rb_yac_avg_roll3_mean",
         # Seasonal PFR prior-season broken tackles — individual elusiveness baseline
@@ -358,6 +363,11 @@ CAUSAL_FEATURES = {
         "fp_late6_vs_season",
         "is_contract_year", "contract_apy_rank", "depth_chart_rank",
         "speed_score", "team_motion_rate", "team_play_action_rate",
+        # v27: rookie identity/draft-capital/combine (real target-leakage
+        # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2 -
+        # these 4 are confirmed leakage-safe; rookie_opportunity_score/
+        # breakout_prob/ceiling_ppg/floor_ppg are NOT, deliberately excluded)
+        "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
         # PFR drop rate (2018+) — target quality / hands reliability
         "recv_drop_pct_roll3_mean",
         # Seasonal PFR prior-season drop rate — full-season hands baseline
@@ -398,6 +408,11 @@ CAUSAL_FEATURES = {
         "fp_late6_vs_season",
         "is_contract_year", "contract_apy_rank", "depth_chart_rank",
         "speed_score", "team_motion_rate", "team_play_action_rate",
+        # v27: rookie identity/draft-capital/combine (real target-leakage
+        # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2 -
+        # these 4 are confirmed leakage-safe; rookie_opportunity_score/
+        # breakout_prob/ceiling_ppg/floor_ppg are NOT, deliberately excluded)
+        "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
         # PFR drop rate (2018+) — target quality / hands reliability
         "recv_drop_pct_roll3_mean",
         # Seasonal PFR prior-season drop rate — full-season hands baseline
@@ -439,6 +454,11 @@ CAUSAL_FEATURES = {
         "fp_late6_vs_season",
         "is_contract_year", "contract_apy_rank", "depth_chart_rank",
         "speed_score", "team_motion_rate", "team_play_action_rate",
+        # v27: rookie identity/draft-capital/combine (real target-leakage
+        # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2 -
+        # these 4 are confirmed leakage-safe; rookie_opportunity_score/
+        # breakout_prob/ceiling_ppg/floor_ppg are NOT, deliberately excluded)
+        "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
         # PFR pressure rate (2018+) — pressured pct as true rate (causal, not count-based)
         "qb_pressure_pct_roll3_mean",
         # Seasonal PFR prior-season accuracy + pocket time — decision quality baseline
@@ -596,7 +616,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "26"  # v26: opp_fpts_allowed_s2d_lag1, opp_fpts_allowed_dvoa_adjusted_lag1 (DVOA-style opponent-adjustment, GAPS.md §11.1.F) + fixed a live serving-path bug where opp_fpts_allowed/_s2d_lag1 reflected the player's last-played opponent instead of the upcoming one
+FEATURE_VERSION = "27"  # v27: is_rookie, rookie_draft_value, rookie_bust_prob, combine_score (GAPS.md §7.2) + fixed a bug where advanced_rookie_injury.py crashed and was silently skipped on every prior training run (first_season column collision with season_long_features.py)
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

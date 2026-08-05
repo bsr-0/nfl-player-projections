@@ -1741,3 +1741,191 @@ R²=0.345 vs. documented-baseline 0.269 result — that was measured on v25,
 before this phase existed, so it doesn't cover v26 either. Worth doing as
 its own pass, covering all of v23-v26 at once, before leaning on any of
 this for real draft decisions.
+
+### §7.2 (rookie features) — DONE: promoted, but only after finding and fixing a bug that had silently disabled this entire feature module for the project's whole history
+
+Picked as the next item after a periodic-checkpoint discussion (walk-
+forward backtests are expensive enough that per-item ablation isn't worth
+it, but letting the whole remaining GAPS.md list go unmeasured isn't
+either — settled on checking after each natural batch, same cadence as
+the v22-v25 checkpoint already done).
+
+Before promoting anything, read the actual computation in
+`src/features/advanced_rookie_injury.py` rather than assuming the earlier
+session's audit ("genuinely runs in train and serve, just excluded from
+CAUSAL_FEATURES") meant it was safe to add wholesale. It wasn't.
+
+**Confirmed real, severe target leakage**: `AdvancedRookieProjector.
+calculate_opportunity_score(df, player_id)` sums `fantasy_points` for the
+player's team/position across the **entire** `df` passed in, with no
+season/week filtering, no shift, no exclusion of future rows. Verified
+empirically with a synthetic test: the same rookie's opportunity score
+came back **0.4** using only weeks 1-5, vs. **0.986** using the full
+season including weeks 6-18 — a massive, unambiguous difference driven
+entirely by information that wouldn't exist yet at prediction time. This
+matters because `add_advanced_rookie_features()` (line ~898) computes this
+**once per rookie** using the full `df` (`profile = self.project_rookie(...,
+df=result)`, line ~936) and then broadcasts that single leaked value onto
+**every one of that player's rows**, including their week-1 row — so a
+rookie's week-1 feature would already "know" how their whole season
+played out.
+
+Traced the contamination downstream: `rookie_opportunity_score` itself,
+`rookie_breakout_prob` (`calculate_breakout_probability` takes
+`opportunity_score` as a direct parameter), and `rookie_ceiling_ppg`/
+`rookie_floor_ppg` (both derived from `adjusted_ppg = base_ppg * (0.8 +
+opportunity * 0.4)`) are all contaminated. **`rookie_draft_value`**
+(`calculate_draft_capital_value(draft_pick)` — pure function of draft
+pick, no `df` dependency) and **`rookie_bust_prob`**
+(`calculate_bust_probability(draft_pick, position)` — same, no
+`opportunity`/`df` dependency) are clean.
+
+**A second, less severe but still real leakage issue found in the same
+module**: `AdvancedInjuryPredictor.add_advanced_injury_features()`
+computes `weekly_workload = rushing_attempts + targets` **for the row's
+own week** (not the prior week), then `season_workload =
+groupby(player,season)['weekly_workload'].cumsum()` — which includes that
+same current-week value in the cumulative sum. `injury_prob_advanced`,
+`injury_workload_risk`, and (via the 0.6/0.4 blend) `injury_prob_combined`
+all consume `weekly_workload`/`season_workload` directly, so they use the
+current week's own rushing attempts/targets — the outcome of the game
+being predicted — as a same-week input feature. Not promoted.
+
+**Confirmed safe and not leaky**: `is_rookie` (derived from `years_exp`/
+first-season-in-data, structural, not outcome-based), `rookie_draft_value`,
+`rookie_bust_prob` (both pure functions of draft position, established
+above), and `combine_score`/`athleticism_grade` (`add_combine_features()`
+matches against a static, pre-draft `combine_df` by player name —
+verified by reading the join logic, no `df`-outcome dependency at all;
+`athleticism_grade` is categorical/redundant with `combine_score` and
+would need separate encoding work to use as a Ridge input, so not
+promoted — same reasoning as `support_class` earlier this session).
+
+**Status as of this entry: investigation and leakage triage done,
+promotion of the safe subset NOT yet completed.** A verification run
+(`create_causal_features()` → `add_advanced_rookie_injury_features()` on
+real 2024 RB data, 1,408 rows) is still in progress in the background —
+it's taking far longer than expected (single-position, single-season
+slice still running after several minutes of CPU time, despite this same
+step completing within the ~2-3 minute full `--fast --no-tune` training
+run in past sessions). Not yet root-caused; worth checking whether
+`add_combine_features()`'s row-wise `.iterrows()` + `.str.contains()`
+matching against `combine_df` (scanning every row, not just rookies) is
+the bottleneck, and whether the full training pipeline benefits from a
+warm cache (NGS/combine data already loaded by an earlier step in the
+same process) that a standalone script doesn't get.
+
+The two leakage bugs above (`rookie_opportunity_score`/`rookie_breakout_
+prob`/`rookie_ceiling_ppg`/`rookie_floor_ppg` via `calculate_opportunity_
+score`'s unshifted full-`df` sum; `injury_prob_*`/`injury_workload_risk`
+via same-week `weekly_workload`/`season_workload`) remain real and
+**dormant** — neither is in `CAUSAL_FEATURES`, so neither is corrupting
+any live model. Flagged here so a future session doesn't promote them
+without independently rediscovering this.
+
+### A much bigger discovery while verifying the "safe" subset: this entire module has never actually run in production
+
+Running the standard non-degeneracy check (chain the real column-
+population order: `create_causal_features()` → `add_season_long_features()`
+→ `add_advanced_rookie_injury_features()`, since the rookie/injury step
+runs *after* causal features, not inside them) immediately crashed with
+`KeyError: 'first_season'`.
+
+**Root cause**: `season_long_features.py`'s `add_rookie_features()` and
+`advanced_rookie_injury.py`'s `add_advanced_rookie_features()` both
+independently compute an identically-named `first_season` column with the
+identical formula (`groupby('player_id')['season'].min()`), and the
+first one runs earlier in the real pipeline. When the second one merges
+its own freshly-computed `first_season` onto a frame that already has a
+column of that name, pandas silently suffixes both sides
+(`first_season_x`/`first_season_y`) instead of erroring — so the very
+next line's `result['first_season']` lookup throws `KeyError`.
+
+**This is not hypothetical or specific to my test setup — confirmed
+against the actual training logs from every feature version shipped this
+session.** `grep "skipped" /tmp/train_out_v25.log /tmp/train_out_v26.log`
+shows, verbatim, in both: `"Adding advanced rookie features..."` followed
+immediately by `"Advanced rookie/injury features skipped: 'first_season'"`.
+The crash is caught by a bare `except Exception as e: print(...); return
+data` in `feature_preparation.py`'s `add_advanced_features()` — a
+textbook instance of Recurring Bug #1 already documented in
+PROJECT_NOTES.md ("silent fallback pattern... any new data integration
+should log structured warnings instead"), just never previously traced to
+this specific module. **Every rookie-draft-capital/comp-player-match/
+combine-score/injury-hazard feature this module computes has been dead
+code in every training run for the life of this project** — not merely
+excluded from `CAUSAL_FEATURES` as the original session-start
+investigation concluded (that investigation confirmed the function was
+*called*, which was true, but didn't check whether the call actually
+*succeeded* — a gap in that verification worth remembering).
+
+**Fix**: `result = result.drop(columns=['first_season'], errors='ignore')`
+immediately before `add_advanced_rookie_features()`'s own `first_season`
+computation, so the merge always creates a clean, unsuffixed column. One
+line, in `advanced_rookie_injury.py`.
+
+### A second bug surfaced by fixing the first one: an uncached, reliably-failing network call per rookie
+
+With the crash fixed, a full-dataset verification run took an
+unreasonable 979 seconds for what should have been a fast operation.
+Root cause: `AdvancedRookieProjector.project_rookie()` defaults to
+`use_comparables=True`, which calls `get_comparable_projection()` →
+`_load_historical_rookies()` — a **fresh, uncached `nfl_data_py` network
+fetch on every single call** (`import_seasonal_data` + `import_draft_picks`,
+no caching, no memoization), called once per unique rookie in the
+calling loop. One of the two fetches (`import_draft_picks` for the
+current, not-yet-happened season) reliably 404s, so every rookie pays a
+real network round-trip that's guaranteed to fail.
+
+Checked what actually consumes the comparable-player blend before
+deciding how to fix it: only `rookie_opportunity_score`,
+`rookie_ceiling_ppg`, and `rookie_floor_ppg` do — all three already
+excluded from promotion due to the leakage bug documented above. **Fix**:
+pass `use_comparables=False` in the call site inside
+`add_advanced_rookie_features()`. Costs nothing for the four features
+actually promoted, and cuts the full-dataset (43,135 rows, 2018+, all
+positions) runtime for this step from an untested-but-clearly-multi-
+minute number down to **105 seconds** — confirmed reasonable relative to
+the ~2-3 minute total `--fast --no-tune` training run.
+
+### Final promotion — verified and shipped
+
+`CAUSAL_FEATURES` gained `is_rookie`, `rookie_draft_value`,
+`rookie_bust_prob`, `combine_score` for all four positions.
+`FEATURE_VERSION` bumped to `"27"`.
+
+**Verified**:
+- Full dead-feature audit (real production column order, 43,135 rows,
+  2018+, all positions): `CAUSAL_FEATURES` clean, zero missing
+  declarations.
+- Distribution check: `is_rookie` nonnull=100%, 26.7% flagged rookie
+  (somewhat elevated vs. a true ~10-15% rookie rate — an artifact of the
+  2018+ data window used for this check, where players whose real debut
+  predates 2018 but who first appear in the *queried slice* at 2018 look
+  like rookies; not a new bug, an inherent limitation of first-season
+  derivation on any truncated window, noted but not chased further since
+  production presumably has deeper history available for this
+  computation). `rookie_draft_value`: nunique=244, range [0.1, 1.0], real
+  spread by draft position. `rookie_bust_prob`: nunique=20 (tiered by
+  draft-pick bucket, as designed). `combine_score`: nunique=210, range
+  [10, 92], real spread.
+- Retrain (`python -m src.models.train --fast --no-tune`): completed
+  clean, **no "skipped" message** — first time this module has ever
+  successfully executed inside a real training run for this project.
+  `feature_version.txt` = 27.
+- Model artifact confirmation: all four features present in
+  `data/models/component_{qb,rb,wr,te}.json` `feature_names` (QB 51, RB
+  55, WR 56, TE 55 total features).
+- 155/155 relevant tests pass (`test_preseason_projector.py`,
+  `test_quality_gates.py`, `test_target_and_history_causality.py`,
+  `test_advanced_analytics.py`, `test_matchup_aware_prediction.py`,
+  `test_missing_data_and_new_features.py`, `test_rookie_projections.py`,
+  `test_training_pipeline.py`).
+
+**Not attempted**: fixing the two dormant leakage bugs
+(`rookie_opportunity_score` and the injury same-week-workload features) —
+real, scoped, but a separate task from "promote the already-safe subset."
+Root-causing why the full-dataset run showed a still-somewhat-elevated
+rookie rate (worth checking whether real `_prepare_training_data` loads
+deeper history than the `season >= 2018` slice used for this session's
+verification, which would resolve it without any code change).

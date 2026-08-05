@@ -905,6 +905,20 @@ class AdvancedRookieProjector:
         if 'years_exp' in result.columns:
             result['is_rookie'] = (result['years_exp'] == 0).astype(int)
         else:
+            # season_long_features.add_rookie_features() runs earlier in the
+            # real pipeline and computes an identical 'first_season' column
+            # of its own (same formula). If it's already present, the merge
+            # below silently suffixes both sides (first_season_x/_y) instead
+            # of erroring, so the very next line's df['first_season'] lookup
+            # raises KeyError — which the caller (feature_preparation.py's
+            # add_advanced_features) catches with a bare except and silently
+            # skips, meaning this entire module (rookie profiles, combine
+            # scores, injury predictions) never actually ran in any real
+            # training run. Confirmed via git history of train logs: every
+            # v22-v26 run printed "Advanced rookie/injury features skipped:
+            # 'first_season'" and moved on. Dropping any pre-existing column
+            # of the same name first avoids the collision.
+            result = result.drop(columns=['first_season'], errors='ignore')
             first_season = result.groupby('player_id')['season'].min().reset_index()
             first_season.columns = ['player_id', 'first_season']
             result = result.merge(first_season, on='player_id', how='left')
@@ -933,7 +947,20 @@ class AdvancedRookieProjector:
                 position=player_data['position'],
                 draft_round=draft_round,
                 draft_pick=draft_pick,
-                df=result
+                df=result,
+                # use_comparables=True triggers get_comparable_projection(),
+                # which calls _load_historical_rookies() — a fresh, uncached
+                # nfl_data_py network fetch PER ROOKIE (no caching at all),
+                # and one of its two calls (import_draft_picks for the
+                # current, not-yet-happened season) reliably 404s. Only
+                # rookie_opportunity_score/rookie_ceiling_ppg/rookie_floor_ppg
+                # consume the comparable-player blend (see GAPS.md §7.2 —
+                # those are also separately excluded from CAUSAL_FEATURES
+                # due to a target-leakage bug in calculate_opportunity_score),
+                # so disabling this costs nothing for the features actually
+                # promoted, and avoids ~0.5s of wasted network I/O per
+                # rookie on every training run.
+                use_comparables=False,
             )
             
             # Update DataFrame
