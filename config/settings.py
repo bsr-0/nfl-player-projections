@@ -711,6 +711,28 @@ DECISION_QUALITY = {
 # guess of the same kind this change is trying to get away from.
 RIDGE_DEFAULT_ALPHA = 1.0
 
+# Per-position exponent for scaling a single-week prediction std into an
+# n-week-total std (GAPS.md §7.4 follow-up: "n_weeks**0.4 multi-week
+# CI-scaling exponent"), used only by ensemble.py's single_week_models
+# fallback path (no per-horizon-trained model to draw real calibration
+# from there). Derived via scripts/derive_multiweek_ci_exponent.py: fits
+# std(N) = std(1) * N**alpha by log-log regression of the realized std of
+# real forward-looking N-week fantasy-point sums (player_weekly_stats,
+# 2006-2025) against N, for N in [1,2,4,8,13,18]. R² > 0.998 for every
+# position. All four values come out well above the independent-weeks
+# baseline of 0.5, confirming real positive week-to-week autocorrelation
+# (hot/cold stretches, role entrenchment) -- and well above the previous
+# hardcoded guess of 0.4, which was wrong in direction (below even the
+# i.i.d. baseline, under-widening multi-week CIs).
+MULTI_WEEK_CI_SCALE_EXPONENT = {
+    "QB": 0.713,
+    "RB": 0.810,
+    "WR": 0.780,
+    "TE": 0.798,
+}
+# Fallback for any position not in the dict above (mean of the fitted values).
+MULTI_WEEK_CI_SCALE_EXPONENT_DEFAULT = 0.775
+
 # Success criteria thresholds (from requirements Section VII)
 SUCCESS_CRITERIA = {
     "spearman_rho_min": 0.65,        # Ranking accuracy target

@@ -81,24 +81,35 @@ def _warn_if_feature_version_mismatch() -> None:
         )
 
 
-def _multi_week_ci_scale(n_weeks: int) -> float:
+def _multi_week_ci_scale(n_weeks: int, position: Optional[str] = None) -> float:
     """Scale factor applied to a single-week prediction std to get the std
-    of an n-week total (GAPS.md §7.4).
+    of an n-week total, for the ``single_week_models`` fallback path only
+    (used when no multi-week model was ever trained for a position, so
+    there's no per-horizon-calibrated uncertainty to draw on directly).
 
-    Uses n_weeks**0.4 rather than sqrt(n_weeks) (the textbook scaling for
-    a sum of n independent weeks). Weekly fantasy performance is
-    autocorrelated (hot/cold stretches, role changes, matchup runs), so
-    treating weeks as independent understates multi-week uncertainty;
-    0.4 was already in use on one of the two prediction paths in this
-    file with that rationale, while the other path used a bare
-    sqrt(n_weeks) with no documented justification — same real quantity
-    (the std of an n-week FP total), two different formulas depending on
-    which underlying model type served a given position. Standardized on
-    the one with a stated rationale rather than inventing a third value;
-    deriving the "correct" exponent from real multi-week coverage data is
-    a separate, bigger calibration study, not done here.
+    Uses ``n_weeks**alpha`` with a per-position alpha derived from the
+    real autocorrelation structure of historical weekly fantasy-point
+    data (GAPS.md §7.4 follow-up, `scripts/derive_multiweek_ci_exponent.py`),
+    rather than a guessed constant. For n independent weeks,
+    Var(sum) = n * Var(week), i.e. alpha=0.5; the fitted per-position
+    values in ``MULTI_WEEK_CI_SCALE_EXPONENT`` are measured directly from
+    ``player_weekly_stats.fantasy_points`` (2006-2025) via log-log
+    regression of realized N-week-sum std against N (R² > 0.998 for all
+    four positions) and come out well above 0.5, confirming real positive
+    week-to-week autocorrelation (hot/cold stretches, role entrenchment).
+    The previous hardcoded 0.4 was not just unvalidated but wrong in
+    direction — below even the independent-weeks baseline, which would
+    have under-widened multi-week CIs relative to real variance.
+
+    The `MultiWeekModel` prediction path does NOT use this function: each
+    of its representative 1w/4w/18w models has its own real conformal
+    calibration fit directly against the true historical n-week-sum
+    target, which is a better uncertainty source than any scaling formula
+    (see the `base_model` selection in `EnsemblePredictor.predict`).
     """
-    return float(n_weeks) ** 0.4
+    from config.settings import MULTI_WEEK_CI_SCALE_EXPONENT, MULTI_WEEK_CI_SCALE_EXPONENT_DEFAULT
+    alpha = MULTI_WEEK_CI_SCALE_EXPONENT.get(position, MULTI_WEEK_CI_SCALE_EXPONENT_DEFAULT)
+    return float(n_weeks) ** alpha
 
 
 class EnsemblePredictor:
@@ -579,13 +590,27 @@ class EnsemblePredictor:
                 # z-scores.  When util->FP conversion is applied, conversion
                 # uncertainty is propagated via quadrature.
                 try:
-                    base_model = model.models.get(1) or list(model.models.values())[0]
+                    # Use the SAME model that produced the point prediction
+                    # above (`model.predict(pos_data, n_weeks)` -> whichever
+                    # of the 1w/4w/18w representative models covers this
+                    # horizon), not always the 1-week model. That model was
+                    # fit directly against the true historical n-week-sum
+                    # target, so its own conformal calibration already
+                    # reflects real n-week variance -- no separate scaling
+                    # heuristic needed (GAPS.md §7.4 follow-up; this used to
+                    # unconditionally pull the 1-week model's uncertainty
+                    # and then heuristically widen it by n_weeks**0.4,
+                    # mismatched with whichever horizon was actually
+                    # predicted).
+                    base_model = model.models.get(n_weeks) or model.models.get(1) or list(model.models.values())[0]
                     if hasattr(base_model, "predict_with_uncertainty"):
                         _, std = base_model.predict_with_uncertainty(pos_data)
                         pred_pts = results.loc[mask, "predicted_points"].values
 
-                        # Multi-week scaling (GAPS.md §7.4: see _multi_week_ci_scale docstring)
-                        multi_week_scale = _multi_week_ci_scale(n_weeks)
+                        # No additional multi-week scaling: base_model's own
+                        # calibration is already fit against the real
+                        # n-week-total target (see comment above).
+                        multi_week_scale = 1.0
 
                         # Per-level conformal calibration factors (preferred path)
                         per_level = getattr(base_model, "_uncertainty_scale_factors_per_level", {})
@@ -657,10 +682,12 @@ class EnsemblePredictor:
                     std_raw = std / global_factor
                 else:
                     std_raw = std
-                # Multi-week scaling (GAPS.md §7.4: unified with the other
-                # prediction path above — see _multi_week_ci_scale
-                # docstring; this used to be a bare sqrt(n_weeks) here.
-                multi_week_scale = _multi_week_ci_scale(n_weeks)
+                # Multi-week scaling: this is the only path that still needs
+                # a scaling formula (no per-horizon-trained model exists
+                # here to draw real calibration from) — see
+                # _multi_week_ci_scale docstring for how its per-position
+                # exponent was derived from real historical data.
+                multi_week_scale = _multi_week_ci_scale(n_weeks, position)
                 f80 = per_level.get(0.80, global_factor)
                 f95 = per_level.get(0.95, global_factor)
                 z80, z95 = 1.28, 1.96

@@ -2899,6 +2899,109 @@ project's production training moves off component mode, or if
 `prediction_ci80/95` columns are ever wired into something user-facing —
 neither is true today.
 
+### RESOLVED: `n_weeks**0.4` exponent replaced with real per-position values, plus a real bug fixed (2026-08-06)
+
+Per explicit user direction ("in case we ever switch modes in
+production, let's fix this robustly"), revisited this with a narrower
+question than the "build a full multi-week backtest tool" framing above:
+does deriving the exponent actually require historical *model
+predictions*, or just the autocorrelation structure of real historical
+*weekly fantasy points*? It's the latter — `std(N-week sum)` vs.
+`N × std(1-week)` is a property of the raw time series, measurable
+directly from `player_weekly_stats.fantasy_points` (110k rows,
+2006-2025) with no model in the loop. No new backtest infrastructure
+needed after all; the prior session's conclusion was right about the
+higher bar (predict-and-compare-to-actuals) but that bar wasn't actually
+required for this specific question.
+
+**A real bug, independent of the exponent.** Re-reading
+`EnsemblePredictor.predict()`'s `MultiWeekModel` branch
+(`ensemble.py:576-629`) turned up something the original investigation
+didn't catch: the point prediction correctly uses the
+horizon-appropriate representative model
+(`model.predict(pos_data, n_weeks)` → picks whichever of the trained
+1w/4w/18w models covers the requested horizon), but the *uncertainty*
+was pulled from `base_model = model.models.get(1)` — **always the
+1-week model**, regardless of `n_weeks` — then heuristically widened by
+`n_weeks**0.4`. Meanwhile each representative model already has its own
+real, conformally-calibrated per-level uncertainty
+(`_uncertainty_scale_factors_per_level`), fit during `PositionModel.fit()`
+from OOF residuals against the *actual* historical `target_{nw}w`
+column (`feature_preparation.py:_create_horizon_targets` — a true
+forward rolling sum of real `fantasy_points`, not an estimate). So this
+path had a real, calibrated n-week uncertainty source sitting right
+there and unused. Fixed: `base_model` now resolves to
+`model.models.get(n_weeks)` (the same model used for the point
+prediction), and the heuristic `multi_week_scale` multiplication was
+dropped from this path entirely (`multi_week_scale = 1.0`) since the
+correctly-selected model's own calibration already reflects real n-week
+variance — reapplying a scaling formula on top would double-count it.
+Added a regression test
+(`tests/test_models.py::TestEnsemblePredictor::test_multiweek_ci_uses_matching_horizon_model`)
+that fits a `MultiWeekModel` with deliberately distinguishable
+uncertainty factors on its 1w vs. 4w sub-models and asserts predicting
+at `n_weeks=4` reflects the 4-week model's calibration, not the
+1-week model's — this would have failed before the fix.
+
+**The exponent is still needed for one path**: the `single_week_models`
+fallback (only used when no multi-week model was ever trained — just a
+`model_{position}_1w.joblib`). There, the point prediction is a literal
+`base_pred * n_weeks` linear scale-up with no per-horizon-trained model
+to draw calibration from, so a scaling formula is unavoidable. Wrote
+`scripts/derive_multiweek_ci_exponent.py`, which loads
+`player_weekly_stats.fantasy_points` joined to `players.position`,
+computes the realized forward-looking N-week rolling sum per
+player-season for N ∈ {1,2,4,8,13,18} (same `_forward_window`-style logic
+as `_create_horizon_targets`), and fits
+`std(N) = std(1) × N^alpha` via log-log regression per position:
+
+| Position | alpha | R² |
+|---|---|---|
+| QB | 0.713 | 0.9988 |
+| RB | 0.810 | 0.9991 |
+| WR | 0.780 | 0.9988 |
+| TE | 0.798 | 0.9989 |
+
+**All four came out well above the i.i.d.-weeks baseline of 0.5**,
+confirming real positive week-to-week autocorrelation in fantasy
+production (hot/cold stretches, role entrenchment) — consistent with
+the qualitative reasoning the original 0.4 guess cited. But the old
+hardcoded **0.4 was actually below the i.i.d. baseline**, meaning it was
+wrong in direction: it wouldn't just have "under-stated" multi-week
+uncertainty relative to the true autocorrelated case, it would have
+under-stated it relative to even treating weeks as fully independent.
+Stored the fitted values in `config/settings.py`
+(`MULTI_WEEK_CI_SCALE_EXPONENT` per-position dict +
+`MULTI_WEEK_CI_SCALE_EXPONENT_DEFAULT` fallback = 0.775, the mean) and
+changed `_multi_week_ci_scale()`'s signature to
+`_multi_week_ci_scale(n_weeks, position)`.
+
+**Verification, and being explicit about its limits**: this fix does
+*not* change the fact from the original investigation that
+`MultiWeekModel`/`single_week_models` aren't exercised by production's
+default component-mode training — there is still no live end-to-end
+backtest to bit-diff against, and that's not overclaimed here. What *is*
+verified: (1) the exponent-fitting function itself, unit-tested on
+synthetic data with known ground truth
+(`tests/test_multiweek_ci_exponent.py`) — i.i.d. weekly noise recovers
+alpha≈0.5, strongly autocorrelated synthetic data recovers alpha>0.6,
+confirming the fitting logic is sound independent of what real NFL data
+shows; (2) the real fitted alphas are all > 0.5 as expected
+(same test file); (3) the `MultiWeekModel` bug fix, regression-tested as
+described above; (4) the full existing suite
+(`test_models.py` + `test_ml_audit.py` + `test_ml_robustness_15_steps.py`
++ `test_schema_validator.py` + `test_feature_engineering.py`) stays
+green — 90 passed, 3 skipped (pre-existing, data-availability-gated) —
+plus the 21 new/updated tests in `test_models.py` and
+`test_multiweek_ci_exponent.py`.
+
+This closes the open item: the exponent is no longer a guess, and the
+`MultiWeekModel` path no longer needs the exponent at all for the
+horizons it was actually trained on. Still worth a live backtest
+verification if/when production actually switches off component mode —
+but the uncertainty machinery is now correct and grounded in real data
+either way, not an untested guess sitting dormant.
+
 ### Draft-board floor/ceiling was badly miscalibrated — found, measured, fixed (2026-08-05, same session)
 
 Follow-up to the above, once it became clear the CI-scaling exponent

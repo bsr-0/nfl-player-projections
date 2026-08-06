@@ -182,22 +182,85 @@ class TestMultiWeekModel:
 
 class TestEnsemblePredictor:
     """Test suite for EnsemblePredictor."""
-    
+
     def test_predictor_initialization(self):
         """Test ensemble predictor initialization."""
         predictor = EnsemblePredictor()
-        
+
         assert not predictor.is_loaded
         assert len(predictor.position_models) == 0
-    
+
     def test_predictor_without_models(self):
         """Test predictor raises error without loaded models."""
         predictor = EnsemblePredictor()
-        
+
         data = pd.DataFrame({"position": ["RB"], "feature1": [1.0]})
-        
+
         with pytest.raises(ValueError):
             predictor.predict(data, n_weeks=1)
+
+    def test_multiweek_ci_uses_matching_horizon_model(self):
+        """GAPS.md §7.4 follow-up regression test: the CI for an n_weeks
+        prediction must come from the representative model that actually
+        covers that horizon, not always the 1-week model.
+
+        Builds a MultiWeekModel with distinguishable per-horizon
+        uncertainty (via _uncertainty_scale_factor) on its 1w vs 4w
+        sub-models, predicts at n_weeks=4 through EnsemblePredictor, and
+        asserts the resulting prediction_std reflects the 4-week model's
+        factor. Before the fix, `base_model = model.models.get(1)` meant
+        this always came from the 1-week model regardless of n_weeks.
+        """
+        np.random.seed(0)
+        n_samples = 300
+        X = pd.DataFrame({
+            "rushing_yards_roll3_mean": np.random.uniform(30, 100, n_samples),
+            "utilization_score": np.random.uniform(30, 90, n_samples),
+            "fantasy_points_lag1": np.random.uniform(5, 25, n_samples),
+        })
+        base_target = X["rushing_yards_roll3_mean"] * 0.1 + X["utilization_score"] * 0.1
+        y_dict = {
+            1: pd.Series(base_target + np.random.normal(0, 2, n_samples)),
+            4: pd.Series(base_target * 4 + np.random.normal(0, 5, n_samples)),
+            18: pd.Series(base_target * 18 + np.random.normal(0, 10, n_samples)),
+        }
+
+        mw_model = MultiWeekModel("RB")
+        mw_model.fit(X, y_dict, tune_hyperparameters=False)
+
+        # Force distinguishable, easily-identifiable uncertainty factors
+        # on the two representative models under test.
+        one_week_model = mw_model.models[1]
+        four_week_model = mw_model.models[4]
+        assert one_week_model is not four_week_model  # sanity: distinct model objects
+        one_week_model._uncertainty_scale_factor = 1.0
+        one_week_model._uncertainty_scale_factors_per_level = {0.80: 1.0, 0.95: 1.0}
+        four_week_model._uncertainty_scale_factor = 9.0
+        four_week_model._uncertainty_scale_factors_per_level = {0.80: 9.0, 0.95: 9.0}
+
+        predictor = EnsemblePredictor()
+        predictor.position_models["RB"] = mw_model
+        predictor.is_loaded = True
+
+        player_data = X.copy()
+        player_data["position"] = "RB"
+
+        result_1w = predictor.predict(player_data, n_weeks=1)
+        result_4w = predictor.predict(player_data, n_weeks=4)
+
+        std_1w = result_1w["prediction_std"].dropna()
+        std_4w = result_4w["prediction_std"].dropna()
+        assert len(std_1w) > 0 and len(std_4w) > 0
+
+        # The 4-week prediction's std must reflect the 4-week model's much
+        # larger scale factor (9x), not the 1-week model's (1x). Before the
+        # fix, both would have used the 1-week model's factor and this
+        # ratio would be ~1.0 instead of close to 9.0.
+        ratio = std_4w.mean() / std_1w.mean()
+        assert ratio > 5.0, (
+            f"Expected 4-week CI to reflect the 4-week model's own "
+            f"calibration (~9x wider), got ratio={ratio:.2f}"
+        )
 
 
 class TestModelTrainer:
