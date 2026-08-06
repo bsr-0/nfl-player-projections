@@ -3820,6 +3820,52 @@ pass): `_add_contract_features` and `_add_late_season_momentum` in
 look if backtest runtime is still a pain point, but not checked for the
 same anti-patterns yet.
 
+### Follow-up 2: contract features + late-season momentum (2026-08-06)
+
+Investigated the last two flagged candidates from the profile.
+
+- **`_add_contract_features`** had the same DB-round-trip pattern as the
+  earlier combine-data bug: every weekly call opened a fresh sqlite3
+  connection and re-queried and rebuilt the entire `contracts` table
+  lookup (15,266 rows) from scratch, even though `contracts` never
+  changes mid-backtest and the same `FeatureEngineer` instance is reused
+  across weeks. Also used `.iterrows()` to assign `is_contract_year`/
+  `contract_apy_rank` row-by-row. Fixed by moving the DB query + APY-
+  percentile computation into a class-level cache
+  (`_get_contract_lookup_table()`, built once, keyed on nothing since the
+  table is process-static) and replacing the `.iterrows()` loop with a
+  single `merge` on `player_id` (`src/features/feature_engineering.py`).
+  Verified against the original row-by-row logic on a 250-row synthetic
+  sample (200 real contract player_ids + 50 non-matching ids): exact
+  match on both output columns.
+- **`_add_late_season_momentum`** turned out to have ~40% dead code:
+  `season_avg`, `is_late`, `late_avg`, and `ratio` were all computed
+  (via two more `groupby(...).transform(lambda ...)` calls) but never
+  read — only the separately-computed `season_ratio` aggregate actually
+  fed the output column. Deleted the dead computation and replaced the
+  trailing `df.apply(axis=1)` dict-lookup with a `merge` on
+  `(player_id, season)`. Verified against the original implementation
+  (including the dead code, to confirm its removal changes nothing) on
+  200 synthetic rows across 3 seasons/15 players: `np.allclose` exact
+  match.
+
+Re-ran the same TE-only 2025 fp-mode backtest used throughout this
+investigation: **R²/MAE bit-identical** (`R2=0.2696787296807507`,
+`MAE=3.840073390115718`). Full `test_ml_audit.py` +
+`test_ml_robustness_15_steps.py` + `test_schema_validator.py` +
+`test_feature_engineering.py` suite still green (78 passed, 3 skipped,
++12 passed).
+
+**Net effect of this follow-up**: 427.0s → 381.05s (~11% further
+reduction). **Cumulative effect of the full backtester performance
+investigation** (all three follow-ups): TE-only 2025 fp-mode backtest
+wall time went from the original **601.5s → 381.05s (~37% faster)**,
+single position only, with zero change to any prediction, metric, or
+model behavior at any step.
+
+This closes out the backtester performance investigation — no further
+candidates remain flagged from the original profile.
+
 ## Stale test/doc sweep: PROJECT_NOTES.md alpha claim + 7 stale tests (2026-08-06)
 
 Closed the two remaining flagged items from the Ridge alpha audit

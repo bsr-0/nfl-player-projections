@@ -777,12 +777,16 @@ class FeatureEngineer:
         )
         return df
 
-    def _add_contract_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add contract year flag and APY rank from contracts table."""
-        if "player_id" not in df.columns or "season" not in df.columns:
-            df["is_contract_year"] = 0
-            df["contract_apy_rank"] = 0.5
-            return df
+    # Class-level cache: the contracts table is static per process, but
+    # this method used to re-query and rebuild its lookup from scratch on
+    # every weekly call in a backtest (same `engineer` instance reused
+    # across weeks). Cache holds the merge-ready per-player lookup table.
+    _contract_lookup_cache: Optional[pd.DataFrame] = None
+
+    @classmethod
+    def _get_contract_lookup_table(cls) -> pd.DataFrame:
+        if cls._contract_lookup_cache is not None:
+            return cls._contract_lookup_cache
 
         try:
             import sqlite3
@@ -796,20 +800,21 @@ class FeatureEngineer:
             """).fetchall()
             c.close()
         except Exception:
-            df["is_contract_year"] = 0
-            df["contract_apy_rank"] = 0.5
-            return df
+            cls._contract_lookup_cache = pd.DataFrame(
+                columns=["player_id", "_final_year", "_apy_rank"]
+            )
+            return cls._contract_lookup_cache
 
-        # Build lookup: gsis_id → (final_year, apy, position)
+        # Build lookup: gsis_id → (final_year, apy, position), keeping
+        # the most recently signed contract per player.
         contract_map = {}
         for gsis, pos, yr_signed, yrs, apy in contracts:
             final_year = int(yr_signed + yrs - 1)
             existing = contract_map.get(gsis)
-            # Keep the most recent contract
             if existing is None or yr_signed > existing[0]:
                 contract_map[gsis] = (yr_signed, final_year, float(apy or 0), pos)
 
-        # Compute positional APY percentiles
+        # Compute positional APY percentiles.
         from collections import defaultdict
         pos_apys = defaultdict(list)
         for gsis, (_, _, apy, pos) in contract_map.items():
@@ -824,22 +829,33 @@ class FeatureEngineer:
             rank = sum(1 for v in vals if v <= apy)
             return rank / len(vals)
 
-        is_cy = []
-        apy_rank = []
-        for _, row in df.iterrows():
-            pid = row.get("player_id")
-            season = row.get("season")
-            info = contract_map.get(pid)
-            if info:
-                _, final_year, apy, pos = info
-                is_cy.append(1 if season == final_year else 0)
-                apy_rank.append(_apy_pctile(apy, pos))
-            else:
-                is_cy.append(0)
-                apy_rank.append(0.5)
+        rows = [
+            (pid, final_year, _apy_pctile(apy, pos))
+            for pid, (_, final_year, apy, pos) in contract_map.items()
+        ]
+        cls._contract_lookup_cache = pd.DataFrame(
+            rows, columns=["player_id", "_final_year", "_apy_rank"]
+        )
+        return cls._contract_lookup_cache
 
-        df["is_contract_year"] = is_cy
-        df["contract_apy_rank"] = apy_rank
+    def _add_contract_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add contract year flag and APY rank from contracts table."""
+        if "player_id" not in df.columns or "season" not in df.columns:
+            df["is_contract_year"] = 0
+            df["contract_apy_rank"] = 0.5
+            return df
+
+        lookup = self._get_contract_lookup_table()
+        if lookup.empty:
+            df["is_contract_year"] = 0
+            df["contract_apy_rank"] = 0.5
+            return df
+
+        merged = df[["player_id", "season"]].merge(lookup, on="player_id", how="left")
+        df["is_contract_year"] = (
+            (merged["season"] == merged["_final_year"]) & merged["_final_year"].notna()
+        ).astype(int).to_numpy()
+        df["contract_apy_rank"] = merged["_apy_rank"].fillna(0.5).to_numpy()
         return df
 
     def _add_weekly_pfr_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1032,17 +1048,8 @@ class FeatureEngineer:
             df["fp_late6_vs_season"] = 1.0
             return df
 
-        # Per-player per-season: compute season avg and late-season avg
-        season_avg = df.groupby(["player_id", "season"])["fantasy_points"].transform("mean")
-        is_late = df["week"] >= 13
-        late_avg = df.groupby(["player_id", "season"])["fantasy_points"].transform(
-            lambda x: x.where(df.loc[x.index, "week"] >= 13).mean()
-        )
-
-        ratio = (late_avg / season_avg.clip(lower=1.0)).fillna(1.0).clip(0.3, 2.5)
-
-        # Shift by 1 season: map each player's current-season ratio to next season
-        # So for prediction at season N, we use season N-1's late momentum
+        # Per-player per-season: late-season (week 13+) avg vs. season avg,
+        # shifted 1 season so it reflects the *prior* season's momentum.
         season_ratio = (
             df.groupby(["player_id", "season"])
             .agg(fp_late6=("fantasy_points", lambda x: x[df.loc[x.index, "week"] >= 13].mean()),
@@ -1055,11 +1062,12 @@ class FeatureEngineer:
 
         # Shift: map season N ratio to season N+1 rows
         season_ratio["season"] = season_ratio["season"] + 1
-        ratio_map = season_ratio.set_index(["player_id", "season"])["fp_late6_vs_season"].to_dict()
 
-        df["fp_late6_vs_season"] = df.apply(
-            lambda r: ratio_map.get((r.get("player_id"), r.get("season")), 1.0), axis=1
+        merged = df[["player_id", "season"]].merge(
+            season_ratio[["player_id", "season", "fp_late6_vs_season"]],
+            on=["player_id", "season"], how="left",
         )
+        df["fp_late6_vs_season"] = merged["fp_late6_vs_season"].fillna(1.0).to_numpy()
         return df
 
     # Module-level caches for the rookie-prior fill.  Loaded on first
