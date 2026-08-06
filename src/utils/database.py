@@ -1062,16 +1062,29 @@ class DatabaseManager:
         return len(out)
 
     def get_combine_data(self, season: int = None, position: str = None) -> pd.DataFrame:
-        """Get combine data with optional filters."""
-        query = "SELECT * FROM combine_data WHERE 1=1"
+        """Get combine data with optional filters.
+
+        Reads from ``combine_data_v2`` (nfl-data-py source), which has
+        data. The legacy ``combine_data`` table is empty on this install
+        (confirmed: 0 rows) -- querying it silently fell through to a
+        live nflverse API fetch on every single call, since
+        load_combine_data()'s caller only checks `if not combine_df.empty`,
+        not the reason it's empty. This is the same fix already applied to
+        get_draft_picks() (see its docstring) for the same legacy-table-is-
+        empty pattern, just never carried over here. GAPS.md §9 follow-up,
+        2026-08-06 -- found while investigating the walk-forward
+        backtester's per-week slowness; this was firing on every single
+        week of every backtest this project has ever run.
+        """
+        query = "SELECT * FROM combine_data_v2 WHERE 1=1"
         params: list = []
         if season:
             query += " AND season = ?"
             params.append(season)
         if position:
-            query += " AND position = ?"
+            query += " AND pos = ?"
             params.append(position)
-        query += " ORDER BY season, position"
+        query += " ORDER BY season, pos"
         with self._get_connection() as conn:
             return pd.read_sql_query(query, conn, params=params)
 

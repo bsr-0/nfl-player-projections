@@ -276,7 +276,17 @@ WALK_FORWARD_BIAS_TOLERANCE_PCT = 10.0
 
 
 def _latest_walk_forward_predictions():
-    """Return Path of the most recent ts_backtest_*_predictions.csv, or None."""
+    """Return Path of the most recent fp-mode ts_backtest_*_predictions.csv, or None.
+
+    Filters to target_mode="fp" (read from the sibling .json metrics file)
+    -- GAPS.md §7.4 follow-up, 2026-08-06: found this test failing on a
+    real bias regression that turned out to be a false alarm, because an
+    unfiltered "most recent file" glob had picked up a diagnostic
+    component/util-mode run instead of an fp-mode one. Those other modes
+    are real and increasingly used for legitimate investigation (see
+    GAPS.md), so "most recent file in this directory" can no longer be
+    assumed to mean "most recent fp-mode regression check."
+    """
     if not WALK_FORWARD_DIR.exists():
         return None
     candidates = sorted(
@@ -284,7 +294,18 @@ def _latest_walk_forward_predictions():
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
-    return candidates[0] if candidates else None
+    for path in candidates:
+        meta_path = path.parent / path.name.replace("_predictions.csv", ".json")
+        if not meta_path.exists():
+            continue
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except Exception:
+            continue
+        if meta.get("target_mode", "fp") == "fp":
+            return path
+    return None
 
 
 class TestWalkForwardBiasRegression:

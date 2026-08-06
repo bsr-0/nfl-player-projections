@@ -334,8 +334,13 @@ def lock_week(
             f"expected {sum(DEFAULT_ROSTER_SLOTS.values())}"
         )
 
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from config.settings import RIDGE_DEFAULT_ALPHA
+
     model_config = {
-        "ridge_alpha_default": 10_000,  # per config.settings.RIDGE_DEFAULT_ALPHA
+        "ridge_alpha_default": RIDGE_DEFAULT_ALPHA,  # was a hardcoded duplicate (10_000) until
+        # 2026-08-06 -- imports the real constant now so this can't drift
+        # out of sync with config/settings.py again (GAPS.md §7.4 follow-up).
         "feature_mode": "causal",
         "payout_multiplier": payout_multiplier,
         "entry_usd": entry_usd,

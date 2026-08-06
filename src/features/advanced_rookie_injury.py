@@ -91,7 +91,15 @@ class AdvancedRookieProjector:
     4. Historical comparables
     5. NFL Combine metrics (40-yard, vertical, etc.)
     """
-    
+
+    # Process-level cache shared across instances (a fresh AdvancedRookieProjector
+    # is constructed on every add_advanced_rookie_injury_features() call, e.g.
+    # once per backtester week) for add_combine_features(): (player_name,
+    # position) -> (combine_score, athleticism_grade). Combine score is a
+    # static per-player attribute, so this is safe to reuse indefinitely
+    # within a process (GAPS.md, 2026-08-06 perf fix).
+    _combine_match_cache: dict = {}
+
     # Position-specific combine metric weightings
     # These weights determine how important each metric is for projecting success
     COMBINE_WEIGHTS = {
@@ -219,7 +227,7 @@ class AdvancedRookieProjector:
     
     def __init__(self):
         self.profiles = {}
-    
+
     def get_draft_tier(self, draft_round: int, draft_pick: int) -> str:
         """Categorize draft position into tiers."""
         if draft_round == 1 and draft_pick <= 10:
@@ -466,6 +474,14 @@ class AdvancedRookieProjector:
                     combine_df['name'] = combine_df['player_name']
                 if 'broad_jump' in combine_df.columns and 'broad' not in combine_df.columns:
                     combine_df['broad'] = combine_df['broad_jump']
+                # combine_data_v2 stores metric columns as TEXT; coerce to
+                # numeric so calculate_combine_score()'s float comparisons
+                # don't blow up (found 2026-08-06 after switching this
+                # loader from the network API, which returns floats, to the
+                # local DB table -- GAPS.md perf-fix follow-up).
+                for col in ('forty', 'bench', 'vertical', 'broad', 'cone', 'shuttle'):
+                    if col in combine_df.columns:
+                        combine_df[col] = pd.to_numeric(combine_df[col], errors='coerce')
                 print(f"Loaded {len(combine_df)} combine records from DB")
                 return combine_df
         except Exception as e:
@@ -540,28 +556,34 @@ class AdvancedRookieProjector:
             result['athleticism_grade'] = 'Unknown'
             return result
         
-        # Calculate combine scores for each player
-        combine_scores = []
-        athleticism_grades = []
-        
-        for idx, row in result.iterrows():
-            player_name = row.get(name_col)
-            position = row.get('position', 'WR')
-            
-            # Find player in combine data
+        # Calculate combine scores once per unique (player, position) pair
+        # instead of once per row. `result` is the walk-forward backtester's
+        # expanding training window (up to 100K+ rows by late season), but
+        # combine_score is a static per-player attribute -- repeating the
+        # O(n_rows) Python loop with a fresh full-table str.contains() scan
+        # against all combine_df rows every week was the dominant cost of
+        # the backtester's per-week slowness (GAPS.md, 2026-08-06 perf fix).
+        # A process-level cache also lets repeat players across weeks/backtest
+        # runs skip the match entirely.
+        unique_pairs = result[[name_col, 'position']].drop_duplicates()
+
+        for player_name, position in unique_pairs.itertuples(index=False, name=None):
+            cache_key = (player_name, position)
+            if cache_key in self._combine_match_cache:
+                continue
+            if not player_name:
+                self._combine_match_cache[cache_key] = (np.nan, 'Unknown')
+                continue
+
             player_combine = combine_df[
                 combine_df[combine_name_col].str.contains(str(player_name).split()[-1], case=False, na=False)
-            ] if player_name else pd.DataFrame()
-            
+            ]
+
             if player_combine.empty:
-                combine_scores.append(np.nan)
-                athleticism_grades.append('Unknown')
+                self._combine_match_cache[cache_key] = (np.nan, 'Unknown')
                 continue
-            
-            # Use first match
+
             pc = player_combine.iloc[0]
-            
-            # Calculate combine score
             score_result = self.calculate_combine_score(
                 position=position,
                 forty=pc.get('forty'),
@@ -570,12 +592,11 @@ class AdvancedRookieProjector:
                 broad=pc.get('broad'),
                 cone=pc.get('cone'),
             )
-            
-            combine_scores.append(score_result['combine_score'])
-            athleticism_grades.append(score_result['athleticism_grade'])
-        
-        result['combine_score'] = combine_scores
-        result['athleticism_grade'] = athleticism_grades
+            self._combine_match_cache[cache_key] = (score_result['combine_score'], score_result['athleticism_grade'])
+
+        pair_keys = list(zip(result[name_col], result['position']))
+        result['combine_score'] = [self._combine_match_cache[k][0] for k in pair_keys]
+        result['athleticism_grade'] = [self._combine_match_cache[k][1] for k in pair_keys]
         
         # Fill missing with position averages
         for position in ['QB', 'RB', 'WR', 'TE']:

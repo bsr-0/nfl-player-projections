@@ -432,8 +432,12 @@ class TimeSeriesBacktester:
                             model, pos_train, X_train_s, X_test_s, position
                         )
                     elif self.target_mode == "component":
+                        # Raw (unscaled) frames -- ComponentPredictor does its
+                        # own per-component StandardScaler internally, same
+                        # as production. Passing the pre-scaled X_train_s/
+                        # X_test_s here would double-scale on top of that.
                         preds = self._fit_predict_component(
-                            pos_train, X_train_s, X_test_s, position
+                            pos_train, X_train, X_test, position
                         )
                     else:
                         y_train = pos_train["fantasy_points"]
@@ -893,8 +897,21 @@ class TimeSeriesBacktester:
         return util.clip(0, 100)
 
     def _fit_predict_util(self, model, pos_train, X_train_s, X_test_s, position):
-        """Train on utilization proxy, convert predictions back to FP."""
-        from sklearn.linear_model import Ridge as _Ridge
+        """Train on utilization proxy, convert predictions back to FP.
+
+        Calls the real src.models.utilization_to_fp.UtilizationToFPConverter
+        (GAPS.md §7.4 follow-up, 2026-08-05) instead of a separate inline
+        Ridge(alpha=1000) reimplementation -- same "test the real class, not
+        a parallel copy" fix already applied to _fit_predict_component.
+        Note: util mode is NOT currently the live serving path in this
+        project (position_target_type is "component" for every position),
+        so unlike the component-mode fix this isn't correcting a
+        drifted-from-production bug in the strict sense -- but
+        UtilizationToFPConverter is real production code (loaded by
+        EnsemblePredictor for whichever positions might use it), so this
+        still tests the real converter rather than a simplified stand-in.
+        """
+        from src.models.utilization_to_fp import UtilizationToFPConverter
 
         util_col = "utilization_score"
         if util_col not in pos_train.columns or pos_train[util_col].notna().sum() < 30:
@@ -912,37 +929,102 @@ class TimeSeriesBacktester:
         model.fit(X_train_s, y_train)
         util_preds = model.predict(X_test_s)
 
-        # In-fold converter: simple Ridge from util → FP on training data
-        train_util = pos_train[[util_col]].fillna(0).values
-        train_fp = pos_train["fantasy_points"].fillna(0).values
-        converter = _Ridge(alpha=1000)
-        converter.fit(train_util, train_fp)
-        return converter.predict(util_preds.reshape(-1, 1))
+        converter = UtilizationToFPConverter(position)
+        converter.fit(pos_train, target_col="fantasy_points")
+        if not converter.is_fitted:
+            # Same fallback the real production ensemble uses when the
+            # converter can't fit (e.g. too few valid rows): pass utilization
+            # through directly rather than crashing the backtest week.
+            return util_preds
+        # LEAKAGE GUARD, part 1 (utilization_score): UtilizationToFPConverter
+        # .predict() pulls utilization_score straight out of efficiency_df
+        # when that column is present there
+        # (src/models/utilization_to_fp.py:274-277) -- passing pos_test
+        # unmodified would hand it the REAL, actual same-week
+        # utilization_score (an outcome stat, not knowable at prediction
+        # time), not this function's own util_preds. Real production
+        # (ensemble.py) avoids this by overwriting
+        # eff_df["utilization_score"] = predictions before calling predict().
+        #
+        # LEAKAGE GUARD, part 2 (efficiency features): EFFICIENCY_FEATURES
+        # (yards_per_carry, catch_rate, snap_share, etc.) are also pulled
+        # directly from efficiency_df's raw, unsuffixed columns -- and
+        # confirmed by direct check that pos_test carries 100% non-null REAL
+        # same-week values for all of them (this backtester evaluates
+        # already-completed historical weeks, so the raw box-score columns
+        # are populated; a genuinely future, not-yet-played week in live
+        # serving would not have these populated the same way, which is why
+        # production's real eff_df usage doesn't hit this leak in practice).
+        #
+        # Both parts caught only by an implausible RB R²=0.78 in this
+        # backtest (vs ~0.32-0.37 for every other mode/config measured this
+        # session) -- the utilization_score-only guard above alone still
+        # produced R²=0.775, meaning the efficiency-feature columns were
+        # carrying nearly all of the leak.
+        #
+        # First fix attempt used efficiency_df=None (zero-padding the
+        # missing efficiency slots) -- leakage-safe, but wrong in a
+        # different way: UtilizationToFPConverter's regressor is a
+        # RandomForest/XGBoost blend trained on realistic (non-zero)
+        # efficiency-feature values, so raw-zero inputs are badly
+        # out-of-distribution after StandardScaler transforms them (a
+        # near-zero raw snap_share/catch_rate/etc. is several std devs
+        # from what the trees were ever trained on). Confirmed directly:
+        # zero-padding gives R²=-1.03 on real RB data (worse than
+        # predicting the mean), while imputing each missing efficiency
+        # feature with its TRAINING-SET mean (still leakage-safe -- no
+        # real per-player same-week data, just a training-only aggregate)
+        # gives R²=+0.09 on the identical data/model. Mean-imputation is
+        # both leakage-safe and a fair test of what the converter can
+        # actually do without an unrelated distribution-mismatch artifact
+        # tanking it.
+        efficiency_df = pd.DataFrame(index=range(len(util_preds)))
+        efficiency_df[util_col] = util_preds
+        from src.models.utilization_to_fp import EFFICIENCY_FEATURES
+        for col in EFFICIENCY_FEATURES.get(position, []):
+            if col in pos_train.columns:
+                efficiency_df[col] = pos_train[col].mean()
+        return converter.predict(util_preds, efficiency_df=efficiency_df)
 
-    def _fit_predict_component(self, pos_train, X_train_s, X_test_s, position):
-        """Train separate Ridge per stat component, assemble FP via PPR weights."""
-        from sklearn.linear_model import Ridge as _Ridge
-        from config.settings import COMPONENT_TARGETS, PPR_SCORING_WEIGHTS
+    def _fit_predict_component(self, pos_train, X_train, X_test, position):
+        """Train separate Ridge per stat component, assemble FP via PPR weights.
+
+        Calls the real src.models.component_predictor.ComponentPredictor
+        directly (GAPS.md §7.4 follow-up, 2026-08-05) instead of a separate
+        inline reimplementation. The previous inline version had drifted
+        from production in three ways, none caught until directly compared
+        line-by-line against the real class:
+        1. Hardcoded alpha=RIDGE_DEFAULT_ALPHA (10,000) for every component
+           Ridge, ignoring this backtester's own --alpha/ridge_alpha
+           override entirely. Real production hardcodes alpha=1.0.
+        2. Missing the final `total_fp = max(total_fp, 0)` clamp after
+           summing weighted components -- could emit negative fantasy-point
+           predictions that production never would.
+        3. Missing the optional post-hoc linear calibration layer
+           (_maybe_fit_calibration) that production fits and applies
+           whenever it measurably improves validation RMSE.
+        Calling the real class directly means this backtest mode can never
+        drift from production again the same way -- it either tests the
+        actual code path or doesn't compile.
+        """
+        from src.models.component_predictor import ComponentPredictor
+        from config.settings import COMPONENT_TARGETS
 
         components = COMPONENT_TARGETS.get(position, [])
-        preds = np.zeros(X_test_s.shape[0])
+        y_components = {
+            comp: pos_train[comp].fillna(0)
+            for comp in components
+            if comp in pos_train.columns and pos_train[comp].std() > 1e-6
+        }
+        if not y_components:
+            return np.zeros(len(X_test))
 
-        for comp in components:
-            if comp not in pos_train.columns:
-                continue
-            y_comp = pos_train[comp].fillna(0)
-            if y_comp.std() < 1e-6:
-                continue
-            comp_model = _Ridge(alpha=RIDGE_DEFAULT_ALPHA)
-            comp_model.fit(X_train_s, y_comp)
-            comp_preds = comp_model.predict(X_test_s)
-            # Stats can't be negative (except interceptions)
-            if comp != "interceptions":
-                comp_preds = np.maximum(comp_preds, 0)
-            weight = PPR_SCORING_WEIGHTS.get(comp, 0)
-            preds += comp_preds * weight
-
-        return preds
+        seasons = pos_train["season"].values if "season" in pos_train.columns else None
+        cp = ComponentPredictor(position)
+        cp.fit(X_train, y_components, seasons=seasons)
+        if not cp.is_fitted:
+            return np.zeros(len(X_test))
+        return cp.predict(X_test)
 
     # ------------------------------------------------------------------
     def get_results_dict(self) -> Dict[str, Any]:

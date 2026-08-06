@@ -3132,3 +3132,640 @@ project's standing practice of not overstating results.
 v26-v28 in combination (each has only been tested against its immediate
 predecessor version, not cross-checked for interaction effects); the
 `--model ensemble` higher-fidelity backtest path for any of v26-v29.
+
+### Skeptical audit of RIDGE_DEFAULT_ALPHA=10,000 — real evidence conflict found, live reproduction in progress (2026-08-05, same session)
+
+Following the "four feature versions in a row show flat lift" pattern
+above, user asked for a comprehensive, skeptical re-check of the Ridge
+α=10,000 default itself — whether it's actually validated, or another
+instance of the "hardcoded, never really checked" pattern this session
+has repeatedly found (uncertainty-blend weights, CI-scaling exponent,
+floor/ceiling's `1.5` constant). Unlike those, α=10,000 has an actual
+citation in `config/settings.py`: *"Per the 2026-04-20 alpha sweep
+(`docs/ALPHA_SWEEP_20260419.md`), uniform α=10,000 beats α=1 by 4.6
+percentage points on cross-season hindsight win rate (29-14 vs 27-16
+over 43 weeks, p=0.016)."* Checked whether that citation actually holds
+up rather than trusting it at face value.
+
+**First finding: the cited doc doesn't exist.** `docs/ALPHA_SWEEP_20260419.md`
+is not present anywhere in this checkout (`find` confirms no `docs/`
+directory exists at all, consistent with the earlier session's finding
+that CLAUDE.md's UI-freeze list references a `docs/` that was never real
+in this repo). What *does* exist: `scripts/run_alpha_sweep.py` and its
+output, `data/backtest_results/alpha_sweep_summary.json` — a real sweep
+across α ∈ {0.3, 1, 3, 10, 100, 1000, 10000, 100000} on the 2025 season,
+with genuine per-position Pearson r / std-ratio / bias stats.
+
+**Second finding: the sweep's own data contradicts the win-rate claim.**
+`run_alpha_sweep.py` never computes win-rate/hindsight/decision-quality
+at all (confirmed by reading the script — it only calls `_analyze()`,
+which produces correlation/bias/variance stats, nothing about
+head-to-head wins). And what it *does* measure — Pearson correlation
+against real 2025 outcomes — shows α=10,000 performing **worse** than
+lower alphas at every single position, not better:
+
+| α | QB r | RB r | WR r | TE r |
+|---|---|---|---|---|
+| 0.3 – 10 | 0.3249 | 0.5118 | 0.5130 | 0.3986 |
+| 100 | 0.3254 | 0.5117 | 0.5130 | 0.3984 |
+| 1,000 | 0.3277 (peak) | 0.5111 | 0.5130 | 0.3973 |
+| **10,000 (current default)** | 0.3252 | **0.5052** | **0.5122** | **0.3947** |
+| 100,000 | 0.3186 | 0.4905 | 0.5084 | 0.3916 |
+
+Correlation is flat from 0.3 to 10 (essentially no regularization effect
+in that whole range — expected, since standardized-feature Ridge only
+starts biting once α approaches the scale of `n_samples`), peaks around
+α=100-1,000 depending on position, then **declines** by α=10,000, and
+declines sharply by α=100,000. RB and TE both show 10,000 measurably
+worse than even α=1. The `std_ratio` column (predicted/actual variance
+ratio — how compressed predictions are) tells the same story more
+starkly: 0.43-0.51 at low α, dropping to 0.32-0.46 at α=10,000, and
+collapsing to 0.09-0.25 at α=100,000 — the model is predicting an
+increasingly narrow, safe band centered near the mean, not genuinely
+more accurate predictions.
+
+**Third finding: the win-rate claim isn't independently verifiable from
+anything currently in the repo.** `PROJECT_NOTES.md` repeats the same
+"29-14 vs 27-16, n=43 weeks" claim (§"Alpha sweep (April 20 2026)"), but
+that's the same unverified claim, not independent corroboration — and
+this project's own history (documented multiple times earlier in this
+doc) shows `PROJECT_NOTES.md` has needed factual corrections before, so
+repetition there isn't evidence. Checked whether any of the 19
+`data/backtest_results/*.json` files in this repo contain a matching
+43-week, two-alpha win-rate comparison: the most relevant one found
+(`ts_backtest_2025_20260804_182714.json`, α=10,000, this session's own
+v25 checkpoint) has real `decision_quality` data, but it's a
+**single-season, 22-week** run (`vs_hindsight`: 63.6%, 14-8, p=0.14, not
+significant) — not the 43-week cross-season comparison the citation
+describes. Whatever run originally produced "29-14 vs 27-16" either
+predates this repo's `data/backtest_results/` history or was never
+persisted in a form that survived to this checkout.
+
+**Also checked and ruled out**: a scaling-pipeline bug as an alternative
+explanation for the correlation decline (e.g. inconsistent/double
+standardization making α=10,000 behave differently than intended).
+Verified directly on real RB data: post-`StandardScaler` features have
+mean ~0 (±3e-15), std exactly 1.0, no NaN/Inf, no near-zero-variance raw
+columns that could blow up under scaling. The scaling pipeline is clean
+— α=10,000 is being applied to properly standardized features exactly as
+intended, so the correlation decline in the sweep is a genuine
+regularization-strength effect, not an artifact.
+
+**Live reproduction, α=1.0 leg complete**: `run_ts_backtest.py --season
+2025 --model ridge --alpha 1.0` (fp mode, decision-quality reporting on)
+— **R²=0.351, Hindsight win rate 72.7% (16-6, p=0.026, ROI +30.9%)**.
+This is *better* than every α=10,000 result documented anywhere in this
+project: better than this session's own earlier α=10,000 checkpoint
+(63.6%, 14-8, p=0.14, not significant) and better than the
+67.4%/29-14/p=0.016 claim `PROJECT_NOTES.md`/`config/settings.py` use to
+justify α=10,000 in the first place (that claim was on a different,
+43-week cross-season sample this repo has no surviving artifact for — see
+above). The matching α=10,000 leg was still running as of this entry;
+result to follow, but α=1.0 has already cleared the bar α=10,000 was
+supposed to beat.
+
+### A much bigger discovery while setting up this reproduction: this project's backtest methodology has never actually tested the deployed model architecture
+
+While building the comparison, checked **where `RIDGE_DEFAULT_ALPHA` is
+actually consumed** across the codebase (not assumed). Finding:
+`train.py`, `component_predictor.py`, `position_models.py`, and
+`ensemble.py` **never import it at all**. Real production
+(`component_predictor.py` — confirmed to be what's live, since
+`position_target_type="component"` for every position in
+`MODEL_CONFIG`) trains 3-5 separate Ridge models per position (one per
+stat: `passing_yards`, `rushing_tds`, `receptions`, etc.), each
+**hardcoded to `alpha=1.0`**, then assembles them into fantasy points via
+PPR scoring weights. `RIDGE_DEFAULT_ALPHA=10,000` only ever reaches
+`ts_backtester.py`'s `target_mode="fp"` path — a single monolithic Ridge
+predicting fantasy points directly, an architecture that **does not
+match production at all**.
+
+Checked how often `target_mode="component"` (the mode that *would* match
+production) has ever actually been run: grepped every `.py`/`.md` file in
+this repo. **Never, in this project's history, until today.** Every
+backtest number this project has ever cited — the original R²=0.269
+baseline, the v25 checkpoint (R²=0.345, described elsewhere in this doc
+as "the real jump"), every v26-v29 ablation, the rookie-slice lift — was
+measured against `target_mode="fp"`, structurally different from what's
+actually deployed to users.
+
+**`ts_backtester.py`'s own `target_mode="component"` implementation was
+itself drifted from real production**, found by direct line-by-line
+comparison against `component_predictor.py`:
+1. Hardcoded `Ridge(alpha=RIDGE_DEFAULT_ALPHA)` for every component
+   model, ignoring this backtester's own `--alpha` override entirely —
+   real production hardcodes `alpha=1.0`.
+2. Missing production's final `total_fp = max(total_fp, 0)` clamp after
+   summing weighted components.
+3. Missing production's optional post-hoc linear calibration layer
+   (`_maybe_fit_calibration`), applied whenever it measurably improves
+   validation RMSE.
+
+**Fixed by replacing the inline reimplementation with a direct call to
+the real `ComponentPredictor` class** (`src/models/component_predictor.py`)
+— not by patching the three bugs individually, since patching a parallel
+copy just re-creates the same drift risk the next time production
+changes. The backtester's `component` mode now either tests the actual
+deployed code path or fails to compile; it can't silently diverge again.
+Verified via a real 2024-2025 RB-only integration test before trusting
+it: completed cleanly across all 22 weeks, zero negative predictions
+(confirms the clamp works), real non-degenerate output — **RB R²=0.322**,
+notably *lower* than the `fp`-mode proxy's documented RB R² (0.364-0.366
+across the v25-v28 checkpoints). A full 4-position `component`-mode run
+was kicked off to get a real apples-to-apples baseline; still running as
+of this entry.
+
+**`target_mode="util"` had the same "own drifting reimplementation"
+problem, plus something worse.** Its inline converter
+(`Ridge(alpha=1000)` fit inline) was replaced the same way, with a call
+to the real `src.models.utilization_to_fp.UtilizationToFPConverter`.
+First integration test produced an **impossible RB R²=0.781** — nothing
+else measured this entire session has exceeded ~0.37. Root-caused rather
+than dismissed: `UtilizationToFPConverter.predict(utilization,
+efficiency_df=...)` pulls its input features (`utilization_score` plus
+`EFFICIENCY_FEATURES` — `yards_per_carry`, `catch_rate`, `snap_share`,
+etc.) directly out of `efficiency_df` when those columns are present
+there, falling back to the passed-in `utilization` array only when
+they're absent. Passing `pos_test` (the backtester's historical test
+frame) handed it the **real, actual, same-week values** for all of these
+— genuine outcome stats, not knowable at real prediction time — instead
+of the function's own `util_preds`. Real production (`ensemble.py`)
+narrowly avoids the `utilization_score` half of this by explicitly
+overwriting `eff_df["utilization_score"] = predictions` before calling
+`predict()`; the backtester integration didn't replicate that.
+
+First fix (replicating the `utilization_score` overwrite) only moved R²
+from 0.781 to 0.775 — barely anything, which was itself the tell that a
+second, larger leak remained. Checked directly: `pos_test` carries
+**100% non-null real values** for all 5 `EFFICIENCY_FEATURES` columns
+(confirmed via direct inspection), because this backtester evaluates
+already-completed historical weeks — unlike genuine live serving for a
+real future week, where these same-week outcome columns simply
+wouldn't exist yet, which is why production's real call sites don't hit
+this leak in practice. First fix attempt: don't construct a leaky
+`efficiency_df` at all, passing `efficiency_df=None` so the converter
+falls back to using only `util_preds` (zero-padding the
+efficiency-feature slots) — leakage-safe, but this introduced a *third*
+distinct bug.
+
+**Third `util`-mode bug: zero-padding is leakage-safe but badly
+out-of-distribution for the converter's model.** With `efficiency_df=None`,
+RB integration-test R² came back at **-1.09** — worse than predicting the
+mean, and a huge drop from the (leaked) 0.775. `UtilizationToFPConverter`'s
+regressor is a RandomForest/XGBoost blend trained on realistic
+(non-zero) efficiency-feature values (`yards_per_carry`, `catch_rate`,
+`snap_share`, etc.); feeding raw zero for those slots at predict time,
+then running that through the fitted `StandardScaler`, lands several
+standard deviations outside anything the trees ever saw in training —
+not a leak, but a genuine distribution-mismatch artifact that tanks
+accuracy for an unrelated reason. Confirmed directly on identical
+data/model: zero-padding → R²=-1.03; imputing each missing efficiency
+feature with its **training-set mean** instead (still fully leakage-safe
+— a training-only aggregate, never a real per-player same-week value) →
+R²=+0.09. Fixed `_fit_predict_util` to mean-impute rather than
+zero-pad. Re-ran the RB integration test a fourth time on the real
+walk-forward backtest (not just the single-shot diagnostic): **R²=0.048,
+non-degenerate, no crashes** — a legitimate number now, three real bugs
+away from the original impossible 0.781.
+
+**Three-way RB comparison, all now genuinely leakage-safe and
+architecture-faithful**: `fp` mode (α=1.0) RB R²=0.365, `component` mode
+RB R²=0.322, `util` mode RB R²=0.048. `util` mode is clearly the weakest
+of the three on this position — not surprising in hindsight, since its
+converter is working with meaningfully less real signal per prediction
+(one predicted utilization score plus mean-imputed, not real,
+efficiency context) than either of the other two modes get from their
+full feature sets. Full 4-position runs for both `component` and `util`
+modes launched; results to follow.
+
+**Full 4-position `component`-mode result: the first-ever backtest of
+this project's actual production architecture.** R²=0.335, QB/RB/WR/TE =
+0.241/0.341/0.267/0.236, Hindsight win rate 72.7% (16-6, p=0.026, ROI
++30.9%). All three legs on the identical 2025 season, side by side:
+
+| | R² (overall) | QB / RB / WR / TE | Hindsight win rate |
+|---|---|---|---|
+| `fp` mode, α=1.0 | 0.351 | 0.252 / 0.365 / 0.276 / 0.271 | 72.7% (16-6), p=0.026 |
+| `fp` mode, α=10,000 (old default) | 0.350 | 0.233 / 0.368 / 0.281 / 0.267 | 63.6% (14-8), p=0.143 |
+| **`component` mode (real production)** | **0.335** | 0.241 / 0.341 / 0.267 / 0.236 | **72.7% (16-6), p=0.026** |
+
+A genuinely nuanced split, not a one-sided verdict: on raw correlation,
+the real production architecture is the *weakest* of the three, lower
+than either `fp`-mode proxy at every position except QB. But on
+decision-quality (win rate) — the metric this project's whole
+`DECISION_QUALITY` framework is built around for actual lineup
+decisions — it exactly matches the best result measured (α=1.0 `fp`
+mode: same 16-6 record, same p=0.026), and clearly beats the α=10,000
+default every past measurement has used (72.7% vs 63.6%). The two
+metrics disagree about whether `component` mode underperforms `fp`
+mode; they agree completely that α=10,000 underperforms α=1.0, on
+whichever architecture you test it against.
+
+One nuance worth flagging honestly: the 16-6 win/loss record matching
+exactly between `component` mode and α=1.0 `fp` mode is not a sign the
+two runs are secretly identical — average margins differ (+18.02 vs
++20.95), meaning the underlying weekly predictions are genuinely
+different; they just happened to land on the same side of that
+particular week's win/loss threshold most weeks this season. At n=22
+weeks, an exact record match across two real but different models isn't
+strong evidence of anything beyond "both are decent," and shouldn't be
+over-read as proof they're equivalent.
+
+**Full 4-position `util`-mode result: decisive, and the opposite kind of
+result.** R²=0.027 overall, and **negative for 3 of 4 positions** (QB
+-0.003, RB -0.167, WR -0.002, TE +0.005 — essentially indistinguishable
+from predicting the mean, or worse). Decision-quality is not just weak
+but actively bad: Hindsight win rate **13.6% (3-19), p=0.9999, ROI
+-75.4%** — p=0.9999 means the observed record is essentially the worst
+possible outcome under the null, i.e. this isn't "no better than a coin
+flip," it's reliably losing. (It still beats the `Replacement`-level
+baseline at 72.7%/16-6 — same record as the other two modes get there —
+but that's a low bar every real model clears easily; it says nothing
+about `util` mode specifically.)
+
+### Complete four-way comparison, all real, all leakage-checked, same 2025 season
+
+| Mode | R² (overall) | QB / RB / WR / TE | Hindsight win rate | p-value | ROI |
+|---|---|---|---|---|---|
+| `fp`, α=1.0 | 0.351 | 0.252 / 0.365 / 0.276 / 0.271 | 72.7% (16-6) | 0.026 | +30.9% |
+| `component` (real production) | 0.335 | 0.241 / 0.341 / 0.267 / 0.236 | 72.7% (16-6) | 0.026 | +30.9% |
+| `fp`, α=10,000 (old default) | 0.350 | 0.233 / 0.368 / 0.281 / 0.267 | 63.6% (14-8) | 0.143 | +14.5% |
+| `util` | 0.027 | -0.003 / -0.167 / -0.002 / 0.005 | **13.6% (3-19)** | **0.9999** | **-75.4%** |
+
+**Overall verdict**: `fp` (α=1.0) and `component` mode (real production)
+are both genuinely competitive — close on correlation, identical on
+decision-quality. `fp` at the old α=10,000 default is clearly worse on
+decision-quality than either of those, though still a functioning model.
+`util` mode, even after finding and fixing three real, distinct bugs to
+give it a fair, leakage-safe, distribution-matched test, is not
+competitive at all — it doesn't beat a naive mean prediction on 3 of 4
+positions and loses money on decision-quality. This is a real, useful,
+independent confirmation that `MODEL_CONFIG["position_target_type"]`
+being `"component"` for every position (not `"util"`) is empirically the
+right call, not an unexamined default — the first time that choice has
+actually been tested against the alternative rather than assumed.
+
+**Decision needed, not yet acted on**: whether to change
+`RIDGE_DEFAULT_ALPHA` from 10,000. The evidence is consistent and now
+comes from four independent angles this session — the sweep's own
+correlation data, the direct α=1-vs-10,000 reproduction on `fp` mode, and
+now confirmed again in spirit by `component` mode's strong result at
+α=1.0's effective regularization level (production's real
+`ComponentPredictor` is hardcoded to `alpha=1.0`, which is exactly the
+value that outperformed 10,000 throughout this investigation). Given
+(a) the constant has zero effect on real production regardless of its
+value, and (b) it is not empirically justified even for the evaluation
+tool it does affect, the honest recommendation is to lower it — but this
+wasn't changed unilaterally in this pass, flagging it for an explicit
+decision instead.
+comparison now available.** Same season, same code, same day, both legs
+side by side:
+
+| | α=1.0 | α=10,000 (current default) |
+|---|---|---|
+| Overall R² | 0.351 | 0.350 |
+| QB / RB / WR / TE R² | 0.252 / 0.365 / 0.276 / 0.271 | 0.233 / 0.368 / 0.281 / 0.267 |
+| Hindsight win rate | **72.7% (16-6)** | 63.6% (14-8) |
+| p-value | **0.026 (significant)** | 0.143 (not significant) |
+| ROI | **+30.9%** | +14.5% |
+
+Correlation (R²) is a wash, as the alpha sweep already predicted for
+this range. But the win-rate metric — the *specific* metric
+`config/settings.py`'s comment cites as the reason α was raised from 1.0
+to 10,000 in the first place — favors α=1.0 on this direct, same-day
+reproduction: higher win rate, statistically significant instead of not,
+nearly double the ROI. This doesn't just fail to replicate the original
+"α=10,000 beats α=1 by 4.6pp" claim; it reproduces the *opposite*
+direction, on real 2025 data, using the current codebase.
+
+**Taken together with the architecture finding above**: `RIDGE_DEFAULT_ALPHA=10,000`
+(a) has zero effect on real production regardless of its value (confirmed
+earlier — production hardcodes `alpha=1.0`), and (b) is not empirically
+justified even for the evaluation tool it does affect — the citation
+backing it doesn't survive a direct reproduction. Given (a), changing the
+constant doesn't affect what's served to users; given (b), it should
+probably change anyway so future backtests default to something
+defensible rather than a value this reproduction argues against. Not
+changed yet in this pass — flagged for a decision, not silently altered,
+since `RIDGE_DEFAULT_ALPHA` is also read as the default in
+`scripts/paper_trade_lock.py:338` (a hardcoded duplicate of the same
+value, separate drift risk worth fixing alongside this if the constant
+changes).
+
+**Not yet concluded**: whether the "v26-v29 show no lift" conclusions
+documented earlier in this doc hold up when re-measured against the real
+`component`-mode architecture instead of the `fp`-mode proxy that's been
+used for every measurement so far — this is now the much bigger open
+question. Nothing in production code has changed; all fixes so far are
+to the *evaluation* tooling, making it capable of testing what's actually
+deployed for the first time.
+
+### RIDGE_DEFAULT_ALPHA lowered to 1.0, duplicate fixed, a real test fragility found and fixed (2026-08-06)
+
+User decision: lower the default given the evidence above. Changed
+`config/settings.py`'s `RIDGE_DEFAULT_ALPHA` from `10_000` to `1.0`, with
+the comment rewritten to cite this session's actual reproducible evidence
+instead of the nonexistent doc/unverifiable claim it used to cite. Chose
+exactly `1.0` rather than an untested intermediate value (the sweep's
+correlation peak was around α=100-1,000 for some positions) because 1.0
+is what was actually validated on decision-quality — the metric that
+matters — via the direct reproduction, and it matches production's own
+independently-hardcoded `ComponentPredictor` value; picking a different,
+decision-quality-untested number here would just be a new unvalidated
+guess of the same kind this change is trying to get away from.
+
+Also fixed the hardcoded duplicate flagged earlier:
+`scripts/paper_trade_lock.py:338` had `"ridge_alpha_default": 10_000,  #
+per config.settings.RIDGE_DEFAULT_ALPHA` — a literal copy with a comment
+pointing at the source of truth instead of actually reading from it.
+Changed to import and use the real constant, eliminating the drift risk
+(this specific duplicate had NOT yet drifted out of sync when found, but
+the whole point of fixing it now is that the next constant change
+wouldn't have this problem).
+
+**A real, demonstrated test fragility found while verifying the alpha
+change didn't regress anything**: `tests/test_backtest_validation.py::TestWalkForwardBiasRegression::test_per_position_bias_within_tolerance`
+failed after the change — not because of the change, but because its
+fixture (`_latest_walk_forward_predictions()`) globs for the
+most-recently-modified `ts_backtest_*_predictions.csv` in
+`data/backtest_results/` with **no filter on which mode produced it**.
+This session's `component`/`util`-mode diagnostic runs (real,
+intentional, and now a normal part of this project's toolkit going
+forward, not one-off throwaway scripts) left newer files in that
+directory than the legitimate `fp`-mode baseline, so the test picked up
+the already-known-badly-biased `util`-mode run and (correctly, given
+what it was handed) flagged it as failing. Verified the alpha change
+itself caused no regression by checking the real `fp`-mode α=1.0 run
+directly: per-position bias 0.8-2.8%, comfortably within the test's ±10%
+tolerance.
+
+Fixed properly rather than just re-running to get a fresh "latest" file
+(which would only paper over the fragility until the next diagnostic
+run): `_latest_walk_forward_predictions()` now reads each candidate's
+sibling `.json` metrics file and skips any whose `target_mode` isn't
+`"fp"`, restoring "most recent regression-relevant baseline" as the
+actual selection criterion instead of "most recent file of any kind."
+This test would have broken the same way on literally any future
+`component`/`util`-mode investigation without this fix, given those
+modes are now known-working and likely to see more use.
+
+**Verified**: `config/settings.py`, `scripts/paper_trade_lock.py`,
+`tests/test_backtest_validation.py` all compile clean. CLI default
+confirmed (`run_ts_backtest.py --help` now shows "default: 1.0").
+59/59 tests pass across `test_ts_backtester.py`,
+`test_baseline_comparison.py`, `test_backtest_validation.py`,
+`test_config_code_alignment.py`, `test_generate_draft_data.py`,
+`test_snake_draft_sim.py`.
+
+**Not attempted**: no code changed to actually retrain or redeploy
+anything — `RIDGE_DEFAULT_ALPHA` still has zero effect on real production
+regardless of its value (production's `ComponentPredictor` remains
+independently hardcoded to `alpha=1.0`, unchanged by this edit). This
+change only affects future backtests/evaluations run through
+`ts_backtester.py`, making their default match what was actually
+validated instead of a value the evidence argued against.
+
+### v26-v29 re-measured against `component` mode — the "flat lift" conclusion does NOT hold up under the real architecture (2026-08-06)
+
+Closed the "much bigger open question" flagged at the end of the alpha
+investigation: every prior v26-v29 lift measurement in this doc used
+`fp` mode, which is now known to be architecturally different from
+production's real `component` mode. Re-ran the ablation the efficient
+way — one combined "strip all four version bumps' features" run against
+`component` mode, compared to the "with everything" `component`-mode
+result already on record from the alpha investigation — instead of 8
+separate per-version runs.
+
+| | R² overall | QB | RB | WR | TE | Hindsight win rate |
+|---|---|---|---|---|---|---|
+| `component`, without v26-v29 (~v25 features) | 0.326 | 0.230 | 0.338 | 0.256 | 0.218 | 72.7% (16-6), p=0.026 |
+| `component`, with v26-v29 (current) | 0.335 | 0.241 | 0.341 | 0.267 | 0.236 | 72.7% (16-6), p=0.026 |
+| Δ | **+0.009** | **+0.011** | **+0.003** | **+0.011** | **+0.018** | none |
+
+**Every position improves, consistently — the opposite of what `fp`-mode
+showed.** The earlier `fp`-mode ablation (documented above,
+"v23-v28 accuracy-lift measurement... flat since v25") found essentially
+zero difference anywhere for v26-v28, and the standalone v29 ablation
+found the same for personnel grouping alone. Under `component` mode, the
+same combined feature set shows a small but real, uniformly positive
+effect at every position — not a fluke concentrated in one position,
+not noise in one direction at some positions and the other direction at
+others. Decision-quality (hindsight win rate) doesn't move either way —
+identical 72.7%/16-6/p=0.026 record with and without, though the
+underlying average margin differs (15.7 vs 18.0), meaning the
+predictions themselves are genuinely different even where the discrete
+win/loss outcome happens to land the same.
+
+**What this means, stated carefully**: the "v26-v29 show no lift"
+conclusion reached earlier this session was **specific to the `fp`-mode
+proxy it was measured on, not a fact about the features themselves**.
+Measured against the architecture that's actually deployed, the same
+features show a real, if modest (ΔR² 0.003-0.018 per position),
+positive effect. This doesn't mean the `fp`-mode measurements were
+wrong about `fp` mode — they were honest and correctly reproduced. It
+means `fp` mode was the wrong instrument for answering "do these
+features help what's actually deployed," which is the whole reason this
+investigation started.
+
+**Not attempted**: isolating which of the four version bumps (v26 DVOA,
+v27 rookie identity, v28 rookie opportunity, v29 personnel grouping) is
+driving the lift, since this was a combined ablation by design (1 run
+instead of 8, given how expensive each run is). If a future session
+wants to know which specific feature set matters most under `component`
+mode, that would need per-version `component`-mode ablations the same
+way the `fp`-mode ones were originally done. Also not attempted: a
+statistical significance test on the R² deltas themselves (they're
+small, and this is one holdout season, one model configuration —
+directionally consistent across all 4 positions is meaningful, but
+these specific magnitudes shouldn't be read as precisely known).
+
+### Diagnosed: why `util` mode's R² is so low (2026-08-06)
+
+Follow-up to the four-way mode comparison above, which found `util` mode
+badly underperforming (R²=0.027, negative for 3 of 4 positions) even
+after fixing the three real bugs that were inflating/deflating its
+number unfairly. Root-caused with cheap, targeted single-fit diagnostics
+rather than more expensive full walk-forward backtests.
+
+**Stage 1 (predicting `utilization_score` itself, before any conversion)
+is already broken, independent of the conversion step**: on real 2025
+RB data, `R²(util_preds vs util_true) = -0.305`, correlation only
+**0.19** — worse than predicting the mean. Predicted values are also
+badly variance-compressed (std=5.73 vs real std=18.82). The conversion-
+step bugs fixed earlier in this investigation (leakage, distribution
+mismatch) were real and worth fixing, but they're downstream of an
+already-weak signal — no amount of conversion-step calibration rescues
+a stage-1 model this poor.
+
+**Confirmed the specific cause, not just the symptom**: fit the *exact
+same* features, model, and train/test split against two different
+targets. `fantasy_points` → R²=0.352, corr=0.607. `utilization_score`
+(same features, same everything else) → R²=-0.305, corr=0.194. This
+isn't a leakage, scaling, or data-quality artifact (all ruled out
+separately elsewhere in this doc) — it's the same feature set carrying
+dramatically less signal for this specific target.
+
+**Why**: `CAUSAL_FEATURES` has been iteratively engineered and validated
+across this entire project's history (every v22-v29 feature bump
+documented in this doc) exclusively against fantasy-points accuracy —
+DVOA, weather, rookie signals, personnel grouping, coaching-change
+detection, all of it was added and kept because it moved `fantasy_points`
+prediction quality. Nobody has ever selected, tuned, or even checked
+whether the same feature set predicts `utilization_score` — a
+differently-composed, percentile-normalized blend of snap/target/rush/
+red-zone shares — anywhere near as well. It apparently doesn't.
+
+**This also retroactively explains, with actual evidence for the first
+time, why `component` mode (not `util` mode) became this project's
+production default** (`position_target_type="component"` for every
+position) — a choice that predates this session and was never
+previously backed by a documented comparison. It's not merely a
+plausible-sounding default; the four-way comparison and this diagnosis
+together confirm it was the right call.
+
+**Not attempted**: building or selecting a feature set specifically for
+predicting `utilization_score` well (would be real, separate feature-
+engineering work, and given `component` mode already outperforms `util`
+mode with the existing FP-tuned features, there's no clear product
+motivation to invest in fixing `util` mode specifically). Also not
+checked: whether other positions (QB/WR/TE) show the same fantasy_points-
+vs-utilization_score gap as RB, though the full 4-position `util`-mode
+backtest result (negative R² at 3 of 4 positions) is consistent with the
+same root cause applying broadly, not just to RB.
+
+### Per-version isolation: which of v26-v29 is actually driving the lift (2026-08-06)
+
+Closed the "not attempted" item from the combined `component`-mode
+ablation above. Given how expensive a full walk-forward run is (hours
+each), used the same fast single-fit diagnostic method as the `util`
+R² investigation instead of 4 more full backtests: one train/test split
+(train 2022-2024, test 2025) per position, Ridge on `fantasy_points`
+directly (a faster proxy for "does this feature carry signal," not a
+full reproduction of `component` mode's per-stat architecture), removing
+each version's features one at a time from the full current set and
+measuring the R² delta.
+
+| pos | full R² | v26 DVOA | v27 rookie ID | v28 rookie opp | v29 personnel |
+|---|---|---|---|---|---|
+| QB | 0.2385 | **-0.0054** | +0.0013 | +0.0035 | n/a |
+| RB | 0.3536 | +0.0025 | +0.0012 | +0.0009 | **-0.0012** |
+| WR | 0.2548 | +0.0013 | -0.0003 | +0.0002 | +0.0009 |
+| TE | 0.2548 | **+0.0119** | +0.0040 | +0.0033 | +0.0062 |
+
+**TE benefits the most, consistently, from every single version** — and
+this independently corroborates the combined `component`-mode ablation
+above, which also found TE getting the single largest Δ of any position
+(+0.018, the biggest jump in that table too). Two different measurement
+methods landing on the same position is a meaningfully stronger signal
+than either alone.
+
+**Two real exceptions, reported honestly rather than smoothed over**:
+- **v26 (DVOA) hurts QB** (-0.0054) despite being the single strongest
+  positive contributor everywhere else in the table (+0.0119 for TE).
+  Plausible explanation, not confirmed: QB has the smallest, noisiest
+  test set of the four positions (one starter per team vs. several
+  relevant skill-position players), or DVOA's opponent-defense-strength
+  signal genuinely transfers less cleanly to quarterback performance
+  than to skill positions whose production is more directly usage-driven.
+- **v29 (personnel grouping) shows a small negative for RB** (-0.0012)
+  — mildly counter to its own design rationale (personnel grouping was
+  specifically motivated by RB opportunity in heavier 12/21-personnel
+  sets, per GAPS.md §3.3/§4). Magnitude is tiny and plausibly noise at
+  this sample size, but it's the position the feature was built for, so
+  worth flagging rather than ignoring.
+
+**Methodology caveats, stated plainly**: this is a single train/test
+split, not a full 22-week walk-forward with weekly refits — noisier and
+less rigorous than the combined ablation above or any of the full
+backtests elsewhere in this doc. It also uses `fantasy_points` as a
+direct Ridge target rather than reproducing `component` mode's real
+per-stat-component architecture, since building a proper per-stat
+isolation harness for 4 versions × 4 positions was judged not worth the
+additional engineering time for a diagnostic follow-up question. Treat
+the *direction* (TE benefits most; DVOA's QB exception; personnel's RB
+exception) as the finding, not the precise magnitudes.
+
+## Backtester per-week performance fix (2026-08-06)
+
+Investigated why every walk-forward backtest run this session took hours
+instead of minutes. Found and fixed four real bugs/inefficiencies, all in
+the expanding-window feature-recomputation path that `leakage_safe_features()`
+calls fresh every single week:
+
+1. **`DatabaseManager.get_combine_data()` queried the wrong table.** It
+   read from the empty legacy `combine_data` table (0 rows) instead of the
+   populated `combine_data_v2` (8,968 rows) — the same class of bug as the
+   `draft_picks`/`draft_picks_v2` split that `get_draft_picks()` already
+   had a documented fix for. Every call silently fell through to a live
+   nflverse network fetch. Fixed to query `combine_data_v2` (`src/utils/database.py`).
+
+2. **`AdvancedRookieProjector.add_combine_features()` matched every row
+   individually.** It ran `.iterrows()` over the *entire* training
+   DataFrame — which grows to 100K+ rows by late season under the
+   expanding window — and for every single row re-scanned all 8,968
+   combine records with a fresh `.str.contains()` call, even though
+   combine score is a static per-player attribute that never changes
+   week to week. Rewrote to compute the score once per unique
+   `(player_name, position)` pair and memoize in a process-level class
+   cache (`AdvancedRookieProjector._combine_match_cache`), shared across
+   the fresh instances the calling code constructs every week
+   (`src/features/advanced_rookie_injury.py`). Verified: 44,000-row /
+   2,000-unique-player synthetic benchmark went from 3.29s (cold) to
+   0.03s (any repeat call).
+
+3. **Fixing bug #1 surfaced a real regression it had been masking.**
+   `combine_data_v2` stores `forty`/`bench`/`vertical`/`broad`/`cone` as
+   TEXT, while the nflverse-API fallback path returns floats. Once bug #1
+   started actually hitting the DB path, `calculate_combine_score()`'s
+   numeric comparisons threw `'<=' not supported between instances of
+   'str' and 'float'` on every call, silently caught by the wrapping
+   `except Exception` in `add_advanced_rookie_injury_features()` — so
+   `combine_score` fell back to the constant default (50.0) for every
+   player, every week, with no visible error. Fixed by coercing the
+   metric columns with `pd.to_numeric(errors='coerce')` right after the
+   DB load (`load_combine_data()`). Caught via a "why did the number not
+   change" sanity check, not by the type checker — good reminder to
+   re-verify a fix's actual output, not just that it ran without raising.
+
+4. **`_add_team_matchup_features()` recomputed four expensive lookup
+   tables from scratch every week**, even though all four depend only on
+   the full `team_stats` table (all teams/seasons/weeks), never on the
+   current backtest window. Confirmed via `cProfile` on a full TE-only
+   2025 walk-forward run: this function (via its `_create_opponent_features`
+   wrapper) was ~430s of a ~1390s profiled run (~31%), dominated by
+   `groupby(...).transform(lambda ...)` calls for 19 metrics plus a
+   custom Python-loop momentum function (`_momentum_60_30_10`) — together
+   responsible for ~10.7M `pd.Series.__init__` calls. Extracted the
+   window-independent precomputation (prior-season averages, in-season
+   rolling blend table, offensive-momentum-score table) into a new
+   module-level `_get_team_matchup_lookups()` cached by
+   `(row count, columns, max season, max week)` of the input `team_stats`
+   table (`src/features/feature_engineering.py`). Verified the cache is
+   actually exercised: 43/44 calls hit it across a full TE-only 2025
+   backtest, with **bit-identical R²/MAE** (`R2=0.2696787296807507`)
+   before and after — confirming this is a pure performance fix, not a
+   behavior change.
+
+**Net measured effect** (real wall-clock, not profiled — cProfile's own
+overhead scales with call count and inflated the profiled share of #4's
+Python-loop-heavy code): TE-only 2025 fp-mode backtest went from **601.5s
+→ 490.8s (~18% faster)**, single position only. The combine-data network
+fetch (bug #1) likely matters more at full 4-position/multi-run scale
+than this single-position measurement shows, since #2-#4 mostly help
+CPU-bound recomputation while #1 was eliminating actual network
+round-trips.
+
+**Investigated and ruled out as a contributor**: `DraftDataLoader.load_draft_data()`
+reconstructs a fresh instance every week too (so its `self._draft_cache`
+never persists), but `get_draft_picks()` already reads from the correct,
+fast local table — measured 22 sequential calls at 0.30s total
+(~14ms/call), negligible next to the bugs above. No fix needed there.
+
+**Not yet investigated**: `_create_causal_rolling_features` (190s
+profiled), `add_season_long_features`'s age-curve/games-projection/ADP
+steps (157s profiled, distinct from the rookie/combine module above),
+and `_add_contract_features`/`_add_late_season_momentum` (106s/102s
+profiled) were all visible in the same profile as further candidates,
+but weren't examined for the same "recomputing something window-
+independent" pattern. Worth a follow-up pass if backtest runtime is
+still a bottleneck after these four fixes.

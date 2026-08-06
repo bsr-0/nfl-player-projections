@@ -685,11 +685,31 @@ DECISION_QUALITY = {
     "break_even_win_rate": 1.0 / 1.8,
 }
 
-# Default Ridge regularization for the walk-forward backtester.  Per the
-# 2026-04-20 alpha sweep (docs/ALPHA_SWEEP_20260419.md), uniform α=10_000
-# beats α=1 by 4.6 percentage points on cross-season hindsight win rate
-# (29-14 vs 27-16 over 43 weeks, p=0.016).  Raised from 1.0 on 2026-04-20.
-RIDGE_DEFAULT_ALPHA = 10_000
+# Default Ridge regularization for the walk-forward backtester.  Lowered
+# back to 1.0 on 2026-08-06 (GAPS.md §7.4 follow-up: comprehensive
+# skeptical audit of the 2026-04-20 alpha=10,000 change). The doc this
+# constant used to cite (docs/ALPHA_SWEEP_20260419.md) doesn't exist
+# anywhere in this repo, and no artifact backing the specific claim
+# ("29-14 vs 27-16 over 43 weeks, p=0.016") survived either. What does
+# exist and is reproducible: (1) the real alpha-sweep data
+# (data/backtest_results/alpha_sweep_summary.json) shows correlation
+# declining at every position from α=10,000 onward, not improving; (2) a
+# direct, same-day, same-code reproduction on the 2025 season showed
+# α=1.0 beating α=10,000 on BOTH correlation (0.351 vs 0.350, a wash) AND
+# hindsight win rate (72.7%/16-6/p=0.026 vs 63.6%/14-8/p=0.143,
+# not significant) -- the reproduction contradicts the original claim's
+# direction, not just its magnitude. Also note: this constant has zero
+# effect on real production regardless of its value -- train.py/
+# component_predictor.py/position_models.py/ensemble.py never import it;
+# production's ComponentPredictor hardcodes alpha=1.0 independently. It
+# only affects src/evaluation/ts_backtester.py's evaluation tooling. 1.0
+# was chosen over an untested intermediate value (the sweep's correlation
+# peak was around 100-1,000 for some positions) because 1.0 is what was
+# actually validated on decision-quality (the metric that matters) and
+# matches production's own hardcoded value -- picking a different,
+# decision-quality-untested number here would just be a new unvalidated
+# guess of the same kind this change is trying to get away from.
+RIDGE_DEFAULT_ALPHA = 1.0
 
 # Success criteria thresholds (from requirements Section VII)
 SUCCESS_CRITERIA = {

@@ -38,6 +38,134 @@ from src.features.feature_policy_registry import FeaturePolicyRegistry
 # Rolling/aggregation on sparse early-season windows can emit this benign warning.
 warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
 
+# Process-level cache for _add_team_matchup_features()'s expensive lookup
+# tables (prior-season averages, in-season rolling window, momentum score).
+# These depend only on the full team_stats table, not on the current
+# training window, but the walk-forward backtester calls create_features()
+# fresh every week -- profiling showed this groupby/transform/apply block
+# was ~430s of a ~1390s single-position backtest (~31%). Cached by row
+# count + max date so a genuinely updated team_stats table busts it.
+# (GAPS.md, 2026-08-06 perf fix.)
+_team_matchup_lookup_cache: Dict[Any, Tuple] = {}
+
+
+def _get_team_matchup_lookups(all_team_stats: pd.DataFrame, team_metrics: List[str]) -> Tuple:
+    """Build (team_a_avgs, team_b_avgs, inseason_df, mom_df) from the full
+    team_stats table, cached across calls within a process."""
+    cache_key = (
+        len(all_team_stats),
+        tuple(sorted(all_team_stats.columns)),
+        all_team_stats["season"].max() if "season" in all_team_stats.columns else None,
+        all_team_stats["week"].max() if "week" in all_team_stats.columns else None,
+    )
+    cached = _team_matchup_lookup_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    team_avgs = all_team_stats.groupby(['team', 'season']).agg({
+        col: 'mean' for col in team_metrics if col in all_team_stats.columns
+    }).reset_index()
+    # Shift season forward by 1 so that a row for season S uses season S-1 averages
+    team_avgs['season'] = team_avgs['season'] + 1
+
+    team_a_cols = {col: f'team_a_{col}' for col in team_metrics if col in team_avgs.columns}
+    team_a_avgs = team_avgs.rename(columns=team_a_cols)
+
+    team_b_cols = {col: f'team_b_{col}' for col in team_metrics if col in team_avgs.columns}
+    team_b_avgs = team_avgs.rename(columns=team_b_cols)
+    team_b_avgs = team_b_avgs.rename(columns={'team': 'opponent', 'season': 'season'})
+
+    inseason_df = None
+    if 'week' in all_team_stats.columns:
+        avail_metrics = [m for m in team_metrics if m in all_team_stats.columns]
+        if avail_metrics:
+            ts_sorted = all_team_stats.sort_values(['team', 'season', 'week'])
+            for metric in avail_metrics:
+                ts_sorted[f'_inseason_{metric}'] = ts_sorted.groupby(
+                    ['team', 'season']
+                )[metric].transform(
+                    lambda x: x.shift(1).rolling(4, min_periods=2).mean()
+                )
+            inseason_cols = ['team', 'season', 'week'] + [f'_inseason_{m}' for m in avail_metrics]
+            inseason_df = ts_sorted[inseason_cols].drop_duplicates()
+
+    mom_df = None
+    if 'week' in all_team_stats.columns and 'points_scored' in all_team_stats.columns:
+        ts = all_team_stats.sort_values(['team', 'season', 'week'])
+
+        def _momentum_60_30_10(grp: pd.Series) -> pd.Series:
+            """Time-weighted momentum: 60% last 4w, 30% weeks 5-8, 10% weeks 9+."""
+            out = pd.Series(index=grp.index, dtype=float)
+            for i in range(len(grp)):
+                hist = grp.iloc[:i]  # past weeks only (no leakage)
+                if len(hist) == 0:
+                    out.iloc[i] = np.nan
+                    continue
+                vals = hist.values[::-1]  # most recent first
+                n = len(vals)
+                w = np.zeros(n)
+                w[: min(4, n)] = 0.6 / min(4, n)
+                if n > 4:
+                    w[4: min(8, n)] = 0.3 / min(4, n - 4)
+                if n > 8:
+                    w[8:] = 0.1 / (n - 8)
+                out.iloc[i] = np.nansum(vals * w)
+            return out
+
+        ts["_mom_pts"] = ts.groupby(
+            ['team', 'season'], group_keys=False
+        )['points_scored'].transform(_momentum_60_30_10)
+
+        composite_parts = [("_mom_pts", 0.50)]
+        if 'passing_yards' in ts.columns:
+            ts["_mom_pass"] = ts.groupby(
+                ['team', 'season'], group_keys=False
+            )['passing_yards'].transform(_momentum_60_30_10)
+            composite_parts.append(("_mom_pass", 0.20))
+        if 'rushing_yards' in ts.columns:
+            ts["_mom_rush"] = ts.groupby(
+                ['team', 'season'], group_keys=False
+            )['rushing_yards'].transform(_momentum_60_30_10)
+            composite_parts.append(("_mom_rush", 0.15))
+        if 'turnovers' in ts.columns:
+            ts["_mom_to"] = -ts.groupby(
+                ['team', 'season'], group_keys=False
+            )['turnovers'].transform(_momentum_60_30_10)
+            composite_parts.append(("_mom_to", 0.15))
+
+        for col, _ in composite_parts:
+            exp_mean = ts.groupby(['team', 'season'])[col].transform(
+                lambda x: x.shift(1).expanding(min_periods=1).mean()
+            )
+            exp_std = ts.groupby(['team', 'season'])[col].transform(
+                lambda x: x.shift(1).expanding(min_periods=2).std()
+            ).clip(lower=1e-6)
+            ts[col + "_z"] = ((ts[col] - exp_mean) / exp_std).fillna(0.0)
+
+        total_weight = sum(w for _, w in composite_parts)
+        ts["offensive_momentum_score"] = sum(
+            ts[col + "_z"] * (w / total_weight) for col, w in composite_parts
+        )
+        exp_mom_mean = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
+            lambda x: x.shift(1).expanding(min_periods=1).mean()
+        )
+        exp_mom_std = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
+            lambda x: x.shift(1).expanding(min_periods=2).std()
+        ).clip(lower=1e-6)
+        ts["offensive_momentum_score"] = (
+            22.0 + 8.0 * (ts["offensive_momentum_score"] - exp_mom_mean) / exp_mom_std
+        ).fillna(22.0).clip(0, 44)
+
+        temp_cols = [c for c in ts.columns if c.startswith("_mom_")]
+        ts = ts.drop(columns=temp_cols, errors="ignore")
+
+        mom_df = ts[['team', 'season', 'week', 'offensive_momentum_score']].drop_duplicates()
+
+    result = (team_a_avgs, team_b_avgs, inseason_df, mom_df)
+    _team_matchup_lookup_cache.clear()  # single-entry cache; avoid unbounded growth across seasons
+    _team_matchup_lookup_cache[cache_key] = result
+    return result
+
 
 class FeatureEngineer:
     """Feature engineering for NFL player performance prediction."""
@@ -1964,7 +2092,7 @@ class FeatureEngineer:
             all_team_stats = db.get_team_stats()
             if all_team_stats.empty:
                 return df
-            
+
             # Calculate rolling team averages (last 3 games)
             team_metrics = ['points_scored', 'points_allowed', 'total_yards',
                            'passing_yards', 'rushing_yards', 'turnovers',
@@ -1973,19 +2101,13 @@ class FeatureEngineer:
                            'neutral_pass_rate', 'neutral_pass_rate_lg', 'neutral_pass_rate_oe',
                            'drive_count', 'drive_success_rate', 'avg_drive_epa',
                            'points_per_drive', 'pace_sec_per_play']
-            
-            # Create team averages lookup using PRIOR season's data to avoid
-            # lookahead bias (current season avg includes future weeks).
-            team_avgs = all_team_stats.groupby(['team', 'season']).agg({
-                col: 'mean' for col in team_metrics if col in all_team_stats.columns
-            }).reset_index()
-            # Shift season forward by 1 so that a row for season S uses season S-1 averages
-            team_avgs['season'] = team_avgs['season'] + 1
-            
-            # Rename for TeamA (player's team - offensive context)
-            team_a_cols = {col: f'team_a_{col}' for col in team_metrics if col in team_avgs.columns}
-            team_a_avgs = team_avgs.rename(columns=team_a_cols)
-            team_a_avgs = team_a_avgs.rename(columns={'team': 'team', 'season': 'season'})
+
+            # These lookup tables depend only on the full team_stats table
+            # (not on df / the current backtest window), so they're built
+            # once and cached across the backtester's weekly calls.
+            team_a_avgs, team_b_avgs, inseason_df, mom = _get_team_matchup_lookups(
+                all_team_stats, team_metrics
+            )
 
             # Merge TeamA prior-season stats
             if 'team' in df.columns and 'season' in df.columns:
@@ -1996,11 +2118,6 @@ class FeatureEngineer:
                     how='left',
                     suffixes=('', '_team_a')
                 )
-
-            # Create TeamB (opponent) averages
-            team_b_cols = {col: f'team_b_{col}' for col in team_metrics if col in team_avgs.columns}
-            team_b_avgs = team_avgs.rename(columns=team_b_cols)
-            team_b_avgs = team_b_avgs.rename(columns={'team': 'opponent', 'season': 'season'})
 
             # Merge TeamB prior-season stats (opponent)
             if 'opponent' in df.columns and 'season' in df.columns:
@@ -2015,18 +2132,10 @@ class FeatureEngineer:
             # In-season rolling team averages (4-week causal window) to supplement
             # stale prior-season averages.  shift(1) excludes current week.
             # Blend: 60% in-season / 40% prior-season when week >= 5, else prior-season only.
-            if 'team' in df.columns and 'season' in df.columns and 'week' in df.columns and 'week' in all_team_stats.columns:
+            if (inseason_df is not None and 'team' in df.columns and 'season' in df.columns
+                    and 'week' in df.columns and 'week' in all_team_stats.columns):
                 avail_metrics = [m for m in team_metrics if m in all_team_stats.columns]
                 if avail_metrics:
-                    ts_sorted = all_team_stats.sort_values(['team', 'season', 'week'])
-                    for metric in avail_metrics:
-                        ts_sorted[f'_inseason_{metric}'] = ts_sorted.groupby(
-                            ['team', 'season']
-                        )[metric].transform(
-                            lambda x: x.shift(1).rolling(4, min_periods=2).mean()
-                        )
-                    inseason_cols = ['team', 'season', 'week'] + [f'_inseason_{m}' for m in avail_metrics]
-                    inseason_df = ts_sorted[inseason_cols].drop_duplicates()
                     df = df.merge(inseason_df, on=['team', 'season', 'week'], how='left')
                     # Blend in-season rolling with prior-season for TeamA columns
                     for metric in avail_metrics:
@@ -2075,90 +2184,10 @@ class FeatureEngineer:
             # team offensive EPA trend (proxied by points_scored), pass/rush success rate
             # trends (passing_yards, rushing_yards), and scoring efficiency (turnovers).
             # Time-weighted: recent 4 weeks = 60%, weeks 5-8 = 30%, weeks 9+ = 10%.
-            if 'week' in all_team_stats.columns and 'points_scored' in all_team_stats.columns:
-                ts = all_team_stats.sort_values(['team', 'season', 'week'])
-
-                def _momentum_60_30_10(grp: pd.Series) -> pd.Series:
-                    """Time-weighted momentum: 60% last 4w, 30% weeks 5-8, 10% weeks 9+."""
-                    out = pd.Series(index=grp.index, dtype=float)
-                    for i in range(len(grp)):
-                        hist = grp.iloc[:i]  # past weeks only (no leakage)
-                        if len(hist) == 0:
-                            out.iloc[i] = np.nan
-                            continue
-                        vals = hist.values[::-1]  # most recent first
-                        n = len(vals)
-                        w = np.zeros(n)
-                        w[: min(4, n)] = 0.6 / min(4, n)
-                        if n > 4:
-                            w[4: min(8, n)] = 0.3 / min(4, n - 4)
-                        if n > 8:
-                            w[8:] = 0.1 / (n - 8)
-                        out.iloc[i] = np.nansum(vals * w)
-                    return out
-
-                # Primary component: scoring (proxy for offensive EPA)
-                ts["_mom_pts"] = ts.groupby(
-                    ['team', 'season'], group_keys=False
-                )['points_scored'].transform(_momentum_60_30_10)
-
-                # Secondary components: passing yards, rushing yards, turnover trend
-                # (available from team_stats; use when present for richer composite)
-                composite_parts = [("_mom_pts", 0.50)]  # 50% scoring efficiency
-                if 'passing_yards' in ts.columns:
-                    ts["_mom_pass"] = ts.groupby(
-                        ['team', 'season'], group_keys=False
-                    )['passing_yards'].transform(_momentum_60_30_10)
-                    composite_parts.append(("_mom_pass", 0.20))  # 20% pass success
-                if 'rushing_yards' in ts.columns:
-                    ts["_mom_rush"] = ts.groupby(
-                        ['team', 'season'], group_keys=False
-                    )['rushing_yards'].transform(_momentum_60_30_10)
-                    composite_parts.append(("_mom_rush", 0.15))  # 15% rush success
-                if 'turnovers' in ts.columns:
-                    # Turnovers are negative: invert so fewer turnovers = higher momentum
-                    ts["_mom_to"] = -ts.groupby(
-                        ['team', 'season'], group_keys=False
-                    )['turnovers'].transform(_momentum_60_30_10)
-                    composite_parts.append(("_mom_to", 0.15))  # 15% ball security
-
-                # Normalize each component to z-scores using EXPANDING (causal)
-                # mean/std within each team-season. shift(1) excludes the current
-                # row from its own z-score to prevent self-referential leakage.
-                for col, _ in composite_parts:
-                    exp_mean = ts.groupby(['team', 'season'])[col].transform(
-                        lambda x: x.shift(1).expanding(min_periods=1).mean()
-                    )
-                    exp_std = ts.groupby(['team', 'season'])[col].transform(
-                        lambda x: x.shift(1).expanding(min_periods=2).std()
-                    ).clip(lower=1e-6)
-                    ts[col + "_z"] = ((ts[col] - exp_mean) / exp_std).fillna(0.0)
-
-                # Redistribute weight if some components are missing
-                total_weight = sum(w for _, w in composite_parts)
-                ts["offensive_momentum_score"] = sum(
-                    ts[col + "_z"] * (w / total_weight) for col, w in composite_parts
-                )
-                # Rescale from z-score space to interpretable ~0-44 range (mean ~22)
-                # Use expanding stats with shift(1) to avoid self-referential leakage.
-                exp_mom_mean = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
-                    lambda x: x.shift(1).expanding(min_periods=1).mean()
-                )
-                exp_mom_std = ts.groupby(['team', 'season'])["offensive_momentum_score"].transform(
-                    lambda x: x.shift(1).expanding(min_periods=2).std()
-                ).clip(lower=1e-6)
-                ts["offensive_momentum_score"] = (
-                    22.0 + 8.0 * (ts["offensive_momentum_score"] - exp_mom_mean) / exp_mom_std
-                ).fillna(22.0).clip(0, 44)
-
-                # Drop temp columns
-                temp_cols = [c for c in ts.columns if c.startswith("_mom_")]
-                ts = ts.drop(columns=temp_cols, errors="ignore")
-
-                mom = ts[['team', 'season', 'week', 'offensive_momentum_score']].drop_duplicates()
-                if 'team' in df.columns and 'season' in df.columns and 'week' in df.columns:
-                    df = df.merge(mom, on=['team', 'season', 'week'], how='left')
-                    df['offensive_momentum_score'] = df['offensive_momentum_score'].fillna(22.0)
+            # (Computed once and cached in _get_team_matchup_lookups above.)
+            if mom is not None and 'team' in df.columns and 'season' in df.columns and 'week' in df.columns:
+                df = df.merge(mom, on=['team', 'season', 'week'], how='left')
+                df['offensive_momentum_score'] = df['offensive_momentum_score'].fillna(22.0)
         except Exception as e:
             # Team features are optional - don't fail if unavailable, but log
             # so silent degradation is visible in pipeline output.
