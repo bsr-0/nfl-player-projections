@@ -365,11 +365,21 @@ class UtilizationScoreCalculator:
             # Fallback: TD-based proxy (documented limitation)
             df["redzone_targets_pct"] = (df["receiving_tds"] * 15).clip(0, 100)
         
-        # Route participation: use actual routes when available (Fantasy Life), else proxy from snap share
+        # Route participation: use actual routes when available (Fantasy Life,
+        # never populated by any current loader -- see GAPS.md §11.1.C/D),
+        # else the PBP-derived pass-play participation rate when available
+        # (real data, but NOT true route participation -- can't separate
+        # route-runners from in-line pass-blockers on the same play; see
+        # get_pass_play_participation_from_pbp docstring), else the flat
+        # snap-share proxy.
         if "routes_run" in df.columns and "team_routes" in df.columns:
             df["route_participation_pct"] = safe_divide(df["routes_run"], df["team_routes"]) * 100
         elif "routes_run" in df.columns and "team_snaps" in df.columns:
             df["route_participation_pct"] = safe_divide(df["routes_run"], df["team_snaps"]) * 100
+        elif "pbp_pass_play_participation_pct_roll3_mean" in df.columns:
+            df["route_participation_pct"] = (df["pbp_pass_play_participation_pct_roll3_mean"] * 100).clip(0, 100)
+        elif "pbp_pass_play_participation_pct" in df.columns:
+            df["route_participation_pct"] = (df["pbp_pass_play_participation_pct"] * 100).clip(0, 100)
         else:
             df["route_participation_pct"] = (df["snap_share_pct"] * 0.8).clip(0, 100)
         

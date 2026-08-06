@@ -378,6 +378,12 @@ class FeatureEngineer:
         # v17: seasonal PFR prior-season stats (bad throw %, pocket time, broken tackles, drop rate)
         df = self._add_seasonal_pfr_features(df)
 
+        # v30: team-level offensive-line quality (pass-block/run-block,
+        # from weekly_pfr) + PBP-derived pass-play participation rate
+        # (GAPS.md §11.1.C/D/H follow-up)
+        df = self._add_team_ol_features(df)
+        df = self._add_pbp_pass_participation_features(df)
+
         # Impute NaN/inf
         df = self._impute_missing(df)
 
@@ -856,6 +862,141 @@ class FeatureEngineer:
             (merged["season"] == merged["_final_year"]) & merged["_final_year"].notna()
         ).astype(int).to_numpy()
         df["contract_apy_rank"] = merged["_apy_rank"].fillna(0.5).to_numpy()
+        return df
+
+    def _add_team_ol_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Team-level offensive-line quality: pass-block (sack/pressure
+        rate allowed) and run-block (yards-before-contact) grades, derived
+        by re-aggregating weekly_pfr (already used at the individual
+        player level by _add_weekly_pfr_features) to team-week (GAPS.md
+        §11.1.H follow-up).
+
+        Pass-block: identifies each team-week's starting QB as the row
+        with the most pass-pressure activity (times_sacked +
+        times_pressured + times_hurried + times_hit -- weekly_pfr has no
+        dropback-count column to rank by directly) and uses that row's
+        own times_pressured_pct/times_sacked directly, rather than
+        averaging across every QB who took a snap that week (which would
+        dilute the signal with mop-up-duty backups).
+
+        Run-block: unweighted mean of rushing_yards_before_contact_avg
+        across that team's RB rows for the week. A deliberate
+        simplification -- weekly_pfr carries no per-RB carry count to
+        weight by.
+
+        Both are same-week team OUTCOME stats (like team_pct_11_personnel
+        elsewhere in this file) -- rolled here via shift(1).rolling(3) per
+        player, same causal-safety pattern as _add_weekly_pfr_features,
+        rather than exposed raw.
+        """
+        raw_cols = ["team_sack_rate_allowed", "team_run_block_ybc_avg"]
+        output_cols = [f"{c}_roll3_mean" for c in raw_cols]
+        if "team" not in df.columns or "season" not in df.columns or "week" not in df.columns:
+            for col in output_cols:
+                df[col] = 0.0
+            return df
+
+        try:
+            import sqlite3
+            from config.settings import DB_PATH
+
+            c = sqlite3.connect(str(DB_PATH))
+            pfr = pd.read_sql("""
+                SELECT team, season, week, stat_type,
+                       times_pressured_pct, times_sacked, times_blitzed,
+                       times_hurried, times_hit,
+                       rushing_yards_before_contact_avg
+                FROM weekly_pfr
+            """, c)
+            c.close()
+
+            pass_pfr = pfr[pfr["stat_type"] == "pass"].copy()
+            pass_pfr["_activity"] = (
+                pass_pfr["times_sacked"].fillna(0)
+                + pass_pfr["times_hurried"].fillna(0)
+                + pass_pfr["times_hit"].fillna(0)
+            )
+            starter_idx = (
+                pass_pfr.groupby(["team", "season", "week"])["_activity"].idxmax()
+            )
+            starters = pass_pfr.loc[starter_idx, ["team", "season", "week", "times_pressured_pct"]]
+            starters = starters.rename(columns={"times_pressured_pct": "team_sack_rate_allowed"})
+
+            rush_pfr = pfr[pfr["stat_type"] == "rush"]
+            run_block = (
+                rush_pfr.groupby(["team", "season", "week"])["rushing_yards_before_contact_avg"]
+                .mean()
+                .rename("team_run_block_ybc_avg")
+                .reset_index()
+            )
+
+            df = df.merge(starters, on=["team", "season", "week"], how="left")
+            df = df.merge(run_block, on=["team", "season", "week"], how="left")
+            df = df.sort_values(["player_id", "season", "week"])
+            for raw_col, out_col in zip(raw_cols, output_cols):
+                df[out_col] = (
+                    df.groupby("player_id")[raw_col]
+                    .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
+                )
+            df = df.drop(columns=raw_cols, errors="ignore")
+            for col in output_cols:
+                df[col] = df[col].fillna(0.0)
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"team_ol features skipped: {e}")
+            for col in output_cols:
+                if col not in df.columns:
+                    df[col] = 0.0
+
+        return df
+
+    def _add_pbp_pass_participation_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Per-player pass-play participation rate, from the
+        pbp_pass_participation table (GAPS.md §11.1.C/D follow-up).
+
+        NOT true route participation -- see pbp_stats_aggregator.py's
+        get_pass_play_participation_from_pbp docstring for why that's
+        genuinely unavailable. This is real PBP-derived signal (fraction
+        of a team's actual dropback pass plays a player was on the field
+        for), distinct from raw snap_share_pct.
+
+        Same-week outcome stat, rolled via shift(1).rolling(3) per player
+        before exposure, same causal-safety pattern as the OL features
+        above.
+        """
+        raw_col = "pbp_pass_play_participation_pct"
+        output_col = f"{raw_col}_roll3_mean"
+        if "player_id" not in df.columns or "season" not in df.columns or "week" not in df.columns:
+            df[output_col] = 0.0
+            return df
+
+        try:
+            import sqlite3
+            from config.settings import DB_PATH
+
+            c = sqlite3.connect(str(DB_PATH))
+            part = pd.read_sql("""
+                SELECT player_id, season, week, pass_play_participation_pct
+                FROM pbp_pass_participation
+            """, c)
+            c.close()
+            part = part.rename(columns={"pass_play_participation_pct": raw_col})
+
+            df = df.merge(part, on=["player_id", "season", "week"], how="left")
+            df = df.sort_values(["player_id", "season", "week"])
+            df[output_col] = (
+                df.groupby("player_id")[raw_col]
+                .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
+            )
+            df = df.drop(columns=[raw_col], errors="ignore")
+            df[output_col] = df[output_col].fillna(0.0)
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"pbp_pass_participation features skipped: {e}")
+            df[output_col] = 0.0
+
         return df
 
     def _add_weekly_pfr_features(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -4005,3 +4005,134 @@ not actual regressions. Verified each against the real current source
 `test_ml_audit.py` + `test_ml_robustness_15_steps.py` +
 `test_schema_validator.py` suite afterward: **78 passed, 3 skipped**
 (skips are pre-existing, data-availability-gated, unrelated to this fix).
+
+## v30: offensive-line quality metrics + PBP pass-play participation rate (2026-08-06)
+
+Investigated data feasibility for the three remaining §11.1 "still
+missing" items (YPRR, Route Participation Rate, Offensive Line Quality
+Metrics) before building anything, per user request.
+
+**YPRR and true route participation: confirmed infeasible with any
+accessible data source.** Checked `ngs_receiving` (no routes column),
+`nfl_data_py.import_ftn_data()` (play-level charting only — motion,
+play-action, personnel counts — no per-player route data), and raw PBP
+(`nfl_data_py.import_pbp_data()`). PBP does have a `route` column
+(93% populated) and `offense_players` (participation, 93% populated,
+2016+) — but `route` only describes the *targeted* receiver's route on
+plays with a target, saying nothing about the other ~3 receivers/backs
+on the field, and `offense_players` says who was on the field but not
+what they did (route vs. in-line block). No combination of accessible
+data distinguishes a route-runner from a pass-blocker on the same play.
+
+This isn't a new discovery so much as confirmation of an existing
+"declared but dead" feature, the same pattern as WOPR and
+`recv_epa_per_target_roll3_mean` documented earlier in this doc:
+`utilization_score.py` and `feature_engineering.py` both already check
+`if "routes_run" in df.columns"` and fall back to `snap_share_pct * 0.8`
+— no loader has ever populated `routes_run`, so that branch has never
+fired, and per this investigation, none of the accessible data sources
+can populate it correctly either.
+
+**A real, honestly-labeled proxy was buildable from PBP `offense_players`
+instead**, and the offensive-line metrics were directly buildable from
+data already in the DB. Built both, promoted to **v30**:
+
+1. **Team OL quality** (`src/features/feature_engineering.py`,
+   `_add_team_ol_features`): re-aggregates `weekly_pfr` (already used at
+   individual-player level by `_add_weekly_pfr_features`/component
+   features) to team-week.
+   - Pass-block (`team_sack_rate_allowed_roll3_mean`): identifies each
+     team-week's starting QB as the row with the most pressure activity
+     (`weekly_pfr` has no dropback-count column to rank by directly) and
+     uses that row's own `times_pressured_pct` — avoids diluting the
+     signal by averaging in mop-up-duty backup QB rows.
+   - Run-block (`team_run_block_ybc_avg_roll3_mean`): unweighted mean of
+     `rushing_yards_before_contact_avg` across a team's RB rows that week
+     — a deliberate simplification, documented in code, since
+     `weekly_pfr` carries no per-RB carry count to weight by.
+   - Wired into `CAUSAL_FEATURES`: QB and WR/TE get the pass-block
+     column (time-to-throw / route-development-time rationale), RB gets
+     the run-block column.
+
+2. **PBP pass-play participation rate** (new table
+   `pbp_pass_participation`, `src/data/pbp_stats_aggregator.py`'s
+   `get_pass_play_participation_from_pbp`, `DatabaseManager.
+   ensure_pbp_pass_participation()`, `scripts/backfill_pbp_pass_
+   participation.py` — all modeled directly on the existing
+   `team_personnel_stats`/`get_personnel_groupings_from_pbp`/
+   `ensure_team_personnel_stats` pattern from the v29 personnel-grouping
+   work). Explodes `offense_players` (semicolon-delimited GSIS IDs,
+   already matching this project's `player_id` format directly — no
+   crosswalk needed) on real dropback pass plays (`play_type == 'pass'`)
+   to compute, per player-week, the fraction of the team's actual pass
+   plays a player was on the field for. **Explicitly NOT true route
+   participation** — documented in three places (table schema comment,
+   function docstring, `CAUSAL_FEATURES` comment) that it can't separate
+   a receiver running a route from one staying in to block on the same
+   play. Backfilled 2016-2025 (10 seasons, ~1,000 players/season).
+   Spot-checked against known real roles on 2023 data: Mahomes 99.2%
+   (QB, every dropback), C.Lamb 91.0% (true WR1), T.Kelce 84.8% (elite
+   receiving TE), A.Ingold 26.2% (blocking fullback), C.Patterson 19.2%
+   (gadget/return RB, minimal passing-down role) — behaves exactly as
+   expected. Wired into `CAUSAL_FEATURES` for WR/TE
+   (`pbp_pass_play_participation_pct_roll3_mean`), and into
+   `utilization_score.py`'s existing `route_participation_pct` fallback
+   chain (ahead of the flat `snap_share_pct * 0.8` proxy, behind the
+   still-dead-but-harmless `routes_run` branch).
+
+Both new raw team/player-week columns are same-week OUTCOME stats (like
+`team_pct_11_personnel` from v29) and are rolled via `shift(1).rolling(3,
+min_periods=1).mean()` before exposure to the model — caught and fixed a
+real ordering bug during implementation where the new raw column names
+were first added to the generic `_create_causal_rolling_features` roll
+list, which runs *before* the helper methods that populate those raw
+columns (verified by checking the pipeline call order directly, not
+assumed); fixed by computing the rolling inline within each new helper
+instead, matching how `_add_weekly_pfr_features` already does it.
+
+**FEATURE_VERSION bumped to 30.** Verified: 8 new unit tests
+(`tests/test_ol_and_participation_features.py` — starter-selection logic
+for pass-block, run-block averaging, causal shift correctness for the
+participation rate, the aggregator's own play-type/participant-counting
+logic on synthetic PBP data, and the `route_participation_pct`
+fallback-chain preference), full existing suite green (`test_ml_audit.py`
++ `test_ml_robustness_15_steps.py` + `test_schema_validator.py` +
+`test_feature_engineering.py` + `test_models.py` +
+`test_multiweek_ci_exponent.py` + `test_pbp_aggregator.py` — 120 passed,
+3 skipped, pre-existing/unrelated).
+
+**Accuracy-lift ablation (same methodology as v29): flat, consistent
+with v26-v29.** Two full 2025 walk-forward backtests (all 4 positions, fp
+target mode, 5,612 predictions) — one with the 5 v30 columns in
+`CAUSAL_FEATURES`, one with them stripped back out (temporarily edited
+`config/settings.py`, ran the "without" backtest, then restored via
+`git checkout` — which briefly wiped the *uncommitted* v30 wiring
+entirely since none of this session's work was committed yet; caught
+immediately by checking `git diff` after and re-applied the same five
+edits before re-verifying, no data lost, but worth flagging as a
+process near-miss: `git checkout -- <file>` reverts to the last commit,
+not "undo my last edit," and is dangerous to reach for on files with
+real uncommitted work in progress).
+
+| Position | MAE (without → with) | RMSE (without → with) | R² (without → with) |
+|---|---|---|---|
+| QB | 6.4155 → 6.4267 | 7.9356 → 7.9438 | 0.2513 → 0.2497 |
+| RB | 4.8115 → 4.8108 | 6.5383 → 6.5377 | 0.3645 → 0.3647 |
+| WR | 4.6507 → 4.6516 | 6.2375 → 6.2362 | 0.2760 → 0.2763 |
+| TE | 3.7969 → 3.7968 | 5.2242 → 5.2178 | 0.2710 → 0.2728 |
+| **Aggregate** | 4.7303 → 4.7319 | 6.3588 → 6.3583 | 0.3509 → 0.3510 |
+
+Every position's movement is noise-level (QB moved the most, and even
+that's ~0.011 MAE on 688 predictions). This is now the **fifth**
+feature-version bump in a row (v26 DVOA, v27 rookie identity, v28 rookie
+opportunity/breakout, v29 personnel grouping, now v30) to show no
+aggregate lift on this backtest configuration. Same standing caveats
+apply: this is one backtest, one holdout season, one model type (not the
+higher-fidelity `--model ensemble` path), and heavy regularization could
+be shrinking a real-but-modest signal toward zero. Not a reason to
+revert — both features are theoretically well-motivated (GAPS.md §11.4
+ranked OL quality and route-participation-adjacent signals as real gaps)
+and the participation-rate proxy visibly encodes real role information
+(the spot-check above) even if it doesn't move this particular metric —
+but also not a claim of proven value. Filed honestly, matching this
+project's standing practice.

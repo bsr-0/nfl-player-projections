@@ -1167,6 +1167,81 @@ def get_personnel_groupings_from_pbp(season: int, use_cache: bool = True) -> pd.
     return result
 
 
+def get_pass_play_participation_from_pbp(season: int, use_cache: bool = True) -> pd.DataFrame:
+    """Per-player pass-play participation rate (GAPS.md §11.1.C/D follow-up).
+
+    Parses PBP's ``offense_players`` column (semicolon-delimited GSIS IDs,
+    one row per play) on real dropback pass plays (``play_type ==
+    'pass'``) only. Column is 100% non-null from 2016 on (verified
+    directly against nfl_data_py; absent before 2016, same coverage start
+    as ``offense_personnel`` used for personnel grouping above).
+
+    This is NOT true route participation -- it counts every play a player
+    was on the field for during a pass play, whether they ran a route or
+    stayed in to block. No accessible data source (NGS, FTN charting, or
+    PBP) distinguishes those two cases for non-targeted players; PBP's own
+    ``route`` column only describes the *targeted* receiver's route on
+    plays with a target. Investigated and confirmed genuinely unavailable
+    -- see GAPS.md. Still real signal: distinct from raw snap_share_pct
+    (excludes run plays and non-pass snaps).
+
+    GSIS-format player IDs in ``offense_players`` already match this
+    project's ``player_id`` format directly -- no ID crosswalk needed.
+
+    Returns one row per (player_id, team, season, week) with
+    team_pass_plays, player_pass_plays, and pass_play_participation_pct.
+    Empty DataFrame for seasons before the column exists.
+    """
+    cache_path = RAW_DATA_DIR / f"pbp_participation_{season}.parquet"
+    if use_cache and cache_path.exists():
+        try:
+            return pd.read_parquet(cache_path)
+        except Exception:
+            print(f"  Warning: corrupt pass-participation cache for season {season}, rebuilding")
+
+    import nfl_data_py as nfl
+    pbp = nfl.import_pbp_data([season])
+    if pbp.empty or "offense_players" not in pbp.columns:
+        return pd.DataFrame()
+
+    plays = pbp[pbp["play_type"] == "pass"].copy()
+    plays = plays[plays["offense_players"].notna() & (plays["offense_players"] != "")]
+    plays = plays.rename(columns={"posteam": "team"})
+    plays = plays[plays["team"].notna() & (plays["team"] != "")]
+    if plays.empty:
+        return pd.DataFrame()
+
+    team_pass_plays = (
+        plays.groupby(["team", "season", "week"]).size().rename("team_pass_plays").reset_index()
+    )
+
+    plays["_players"] = plays["offense_players"].str.split(";")
+    exploded = plays[["team", "season", "week", "_players"]].explode("_players")
+    exploded = exploded.rename(columns={"_players": "player_id"})
+    exploded = exploded[exploded["player_id"].notna() & (exploded["player_id"] != "")]
+
+    player_pass_plays = (
+        exploded.groupby(["player_id", "team", "season", "week"])
+        .size()
+        .rename("player_pass_plays")
+        .reset_index()
+    )
+
+    result = player_pass_plays.merge(team_pass_plays, on=["team", "season", "week"], how="left")
+    result["pass_play_participation_pct"] = (
+        result["player_pass_plays"] / result["team_pass_plays"]
+    ).clip(0, 1)
+    result["team"] = result["team"].apply(resolver.normalize_team_code)
+
+    if use_cache:
+        try:
+            _atomic_parquet_write(result, cache_path)
+        except Exception as e:
+            print(f"  Warning: failed to write pass-participation cache for {season}: {e}")
+
+    return result
+
+
 def load_current_season_stats_from_pbp() -> pd.DataFrame:
     """
     Load current NFL season stats from PBP data (convenience wrapper).

@@ -347,6 +347,8 @@ CAUSAL_FEATURES = {
         # v29: offensive personnel grouping usage (GAPS.md §3.3/§11.1.E).
         # 12/21 personnel = extra blocker/2-back sets -> more RB opportunity.
         "team_pct_12_personnel_roll3_mean", "team_pct_21_personnel_roll3_mean",
+        # v30: offensive-line run-block quality (GAPS.md §11.1.H).
+        "team_run_block_ybc_avg_roll3_mean",
     ],
     "WR": [
         "snap_share_pct_roll3_mean",
@@ -399,6 +401,13 @@ CAUSAL_FEATURES = {
         # v29: offensive personnel grouping usage (GAPS.md §3.3/§11.1.E).
         # 11 personnel (3 WR) is a spread-offense signal, ceiling for WR3+.
         "team_pct_11_personnel_roll3_mean", "team_pct_12_personnel_roll3_mean",
+        # v30: offensive-line pass-block quality (route development time)
+        # and PBP-derived pass-play participation rate (GAPS.md
+        # §11.1.C/D/H follow-up). NOT true route participation -- see
+        # get_pass_play_participation_from_pbp docstring; it's a real but
+        # imperfect proxy (can't separate route-runners from in-line
+        # pass-blockers on the same play).
+        "team_sack_rate_allowed_roll3_mean", "pbp_pass_play_participation_pct_roll3_mean",
     ],
     "TE": [
         "snap_share_pct_roll3_mean",
@@ -452,6 +461,10 @@ CAUSAL_FEATURES = {
         # 12/13 personnel (2-3 TE sets) directly determines TE snap/route
         # ceiling versus a 3-WR spread offense.
         "team_pct_12_personnel_roll3_mean", "team_pct_13_personnel_roll3_mean",
+        # v30: offensive-line pass-block quality + PBP-derived pass-play
+        # participation rate (GAPS.md §11.1.C/D/H follow-up; see WR list
+        # above for the "not true route participation" caveat).
+        "team_sack_rate_allowed_roll3_mean", "pbp_pass_play_participation_pct_roll3_mean",
     ],
     "QB": [
         # Volume (3-week rolling)
@@ -503,6 +516,9 @@ CAUSAL_FEATURES = {
         # prior_season_late_ppg removed in v20 — caused +3.6pt upward bias for
         # benched QBs whose high late-2019 scores don't reflect 2020 backup role.
         # prev_season_ppg + depth_chart_rank already cover prior quality.
+        # v30: offensive-line pass-block quality (GAPS.md §11.1.H) — most
+        # direct beneficiary, affects time to throw.
+        "team_sack_rate_allowed_roll3_mean",
     ],
 }
 
@@ -642,7 +658,8 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "29"  # v29: offensive personnel grouping usage (team_pct_11/12/21/13_personnel_roll3_mean, GAPS.md §3.3/§11.1.E) — parsed from PBP offense_personnel, 2016+ coverage
+FEATURE_VERSION = "30"  # v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H) — see FEATURE_VERSION history below
+# v29: offensive personnel grouping usage (team_pct_11/12/21/13_personnel_roll3_mean, GAPS.md §3.3/§11.1.E) — parsed from PBP offense_personnel, 2016+ coverage
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

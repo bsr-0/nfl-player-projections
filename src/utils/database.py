@@ -456,6 +456,30 @@ class DatabaseManager:
                 )
             """)
 
+            # Per-player pass-play participation rate (GAPS.md §11.1.C/D
+            # follow-up): fraction of a team's real dropback pass plays
+            # (PBP play_type == 'pass') a player was on the field for,
+            # derived from PBP's offense_players column. NOT true route
+            # participation -- it can't distinguish a receiver who ran a
+            # route from one who stayed in to pass-block on the same play
+            # (no accessible data source makes that distinction; see
+            # GAPS.md). Same-week outcome stat like team_personnel_stats
+            # above, must be consumed via a shifted rolling feature.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pbp_pass_participation (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id TEXT NOT NULL,
+                    team TEXT NOT NULL,
+                    season INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    team_pass_plays INTEGER DEFAULT 0,
+                    player_pass_plays INTEGER DEFAULT 0,
+                    pass_play_participation_pct REAL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(player_id, season, week)
+                )
+            """)
+
             # Head coach identity per team-week (GAPS.md §4.G / §11.1.G).
             # Sourced from nflverse games.csv home_coach/away_coach — the
             # same file already used for schedule/Vegas ingestion.
@@ -1842,6 +1866,75 @@ class DatabaseManager:
                             float(row["pct_11"]), float(row["pct_12"]),
                             float(row["pct_21"]), float(row["pct_13"]),
                             float(row["pct_other"]), int(row["n_plays"]),
+                        ))
+                        count += 1
+                    except Exception:
+                        pass
+                conn.commit()
+        return count
+
+    def ensure_pbp_pass_participation(self, seasons: Optional[List[int]] = None,
+                                       force_refresh: bool = False) -> int:
+        """Populate pbp_pass_participation (per-player pass-play participation %).
+
+        Sourced from PBP's offense_players column via
+        get_pass_play_participation_from_pbp (GAPS.md §11.1.C/D follow-up)
+        -- not derivable from local player_weekly_stats, requires a PBP
+        fetch per season. Only fetches seasons not already present unless
+        force_refresh=True. Seasons before 2016 (where the PBP column
+        doesn't exist) are silently skipped, not an error. Network/parse
+        failures degrade to a no-op per season, matching the pattern used
+        for ensure_team_personnel_stats above.
+        """
+        with self._get_connection() as conn:
+            existing_seasons = set(
+                pd.read_sql_query(
+                    "SELECT DISTINCT season FROM pbp_pass_participation", conn
+                )["season"].tolist()
+            )
+
+        if seasons is None:
+            with self._get_connection() as conn:
+                seasons = [
+                    int(s) for s in pd.read_sql_query(
+                        "SELECT DISTINCT season FROM player_weekly_stats", conn
+                    )["season"].tolist()
+                ]
+
+        PARTICIPATION_COVERAGE_START = 2016
+        seasons = [s for s in seasons if s >= PARTICIPATION_COVERAGE_START]
+
+        target_seasons = seasons if force_refresh else [
+            s for s in seasons if s not in existing_seasons
+        ]
+        if not target_seasons:
+            return 0
+
+        from src.data.pbp_stats_aggregator import get_pass_play_participation_from_pbp
+
+        count = 0
+        for season in target_seasons:
+            try:
+                df = get_pass_play_participation_from_pbp(season)
+            except Exception as e:
+                print(f"  WARNING: pbp_pass_participation refresh skipped for {season} (fetch failed): {e}")
+                continue
+            if df.empty:
+                continue
+            with self._get_connection() as conn:
+                cur = conn.cursor()
+                for _, row in df.iterrows():
+                    try:
+                        cur.execute("""
+                            INSERT OR REPLACE INTO pbp_pass_participation
+                            (player_id, team, season, week, team_pass_plays,
+                             player_pass_plays, pass_play_participation_pct)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            str(row["player_id"]), str(row["team"]),
+                            int(row["season"]), int(row["week"]),
+                            int(row["team_pass_plays"]), int(row["player_pass_plays"]),
+                            float(row["pass_play_participation_pct"]),
                         ))
                         count += 1
                     except Exception:
