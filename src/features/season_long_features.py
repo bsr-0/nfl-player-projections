@@ -203,39 +203,38 @@ class AgeCurveModel:
                 avg_ages = {'QB': 28, 'RB': 25, 'WR': 26, 'TE': 27}
                 result['age'] = result['position'].map(avg_ages).fillna(26)
         
-        # Age factor (performance relative to peak)
-        result['age_factor'] = result.apply(
-            lambda row: self.get_age_factor(int(row['age']), row['position']),
-            axis=1
-        )
-        
-        # Expected games based on age
-        result['age_expected_games'] = result.apply(
-            lambda row: self.get_expected_games(int(row['age']), row['position']),
-            axis=1
-        )
-        
-        # Year-over-year decline rate
-        result['decline_rate'] = result.apply(
-            lambda row: self.calculate_decline_rate(int(row['age']), row['position']),
-            axis=1
-        )
-        
-        # Peak age distance (negative = before peak, positive = after)
+        # age_factor/age_expected_games/decline_rate are pure functions of
+        # (age, position) drawn from small static lookup tables, but were
+        # computed via .apply(axis=1) over the full (100K+ row, under the
+        # backtester's expanding window) DataFrame on every call. Compute
+        # once per unique (age, position) pair instead and broadcast back
+        # (GAPS.md, 2026-08-06 perf fix follow-up).
+        age_int = result['age'].astype(int)
+        unique_pairs = pd.DataFrame({'_age_int': age_int, 'position': result['position']}).drop_duplicates()
+        factor_map, games_map, decline_map = {}, {}, {}
+        for a, pos in unique_pairs.itertuples(index=False, name=None):
+            key = (a, pos)
+            factor_map[key] = self.get_age_factor(a, pos)
+            games_map[key] = self.get_expected_games(a, pos)
+            decline_map[key] = self.calculate_decline_rate(a, pos)
+
+        pair_keys = list(zip(age_int, result['position']))
+        result['age_factor'] = [factor_map[k] for k in pair_keys]
+        result['age_expected_games'] = [games_map[k] for k in pair_keys]
+        result['decline_rate'] = [decline_map[k] for k in pair_keys]
+
+        # Peak age distance (negative = before peak, positive = after) --
+        # simple arithmetic, fully vectorized.
         peak_ages = {'QB': 29, 'RB': 24, 'WR': 27, 'TE': 28}
-        result['years_from_peak'] = result.apply(
-            lambda row: row['age'] - peak_ages.get(row['position'], 27),
-            axis=1
-        )
-        
-        # Is in prime window
+        result['years_from_peak'] = result['age'] - result['position'].map(peak_ages).fillna(27)
+
+        # Is in prime window -- also fully vectorized.
         prime_windows = {
             'QB': (26, 34), 'RB': (22, 27), 'WR': (24, 30), 'TE': (25, 31)
         }
-        result['is_in_prime'] = result.apply(
-            lambda row: 1 if prime_windows.get(row['position'], (24, 30))[0] <= row['age'] <= prime_windows.get(row['position'], (24, 30))[1] else 0,
-            axis=1
-        )
+        prime_lo = result['position'].map(lambda p: prime_windows.get(p, (24, 30))[0])
+        prime_hi = result['position'].map(lambda p: prime_windows.get(p, (24, 30))[1])
+        result['is_in_prime'] = ((result['age'] >= prime_lo) & (result['age'] <= prime_hi)).astype(int)
         
         print(f"  Added age features: age_factor, age_expected_games, decline_rate, years_from_peak, is_in_prime")
         
@@ -649,32 +648,39 @@ class RookieProjector:
                 axis=1
             )
         
-        # Get archetype projections
-        def get_archetype_ppg(row):
-            if row['is_rookie'] == 0:
-                return np.nan
-            proj = self.get_rookie_projection(row['rookie_archetype'], row['position'])
-            return proj['ppg']
-        
-        def get_archetype_games(row):
-            if row['is_rookie'] == 0:
-                return np.nan
-            proj = self.get_rookie_projection(row['rookie_archetype'], row['position'])
-            return proj['games']
-        
-        result['rookie_projected_ppg'] = result.apply(get_archetype_ppg, axis=1)
-        result['rookie_projected_games'] = result.apply(get_archetype_games, axis=1)
+        # Get archetype projections. Restrict the row-wise apply to the
+        # rookie subset -- non-rookies always return NaN/0 anyway, but the
+        # old code ran the Python-level apply over the *entire* (100K+ row
+        # under the backtester's expanding window) DataFrame regardless
+        # (GAPS.md, 2026-08-06 perf fix follow-up).
+        result['rookie_projected_ppg'] = np.nan
+        result['rookie_projected_games'] = np.nan
+        rookie_mask = result['is_rookie'] == 1
+        if rookie_mask.any():
+            rookies = result.loc[rookie_mask]
+            result.loc[rookie_mask, 'rookie_projected_ppg'] = rookies.apply(
+                lambda row: self.get_rookie_projection(row['rookie_archetype'], row['position'])['ppg'],
+                axis=1,
+            )
+            result.loc[rookie_mask, 'rookie_projected_games'] = rookies.apply(
+                lambda row: self.get_rookie_projection(row['rookie_archetype'], row['position'])['games'],
+                axis=1,
+            )
         result['rookie_projected_total'] = (
             result['rookie_projected_ppg'] * result['rookie_projected_games']
         )
-        
+
         # Rookie adjustment factor (how much to weight rookie projection vs actual)
         # Early season: weight rookie projection more
         # Late season: weight actual performance more
-        result['rookie_weight'] = result.apply(
-            lambda row: max(0, 1 - (row.get('week', 1) - 1) / 10) if row['is_rookie'] == 1 else 0,
-            axis=1
-        )
+        result['rookie_weight'] = 0.0
+        if rookie_mask.any():
+            if 'week' in result.columns:
+                weight_vals = 1 - (result.loc[rookie_mask, 'week'] - 1) / 10
+            else:
+                weight_vals = 1.0
+            result.loc[rookie_mask, 'rookie_weight'] = weight_vals
+            result['rookie_weight'] = result['rookie_weight'].clip(lower=0)
         
         print(f"  Added rookie features: is_rookie, rookie_archetype, rookie_projected_ppg/games/total")
         

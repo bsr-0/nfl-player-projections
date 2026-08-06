@@ -3769,3 +3769,53 @@ profiled) were all visible in the same profile as further candidates,
 but weren't examined for the same "recomputing something window-
 independent" pattern. Worth a follow-up pass if backtest runtime is
 still a bottleneck after these four fixes.
+
+### Follow-up: age-curve and rookie-projection vectorization (2026-08-06)
+
+Continued the per-week performance investigation into the two candidates
+flagged as not-yet-checked above. `_create_causal_rolling_features`
+turned out to be inherently window-dependent (per-player rolling means
+recomputed over the actually-growing training set every week — not the
+same "recomputing something static" bug pattern as the other fixes, so
+left as-is; a real fix there would need incremental/memoized rolling
+state, judged not worth the risk for a diagnostic follow-up).
+
+`add_season_long_features`'s age-curve and rookie-projection steps did
+have the same bug pattern, though:
+
+- `AgeCurveModel.add_age_features()` ran `.apply(axis=1)` **five separate
+  times** over the full expanding-window DataFrame to compute
+  `age_factor`, `age_expected_games`, `decline_rate`, `years_from_peak`,
+  and `is_in_prime` — all pure functions of `(age, position)`, a space of
+  at most ~4 positions × a few dozen ages. Rewrote to compute the three
+  lookup-based values once per unique `(age, position)` pair and
+  broadcast via dict lookup, and fully vectorized the two arithmetic/
+  comparison-only ones (`years_from_peak`, `is_in_prime`) directly
+  (`src/features/season_long_features.py`).
+- `RookieProjector.add_rookie_features()` ran two more `.apply(axis=1)`
+  calls (`rookie_projected_ppg`/`_games`) and a third
+  (`rookie_weight`) over the **entire** DataFrame even though the
+  underlying functions immediately return NaN/0 for the ~90%+ of rows
+  that aren't rookies. Restricted all three to the rookie subset via a
+  boolean mask before applying.
+
+Verified correctness two ways: (1) a standalone synthetic-data script
+comparing the new vectorized/masked output against the original
+per-row formulas element-by-element (`np.allclose`, including NaN
+positions) — exact match on both functions; (2) re-ran the same
+TE-only 2025 fp-mode backtest used to verify the earlier fixes —
+**R²/MAE bit-identical** (`R2=0.2696787296807507`) before and after.
+
+**Net effect of this follow-up alone**: 490.8s → 427.0s (~13% further
+reduction). **Cumulative effect of the full per-week performance
+investigation** (this section plus the four fixes above): TE-only 2025
+fp-mode backtest wall time went from the original **601.5s → 427.0s
+(~29% faster)**, with zero change to any prediction, metric, or model
+behavior at any step — confirmed a pure performance investigation, not
+a silent behavior change, at every stage.
+
+**Still not investigated** (lower expected payoff, not attempted this
+pass): `_add_contract_features` and `_add_late_season_momentum` in
+`feature_engineering.py` (106s/102s in the original profile) — worth a
+look if backtest runtime is still a pain point, but not checked for the
+same anti-patterns yet.
