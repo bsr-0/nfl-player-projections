@@ -123,11 +123,14 @@ class TestStep5_FeatureLeakagePrevention:
         assert "shift(1)" in source
 
     def test_target_uses_shift_neg1(self):
-        """Target uses shift(-1) for future points."""
-        from src.models.train import train_models
-        import inspect
-        # Check train.py target creation
-        with open(Path(__file__).parent.parent / "src" / "models" / "train.py") as f:
+        """Target uses shift(-1) for future points.
+
+        Target creation (target_1w/target_util_1w/etc.) moved from train.py
+        into feature_preparation.py's _create_horizon_targets() during the
+        2026-04-22 council process; updated 2026-08-06 after finding the
+        test still pointed at train.py, which no longer contains this logic.
+        """
+        with open(Path(__file__).parent.parent / "src" / "models" / "feature_preparation.py") as f:
             content = f.read()
         assert "shift(-1)" in content
 
@@ -142,13 +145,23 @@ class TestStep6_CrossValidation:
     """Step 6: Cross-validation with time-series splits."""
 
     def test_optuna_uses_timeseries_split(self):
-        """Optuna tuning uses TimeSeriesSplit."""
+        """Optuna tuning uses a time-series-respecting split.
+
+        `_tune_xgboost` was rewritten to use `SeasonAwareTimeSeriesSplit`
+        (project-specific: never splits mid-season, supports a purge gap,
+        falls back to plain TimeSeriesSplit when season info is
+        unavailable) with a manual CV loop instead of sklearn's
+        `cross_val_score`, per an in-code comment: sklearn>=1.6's
+        `get_tags()` path breaks with xgboost's estimator MRO. Test
+        updated 2026-08-06 to check for the class actually used instead of
+        the literal `TimeSeriesSplit`/`cross_val_score` names.
+        """
         from src.models.position_models import PositionModel
         import inspect
-        
+
         source = inspect.getsource(PositionModel._tune_xgboost)
-        assert "TimeSeriesSplit" in source
-        assert "cross_val_score" in source
+        assert "SeasonAwareTimeSeriesSplit" in source
+        assert ".split(" in source
 
     def test_robust_timeseries_cv_exists(self):
         """RobustTimeSeriesCV implements temporal CV."""
@@ -163,19 +176,38 @@ class TestStep7_ValidationSetUsage:
     """Step 7: Validation set for hyperparameter and ensemble decisions."""
 
     def test_ensemble_weights_are_spec_mandated(self):
-        """Ensemble weights use spec-mandated constants (30/40/30)."""
-        from config.settings import ENSEMBLE_WEIGHTS_1W
-        assert ENSEMBLE_WEIGHTS_1W["random_forest"] == 0.30
-        assert ENSEMBLE_WEIGHTS_1W["xgboost"] == 0.40
-        assert ENSEMBLE_WEIGHTS_1W["ridge"] == 0.30
+        """Ensemble weights use spec-mandated constants (30/40/30).
+
+        ENSEMBLE_WEIGHTS_1W lives in position_models.py, not config.settings
+        (test updated 2026-08-06 after finding the old import target never
+        existed there). It's conditional on LightGBM availability: a 4-model
+        split when available, and this exact spec-mandated 3-model 30/40/30
+        split otherwise -- assert against whichever the current environment
+        actually uses rather than assuming one branch.
+        """
+        from src.models.position_models import ENSEMBLE_WEIGHTS_1W, HAS_LIGHTGBM
+        if HAS_LIGHTGBM:
+            assert set(ENSEMBLE_WEIGHTS_1W.keys()) == {"random_forest", "xgboost", "lightgbm", "ridge"}
+            assert abs(sum(ENSEMBLE_WEIGHTS_1W.values()) - 1.0) < 1e-9
+        else:
+            assert ENSEMBLE_WEIGHTS_1W["random_forest"] == 0.30
+            assert ENSEMBLE_WEIGHTS_1W["xgboost"] == 0.40
+            assert ENSEMBLE_WEIGHTS_1W["ridge"] == 0.30
 
     def test_meta_learner_trained_on_validation(self):
-        """Meta-learner uses validation predictions."""
+        """Meta-learner uses validation predictions.
+
+        The validation-predictions variable was renamed to
+        `val_preds_stack` at some point after this test was written; test
+        updated 2026-08-06 after confirming the underlying property (the
+        meta-learner is still predicted from held-out X_val, not train
+        data) still holds under the current name.
+        """
         from src.models.position_models import PositionModel
         import inspect
-        
+
         source = inspect.getsource(PositionModel.fit)
-        assert "preds_val" in source and "X_val" in source
+        assert "val_preds_stack" in source and "X_val" in source
 
 
 class TestStep8_EarlyStopping:
@@ -235,8 +267,13 @@ class TestStep11_TargetOutliers:
     """Step 11: Target outlier treatment."""
 
     def test_winsorization_applied(self):
-        """Winsorize at 1st/99th percentile on train only."""
-        with open(Path(__file__).parent.parent / "src" / "models" / "train.py") as f:
+        """Winsorize at 1st/99th percentile on train only.
+
+        Moved from train.py into feature_preparation.py's
+        prepare_training_data() during the 2026-04-22 council process;
+        test updated 2026-08-06 to point at the current location.
+        """
+        with open(Path(__file__).parent.parent / "src" / "models" / "feature_preparation.py") as f:
             content = f.read()
         assert "quantile" in content and "clip" in content
         assert "train_data" in content

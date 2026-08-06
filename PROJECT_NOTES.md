@@ -94,6 +94,8 @@ what's been verified vs. what's still an open measurement).
 
 Raised `RIDGE_DEFAULT_ALPHA` from 1.0 to **10,000** in `config/settings.py`. Cross-season result: 29-14 (67.4%) hindsight win rate vs 27-16 (62.8%) at α=1 (p=0.016, n=43 weeks).
 
+**STALE — reversed 2026-08-06, see GAPS.md §"Skeptical audit of RIDGE_DEFAULT_ALPHA=10,000".** A same-day, same-season, same-codebase direct reproduction found the opposite result: α=1.0 beat α=10,000 72.7% (16-6, p=0.026, ROI +30.9%) vs 63.6% (14-8, p=0.143 not significant, ROI +14.5%). The α=10,000 change also turned out to have **zero effect on real production** the whole time — `ComponentPredictor` (what's actually served) hardcodes `alpha=1.0` independently of this constant; only the `ts_backtester.py` evaluation tool ever read it. `RIDGE_DEFAULT_ALPHA` was lowered back to `1.0` in `config/settings.py` on 2026-08-06 after this finding, and a duplicate hardcoded copy in `scripts/paper_trade_lock.py` was fixed to reference the constant instead of a separate literal.
+
 ### Phase 1 — Vegas lines (April 21 2026)
 
 Vegas features had been silently pinned at constants (`implied_team_total=23.0`, `spread=0.0`) due to `except Exception: pass`. Fixing this lifted overall R² by +0.004, QB r by +0.031–0.034 on 2025. Cross-season hindsight: 67.4% → **69.8% (30-13, p=0.007, ROI +25.6%)**.

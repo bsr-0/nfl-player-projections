@@ -855,8 +855,13 @@ class TestUtilizationScoreIntegrity:
         assert loaded == bounds, f"Percentile bounds save/load roundtrip failed: {loaded} != {bounds}"
 
     def test_utilization_weights_persistence(self):
-        """Utilization weights must be persisted for train/serve consistency."""
-        source = Path(PROJECT_ROOT / "src" / "models" / "train.py").read_text()
+        """Utilization weights must be persisted for train/serve consistency.
+
+        This logic moved from train.py into feature_preparation.py during
+        the 2026-04-22 council process (see GAPS.md); updated 2026-08-06
+        after finding the test still pointed at the old location.
+        """
+        source = Path(PROJECT_ROOT / "src" / "models" / "feature_preparation.py").read_text()
         assert "utilization_weights.json" in source, (
             "Utilization weights not persisted during training"
         )

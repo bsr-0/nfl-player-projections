@@ -24,13 +24,20 @@ def test_validate_weekly_data_rejects_invalid_position_in_strict_mode():
 
 
 def test_validate_weekly_data_rejects_negative_stats_in_strict_mode():
+    # `passing_yards` is deliberately excluded from this check (see
+    # schema_validator.py's NEGATIVE_WARN_COLUMNS): sacks can legitimately
+    # put single-game passing yards below zero, so it's warn-only, not a
+    # critical error, even in strict mode. Use `receptions` instead, which
+    # is in NEGATIVE_DISALLOWED_COLUMNS and has no legitimate negative
+    # value. Test updated 2026-08-06 after finding the original assertion
+    # failed against passing_yards for this reason, not a code regression.
     df = pd.DataFrame(
         {
             "player_id": ["p1"],
             "season": [2024],
             "week": [1],
             "position": ["QB"],
-            "passing_yards": [-10],
+            "receptions": [-1],
         }
     )
 

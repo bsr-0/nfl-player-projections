@@ -3819,3 +3819,40 @@ pass): `_add_contract_features` and `_add_late_season_momentum` in
 `feature_engineering.py` (106s/102s in the original profile) — worth a
 look if backtest runtime is still a pain point, but not checked for the
 same anti-patterns yet.
+
+## Stale test/doc sweep: PROJECT_NOTES.md alpha claim + 7 stale tests (2026-08-06)
+
+Closed the two remaining flagged items from the Ridge alpha audit
+(GAPS.md, "RIDGE_DEFAULT_ALPHA lowered to 1.0" section): PROJECT_NOTES.md
+still asserted the old, since-reversed 29-14-vs-27-16 claim, and 4 tests
+were flagged as stale but not yet fixed.
+
+**PROJECT_NOTES.md**: appended a dated correction inline after the stale
+April 20 claim (matching this doc's existing house style of marking
+superseded claims rather than deleting them), pointing at the same-day
+direct reproduction that found the opposite result (72.7%/16-6/p=0.026
+at α=1.0 vs. 63.6%/14-8/p=0.143 at α=10,000) and noting production was
+unaffected either way (`ComponentPredictor` always hardcoded α=1.0).
+
+**The 4 flagged stale tests**, plus 3 more found while verifying (same
+sweep, same session — fixed per this project's standing "fix small/safe
+bugs immediately" convention rather than leaving them for a later pass):
+
+| Test | File | Root cause |
+|---|---|---|
+| `test_utilization_weights_persistence` | test_ml_audit.py | Checked train.py; persistence logic moved to `feature_preparation.py` during the 2026-04-22 council process |
+| `test_target_uses_shift_neg1` | test_ml_robustness_15_steps.py | Checked train.py; target creation (`shift(-1)`) moved to `feature_preparation.py`'s `_create_horizon_targets()` |
+| `test_winsorization_applied` | test_ml_robustness_15_steps.py | Same — winsorization moved to `feature_preparation.py`'s `prepare_training_data()` |
+| `test_ensemble_weights_are_spec_mandated` | test_ml_robustness_15_steps.py | Imported `ENSEMBLE_WEIGHTS_1W` from `config.settings`; it lives in `src/models/position_models.py`, conditional on `HAS_LIGHTGBM` (3-model 30/40/30 when unavailable — still spec-mandated; 4-model split when available) |
+| `test_meta_learner_trained_on_validation` | test_ml_robustness_15_steps.py | Checked for a variable named `preds_val`; renamed to `val_preds_stack` at some point. Property (meta-learner trained on held-out `X_val`, not train) still holds |
+| `test_optuna_uses_timeseries_split` | test_ml_robustness_15_steps.py | `_tune_xgboost` was rewritten to use `SeasonAwareTimeSeriesSplit` (project-specific, season-boundary-respecting, supports a purge gap) with a manual CV loop instead of sklearn's `TimeSeriesSplit`/`cross_val_score`, per an in-code comment: sklearn>=1.6's `get_tags()` path breaks with xgboost's estimator MRO |
+| `test_validate_weekly_data_rejects_negative_stats_in_strict_mode` | test_schema_validator.py | Used `passing_yards`, which is deliberately in `NEGATIVE_WARN_COLUMNS` (sacks can legitimately put single-game passing yards below zero) — not a code bug, a wrong test fixture. Switched to `receptions`, which is genuinely in `NEGATIVE_DISALLOWED_COLUMNS` |
+
+All 7 were the same underlying failure mode as much of this session's
+other findings: real, currently-correct behavior that a test's literal
+string/import check had fallen out of sync with after a refactor —
+not actual regressions. Verified each against the real current source
+(not assumed) before rewriting the assertion, and re-ran the full
+`test_ml_audit.py` + `test_ml_robustness_15_steps.py` +
+`test_schema_validator.py` suite afterward: **78 passed, 3 skipped**
+(skips are pre-existing, data-availability-gated, unrelated to this fix).
