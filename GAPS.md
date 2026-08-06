@@ -2854,23 +2854,55 @@ logic they're testing for, not evidence of an actual regression, but
 still worth updating so the test suite doesn't carry three permanently-red
 tests. Out of scope for the §9 audit specifically.
 
+### OPEN ITEM: `n_weeks**0.4` multi-week CI-scaling exponent — investigated, deliberately NOT fixed, still open (2026-08-05)
+
+**Status: open, not done.** This is a separate item from the
+floor/ceiling fix below and should not be read as resolved by it — the
+task tracker's entry for this work is labeled "completed" because the
+*redirected* work (floor/ceiling) was completed, not because this
+original ask was. Recording that distinction explicitly here since it's
+an easy thing for a future session (or a status summary) to conflate.
+
+The original ask (§7.4 follow-up) was to empirically derive the
+`n_weeks**0.4` exponent used in `position_models.py`/`ensemble.py`'s
+`_multi_week_ci_scale()` — it was chosen last session as "the more
+defensible of two existing guesses" (`n_weeks**0.4` vs `sqrt(n_weeks)`),
+never derived from real coverage data. Investigated feasibility before
+touching any code and found the honest answer is **not worth building
+right now**, for three compounding reasons, traced end to end rather than
+assumed:
+1. No backtesting tool in this codebase ever generates multi-week
+   predictions against known historical actuals — `run_ts_backtest.py`
+   only ever predicts 1 week at a time. The only `n_weeks>1` callers are
+   live serving (draft board generation), which by definition has no
+   historical actuals to check against (it's projecting the future).
+2. The code path is unreachable under default component-mode training
+   (already known from the prior session's §7.4 work).
+3. Even where reachable (non-default target modes), `EnsemblePredictor.predict()`
+   explicitly leaves `prediction_ci80/95_lower/upper` as `NaN` for
+   component-mode positions — confirmed by reading the code directly, not
+   assumed — and the actual user-facing draft board computes its own
+   floor/ceiling independently via `generate_draft_data.py`'s spread
+   formula, with zero connection to `_multi_week_ci_scale()` at all.
+
+So calibrating `n_weeks**0.4` properly would mean building real new
+backtesting infrastructure (predict N weeks forward from a historical
+cutoff, compare against real summed actuals — buildable, but a genuinely
+new tool, not a quick measurement) to harden a formula that currently has
+no path to affecting anything a user sees. Per explicit user direction,
+redirected the effort to the floor/ceiling formula instead (below), which
+*was* reachable and *was* shown to be badly miscalibrated. **The
+`n_weeks**0.4` exponent itself remains exactly as uncertain as it was at
+the start of this session** — still just "the more defensible of two
+guesses," not empirically validated. Worth revisiting only if/when this
+project's production training moves off component mode, or if
+`prediction_ci80/95` columns are ever wired into something user-facing —
+neither is true today.
+
 ### Draft-board floor/ceiling was badly miscalibrated — found, measured, fixed (2026-08-05, same session)
 
-Follow-up to §7.4: the original ask was to empirically derive the
-`n_weeks**0.4` multi-week CI-scaling exponent in `position_models.py`/
-`ensemble.py`. Investigated first and found that machinery isn't worth
-calibrating right now — traced it end to end and confirmed (a) no
-backtesting tool in this codebase ever generates multi-week predictions
-against known historical actuals (`run_ts_backtest.py` only ever predicts
-1 week at a time; the only `n_weeks>1` callers are live serving, which by
-definition has no historical actuals to check against), (b) the code path
-is unreachable under default component-mode training (already known), and
-(c) — the new finding — even where reachable, `EnsemblePredictor.predict()`
-explicitly leaves `prediction_ci80/95_lower/upper` as `NaN` for
-component-mode positions, and the actual user-facing draft board computes
-its own floor/ceiling independently via `generate_draft_data.py`'s
-`fp_std`-based spread formula, with zero connection to that machinery.
-Redirected effort there instead, per user direction.
+Follow-up to the above, once it became clear the CI-scaling exponent
+itself wasn't worth chasing further right now.
 
 **Method**: `_resolve_projection()`'s formula is `spread = 1.5 * fp_std *
 sqrt(17) * spread_multiplier`, where `fp_std` is a player's own
@@ -3045,3 +3077,58 @@ reproducing the offline analysis. 18/18 tests still pass
 **Not attempted**: a true walk-forward version (refitting
 `PreseasonProjector` itself per season, not just the spread formula)
 remains the same open item noted in the section above.
+
+### v29 (personnel grouping) accuracy-lift measurement — DONE, honest result: flat (2026-08-05, same session)
+
+Closed the standing "v29 features are confirmed live but nobody's
+measured whether they move `pred_mae`" caveat from the v29 promotion
+entry earlier in this doc. Same ablation methodology as the rookie-
+feature ablation: two full 2025 walk-forward backtests via the fixed
+`run_ts_backtest.py`-equivalent harness (expanding-window Ridge
+α=10,000, 22 weeks, 5,612 predictions) — one with the 6 v29 columns
+(`team_pct_11/12/21_personnel_roll3_mean` for RB, `team_pct_11/12` for
+WR, `team_pct_12/13` for TE) in `CAUSAL_FEATURES`, one with them
+stripped back out.
+
+**Result: no measurable lift, aggregate or by position.** Every metric
+matched to displayed precision between the two runs — MAE 4.78 vs 4.78,
+RMSE 6.36 vs 6.36, R² 0.350 vs 0.350 overall; RB 0.368 vs 0.368, WR
+0.281 vs 0.281, QB 0.233 vs 0.233 (identical, as expected — personnel
+features were never wired for QB), TE 0.267 vs 0.266 (the only
+non-identical value in the whole comparison, and it's noise-level).
+
+**Unlike the rookie-feature ablation, this is very unlikely to be an
+aggregation-masking artifact.** The rookie ablation's initial "flat"
+result turned out to be hiding a real effect because rookies are only
+~19% of rows — slicing to rookie-only rows revealed a genuine lift the
+aggregate metric buried. Personnel-grouping features apply broadly to
+*every* RB/WR/TE row every week, not a small subgroup, and the
+position-level breakdowns above (which would surface a concentrated
+effect the same way the rookie slice did) show the same flat result as
+the aggregate. There isn't an obvious slice left to check that could be
+hiding something here the way there was for rookies.
+
+**Consistent with the v26-v28 checkpoint pattern already documented
+above**: this is now the fourth feature-version bump in a row (v26 DVOA,
+v27 rookie identity, v28 rookie opportunity/breakout, now v29 personnel
+grouping) to show no aggregate lift on this specific backtest
+configuration (Ridge α=10,000, 55-60 competing features per position).
+The same caveats already on record apply here too — heavy regularization
+at that α could be shrinking a real-but-modest signal's coefficient
+toward zero, and this is one backtest on one holdout season with one
+model type, not the higher-fidelity `--model ensemble` path (too slow to
+run routinely, per earlier entries in this doc).
+
+**Verdict**: v29's personnel-grouping features are confirmed live,
+non-degenerate, and correctly computed (per the promotion entry), but
+have not been shown to improve accuracy on this measurement. Not a
+reason to revert them (they're theoretically well-motivated — GAPS.md
+§11.4 ranked personnel grouping #6 in the impact table for real reasons,
+i.e. 11 vs. 12 personnel usage directly gates WR3/TE opportunity), but
+also not a claim of proven value. Filed honestly, matching this
+project's standing practice of not overstating results.
+
+**Not attempted**: per-feature-version ablation isolating v29 from
+v26-v28 in combination (each has only been tested against its immediate
+predecessor version, not cross-checked for interaction effects); the
+`--model ensemble` higher-fidelity backtest path for any of v26-v29.
