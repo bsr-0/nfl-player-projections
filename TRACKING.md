@@ -97,31 +97,37 @@ TE's negative R²: traced to 4.08x train/OOF overfit ratio on smallest sample (9
 
 ### 2e. Calibration/post-processing effect tests (real, this session)
 
-| Step | Test | Result |
-|---|---|---|
-| `PreseasonProjector` full calibration chain (legacy patches + `UpstreamCalibrator`) | base_pred vs. calibrated pred, real 2023-2025 holdout, all 4 pos | **Negligible.** QB: no change (calibrator not even active for QB). RB: ΔR²=0.000, MAE +0.1 (slightly worse). WR: ΔR²=+0.002, MAE -0.1 (tiny real help). TE: ΔR²=+0.001 (negligible). |
-| `UpstreamCalibrator`, freshly refit on the §2c RB candidate | with vs. without | **Real help** — R² 0.447→0.452, MAE 56.4→56.1. Contrast with row above: a *freshly-fit* calibrator helps meaningfully; the *currently-deployed* one (fit on the original base model) does almost nothing on this holdout. |
-| `ComponentPredictor` linear recalibration (QB only, only position where it's active) | — | Not yet tested — QB's base predictions are healthy (§4), so this is now a valid test to run, unlike when §4 looked catastrophic. |
-| `EnsemblePredictor` sanity-bounds clip | — | Not yet tested |
-| `EnsemblePredictor` tier-uncertainty scaling | — | Confirmed **no live effect** in `component` mode (operates on `NaN` fields) |
-| TD mean-reversion (`TouchdownRegressor`) | — | Confirmed **disabled**, not tested against enabled |
-| Asymmetric floor/ceiling vs. old symmetric formula | real 2023-2025 holdout, per-side coverage | **Real win.** Symmetric: floor breached 2.5% (target 6.7%, over-conservative), ceiling breached 7.6%. Asymmetric: 7.5%/7.5%, both near target. 3x reduction in per-side miscalibration. |
+Everything below except the asymmetric floor/ceiling was **removed
+from the codebase on 2026-08-07** per explicit user decision, once the
+real-data tests confirmed each step was either negligible, dead, or
+disabled — kept here as the historical record of why.
+
+| Step | Test | Result | Outcome |
+|---|---|---|---|
+| `PreseasonProjector` full calibration chain (legacy patches + `UpstreamCalibrator`) | base_pred vs. calibrated pred, real 2023-2025 holdout, all 4 pos | **Negligible.** QB: no change (calibrator not even active for QB). RB: ΔR²=0.000, MAE +0.1 (slightly worse). WR: ΔR²=+0.002, MAE -0.1 (tiny real help). TE: ΔR²=+0.001 (negligible). | **Removed.** `preseason_projector.py` rewritten to a single fixed Ridge per position (`position_specific_ridge` feature set) — `UpstreamCalibrator`, `VeteranEliteCalibration`, `FragileRoleCalibration`, and the whole multi-variant selection/draft-sim-gate framework deleted. `confidence_score`/`support_class` kept (feed the floor/ceiling formula below). |
+| `UpstreamCalibrator`, freshly refit on the §2c RB candidate | with vs. without | **Real help** — R² 0.447→0.452, MAE 56.4→56.1. Contrast with row above: a *freshly-fit* calibrator helps meaningfully; the *currently-deployed* one (fit on the original base model) does almost nothing on this holdout. | **Removed** along with the rest of the calibrator machinery — the freshly-fit-vs-deployed gap wasn't worth the ~1000 lines of variant-selection code required to keep re-deriving it live. |
+| `ComponentPredictor` linear recalibration (QB only, only position where it's active) | raw vs. calibrated, real serving data, post-injury-fix retrain | **Real, modest help.** QB: slope=0.919, intercept=+2.05 — mean 11.05→12.20 (+1.1 avg, up to +1.9), moving predictions closer to the ~14.1 real benchmark. | **Removed** per explicit user request (`_maybe_fit_calibration`/`_target_fantasy_points`/`self.calibration` deleted from `component_predictor.py`). Live QB predictions dropped back ~1pt (median 9.97→9.18) as a direct, expected consequence — traded away knowingly, not a bug. |
+| `EnsemblePredictor` sanity-bounds clip | — | Not yet tested | **Kept** — not part of "calibration," it's a hard safety clip on the final output, out of scope for this removal. |
+| `EnsemblePredictor` tier-uncertainty scaling | — | Confirmed **no live effect** in `component` mode (operates on `NaN` fields) | **Removed** (`_apply_tier_uncertainty`, `TIER_UNCERTAINTY_MULTIPLIERS`, `_get_utilization_tier` deleted from `ensemble.py`) — dead code, no measured effect to lose. |
+| TD mean-reversion (`TouchdownRegressor`) | — | Confirmed **disabled**, not tested against enabled | **Removed** (`TouchdownRegressor` class deleted from `production_model.py`, its already-commented-out call site in `ensemble.py` deleted, `validate_methodology.py`'s check for it deleted) — was already inert. |
+| Asymmetric floor/ceiling vs. old symmetric formula | real 2023-2025 holdout, per-side coverage | **Real win.** Symmetric: floor breached 2.5% (target 6.7%, over-conservative), ceiling breached 7.6%. Asymmetric: 7.5%/7.5%, both near target. 3x reduction in per-side miscalibration. | **Kept** — the only step (`scripts/generate_draft_data.py`) with a measured real accuracy win. |
 
 ---
 
 ## 3. Post-processing pipeline (order of operations, live paths)
 
+**2026-08-07: simplified.** Every calibration/scaling step below except
+the asymmetric floor/ceiling was removed from the code (see §2e for
+why, per-step). These tables now describe the current, much shorter
+pipelines.
+
 ### Weekly (`ComponentPredictor` → `EnsemblePredictor`)
-⚠️ Step 1 was broken for all 4 positions until today's retrain (§4).
 
 | # | Step | Live? |
 |---|---|---|
 | 1 | Predict components → assemble FP via PPR weights, clip ≥0 | Yes |
-| 2 | Linear recalibration (slope×fp+intercept) | Conditional — only kept if >0.5% RMSE improvement at fit time. Active: QB only. |
-| 3 | Scale by `n_weeks` | Yes |
-| 4 | Tier-specific uncertainty scaling | **No** — no-op in `component` mode |
-| 5 | TD mean-reversion | **No** — disabled |
-| 6 | Sanity-bounds clip (`{QB:65,RB:55,WR:55,TE:45}` pts/wk) | Yes |
+| 2 | Scale by `n_weeks` | Yes |
+| 3 | Sanity-bounds clip (`{QB:65,RB:55,WR:55,TE:45}` pts/wk) | Yes |
 
 Not produced at all: `prediction_ci80/95_*` stay `NaN` in `component` mode.
 
@@ -129,12 +135,8 @@ Not produced at all: `prediction_ci80/95_*` stay `NaN` in `component` mode.
 
 | # | Step | Live? |
 |---|---|---|
-| 1 | Base Ridge → clip ≥0 | Yes |
-| 2 | "Veteran elite" calibration (multiplicative) | **No** — empty/inactive in the currently-trained model |
-| 3 | "Fragile role" calibration (multiplicative) | **No** — same |
-| 4 | `UpstreamCalibrator` (bounded 2nd-stage Ridge) | Active: RB/WR/TE only, not QB. Real effect: negligible, see §2e. |
-| 5 | Clip ≥0 | Yes |
-| 6 | Asymmetric floor/ceiling (`generate_draft_data.py`, separate from `PreseasonProjector`) | Yes — real win, see §2e |
+| 1 | Base Ridge (fixed `position_specific_ridge` feature set, no variant selection) → clip ≥0 | Yes |
+| 2 | Asymmetric floor/ceiling (`generate_draft_data.py`, separate from `PreseasonProjector`) | Yes — real win, see §2e |
 
 ---
 
@@ -169,11 +171,69 @@ RB and TE need their own investigation as genuine model-quality
 problems (component-level residuals, sample size, `--no-tune` vs.
 tuned hyperparameters) — not a feature-pipeline plumbing bug.
 
+**Follow-up — fixed one real bug, found the symptom picture doesn't
+match this table (2026-08-06):** calling the real `NFLPredictor` class
+directly (`predictor.initialize(); predictor.predict(n_weeks=1,
+top_n=2000)` — the actual `scripts/generate_app_data.py` call pattern)
+surfaced and fixed a genuine bug: `_add_team_matchup_features` ran
+twice on the same dataframe (`create_features()` then
+`refresh_matchup_features()`), the second call's merges silently
+collided with columns from the first call, and `offensive_momentum_score`
+raised a caught `KeyError` on every real call, dropping all team-matchup
+features for that call. Fixed by dropping stale columns before
+re-merging (GAPS.md 2026-08-06 entry). Confirmed pre-existing since
+2026-08-04, not a regression from this session's earlier caching work.
+
+That same real call's per-position prediction stats **don't match the
+OLD/NEW table above**: QB mean 4.30 (real ~14.1, badly under), RB mean
+8.45 (real ~8.7, roughly correct), WR mean 3.36 (real ~7.9, under), TE
+mean 0.25/median 0.00 (real ~6.4, majority predicted zero — worse than
+the table shows). The momentum-score fix didn't change these numbers.
+**Not yet reconciled**: the RB-over/TE-under pattern above came from a
+manually-reconstructed pipeline call (proven unreliable twice already
+this session — see the retraction above); this new QB/WR-under,
+TE-collapsed pattern comes from the real class and supersedes it, but
+the mechanistic explanation (dominant rookie-feature coefficients) found
+earlier hasn't been re-derived against this real data yet. Next step:
+investigate using ONLY the real `NFLPredictor` class output from here on.
+
+**Root cause found and fixed (2026-08-07)**: the QB/WR under-prediction
+and TE collapse were driven by `_infer_bounded_columns`
+(`feature_preparation.py`) auto-selecting `injury_prob_advanced`/
+`injury_prob_combined` — genuine, already-calibrated probabilities
+capped at 0.25 by design — for MinMax rescaling meant for raw 0-100
+percentage columns. That stretched a real 0.10-0.25 range to fill all of
+`[0,1]`, and `predict.py`'s `predicted_points *= (1 - injury_prob_combined)`
+availability gate then crushed nearly every prediction by 45-100%. Fixed
+by removing `"prob"`/`"probability"` from the bounded-column token list;
+also caught `rookie_breakout_prob`/`rookie_bust_prob` (same bug, smaller
+effect since they're Ridge *inputs* not a direct output multiplier). Full
+retrain done for train/serve consistency on those two features. Full
+root-cause writeup + verification in GAPS.md's 2026-08-07 entries.
+
+| Pos | predicted_points BEFORE fix | AFTER fix + retrain | Real typical |
+|---|---|---|---|
+| QB | mean 4.30 / median 4.35 | mean 10.06 / median 9.97 | ~14.1 |
+| RB | mean 8.45 / median 9.00 | mean 13.81 / median 13.81 | ~8.7 |
+| WR | mean 3.36 / median 3.51 | mean 6.76 / median 6.73 | ~7.9 |
+| TE | mean 0.25 / median 0.00 | mean 0.69 / median 0.00 | ~6.4 |
+
+`injury_prob_combined` now correctly bounded live (mean 0.185, max
+0.25, was mean 0.554, max 1.0). Top-player predictions post-fix look
+realistic (QB1s 14-17, RB1s 19-26, TE1s 4.5-6.5). **Still open**: TE
+median is still exactly 0.00 (n=85/147 are likely legitimate backup
+TEs, not re-verified against a real starters-only baseline), and RB
+now runs a bit hot (13.81 vs ~8.7) — possibly the same pre-existing RB
+over-prediction issue re-surfacing now that the injury-crush that was
+masking it is gone, possibly a benchmark-population mismatch (top RBs
+vs. all RBs). Needs a real, apples-to-apples (matched player
+population) accuracy pass, not just aggregate means — tracked in §5.
+
 ---
 
 ## 5. Not yet tried
 
-- [ ] **PRIORITY — §4**: RB's systematic ~2x over-prediction (pre-existing, real, component-level: `rushing_yards`/`rushing_tds` residuals) and TE's prediction collapse (retrain flipped it from over→under) — both real model-quality issues, need component-level investigation, not a feature-pipeline bug.
+- [ ] **PRIORITY — §4**: real, apples-to-apples RB/TE accuracy check post-injury-fix (matched player population vs. real actuals, not aggregate means) — RB runs hot (13.81 vs ~8.7), TE median still 0.00 (n=85/147 zero, plausibly legitimate backups, not yet confirmed).
 - [ ] `EnsemblePredictor` sanity-bounds clip — does it help or hurt real predictions?
 - [ ] `PositionModel` at production alpha / with tuning on (current numbers used `tune_hyperparameters=False`)
 - [ ] Lookback-depth sweep for §2c (2yr vs 3yr vs 4yr+, 3 was picked arbitrarily)

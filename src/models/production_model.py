@@ -398,66 +398,6 @@ class FeatureStabilityAnalyzer:
         return stability_df
 
 
-class TouchdownRegressor:
-    """
-    Regress touchdowns toward expected values.
-    
-    TDs are high-variance events. A player who scored 12 TDs on 80 targets
-    is likely to regress. This calculates expected TDs based on opportunity
-    and regresses actual toward expected.
-    
-    Based on research showing TD rates regress ~50% toward mean.
-    """
-    
-    # Historical average TD rates by position
-    AVG_TD_RATES = {
-        'RB': {
-            'rush_td_per_attempt': 0.035,  # ~3.5% of carries result in TD
-            'rec_td_per_target': 0.045,    # ~4.5% of targets result in TD
-        },
-        'WR': {
-            'rec_td_per_target': 0.055,    # ~5.5% of targets
-        },
-        'TE': {
-            'rec_td_per_target': 0.065,    # ~6.5% of targets (more red zone)
-        },
-        'QB': {
-            'pass_td_per_attempt': 0.045,  # ~4.5% of attempts
-            'rush_td_per_attempt': 0.025,  # ~2.5% of rushes
-        }
-    }
-    
-    REGRESSION_FACTOR = 0.5  # Regress 50% toward mean
-    
-    def calculate_expected_tds(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add expected TD columns based on opportunity."""
-        result = df.copy()
-        
-        for position, rates in self.AVG_TD_RATES.items():
-            mask = result['position'] == position
-            
-            if 'rush_td_per_attempt' in rates:
-                result.loc[mask, 'expected_rush_tds'] = (
-                    result.loc[mask, 'rushing_attempts'] * rates['rush_td_per_attempt']
-                )
-            
-            if 'rec_td_per_target' in rates:
-                result.loc[mask, 'expected_rec_tds'] = (
-                    result.loc[mask, 'targets'] * rates['rec_td_per_target']
-                )
-            
-            if 'pass_td_per_attempt' in rates:
-                result.loc[mask, 'expected_pass_tds'] = (
-                    result.loc[mask, 'passing_attempts'] * rates['pass_td_per_attempt']
-                )
-        
-        return result
-    
-    def regress_tds(self, actual_tds: float, expected_tds: float) -> float:
-        """Regress actual TDs toward expected."""
-        return actual_tds * (1 - self.REGRESSION_FACTOR) + expected_tds * self.REGRESSION_FACTOR
-
-
 class ProductionModel:
     """
     Production-grade fantasy football prediction model.

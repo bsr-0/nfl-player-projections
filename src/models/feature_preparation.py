@@ -177,7 +177,16 @@ def _infer_bounded_columns(df: pd.DataFrame) -> List[str]:
     if df.empty:
         return []
     candidates: List[str] = []
-    bounded_tokens = ("pct", "rate", "share", "prob", "probability", "percentage")
+    # "prob"/"probability" deliberately excluded: those columns (e.g.
+    # injury_prob_advanced/combined, rookie_breakout_prob, rookie_bust_prob)
+    # are already-calibrated model probabilities, often with a narrow
+    # natural range by design (injury risk is capped at 0.25 in
+    # AdvancedInjuryPredictor.predict_injury_probability). MinMax-stretching
+    # a narrow range like [0.10, 0.25] to fill [0, 1] destroys its calibrated
+    # meaning -- a real 18% weekly injury risk was getting rescaled to ~55%,
+    # crushing predict.py's `availability = 1 - injury_prob_combined`
+    # multiplier for nearly every player (GAPS.md, 2026-08-07).
+    bounded_tokens = ("pct", "rate", "share", "percentage")
     for col in df.columns:
         if col.startswith("target_util_") or (
             col.startswith("target_") and (col.endswith("w") or col[7:8].isdigit())

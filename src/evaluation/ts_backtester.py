@@ -1000,9 +1000,6 @@ class TimeSeriesBacktester:
         2. Missing the final `total_fp = max(total_fp, 0)` clamp after
            summing weighted components -- could emit negative fantasy-point
            predictions that production never would.
-        3. Missing the optional post-hoc linear calibration layer
-           (_maybe_fit_calibration) that production fits and applies
-           whenever it measurably improves validation RMSE.
         Calling the real class directly means this backtest mode can never
         drift from production again the same way -- it either tests the
         actual code path or doesn't compile.
@@ -1019,9 +1016,8 @@ class TimeSeriesBacktester:
         if not y_components:
             return np.zeros(len(X_test))
 
-        seasons = pos_train["season"].values if "season" in pos_train.columns else None
         cp = ComponentPredictor(position)
-        cp.fit(X_train, y_components, seasons=seasons)
+        cp.fit(X_train, y_components)
         if not cp.is_fitted:
             return np.zeros(len(X_test))
         return cp.predict(X_test)

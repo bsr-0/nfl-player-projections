@@ -4607,3 +4607,170 @@ un-modified) but wasn't a faithful reproduction of real *usage* —
 matching production's actual call pattern (multi-position, `position=None`)
 mattered as much as using the real code. Verify against how something
 is actually invoked, not just that the function itself is unmodified.
+
+## Fixed: real `KeyError: 'offensive_momentum_score'` in `_add_team_matchup_features`, caught-but-fatal on every live `predict()` call (2026-08-06)
+
+Calling the real, unmodified `NFLPredictor` (`predictor.initialize(); predictor.predict(n_weeks=1, top_n=2000)`,
+matching `scripts/generate_app_data.py`'s exact invocation — the correct
+methodology per the retraction above) surfaced a real, previously-unknown
+warning on every call: `WARNING: Team matchup features unavailable
+(KeyError: 'offensive_momentum_score')`.
+
+**Root cause**: `_add_team_matchup_features` (`src/features/feature_engineering.py:2230`)
+runs twice on the same dataframe in the real serving path — once inside
+`create_features()` (`predict.py:632`), then again via
+`refresh_matchup_features()` (`predict.py:292`), which exists specifically
+to recompute opponent-dependent features for the actual upcoming
+opponent/week after they're overwritten. The second call's merges
+(`team_a_avgs`, `team_b_avgs`, `mom`) collide with columns of the same
+name already added by the first call. The `team_a_avgs`/`team_b_avgs`
+merges have explicit `suffixes=` so they silently keep the *stale*
+value from the first pass instead of erroring (a separate, quieter bug
+this fix also resolves — the "refresh" wasn't actually refreshing). The
+`mom` merge has no `suffixes=` at all, so pandas silently renames both
+sides to `offensive_momentum_score_x`/`_y`, and the very next line's
+`df['offensive_momentum_score']` raises `KeyError`, caught by a broad
+`except Exception` and printed as a warning — silently dropping every
+team-matchup feature (matchup edges, expected game total, pace, momentum)
+for that call. Same collision pattern as the previously-fixed
+`first_season` bug in `advanced_rookie_injury.py`.
+
+Confirmed via `git blame` this predates today's session (`4c30bc71`,
+2026-08-04) — not a regression from this session's `_get_team_matchup_lookups`
+caching optimization, which only wraps the lookup-table computation and
+doesn't touch the merge/collision logic.
+
+**Fix**: drop the columns `_add_team_matchup_features` is about to
+(re)produce from `df` before merging, right after the `all_team_stats.empty`
+check — so a second call genuinely overwrites rather than silently
+colliding. Verified: re-ran the real `NFLPredictor.predict()` call,
+warning no longer appears.
+
+**Not the cause of the QB/WR under-prediction / TE near-zero collapse**
+also observed via that same real call (QB mean 4.30 vs. real ~14.1; WR
+mean 3.36 vs. ~7.9; TE mean 0.25, median 0.00 vs. ~6.4; RB mean 8.45 vs.
+~8.7, roughly correct) — those numbers are unchanged after this fix, so
+that's a separate, still-open, more serious accuracy issue. Next: since
+per-position-isolated diagnostics have now proven unreliable twice in
+this session, continue investigating only via the real `NFLPredictor`
+class, comparing its actual per-component intermediate outputs against
+real 2025 actuals for a handful of specific players.
+
+## Found and fixed: real root cause of QB/WR under-prediction + TE collapse — bounded scaler was destroying calibrated injury probabilities (2026-08-07)
+
+Continued the investigation using only the real `NFLPredictor` class (per
+the plan above). Called `cp.predict_components()`/`cp.predict()` directly
+on `ComponentPredictor` with the real `latest_data` used by `predict()`
+and got sane numbers (e.g. J.Allen 21.3 pts, top TEs 7-9 pts) — **not**
+the crushed numbers (QB mean 4.30, TE median 0.00) seen from the full
+`NFLPredictor.predict()` call. So the damage happens strictly *after*
+`ComponentPredictor.predict()`, inside `NFLPredictor.predict()` itself.
+
+**Root cause**: `predict.py:337-339` applies an injury-based availability
+discount — `availability = 1.0 - injury_prob_combined`,
+`predicted_points *= availability`. Checked `injury_prob_combined`'s real
+distribution in `latest_data`: **mean 0.554, min 0.282, max 1.0** — wildly
+implausible for a general population of active NFL players in a given
+week (real weekly injury risk is a few percent for most players). Traced
+`injury_prob_advanced`/`injury_prob_combined` to
+`AdvancedInjuryPredictor.predict_injury_probability`
+(`src/features/advanced_rookie_injury.py:1239`), which explicitly caps
+the result at `min(combined_prob, 0.25)` — confirmed by calling it
+directly with real inputs (age 28, prior_injuries 5, low workload):
+returns exactly `0.25`. So the *raw* value is correctly bounded and
+usually much lower (median well under 0.25) — but the value actually
+present in `latest_data` after the full feature pipeline is far outside
+that range.
+
+Found the actual culprit: `_infer_bounded_columns`
+(`src/models/feature_preparation.py:172`) auto-selects any numeric
+column with `"prob"`/`"probability"` in its name for `MinMaxScaler`
+rescaling to fill the full `[0, 1]` range (persisted to
+`data/models/feature_scaler_bounded.joblib`, applied live in
+`predict.py::_prepare_features`). Checked the artifact directly:
+`injury_prob_advanced`/`injury_prob_combined` were fit with
+`data_min_=0.105, data_max_=0.25` — a genuinely narrow, *already
+meaningful* range (injury risk is capped at 25% by design). MinMax￾stretching that 0.15-wide range to fill all of `[0, 1]` means a real 18%
+weekly injury risk gets rescaled to ~55%, and the actual worst case
+(25%) gets rescaled to 100% ("certain injury"). This single distortion
+then gets multiplied directly into `predicted_points` via the
+availability gate, crushing nearly every player's prediction by 45-100%
+— explaining the QB/WR under-prediction and (compounding on an already
+lower baseline) the TE near-zero collapse.
+
+Also checked the other `"prob"`-matching bounded columns for the same
+issue: `rookie_breakout_prob` (0-0.58 natural range) and
+`rookie_bust_prob` (0-0.70) — same category of bug (already-calibrated
+model probabilities, not raw percentages needing 0-100→0-1 conversion),
+smaller blast radius since they're Ridge *input* features (learned
+coefficients partially compensate) rather than a direct multiplicative
+gate on the output. `win_probability` also matched but is naturally
+near-full-range (0.05-0.95) so rescaling it is close to a no-op —
+harmless, left as-is implicitly by the fix below (not specifically
+re-included, but no separate carve-out needed).
+
+**Fix**: removed `"prob"`/`"probability"` from `_infer_bounded_columns`'s
+token list (`bounded_tokens = ("pct", "rate", "share", "percentage")`,
+was `(..., "prob", "probability", ...)`). Probabilities are conceptually
+different from raw 0-100-scale percentage columns: a calibrated
+probability estimate is already meaningful in its native range and must
+never be MinMax-stretched to artificially fill `[0, 1]`.
+
+**Verification in progress**: `injury_prob_advanced`/`combined` are not
+themselves `ComponentPredictor` input features (only the post-hoc
+availability gate uses them), so that part of the fix takes effect
+immediately once the bounded-scaler artifact is regenerated — no
+retrain needed. `rookie_breakout_prob`/`rookie_bust_prob` **are** real
+Ridge input features for all 4 positions (confirmed via
+`cp.feature_names`), so a full retrain (`python -m src.models.train
+--no-tune`) was kicked off to refit those coefficients against the
+corrected, un-distorted values for full train/serve consistency.
+Real-`NFLPredictor` before/after comparison to follow once it completes.
+
+### Verified: retrain complete, real before/after via `NFLPredictor.predict()` confirms a major fix (2026-08-07)
+
+`injury_prob_combined` is now correctly bounded in real serving output:
+mean 0.185, median 0.175, min 0.146, **max 0.25** (was mean 0.554, max
+1.0) — exactly matches `predict_injury_probability`'s own design cap,
+no more MinMax distortion.
+
+| Pos | predicted_points BEFORE | predicted_points AFTER | Real typical |
+|---|---|---|---|
+| QB | mean 4.30 / median 4.35 | mean 10.06 / median 9.97 | ~14.1 |
+| RB | mean 8.45 / median 9.00 | mean 13.81 / median 13.81 | ~8.7 |
+| WR | mean 3.36 / median 3.51 | mean 6.76 / median 6.73 | ~7.9 |
+| TE | mean 0.25 / median 0.00 | mean 0.69 / median 0.00 | ~6.4 |
+
+Spot-checked top players per position post-fix — these look genuinely
+realistic now: QB1s 14.1-16.8 (Allen, Mahomes, Daniels, Herbert all in a
+plausible range), RB1s 18.8-25.7 (Robinson, Gibbs, Jeanty, McCaffrey),
+TE1s 4.5-6.5 (McBride, Kittle, Kelce, Bowers). TE's `n=85/147` exactly-
+zero predictions are backup/inactive tight ends (most NFL backup TEs
+score ~0 in a given week for real) — plausible, not obviously a bug,
+though not independently verified row-by-row against real backup-TE
+usage.
+
+**Not fully resolved / needs its own look**:
+- **TE median is still 0.00** even after the fix — the earlier "real
+  ~6.4" benchmark may have been computed only over fantasy-relevant/
+  starting TEs, not this call's full `n=147` roster (which likely
+  includes 2nd/3rd-string TEs a real weekly-average benchmark wouldn't
+  include) — this comparison needs to be redone against a
+  starters-only real baseline before concluding TE is still broken.
+- **RB now runs a bit hot** (mean 13.81 vs. ~8.7 real) — inverse
+  direction from the pre-fix RB finding (which was *also* over-
+  predicting, ~2x, before any of today's fixes) — worth checking
+  whether this is the same pre-existing RB issue (GAPS.md's earlier
+  "RB/TE model-quality issue" entry) persisting/compounding, now that
+  the injury-crush that was masking it is gone, or whether the same
+  "which players/benchmark am I comparing against" methodology gap
+  applies here too (mean 13.81 across top RBs specifically, vs. an
+  unfiltered position-wide real average).
+
+**Bottom line**: this was a real, severe, previously-undocumented bug
+crushing every live prediction by 45-100% via a corrupted injury-
+availability multiplier — now fixed and verified working as designed.
+QB/WR accuracy improved substantially. RB/TE still need a dedicated,
+apples-to-apples accuracy pass (matched real-vs-predicted player
+populations, not just aggregate means) before calling either "fixed."
+

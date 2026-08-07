@@ -29,7 +29,7 @@ from src.models.train_advanced import get_feature_columns
 from src.models.robust_validation import validate_no_leakage, RobustTimeSeriesCV
 from src.models.production_model import (
     ProductionModel, ModelConfig, TrainingWindowOptimizer,
-    FeatureStabilityAnalyzer, TouchdownRegressor
+    FeatureStabilityAnalyzer
 )
 
 
@@ -276,16 +276,6 @@ def validate_nfl_considerations(df: pd.DataFrame) -> bool:
         checks.append(True)
     else:
         print("❌ Missing volatility features")
-        checks.append(False)
-    
-    # Check 4: TD regression capability
-    td_regressor = TouchdownRegressor()
-    test_df = td_regressor.calculate_expected_tds(df.head(100))
-    if 'expected_rush_tds' in test_df.columns or 'expected_rec_tds' in test_df.columns:
-        print("✅ TD regression implemented")
-        checks.append(True)
-    else:
-        print("❌ TD regression not working")
         checks.append(False)
     
     return all(checks)

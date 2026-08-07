@@ -2251,6 +2251,23 @@ class FeatureEngineer:
                            'drive_count', 'drive_success_rate', 'avg_drive_epa',
                            'points_per_drive', 'pace_sec_per_play']
 
+            # This function can run twice on the same df: once from
+            # create_features(), again from refresh_matchup_features() to
+            # recompute for the actual upcoming opponent (predict.py).
+            # Dropping any columns from the first pass before re-merging
+            # avoids pandas' silent _x/_y suffixing on the second pass,
+            # which otherwise both leaves stale opponent data in place
+            # and raises a caught-but-fatal KeyError on
+            # 'offensive_momentum_score' below (GAPS.md, 2026-08-06).
+            stale_cols = (
+                [f'team_a_{m}' for m in team_metrics] + [f'team_b_{m}' for m in team_metrics] +
+                ['matchup_scoring_edge', 'matchup_yards_diff', 'matchup_pass_diff',
+                 'matchup_rush_diff', 'expected_game_total', 'expected_point_diff',
+                 'team_a_plays_per_game', 'team_b_plays_per_game', 'team_a_pass_rate',
+                 'offensive_momentum_score']
+            )
+            df = df.drop(columns=[c for c in stale_cols if c in df.columns])
+
             # These lookup tables depend only on the full team_stats table
             # (not on df / the current backtest window), so they're built
             # once and cached across the backtester's weekly calls.

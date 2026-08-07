@@ -7,9 +7,7 @@ import pandas as pd
 
 from src.models.preseason_projector import (
     BASE_FEATURES_BY_POSITION,
-    CALIBRATION_FEATURES_BY_POSITION,
     PreseasonProjector,
-    UpstreamCalibrator,
 )
 
 
@@ -175,110 +173,19 @@ def test_prepare_feature_frame_derives_interactions_and_support_features():
     assert out.loc[0, "ppg_x_carries_pg"] == 116.0
     assert out.loc[0, "rookie_or_low_experience"] == 1.0
     assert out.loc[0, "support_class"] in {"committee", "backup", "rotational"}
+    # confidence_score feeds generate_draft_data.py's floor/ceiling sizing
+    # (kept even though the base Ridge model doesn't consume it directly).
     assert 0.05 <= out.loc[0, "confidence_score"] <= 1.0
-    assert out.loc[0, "low_information_score"] == 1.0 - out.loc[0, "confidence_score"]
 
 
-def test_upstream_calibrator_is_bounded_by_confidence():
-    prepared = pd.DataFrame(
-        {
-            "confidence_score": [0.15, 0.90],
-            "low_information_score": [0.85, 0.10],
-            "rookie_or_low_experience": [1.0, 0.0],
-            "support_class_starter": [0.0, 1.0],
-            "support_class_committee": [0.0, 0.0],
-            "support_class_backup": [1.0, 0.0],
-            "support_class_rotational": [0.0, 0.0],
-            "games_played": [8.0, 16.0],
-            "snap_share": [0.24, 0.82],
-            "carries_pg": [4.0, 17.0],
-            "targets_pg": [2.0, 4.6],
-            "ppg_x_carries_pg": [44.0, 272.0],
-            "low_volume_efficiency_flag": [1.0, 0.0],
-            "raw_pred_x_confidence": [0.0, 0.0],
-        }
-    )
-    raw = np.array([60.0, 230.0])
-    prepared["raw_pred"] = raw
-    prepared["raw_pred_x_confidence"] = raw * prepared["confidence_score"]
-
-    features = [f for f in CALIBRATION_FEATURES_BY_POSITION["RB"] if f in prepared.columns]
-    calibrator = UpstreamCalibrator(
-        position="RB",
-        features=features,
-        coef=[0.0] * len(features),
-        intercept=500.0,
-        scaler_mean=[0.0] * len(features),
-        scaler_scale=[1.0] * len(features),
-        max_adjustment_share=0.30,
-        sample_size=20,
-        train_mae_before=20.0,
-        train_mae_after=15.0,
-    )
-
-    pred = calibrator.calibrate(prepared, raw)
-
-    # Low-confidence row gets pulled up toward the (constant) calibrated
-    # candidate; high-confidence row is barely adjusted.
-    assert pred[0] > raw[0]
-    assert pred[1] <= raw[1] + 20.0
-
-
-def test_upstream_calibrator_handles_missing_features_gracefully():
-    prepared = pd.DataFrame(
-        {
-            "confidence_score": [0.35, 0.85],
-            "low_information_score": [0.65, 0.15],
-            "rookie_or_low_experience": [1.0, 0.0],
-            "support_class_starter": [0.0, 1.0],
-            "support_class_committee": [1.0, 0.0],
-            "support_class_backup": [0.0, 0.0],
-            "support_class_rotational": [0.0, 0.0],
-            "games_played": [9.0, 16.0],
-            "snap_share": [0.32, 0.78],
-            "carries_pg": [6.0, 15.0],
-            "targets_pg": [2.5, 4.0],
-            "ppg_x_carries_pg": [54.0, 225.0],
-            "low_volume_efficiency_flag": [1.0, 0.0],
-            "raw_pred_x_confidence": [0.0, 0.0],
-        }
-    )
-    raw = np.array([80.0, 210.0])
-    features = CALIBRATION_FEATURES_BY_POSITION["RB"]
-    calibrator = UpstreamCalibrator(
-        position="RB",
-        features=features,
-        coef=[0.0] * len(features),
-        intercept=190.0,
-        scaler_mean=[0.0] * len(features),
-        scaler_scale=[1.0] * len(features),
-        max_adjustment_share=0.20,
-        sample_size=20,
-        train_mae_before=20.0,
-        train_mae_after=15.0,
-    )
-
-    out = calibrator.calibrate(prepared, raw)
-
-    assert out.shape == (2,)
-    assert np.all(np.isfinite(out))
-    assert np.all(out >= 0.0)
-
-
-def test_fit_learns_position_specific_models_and_calibration():
+def test_fit_learns_position_specific_models():
     projector = PreseasonProjector().fit(_training_pairs())
 
-    assert projector.variant_name in {
-        "ridge_baseline",
-        "position_specific_ridge",
-        "position_specific_ridge_rb_construction",
-        "hybrid_legacy_rb_position_specific",
-        "position_specific_ridge_plus_calibrator",
-    }
     assert set(projector.models) == {"QB", "RB", "WR", "TE"}
-    assert "selection_report" in projector.audit_report
-    assert projector.get_selection_report()["selected_variant"] == projector.variant_name
-    assert projector.audit_report["overall"]["pred_mae"] <= projector.audit_report["overall"]["base_mae"] + 3.0
+    for pos in ("QB", "RB", "WR", "TE"):
+        assert set(projector.feature_names[pos]).issubset(BASE_FEATURES_BY_POSITION[pos])
+    assert "overall" in projector.audit_report
+    assert "mae" in projector.audit_report["overall"]
 
 
 def test_predict_keeps_public_contract():
@@ -329,16 +236,11 @@ def test_predict_keeps_public_contract():
 
     assert pred.shape == (2,)
     assert np.all(pred >= 0.0)
-    assert list(details.columns) == [
-        "base_pred",
-        "pred",
-        "confidence_score",
-        "support_class",
-    ]
+    assert list(details.columns) == ["pred", "confidence_score", "support_class"]
     assert details.loc[players.index[0], "pred"] > details.loc[players.index[1], "pred"]
 
 
-def test_save_and_load_round_trip_new_schema(tmp_path):
+def test_save_and_load_round_trip(tmp_path):
     projector = PreseasonProjector().fit(_training_pairs())
     model_path = tmp_path / "preseason_projector.json"
     players = _training_pairs().query("position == 'WR'").head(6).copy()
@@ -348,40 +250,31 @@ def test_save_and_load_round_trip_new_schema(tmp_path):
     raw = json.loads(model_path.read_text())
     after = PreseasonProjector.load(model_path).predict(players, "WR")
 
-    assert raw["schema_version"] == 2
-    assert "base_outcome_model" in raw["positions"]["WR"]
-    assert "upstream_calibrator" in raw["positions"]["WR"]
+    assert raw["schema_version"] == 3
+    assert "coef" in raw["positions"]["WR"]
     assert np.allclose(before, after)
 
 
 def test_load_legacy_schema_remains_supported(tmp_path):
+    """Old (pre-2026-08-07) artifacts nested the base model under
+    positions[pos]["base_outcome_model"] and carried now-removed
+    calibration keys -- load() should still read the base model and
+    silently ignore the calibration keys."""
     legacy = {
         "positions": {
             "RB": {
-                "features": ["ppg", "games_played"],
-                "coef": [10.0, 2.0],
-                "intercept": 5.0,
-                "scaler_mean": [0.0, 0.0],
-                "scaler_scale": [1.0, 1.0],
+                "base_outcome_model": {
+                    "features": ["ppg", "games_played"],
+                    "coef": [10.0, 2.0],
+                    "intercept": 5.0,
+                    "scaler_mean": [0.0, 0.0],
+                    "scaler_scale": [1.0, 1.0],
+                },
+                "upstream_calibrator": {"position": "RB"},
             }
         },
-        "veteran_elite_calibration": {
-            "RB": {
-                "position": "RB",
-                "factor": 1.1,
-                "age_threshold": 29.0,
-                "elite_ppg_threshold": 15.0,
-                "sample_size": 14,
-                "mean_error_before": -8.0,
-                "mean_error_after": -2.0,
-                "mae_before": 18.0,
-                "mae_after": 12.0,
-                "median_actual_to_pred_ratio": 1.1,
-            }
-        },
-        "fragile_role_calibration": {},
-        "bias_audit": {},
-        "fragile_role_audit": {},
+        "legacy_veteran_elite_calibration": {},
+        "legacy_fragile_role_calibration": {},
     }
     path = tmp_path / "legacy.json"
     path.write_text(json.dumps(legacy))
@@ -393,14 +286,14 @@ def test_load_legacy_schema_remains_supported(tmp_path):
                 "position": "RB",
                 "projection_season": 2026,
                 "birth_date": "1994-01-01",
-                "ppg": 16.0,
+                "ppg": 18.0,
                 "games_played": 16,
             },
             {
                 "position": "RB",
                 "projection_season": 2026,
                 "birth_date": "2001-01-01",
-                "ppg": 16.0,
+                "ppg": 12.0,
                 "games_played": 16,
             },
         ]
@@ -408,15 +301,15 @@ def test_load_legacy_schema_remains_supported(tmp_path):
 
     pred = projector.predict(players, "RB")
 
-    assert projector.variant_name == "legacy_ridge_with_cohort_patches"
+    assert set(projector.models) == {"RB"}
     assert pred[0] > pred[1]
 
 
-def test_upstream_audit_contains_outcome_fields():
+def test_audit_report_contains_outcome_fields():
     projector = PreseasonProjector().fit(_training_pairs())
-    audit = projector.get_upstream_audit_report()
+    audit = projector.audit_report
 
     assert "overall" in audit
-    assert "pred_mae" in audit["overall"]
-    assert "pred_bias" in audit["overall"]
+    assert "mae" in audit["overall"]
+    assert "bias" in audit["overall"]
     assert "by_position" in audit
