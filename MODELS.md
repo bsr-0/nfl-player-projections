@@ -46,6 +46,36 @@ confirm nothing below was changed while investigating.
 
 ---
 
+## Post-processing steps applied after raw predictions (2026-08-06)
+
+Order matters — each row runs after the one above it.
+
+### Weekly (`ComponentPredictor` → `EnsemblePredictor`, live)
+
+| # | Step | Where | Live effect? |
+|---|---|---|---|
+| 1 | Predict components, assemble FP via PPR weights, clip ≥0 | `component_predictor.py::_predict_total_fp` | Yes |
+| 2 | Linear recalibration (`slope × fp + intercept`) | same, `self.calibration` | Conditional — only kept if it beats raw RMSE by >0.5% at fit time; often a no-op |
+| 3 | Scale by `n_weeks` | `ensemble.py::predict` | Yes |
+| 4 | Tier-specific uncertainty scaling | `ensemble.py::_apply_tier_uncertainty` | **No** — only touches `prediction_std`/CI fields, which stay `NaN` in `component` mode. Live only for the dormant `position_models` path. |
+| 5 | TD mean-reversion (`TouchdownRegressor`) | `ensemble.py::_apply_td_regression` | **No** — call site commented out |
+| 6 | Sanity-bounds clip (`{QB:65, RB:55, WR:55, TE:45}` pts/wk, scaled by `n_weeks`) | `ensemble.py::predict` | Yes — final clamp |
+
+**Not produced at all today**: confidence intervals (`prediction_ci80/95_*`) stay `NaN` for the live `component`-mode path.
+
+### Season-total (`PreseasonProjector`, live — drives the draft board)
+
+| # | Step | Where | Live effect? |
+|---|---|---|---|
+| 1 | Base position-specific Ridge → `base_pred`, clip ≥0 | `preseason_projector.py::predict_with_details` | Yes |
+| 2 | "Veteran elite" calibration (multiplicative, hardcoded conditions) | same, `legacy_veteran_elite_calibration` | Yes, for matching rows |
+| 3 | "Fragile role" calibration (multiplicative, hardcoded conditions) | same, `legacy_fragile_role_calibration` | Yes, for matching rows |
+| 4 | `UpstreamCalibrator` — 2nd-stage Ridge on raw_pred + confidence/support features, bounded to a max % adjustment, damped for low confidence | same, `upstream_calibrators.calibrate` | Yes, if it beat train MAE/bias at fit time |
+| 5 | Clip ≥0 | same | Yes |
+| 6 | Asymmetric floor/ceiling (quantile-regression spread, this session's work) | `scripts/generate_draft_data.py::_floor_ceiling` | Yes — separate from `PreseasonProjector` itself |
+
+---
+
 ## DORMANT (real, complete, often trained — but unreachable from any live entry point)
 
 **Accuracy-tested column is the honest-reporting point of this table**:
