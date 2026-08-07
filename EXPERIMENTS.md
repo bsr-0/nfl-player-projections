@@ -201,3 +201,20 @@ would include — likely understates real accuracy, not overstates it.
 - [ ] RB-specific: try 1-2 year lookback instead of dropping multi-year
       entirely, in case 2-years-back (not 3) is the actual cutoff where
       RB signal goes stale.
+- [ ] **Never-tested dormant models — see `MODELS.md` for the full
+      inventory and why each is dormant.** None of these have real
+      accuracy numbers anywhere in this repo:
+  - [ ] `Hybrid4WeekModel` (`horizon_models.py`) — real trained
+        artifacts exist for all 4 positions, never evaluated.
+  - [ ] `DeepSeasonLongModel` (`horizon_models.py`) — same, never
+        evaluated.
+  - [ ] `MultiWeekModel` for RB/WR/TE using its own saved-artifact
+        training config (this session's test retrained fresh rather
+        than evaluating a saved artifact, since only QB had one).
+  - [ ] `TouchdownRegressor` (`production_model.py`) — disabled based on
+        a design argument (Huber loss already handles outliers), never
+        actually compared head-to-head.
+  - [ ] `BayesianPlayerModel` (`bayesian_models.py`) — only unit-tested
+        for running, not for prediction quality.
+  - [ ] `MonteCarloSimulator` (`advanced_modeling.py`) — real
+        implementation, never fed real player data at all.

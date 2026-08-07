@@ -657,6 +657,18 @@ Cross-referenced against open-source projects, academic papers, and documented m
 
 **Implementation path:** Train a player embedding model on historical season stat vectors. For each player entering 2026, find top-5 historical twins and use their next-season performance as an additional feature or ensemble member. Especially valuable for rookies and team-changers where individual history is limited.
 
+**UPDATE 2026-08-06**: still genuinely unbuilt for the general case, but
+precision matters here — checked what actually exists rather than
+assuming "not attempted" means zero code. `PlayerEmbeddings`
+(`src/models/advanced_techniques.py`) is real and LIVE, but it's a
+PCA-based training feature, not this proposal's similarity-search
+system. A real comp-player matcher (draft capital + combine similarity)
+also exists, but **only for rookies**
+(`src/features/advanced_rookie_injury.py`) — not the general
+Player2Vec/Baller2Vec-style system for all players this section
+describes. See `MODELS.md`'s "UNBUILT" section for the full precise
+breakdown.
+
 #### C. Mixture Density / Bimodal Output Modeling (MEDIUM IMPACT, HIGH EFFORT)
 
 **What this project does:** Predicts a single point estimate per player, with conformal intervals for uncertainty. Boom/bust probability is computed as a feature but not modeled as an output distribution.
@@ -703,6 +715,14 @@ from scratch, read and evaluate this existing implementation first.
 **What state-of-the-art does:** srome's Bayesian hierarchical model (2015, well-documented) uses partial pooling to model team-vs-position matchup effects. The model simultaneously estimates team offensive strength, team defensive strength vs. each position, and player-within-team effects. Key advantage: **inconsistent teams get wider posteriors** — the model knows when it doesn't know, rather than treating all matchups as equally predictable.
 
 **Implementation path:** Layer a Bayesian hierarchical matchup adjustment on top of the existing ensemble. The existing `BayesianPlayerModel` class could be extended to include defense random effects.
+
+**UPDATE 2026-08-06**: confirmed `BayesianPlayerModel`
+(`src/models/bayesian_models.py`) is real (721 lines, full MCMC +
+James-Stein shrinkage variants) but currently dormant — zero callers
+anywhere except a unit test that only checks it runs, not that it
+predicts well. It's real infrastructure to extend, not a working
+matchup model to compare against; the defense-random-effects extension
+this section describes is still fully unbuilt. See `MODELS.md`.
 
 ### 11.3 Missing Analytical Frameworks
 

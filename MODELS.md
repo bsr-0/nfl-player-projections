@@ -48,15 +48,20 @@ confirm nothing below was changed while investigating.
 
 ## DORMANT (real, complete, often trained — but unreachable from any live entry point)
 
-| Model / Strategy | File | Why dormant | Evidence it's real, not a stub |
-|---|---|---|---|
-| `EnsemblePredictor` / `PositionModel` / `MultiWeekModel` | `src/models/ensemble.py`, `position_models.py` | Production hardcodes `position_target_type="component"` for every position; `ComponentPredictor` is checked first in `EnsemblePredictor.predict()`'s branch logic, so these are bypassed even when loaded. | `data/models/multiweek_qb.joblib` exists (85MB, real trained artifact, all 18 week-horizons, saved 2026-08-01) — but only for QB; RB/WR/TE never got a `multiweek_*.joblib`. Real head-to-head test this session (`EXPERIMENTS.md` §3): mixed real results, RB clearly beats naive baseline, TE overfits on small sample. |
-| `Hybrid4WeekModel` | `src/models/horizon_models.py` | Same `component`-mode bypass. | `data/models/hybrid_4w_{qb,rb,wr,te}.joblib` — real trained artifacts, all 4 positions, LSTM+ARIMA, saved 2026-08-01. |
-| `DeepSeasonLongModel` | `src/models/horizon_models.py` | Same `component`-mode bypass. | `data/models/deep_18w_{qb,rb,wr,te}` — real trained artifacts, all 4 positions, residual feedforward net, saved 2026-08-03. |
-| `TouchdownRegressor` | `src/models/production_model.py` | Its only call site, `EnsemblePredictor._apply_td_regression()`, is explicitly commented out in `ensemble.py` (`# results = self._apply_td_regression(...)`) with a rationale comment: Huber loss already provides outlier robustness, so this was deliberately disabled, not forgotten — but the class and its logic remain, real and unused. | Real implementation, opportunity-based expected-TD mean reversion. |
-| `BayesianPlayerModel` | `src/models/bayesian_models.py` | Zero references anywhere except `tests/test_rookie_projections.py`. Never imported by any production or training script. | 721-line file, real implementation (full Bayesian + simplified variants). |
-| `weekly_matchup_predictor.py` | `src/models/weekly_matchup_predictor.py` | Only caller is `scripts/generate_weekly_projections.py`, which itself has zero references anywhere (not in README, not called by any other script) — dormant two levels deep. | 382 lines, real implementation. |
-| `LineupOptimizer` (#1) | `src/optimization/lineup_optimizer.py` | `optimize_lineup()` has no caller anywhere in the codebase, no test coverage. Found and flagged earlier this session. | Salary-cap knapsack, cash/GPP strategies, real (if buggy — sums independent player percentiles for lineup floor/ceiling, a real statistical error found and not yet fixed). |
+**Accuracy-tested column is the honest-reporting point of this table**:
+most of this code has *never* had its real-world accuracy measured
+against held-out data, at all, ever — "real and complete" is not the
+same as "known to work well."
+
+| Model / Strategy | File | Why dormant | Evidence it's real, not a stub | Accuracy tested? |
+|---|---|---|---|---|
+| `EnsemblePredictor` / `PositionModel` / `MultiWeekModel` | `src/models/ensemble.py`, `position_models.py` | Production hardcodes `position_target_type="component"` for every position; `ComponentPredictor` is checked first in `EnsemblePredictor.predict()`'s branch logic, so these are bypassed even when loaded. | `data/models/multiweek_qb.joblib` exists (85MB, real trained artifact, all 18 week-horizons, saved 2026-08-01) — but only for QB; RB/WR/TE never got a `multiweek_*.joblib`. | **Yes, partially** — real head-to-head test this session (`EXPERIMENTS.md` §3), QB only (RB/WR/TE artifacts don't exist so those were retrained fresh for the test, not evaluating the saved artifact). Mixed real results, RB clearly beats naive baseline, TE overfits on small sample. |
+| `Hybrid4WeekModel` | `src/models/horizon_models.py` | Same `component`-mode bypass. | `data/models/hybrid_4w_{qb,rb,wr,te}.joblib` — real trained artifacts, all 4 positions, LSTM+ARIMA, saved 2026-08-01. | **No.** Zero mentions anywhere in GAPS.md before this document. Never evaluated against real held-out data. |
+| `DeepSeasonLongModel` | `src/models/horizon_models.py` | Same `component`-mode bypass. | `data/models/deep_18w_{qb,rb,wr,te}` — real trained artifacts, all 4 positions, residual feedforward net, saved 2026-08-03. | **No.** Same as above — trained, saved, never evaluated. |
+| `TouchdownRegressor` | `src/models/production_model.py` | Its only call site, `EnsemblePredictor._apply_td_regression()`, is explicitly commented out in `ensemble.py` (`# results = self._apply_td_regression(...)`) with a rationale comment: Huber loss already provides outlier robustness, so this was deliberately disabled, not forgotten — but the class and its logic remain, real and unused. | Real implementation, opportunity-based expected-TD mean reversion. | **No.** Disabled before/without a real accuracy comparison against the Huber-loss-only baseline that replaced it — the rationale comment is a design argument, not a measurement. |
+| `BayesianPlayerModel` | `src/models/bayesian_models.py` | Zero references anywhere except `tests/test_rookie_projections.py`. Never imported by any production or training script. | 721-line file, real implementation (full Bayesian + simplified variants). | **No.** Only exercised by unit tests checking it runs, not that it predicts well. |
+| `weekly_matchup_predictor.py` | `src/models/weekly_matchup_predictor.py` | Only caller is `scripts/generate_weekly_projections.py`, which itself has zero references anywhere (not in README, not called by any other script) — dormant two levels deep. | 382 lines, real implementation. | **No.** |
+| `LineupOptimizer` (#1) | `src/optimization/lineup_optimizer.py` | `optimize_lineup()` has no caller anywhere in the codebase, no test coverage. Found and flagged earlier this session. | Salary-cap knapsack, cash/GPP strategies, real (if buggy — sums independent player percentiles for lineup floor/ceiling, a real statistical error found and not yet fixed). | **No** — no test coverage at all, so not even confirmed to run correctly, let alone accurately. |
 
 ---
 
@@ -78,18 +83,53 @@ themselves.
 vetted.** Before reusing any of these (e.g. for the GAPS.md §11.2.D
 Monte Carlo item), read the actual code and check it against current
 data schemas — it may predate recent feature/schema changes and not
-run as-is.
+run as-is. **Accuracy tested: No, for all five entries** — none of
+these have ever been run against real data, let alone measured for
+accuracy; "orphaned" is a strictly weaker claim than "dormant" above
+(dormant = built with an intended live path that got bypassed; orphaned
+= no evidence a live path was ever wired at all).
+
+---
+
+## UNBUILT (proposed in GAPS.md §11.2, zero code exists anywhere — verified by direct search, not assumed from the "not attempted" label)
+
+| Proposal | GAPS.md section | Real status |
+|---|---|---|
+| Player Interaction Graph Networks (GNN) | §11.2.A | **Confirmed zero code.** Searched for `GATv2`, `GraphAttention`, `GNN`, `graph_neural`, `PlayerInteractionGraph` anywhere in `src/` — no matches. Genuinely unbuilt, not just unwired. |
+| Player Embeddings / Historical Twin Matching | §11.2.B | **Partially exists, easy to conflate with what doesn't.** `PlayerEmbeddings` (`src/models/advanced_techniques.py`, LIVE, PCA-based) is a *training feature*, not the "find the 5 most similar historical players and use their trajectories as a projection input" system §11.2.B actually describes. The real analog — comp-player matching by draft capital + combine similarity — exists but **only for rookies** (`src/features/advanced_rookie_injury.py`), not the general Player2Vec/Baller2Vec-style system for all players. The general version is unbuilt. |
+| Bayesian Hierarchical Matchup Model | §11.2.F | **Partially exists, different scope than proposed.** `BayesianPlayerModel` (`src/models/bayesian_models.py`, DORMANT, see table above) does player-level random-effects shrinkage (James-Stein / MCMC) — real, but it is not the team-vs-position matchup model §11.2.F describes (simultaneous team offensive strength + team defensive strength vs. position + player-within-team effects). That specific extension is unbuilt. |
+| News Sentiment as ML Feature | §11.1.J (feature, not §11.2, but same "unclear if wired" pattern) | **Ambiguous, unresolved — flagged in GAPS.md, still not confirmed either way.** `MODEL_CONFIG["enable_news_sentiment"] = True` and `NewsSentimentAnalyzer` exist, but `news_sentiment`/`news_volume` are confirmed **not** in `CAUSAL_FEATURES` (checked directly). Computed, possibly unused — GAPS.md already flagged this as "evaluation needed" and it's still open. |
+
+Already covered elsewhere, not re-listed here: Mixture Density (§11.2.C)
+— addressed this session via the asymmetric floor/ceiling fix, see
+GAPS.md's write-up, real MDN remains a further option; Monte Carlo Game
+Simulation (§11.2.D) — real code exists, see ORPHANED table above;
+QB-WR/RB Correlation Matrices (§11.2.E, misnumbered in GAPS.md as under
+11.1) — scoped this session, computed real correlations, blocked on a
+real lineup-optimizer consumer per the user's own sequencing decision
+(see GAPS.md's "Roadmap decision" entry).
 
 ---
 
 ## EXPERIMENTAL / CANDIDATE (today's work — explicitly not a production decision)
 
-| Model / Strategy | File | Status |
-|---|---|---|
-| Multi-year + team-aware preseason candidate | `src/models/preseason_features.py` | Real, tested (`tests/test_preseason_features.py`), metrics tracked in `EXPERIMENTS.md` §2. **Zero production callers — confirmed above.** Mixed real results: QB/WR/TE show wins over `PreseasonProjector`, RB does not yet. Nothing decided or shipped. |
+| Model / Strategy | File | Status | Accuracy tested? |
+|---|---|---|---|
+| Multi-year + team-aware preseason candidate | `src/models/preseason_features.py` | Real, tested (`tests/test_preseason_features.py`), metrics tracked in `EXPERIMENTS.md` §2. **Zero production callers — confirmed above.** | **Yes** — real 2023-2025 holdout, full R²/RMSE/MAE/corr per position in `EXPERIMENTS.md`. Mixed results: QB/WR/TE beat `PreseasonProjector`, RB does not yet (0.009 R² short of production, best candidate found). Nothing decided or shipped. |
 
 ---
 
 ## Summary: what's actually running right now
 
 For the live 2026 draft board and any weekly serving: **`PreseasonProjector`** (season totals) and **`ComponentPredictor`** (weekly, once the season starts) are the only two skill-position models in the loop, plus **`KickerDSTPredictor`** for K/DST. Everything else in this document — roughly a dozen files, several thousand lines, multiple real trained model artifacts on disk — is either deliberately disabled, architecturally bypassed, or was never wired in at all.
+
+**Accuracy-tested tally, across every section above**: of the ~13
+non-live models/strategies cataloged (dormant + orphaned + today's
+candidate), only **2** have ever had real accuracy measured against
+held-out data — `MultiWeekModel` (partially, QB only, this session) and
+today's preseason candidate. Everything else — `Hybrid4WeekModel`,
+`DeepSeasonLongModel`, `TouchdownRegressor`, `BayesianPlayerModel`,
+`weekly_matchup_predictor.py`, both `LineupOptimizer`s,
+`MonteCarloSimulator`, and the four orphaned framework files — is
+real, unvalidated code. "Exists" and "works well" are not the same
+claim anywhere in this document.
