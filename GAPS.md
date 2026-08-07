@@ -676,6 +676,18 @@ Cross-referenced against open-source projects, academic papers, and documented m
 
 **Implementation path:** Build a lightweight game-level simulator that takes Vegas lines (spread, total) and team tendencies, simulates play distribution, allocates touches/targets based on player utilization shares, and produces 1000+ outcome samples per player per game. This replaces point estimates with full distributions.
 
+**UPDATE 2026-08-06**: "not attempted" is imprecise — a real, complete
+`MonteCarloSimulator` class already exists
+(`src/models/advanced_modeling.py`), with skew-normal outcome sampling,
+an injury-probability mixture, and matchup adjustment. It's dormant
+(zero callers anywhere, never fed real data), not previously
+documented as existing at all, and not vetted for correctness against
+current schemas. See `MODELS.md`'s "ORPHANED" section for the full
+inventory of similarly undocumented dormant code found during the same
+audit (a second, different `LineupOptimizer`, a standalone LSTM model,
+a large validation/monitoring framework). Before starting this item
+from scratch, read and evaluate this existing implementation first.
+
 #### E. QB-WR/RB Correlation Matrices (HIGH IMPACT for lineup optimizer)
 
 **What this project does:** Players are projected independently. The lineup optimizer (`docs/lineup.html`) presumably selects players without modeling correlations.
