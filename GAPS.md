@@ -4285,3 +4285,34 @@ above is now partially addressed (asymmetric shape) rather than fully
 open (whole new architecture) — updating the original item's framing
 would require a full rewrite of that section rather than a quick edit,
 so leaving that entry as historical context and pointing here instead.
+
+## Roadmap decision: lineup optimizer + correlation matrices come after horizons are finalized (2026-08-06)
+
+Following the QB-WR/RB correlation scoping above (§11.2.E), user set
+explicit sequencing rather than building correlation matrices now:
+
+1. **Finalize weekly (single-week) predictions** — accuracy/calibration
+   work on the `component`-mode single-week path.
+2. **Finalize draft/season-long horizon predictions** — the
+   `PreseasonProjector` season-total path (floor/ceiling just reworked
+   above) and any remaining multi-week horizon work.
+3. **Then**, and only then: build a real lineup optimizer (wiring
+   `LineupOptimizer` — or a rewrite of it — into an actual caller, fixing
+   its existing lineup-sum statistics bug, adding the QB-WR/RB
+   correlation matrices scoped above) — this was the natural target for
+   §11.2.E all along, it's just gated on the horizons being done first.
+4. **Also needed, not yet scoped**: a basic UI for GitHub Pages. Note
+   for whoever picks this up: CLAUDE.md's "UI Freeze" section names
+   `docs/index.html`/`docs/lineup.html`/`_site/*` as locked files
+   requiring confirmation before editing — but per this project's own
+   memory (and reconfirmed while investigating the lineup optimizer
+   this session) **none of those paths exist in this checkout**. There
+   is no existing UI to unfreeze or extend; this would be new work from
+   scratch, not a UI-freeze exception. The real data artifacts it would
+   consume are `data/players_{POS}.json` (produced by
+   `scripts/generate_draft_data.py`) and friends.
+
+Rationale for the gate, as stated: correlation matrices and a lineup
+optimizer are only useful once the per-player predictions feeding them
+are stable — no point optimizing lineups against projections that are
+still being recalibrated out from under them.
