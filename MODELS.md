@@ -36,7 +36,7 @@ confirm nothing below was changed while investigating.
 
 | Model / Strategy | File | Entry point | What it does |
 |---|---|---|---|
-| `ComponentPredictor` | `src/models/component_predictor.py` | `scripts/generate_app_data.py`, `src/models/train.py` (via `position_target_type="component"`) | Predicts individual stat components (pass yards, rush TDs, etc.) per position, assembles fantasy points via PPR weights. **The real weekly prediction architecture** — confirmed real 2025 accuracy in `EXPERIMENTS.md` §1a. |
+| `ComponentPredictor` | `src/models/component_predictor.py` | `scripts/generate_app_data.py`, `src/models/train.py` (via `position_target_type="component"`) | Predicts individual stat components (pass yards, rush TDs, etc.) per position, assembles fantasy points via PPR weights. **The real weekly prediction architecture.** ⚠️ **CRITICAL, currently broken**: the saved `component_{qb,rb,wr,te}.json` on disk produce 5x-26x inflated predictions when fed current features — a `_pct`/`share` feature scale drift (0-100 vs the scaler's expected 0-1), confirmed for all 4 positions. See GAPS.md's "saved component_*.json models are stale" entry. `EXPERIMENTS.md` §1a's numbers are unaffected (different code path — a freshly-trained backtest, not these saved files) but do **not** mean this bug doesn't matter. Fix: retrain, not yet done. |
 | `PreseasonProjector` | `src/models/preseason_projector.py` | `scripts/generate_draft_data.py`'s `_resolve_projection()` | Season-total draft-board projection from single-prior-season stats. **Drives the live draft board today.** Real accuracy in `EXPERIMENTS.md` §1b. Confirmed gaps (single-season only, zero team context) motivated today's candidate work. |
 | `KickerDSTPredictor` | `src/models/kicker_dst_predictor.py` | `scripts/generate_app_data.py` (`README.md`-documented: `python scripts/generate_app_data.py`) | Kicker and DST predictions — a separate pipeline from the QB/RB/WR/TE skill-position models covered everywhere else in this doc. |
 | `UtilizationToFPConverter` | `src/models/utilization_to_fp.py` | `train.py`, `ensemble.py`, `ts_backtester.py`, `feature_preparation.py` | Converts utilization-score predictions to fantasy points. Live infrastructure — used whenever `util`-mode conversion is exercised, including by the (currently non-default) `util` target mode. |
@@ -51,6 +51,11 @@ confirm nothing below was changed while investigating.
 Order matters — each row runs after the one above it.
 
 ### Weekly (`ComponentPredictor` → `EnsemblePredictor`, live)
+
+⚠️ **Step 1's output is currently broken for all 4 positions — 5x-26x
+inflated (see LIVE table above / GAPS.md).** Steps 2+ below are applied
+on top of an already-wrong base prediction until retrained; don't read
+"Live effect: Yes" as "produces a correct number."
 
 | # | Step | Where | Live effect? |
 |---|---|---|---|

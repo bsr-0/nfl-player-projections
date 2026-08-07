@@ -4383,3 +4383,91 @@ this is candidate evaluation, not a production change. See
 `EXPERIMENTS.md`'s "Open experiments" section for what's still queued
 (calibration-layer test, lookback-depth sweep, component/util/fp
 re-check, walk-forward validation).
+
+## CRITICAL: saved component_*.json models are stale relative to a share/pct feature scale convention change — all 4 positions (2026-08-06)
+
+Found while testing whether `ComponentPredictor`'s post-processing
+calibration step actually helps accuracy (asked directly: "can we test
+whether calibration and post-processing steps actually improve
+performance"). The calibration test itself became moot the moment this
+surfaced — a broken base prediction makes any calibration comparison
+meaningless.
+
+**The bug**: fed real, current-feature-engineering-pipeline data
+(`FeatureEngineer(feature_mode="causal").create_causal_features()`,
+the same pipeline `ComponentPredictor` is actually served with) through
+the currently-saved `data/models/component_{qb,rb,wr,te}.json` models.
+All four produce predictions wildly inflated versus real actuals:
+
+| Position | Predicted mean | Real actual mean | Ratio |
+|---|---|---|---|
+| QB | 142.3 | 14.1 | **10.1x** |
+| RB | 45.7 | 8.7 | **5.2x** |
+| WR | 143.0 | 7.9 | **18.1x** |
+| TE | 166.6 | 6.4 | **25.9x** |
+
+**Root cause, confirmed precisely by inspecting standardized (z-score)
+feature values against each saved `StandardScaler`**: every `_pct`/
+`share`-suffixed rolling feature — `redzone_target_share_pct`,
+`target_share_pct`, `rush_share_pct`, `snap_share_pct`,
+`team_rb_target_share`, `team_rb_lead_share`,
+`goal_line_carry_share_pct`, `team_wr_target_share`,
+`team_te_target_share`, `completion_pct`, `qb_bad_throw_pct_prior` —
+is currently computed as a **0-100 percentage**
+(`feature_engineering.py:1449`, e.g. `completion_pct = safe_divide(...)
+* 100`), but every saved scaler was fit expecting a **0-1 fraction**.
+Feeding a 0-100 value through a scaler calibrated for 0-1 produces
+standardized values in the hundreds (one feature hit z=2353) — a linear
+Ridge component model extrapolates that into a wildly wrong prediction.
+This is a genuine convention drift between the feature-engineering code
+and the saved model artifacts, not a test-harness bug — verified with
+the real, unmodified `ComponentPredictor.predict()` method, not a
+reimplementation.
+
+**Secondary, smaller drift** (max|z| in the 10-30 range, not the
+100s-1000s range above): EPA-based rolling features
+(`pass_epa_per_play_roll3_mean`, `rush_epa_per_play_roll3_mean`,
+`recv_epa_per_target_roll3_mean`) and drop-rate priors
+(`recv_drop_pct_season_prior`, `recv_drop_pct_roll3_mean`). These look
+more like genuine distributional differences in the small 2025-only
+diagnostic slice than a hard unit-convention bug — flagged separately,
+not conflated with the confirmed percentage/fraction bug above. Worth
+re-checking after a retrain, not assumed to be the same root cause.
+
+**Real, currently-live risk**: `data/models/component_{qb,rb,wr,te}.json`
+are the actual weekly serving models (`scripts/generate_app_data.py`,
+`README.md`-documented). If served as-is once the season starts,
+real weekly predictions would be catastrophically wrong — not merely
+missing v30's new features (already known and documented in
+`MODELS.md`), but actively producing 5x-26x inflated point totals.
+
+**Not the same thing as the `fp`-mode backtest numbers already in
+`EXPERIMENTS.md` §1a** — those come from `run_ts_backtest.py --target-mode
+fp`, which trains a fresh Ridge/`PositionModel` ensemble per backtest run
+rather than loading the saved `component_*.json` files. Those numbers
+are unaffected by this bug and remain a valid (if architecturally
+different) reference point. Don't read §1a's reasonable-looking numbers
+as evidence this bug doesn't matter — it's a completely different code
+path.
+
+**Fix: retrain.** `python -m src.models.train` regenerates
+`component_{position}.json` from the current feature-engineering
+pipeline, which will fit fresh scalers matching the current 0-100
+percentage convention. This is the same retrain already recommended in
+`MODELS.md` for v30's new features — this finding raises the priority
+from "missing some newer signal" to "actively wrong," but doesn't
+change the fix. Not retrained in this session — flagging for explicit
+user decision before running a real training job (real cost/time,
+overwrites the currently-served model files).
+
+**Not yet done**: confirming exactly when the percentage-convention
+change landed (git history for `feature_engineering.py` doesn't extend
+far enough back to find it — same limitation noted elsewhere in this
+doc, `src/` wasn't tracked until 2026-08-04), and whether the same drift
+affects any other saved model artifact that consumes these same
+features (`PreseasonProjector` uses a different, disjoint feature set
+per `_build_season_pairs`, confirmed unaffected; the dormant
+`Hybrid4WeekModel`/`DeepSeasonLongModel`/`MultiWeekModel` artifacts in
+`MODELS.md`'s DORMANT table use the same `CAUSAL_FEATURES` as
+`ComponentPredictor` and were saved around the same time — likely
+affected the same way, not yet verified).
