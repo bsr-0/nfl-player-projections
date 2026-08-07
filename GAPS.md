@@ -4471,3 +4471,91 @@ per `_build_season_pairs`, confirmed unaffected; the dormant
 `MODELS.md`'s DORMANT table use the same `CAUSAL_FEATURES` as
 `ComponentPredictor` and were saved around the same time — likely
 affected the same way, not yet verified).
+
+## Doc restructure: EXPERIMENTS.md + MODELS.md merged into TRACKING.md (2026-08-06)
+
+Per explicit request: too wordy/split across two files, wanted mainly
+tables/bullets, and wanted a single doc where "experiments" can be
+about models, features, or techniques, not just models specifically.
+Consolidated into `TRACKING.md` (registry + metrics + post-processing
+pipeline + open items + pitfalls, all table/bullet form). `MODELS.md`
+and `EXPERIMENTS.md` deleted — their content lives in `TRACKING.md`
+now, condensed.
+
+**Section-number references to `EXPERIMENTS.md`/`MODELS.md` in earlier
+entries above this one are stale** (e.g. "EXPERIMENTS.md §1a") — they
+refer to the pre-merge document structure and weren't individually
+remapped, consistent with this doc's own convention of not rewriting
+history. The underlying findings they point to are all still real and
+still in `TRACKING.md`, just under different section numbers/headers.
+
+## CORRECTION + deeper root cause: the component_*.json bug is NOT fixed by retraining, and the real cause is a silent except-ValueError in src/predict.py (2026-08-06)
+
+Follow-up to the "CRITICAL: saved component_*.json models are stale"
+entry above. Ran the retrain (`python -m src.models.train --no-tune`),
+then re-verified with the diagnostic script — **still broken**, same
+severity: QB 10.4x, RB 26.8x (worse than before!), WR 3.0x
+(now under-predicting, not over), TE 9.6x. Retraining changed the
+*symptom* per-position but did not fix the *cause*.
+
+**Root cause is more precise, and more serious, than originally
+diagnosed.** The original entry attributed this to a stale
+percentage-vs-fraction convention in `ComponentPredictor`'s own saved
+`StandardScaler`. That was an incomplete diagnosis — my first
+diagnostic script called `FeatureEngineer.create_causal_features()`
+directly, skipping a real intermediate step
+(`_apply_bounded_scaling`/`feature_scaler_bounded.joblib`) that the full
+production training pipeline (`_prepare_training_data`) applies before
+`ComponentPredictor`'s own scalers ever see the data — a `MinMaxScaler`
+fit on 112 "bounded" (`_pct`/`share`/`rate`/`prob`-named) columns.
+
+Rebuilt the diagnostic to exactly replicate the **real serving path**
+(`src/predict.py::_prepare_features` — `add_external_features` →
+`add_season_long_features` → `UtilizationScoreCalculator.calculate_all_scores`
+→ `FeatureEngineer.create_features()` → `add_advanced_rookie_injury_features`
+→ apply `feature_scaler_bounded.joblib`), not a shortcut. Found the real
+cause: **serving-time feature generation produces 98 columns where the
+bounded-scaler artifact expects 112** — 14 missing, mostly
+utilization-score percentile-normalized components (`snap_share_norm`,
+`target_share_norm`, `redzone_share_norm`, `touch_share_norm`,
+`inline_rate_norm`) plus a few raw share/pct columns
+(`snap_share_pct`, `touch_share_pct`, `redzone_share_pct`,
+`redzone_targets_pct`, `route_participation_pct`,
+`util_air_yards_share`). This raises `MinMaxScaler.transform()`'s
+`ValueError` (shape mismatch), which `src/predict.py`'s real code
+**silently catches**:
+
+```python
+try:
+    scaled = self.bounded_scaler_artifact["scaler"].transform(values)
+    data.loc[:, cols] = scaled
+except ValueError:
+    pass  # Feature count mismatch from version bump — skip scaling
+```
+
+The comment shows this was a known, deliberate trade-off (don't crash
+on a version mismatch) — but the silent fallback is "feed raw,
+unnormalized 0-100 percentages into scalers that expect a 0-1
+MinMax-normalized range," which is exactly the failure mode, not a
+graceful degradation. This is the same `except Exception`/`except
+ValueError: pass` anti-pattern this project's §9 audit was built
+around, in a spot that audit didn't reach.
+
+**Why the missing 14 columns are missing**: likely
+`UtilizationScoreCalculator`'s percentile-normalization step
+(`_percentile_normalize`, used for the `_norm`-suffixed columns) needs
+fitted percentile bounds that only get produced/loaded correctly inside
+the full `_prepare_training_data` pipeline, not `src/predict.py`'s
+lighter-weight `UtilizationScoreCalculator(weights=util_weights)`
+construction. **Not yet fully root-caused** — this needs its own
+follow-up to trace exactly why serving-time doesn't produce these 14
+columns; flagging precisely what's missing rather than guessing further.
+
+**Status**: still broken, confirmed on the freshly-retrained models.
+The retrain from the entry above was not wasted (it did pick up v30's
+new features and `feature_version.txt` now correctly reads 30), but it
+does not address this bug — a genuine fix needs either (a) making
+serving-time feature generation produce the same 112 columns
+training-time does, or (b) making the bounded-scaler application robust
+to a column subset instead of silently no-op'ing on any mismatch. Real,
+currently-live risk, unresolved.
