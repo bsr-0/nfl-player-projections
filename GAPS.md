@@ -414,6 +414,13 @@ The component predictor (predict individual stats → assemble FP) and the main 
 | **Seasonal PFR (prior-season summary)** | `nfl.import_seasonal_pfr()` | Pre-season drop rate, bad throw % for cold-start |
 | **Vegas preseason win totals** | `nfl.import_win_totals()` | Team quality proxy for full-season game script |
 
+**STALE — corrected 2026-08-06**: `nfl.import_win_totals()` is not this
+data despite the name — it's per-game weekly odds (spread/total/
+moneyline), not season-long win-total futures, and this project's
+`game_odds` table already has that fully covered. No free source for
+real preseason win-total futures was found. See "No viable free source
+for Vegas preseason win totals" further down in this doc.
+
 **Tier 3: Lower impact or high implementation cost**
 
 | Feature | Source | Why it matters |
@@ -1329,7 +1336,11 @@ scoping these as deliberately deferred rather than half-attempted:
   `win_totals` market has never actually been scraped into `game_odds`
   (checked: only h2h/spreads/totals present). Requires running the
   scraper against The Odds API (needs `ODDS_API_KEY`, not confirmed
-  available/funded this session) — not attempted.
+  available/funded this session) — not attempted. **UPDATE 2026-08-06:
+  the user won't ever have paid Odds API access — investigated free
+  alternatives, found none exist. See "No viable free source for Vegas
+  preseason win totals" further down in this doc; this item is now
+  permanently deprioritized rather than "blocked on API key."**
 - **§9 data pipeline hardening** (schema validation on ingestion,
   replacing remaining `except Exception: pass` with structured logging) —
   this session fixed every *specific* silent-failure instance it
@@ -4136,3 +4147,54 @@ and the participation-rate proxy visibly encodes real role information
 (the spot-check above) even if it doesn't move this particular metric —
 but also not a claim of proven value. Filed honestly, matching this
 project's standing practice.
+
+## No viable free source for Vegas preseason win totals (2026-08-06)
+
+User confirmed they will never have paid access to The Odds API (the
+only source `odds_scraper.py`'s `fetch_win_totals`/`scrape_win_totals`
+actually calls), and asked whether a free public source exists instead.
+Checked three candidates before concluding none work:
+
+1. **`nfl_data_py.import_win_totals()` — free, but not this data,
+   despite the name.** Traced the function to its actual source
+   (`https://raw.githubusercontent.com/mrcaseb/nfl-data/master/data/
+   nfl_lines_odds.csv.gz`) and pulled real rows: it's **per-game weekly
+   odds** (`market_type` = spread/total/money_line, keyed by
+   `game_id` like `2021_01_CLE_KC`), not season-long preseason win-total
+   futures. This project's own `game_odds` table already has that exact
+   data fully covered (100% coverage 2006-2025, per project memory) —
+   pulling this would be pure duplication, not new signal. Also
+   effectively dead going forward: 2022+ returns 0 rows, and the library
+   itself logs "the win totals data source is currently in flux and may
+   be out of date." The §8.1 Tier 2 table's citation of this function as
+   the source for win totals was itself wrong — corrected inline above.
+2. **nflverse-data's GitHub releases** — checked the full release catalog
+   (`api.github.com/repos/nflverse/nflverse-data/releases`, ~25
+   categories: pbp, rosters, contracts, snap_counts, ftn_charting,
+   nextgen_stats, pfr_advstats, injuries, depth_charts, combine, etc.).
+   No betting-odds or win-totals dataset exists anywhere in it. nflverse
+   simply doesn't publish this.
+3. **`sportsoddshistory.com`** — this genuinely *was* a free public
+   archive of real NFL preseason win-total futures by team/season/book,
+   confirmed via the Wayback Machine's CDX index to have covered seasons
+   back to 1989. But the live site now redirects to `covers.com`
+   (absorbed/acquired), and even the archived Wayback snapshots of the
+   old site only captured the page shell — the actual data table loaded
+   via a WordPress AJAX call (`.win_call`/`.pre_call` click handlers)
+   that Wayback never captured as a separate response, so there's no
+   clean historical CSV/HTML sitting in the archive to parse either.
+   Checked `covers.com`'s current live win-totals page as the closest
+   surviving equivalent: it's a JS-rendered SPA (empty body on direct
+   fetch), so scraping it reliably would mean real browser automation —
+   fragile against layout changes, likely against the aggregator's ToS,
+   and even if built would only capture *this season's* line going
+   forward, not a historical multi-year backfill for training data.
+
+**Conclusion: no free, structured, reliably scrapable source exists for
+real historical Vegas preseason win-total futures.** Recategorized this
+item from "blocked on API key" (implies paying would unblock it cleanly)
+to **permanently deprioritized, no viable path found** — both the §8.1
+Tier 2 table and the earlier "scoped out" list entry updated inline
+above to point here. Not attempting a browser-automation scraper against
+covers.com without an explicit ask, given the fragility/ToS concerns and
+that it wouldn't even solve the historical-backfill half of the problem.
