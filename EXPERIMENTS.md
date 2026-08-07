@@ -147,9 +147,21 @@ decision.** See "Open experiments" below before promoting anything.
 
 ---
 
-## 3. Multi-horizon model (`MultiWeekModel`, real 18-week rest-of-season prediction)
+## 3. In-season rest-of-season model (`MultiWeekModel`) — NOT the same experiment as §2, despite both involving "multiple years/weeks"
 
-Different task than §2: predicts the rest of *this* season from an
+**Read this before comparing numbers across §2 and §3 — they are
+different models answering different questions, and a number being bad
+in one says nothing about the other.** §2 is "predict next season's
+total, before it starts, using multiple years of the player's past
+plus their new team" (Ridge/PositionModel on `PreseasonProjector`-style
+features). §3 here is "predict the *rest of the current season*, from
+an early-week vantage point, using the live weekly model's own
+features" (`MultiWeekModel`, a gradient-boosted ensemble). Different
+model, different target, different task. **TE's multi-year §2 result is
+positive (0.536, a small win) — the negative number below (-0.416) is
+this separate §3 experiment, not §2.**
+
+Predicts the rest of *this* season from an
 early-season vantage point (target_18w is season-scoped, needs ≥14 of
 18 future games within the same season — can't cross season boundaries,
 so this is architecturally not comparable to §1b/§2's "predict next
