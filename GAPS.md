@@ -4316,3 +4316,38 @@ Rationale for the gate, as stated: correlation matrices and a lineup
 optimizer are only useful once the per-player predictions feeding them
 are stable — no point optimizing lineups against projections that are
 still being recalibrated out from under them.
+
+## Multi-season, team-aware preseason model: investigation started, tracked in EXPERIMENTS.md (2026-08-06)
+
+Following the "multi-season, team-aware preseason model" discussion:
+confirmed `PreseasonProjector` is genuinely single-prior-season-only
+with zero team context (verified by grep — no `team`/`dest_team`/
+`team_changed` reference anywhere in the file). Built a real candidate
+(`src/models/preseason_features.py`, `build_multiyear_season_pairs`) —
+reuses the weekly model's already-validated destination-team logic
+(`_add_dest_team_pos_profiles`) plus new multi-year (y1/y2/y3) trend
+features, genuinely new engineering that didn't exist anywhere in this
+codebase before.
+
+Per explicit user request, **all metrics from this investigation
+(and going forward) are tracked in `EXPERIMENTS.md`** at the repo root,
+not narrated here — R², RMSE, MAE, corr, and n for every variant tested,
+specifically because R² alone was found to be misleading mid-
+investigation (see EXPERIMENTS.md's "Known pitfalls" section: an early
+run showed R² getting worse while MAE improved, traced to a test-set
+size mismatch, not a real accuracy difference).
+
+Also fixed in passing: a real pandas `groupby()` bug (silently drops
+rows with any NaN key, unlike SQL's `GROUP BY`) that caused an entire
+season (2025) to vanish and another (2024) to be undercounted to 5 QB
+rows in the new feature pipeline — root-caused and fixed
+(`dropna=False`), with a regression test
+(`tests/test_preseason_features.py`) added directly against it.
+
+**Current verdict, per EXPERIMENTS.md**: QB and WR show clear real wins
+over production; TE a small real win; RB has a close but not-yet-proven
+candidate (still 0.009 R² short of production). Nothing shipped yet —
+this is candidate evaluation, not a production change. See
+`EXPERIMENTS.md`'s "Open experiments" section for what's still queued
+(calibration-layer test, lookback-depth sweep, component/util/fp
+re-check, walk-forward validation).
