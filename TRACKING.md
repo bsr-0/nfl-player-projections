@@ -20,7 +20,7 @@ caller at all) · 🔴 UNBUILT (proposed, zero code) · 🔵 CANDIDATE
 
 | Subject | Type | Status | File | Accuracy tested? |
 |---|---|---|---|---|
-| `ComponentPredictor` | model | 🟢 | `component_predictor.py` | Yes — see §2. ⚠️ **STILL BROKEN, retrain did not fix, see §4** |
+| `ComponentPredictor` | model | 🟢 | `component_predictor.py` | Yes — see §2. QB/WR healthy, RB/TE have real model-quality issues, see §4 (corrected finding — no scale bug) |
 | `PreseasonProjector` | model | 🟢 | `preseason_projector.py` | Yes — see §2 |
 | `KickerDSTPredictor` | model | 🟢 | `kicker_dst_predictor.py` | No |
 | `UtilizationToFPConverter` | model | 🟢 | `utilization_to_fp.py` | Indirect (feeds live `util`-mode conversion) |
@@ -101,7 +101,7 @@ TE's negative R²: traced to 4.08x train/OOF overfit ratio on smallest sample (9
 |---|---|---|
 | `PreseasonProjector` full calibration chain (legacy patches + `UpstreamCalibrator`) | base_pred vs. calibrated pred, real 2023-2025 holdout, all 4 pos | **Negligible.** QB: no change (calibrator not even active for QB). RB: ΔR²=0.000, MAE +0.1 (slightly worse). WR: ΔR²=+0.002, MAE -0.1 (tiny real help). TE: ΔR²=+0.001 (negligible). |
 | `UpstreamCalibrator`, freshly refit on the §2c RB candidate | with vs. without | **Real help** — R² 0.447→0.452, MAE 56.4→56.1. Contrast with row above: a *freshly-fit* calibrator helps meaningfully; the *currently-deployed* one (fit on the original base model) does almost nothing on this holdout. |
-| `ComponentPredictor` linear recalibration (QB only, only position where it's active) | — | **Untested — moot.** Base predictions are still 3x-27x wrong (§4, confirmed unfixed by retraining); a calibration test on top of broken predictions is meaningless. |
+| `ComponentPredictor` linear recalibration (QB only, only position where it's active) | — | Not yet tested — QB's base predictions are healthy (§4), so this is now a valid test to run, unlike when §4 looked catastrophic. |
 | `EnsemblePredictor` sanity-bounds clip | — | Not yet tested |
 | `EnsemblePredictor` tier-uncertainty scaling | — | Confirmed **no live effect** in `component` mode (operates on `NaN` fields) |
 | TD mean-reversion (`TouchdownRegressor`) | — | Confirmed **disabled**, not tested against enabled |
@@ -138,50 +138,42 @@ Not produced at all: `prediction_ci80/95_*` stay `NaN` in `component` mode.
 
 ---
 
-## 4. CRITICAL, STILL OPEN: real weekly predictions are 3x-27x wrong (retrain did NOT fix this)
+## 4. RB/TE model-quality issue (corrected finding — two earlier "scale bug" claims retracted)
 
-Found 2026-08-06 testing whether calibration helps. Confirmed via the
-**real, exact serving path** (`src/predict.py::_prepare_features`),
-not a shortcut. **Retrained the models — still broken afterward,**
-same severity, different per-position ratios (QB 10.4x over, RB 26.8x
-over, WR 3.0x *under*, TE 9.6x over).
+**Two earlier versions of this section (a "5x-26x scale-convention
+drift" claim, then a "silent except-ValueError" claim) were both
+wrong** — both were artifacts of testing one position at a time, which
+doesn't match how `src/predict.py` is actually used (`position=None`
+default, all 4 positions processed together in one combined
+dataframe). `feature_scaler_bounded.joblib`'s 112-column list was fit
+on that combined dataframe, so position-specific columns are naturally
+absent when a position is tested alone — an artifact of the test, not
+a real serving gap. Retested correctly (all 4 positions combined,
+exactly matching real usage): **the bounded scaler applies
+successfully, zero missing columns.** Full detail + lesson learned in
+GAPS.md's retraction entry.
 
-**Root cause**: training-time (`_prepare_training_data`) fits a
-`MinMaxScaler` on 112 "bounded" (`_pct`/`share`/`rate`-named) columns
-before `ComponentPredictor`'s own scalers see the data. Serving-time
-(`src/predict.py`) only produces 98 of those columns — 14 missing,
-mostly utilization percentile-normalized components
-(`snap_share_norm`, `target_share_norm`, `redzone_share_norm`,
-`touch_share_norm`, `inline_rate_norm`) plus some raw share/pct
-columns. The resulting `MinMaxScaler.transform()` shape-mismatch
-`ValueError` is **silently caught** in real production code:
+**What's actually real**, verified the correct way (comparing the
+backed-up pre-retrain models against today's retrain, same real 2025
+data, all positions combined):
 
-```python
-except ValueError:
-    pass  # Feature count mismatch from version bump — skip scaling
-```
+| Pos | OLD ratio/R² | NEW ratio/R² | Verdict |
+|---|---|---|---|
+| QB | 1.11x / 0.193 | 1.10x / 0.195 | Unchanged, reasonably healthy |
+| RB | 2.09x over / -0.979 | 2.12x over / -1.047 | **Pre-existing ~2x over-prediction, predates this session, not a scale bug** |
+| WR | 1.96x over / -0.826 | 1.21x / **0.194** | **Retrain genuinely helped** (likely v30 features) |
+| TE | 2.08x over / -1.032 | 0.22x under / -0.461 | **Still broken — failure mode flipped over→under with the retrain**, a real retrain-related change |
 
-So bounded scaling silently never applies at serving time — raw 0-100
-percentages get fed into scalers expecting 0-1. A real, deliberate
-"don't crash" trade-off whose fallback path is itself badly broken.
-
-**Not fixable by retraining** — retraining changes model weights and
-the training-side scaler, not the serving-side feature-generation gap.
-Real fix needs either (a) serving-time producing the same 112 columns
-training-time does, or (b) the bounded-scaler application handling a
-column subset instead of silently no-op'ing. **Why the 14 columns are
-missing specifically is not yet root-caused** — likely
-`UtilizationScoreCalculator`'s percentile bounds not loading the same
-way in `src/predict.py` as in the full training pipeline. Next step,
-not done yet.
-
-**STATUS: UNRESOLVED, currently live.**
+**STATUS: real, open, but far less severe than previously stated.**
+RB and TE need their own investigation as genuine model-quality
+problems (component-level residuals, sample size, `--no-tune` vs.
+tuned hyperparameters) — not a feature-pipeline plumbing bug.
 
 ---
 
 ## 5. Not yet tried
 
-- [ ] **PRIORITY — §4 fix**: find why `src/predict.py::_prepare_features` produces 14 fewer bounded columns than training (`snap_share_norm`/`target_share_norm`/`redzone_share_norm`/`touch_share_norm`/`inline_rate_norm` + a few raw share/pct columns) — likely `UtilizationScoreCalculator` percentile bounds not loading the same way at serving time.
+- [ ] **PRIORITY — §4**: RB's systematic ~2x over-prediction (pre-existing, real, component-level: `rushing_yards`/`rushing_tds` residuals) and TE's prediction collapse (retrain flipped it from over→under) — both real model-quality issues, need component-level investigation, not a feature-pipeline bug.
 - [ ] `EnsemblePredictor` sanity-bounds clip — does it help or hurt real predictions?
 - [ ] `PositionModel` at production alpha / with tuning on (current numbers used `tune_hyperparameters=False`)
 - [ ] Lookback-depth sweep for §2c (2yr vs 3yr vs 4yr+, 3 was picked arbitrarily)

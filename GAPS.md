@@ -4559,3 +4559,51 @@ serving-time feature generation produce the same 112 columns
 training-time does, or (b) making the bounded-scaler application robust
 to a column subset instead of silently no-op'ing on any mismatch. Real,
 currently-live risk, unresolved.
+
+## RETRACTION: the two entries above ("CRITICAL... stale relative to scale convention" and "CORRECTION + deeper root cause") were both wrong, caused by a test-methodology flaw (2026-08-06)
+
+Both prior entries claimed real weekly predictions were 5x-27x wrong due
+to a scale-convention drift, then a silent `except ValueError: pass`
+swallowing a bounded-scaler failure. **Both diagnoses were artifacts of
+testing one position at a time** (`db.get_all_players_for_training(position="QB", ...)`
+etc.), not how `src/predict.py` is actually used in production —
+`predict()`'s default is `position=None`, meaning all 4 positions are
+processed together in one combined dataframe. `feature_scaler_bounded.joblib`'s
+112-column list was fit on that combined, multi-position dataframe, so
+position-specific columns (e.g. TE's `inline_rate_pct`) are naturally
+absent when a position is tested in isolation — an artifact of the test,
+not a real gap in what serving actually produces. Rebuilt the
+diagnostic a third time with all 4 positions combined, exactly matching
+real usage: **the bounded scaler transform succeeds, zero missing
+columns.** The "silent except ValueError" mechanism never actually
+fires in real usage.
+
+**What's real, verified the correct way** (all positions combined,
+comparing the backed-up pre-retrain models against today's retrain,
+same real 2025 data):
+
+| Pos | OLD ratio/R² | NEW ratio/R² | Verdict |
+|---|---|---|---|
+| QB | 1.11x / 0.193 | 1.10x / 0.195 | Unchanged, reasonably healthy |
+| RB | 2.09x over / -0.979 | 2.12x over / -1.047 | **Already broken before this session's retrain — a real, pre-existing model-quality issue, not a scale bug** |
+| WR | 1.96x over / -0.826 | 1.21x / **0.194** | **Retrain genuinely helped** (likely v30 features) |
+| TE | 2.08x over / -1.032 | 0.22x under / -0.461 | **Still broken; failure mode flipped from over- to under-prediction with the retrain** — a real, retrain-related change worth understanding, separate from the RB issue |
+
+**Correction to the record**: no scale-convention bug, no silently-caught
+exception in practice. The real, standing issues are RB's systematic
+~2x over-prediction (predates this session, unrelated to anything
+changed here) and TE's prediction collapse (retrain-related, direction
+flipped). Both are genuine model-quality problems, not
+feature-pipeline plumbing bugs — worth investigating on their own
+terms (component-level residuals, training sample size,
+`--no-tune` vs. tuned hyperparameters) rather than chasing the
+scale-mismatch theory further. Retracting the "retrain, then it'll be
+fixed" framing from both earlier entries; this needed a real accuracy
+investigation, which those entries jumped past.
+
+**Lesson, stated plainly**: the isolated-position test felt like a
+faithful reproduction (it called the real `predict()` method
+un-modified) but wasn't a faithful reproduction of real *usage* —
+matching production's actual call pattern (multi-position, `position=None`)
+mattered as much as using the real code. Verify against how something
+is actually invoked, not just that the function itself is unmodified.
