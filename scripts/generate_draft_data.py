@@ -74,18 +74,79 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 # the gap to QB 84.6% / RB 86.3% / TE 86.6% / WR 86.2%, all within ~2pp
 # of the 86.6% target, with fp_std-quintile coverage unchanged (still a
 # tight ~5pp range). Cheap to add and a clear improvement, so shipped.
+# --- Asymmetric floor/ceiling (GAPS.md §11.2.C follow-up, 2026-08-06) ---
+#
+# The formula above (still kept, see FLOOR_CEILING_REL_SPREAD_* below) was
+# symmetric: one relative spread applied equally above and below the point
+# total. Checked whether that's the right shape by testing real 2025
+# backtest residuals for bimodality (Pfister's coefficient, all 4
+# positions) -- not classically bimodal (all well below the 0.555
+# threshold), but genuinely right-skewed and heavy-tailed (positive skew
+# 0.48-1.37, real excess kurtosis on RB/WR/TE). A symmetric interval on a
+# skewed distribution is structurally mis-shaped.
+#
+# Confirmed directly: refit the same real PreseasonProjector-vs-actual
+# dataset (2,034 player-seasons, 2019-2025, `scripts/calibrate_floor_
+# ceiling.py`) as two one-sided quantile regressions (q=0.067 for floor,
+# q=0.933 for ceiling, matching the same 86.6% target) instead of one
+# symmetric one. On a genuine holdout (fit 2019-2022, test 2023-2025):
+# the symmetric formula's floor was almost never actually breached (2.5%
+# vs. the 6.7% it was supposed to be -- needlessly conservative) while
+# its ceiling was slightly too tight (7.6% vs 6.7%). The asymmetric fit
+# gets both sides close to target (7.5% / 7.5%), a 3x reduction in
+# per-side miscalibration (sum of |actual-target| gap: 0.051 -> 0.016).
+# Overall coverage dropped slightly (89.9% -> 85.0%, vs. an 86.6% target)
+# -- expected and acceptable, since the symmetric formula's 89.9% was
+# itself an artifact of over-covering on the floor side while under-
+# covering on the ceiling side, not a real calibration win.
+FLOOR_ASYM_COEF = {
+    "const": -1.307583, "log_pred": 0.108491, "confidence_score": 0.072483,
+    "pos_RB": -0.071201, "pos_WR": -0.017547, "pos_TE": 0.033451,
+}
+CEILING_ASYM_COEF = {
+    "const": 4.383422, "log_pred": -0.662733, "confidence_score": -0.081698,
+    "pos_RB": -0.126647, "pos_WR": -0.306856, "pos_TE": -0.369531,
+}
+FLOOR_CEILING_DEFAULT_CONFIDENCE = 0.7
+# Sanity clamps on the fitted relative error -- guards against extreme
+# extrapolation for pred_total values far outside the fit data's range.
+ASYM_REL_MIN, ASYM_REL_MAX = -0.95, 5.0
+
+
+def _asym_rel_error(coef: dict, log_total: float, conf: float, position: str) -> float:
+    rel = coef["const"] + coef["log_pred"] * log_total + coef["confidence_score"] * conf
+    rel += coef.get(f"pos_{position}", 0.0)
+    return max(ASYM_REL_MIN, min(ASYM_REL_MAX, rel))
+
+
+def _floor_ceiling(total: float, confidence, position: str = None) -> tuple:
+    """Asymmetric floor/ceiling for a season-total projection, given
+    (optionally) a per-player model confidence score, and position.
+    Returns (floor, ceiling). See the fit methodology and rationale in
+    the comment above FLOOR_ASYM_COEF."""
+    conf = (
+        FLOOR_CEILING_DEFAULT_CONFIDENCE
+        if confidence is None or pd.isna(confidence)
+        else float(confidence)
+    )
+    total = float(total)
+    log_total = np.log(max(total, 1.0))
+    floor_rel = _asym_rel_error(FLOOR_ASYM_COEF, log_total, conf, position)
+    ceiling_rel = _asym_rel_error(CEILING_ASYM_COEF, log_total, conf, position)
+    floor = max(0.0, total * (1 + floor_rel))
+    ceiling = max(total, total * (1 + ceiling_rel))
+    floor = min(floor, total)
+    return floor, ceiling
+
+
+# --- Legacy symmetric formula, kept for reference/rollback only; no
+# longer called anywhere in this file as of the asymmetric fix above. ---
 FLOOR_CEILING_REL_SPREAD_INTERCEPT = 2.620
 FLOOR_CEILING_REL_SPREAD_LOG_PRED_COEF = -0.335
 FLOOR_CEILING_REL_SPREAD_CONF_COEF = 0.022
 FLOOR_CEILING_REL_SPREAD_POSITION_COEF = {"QB": 0.0, "RB": -0.121, "WR": -0.172, "TE": -0.295}
 FLOOR_CEILING_REL_SPREAD_MIN = 0.15
 FLOOR_CEILING_REL_SPREAD_MAX = 3.0
-# Used only for the weekly_18w fallback branch, which has no per-player
-# confidence_score (that's specific to PreseasonProjector's
-# predict_with_details) -- a fixed neutral value rather than omitting
-# the confidence term entirely, since the fitted formula was calibrated
-# with a confidence term present.
-FLOOR_CEILING_DEFAULT_CONFIDENCE = 0.7
 
 
 def _floor_ceiling_spread(total: float, confidence, position: str = None) -> float:
@@ -549,9 +610,9 @@ def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions:
             confidence = row.get("preseason_confidence")
             proj_total = round(total, 1)
             proj_ppg = round(total / 17, 1)
-            spread = _floor_ceiling_spread(total, confidence, row.get("position"))
-            proj_floor = round(max(0, total - spread), 1)
-            proj_ceiling = round(total + spread, 1)
+            floor, ceiling = _floor_ceiling(total, confidence, row.get("position"))
+            proj_floor = round(floor, 1)
+            proj_ceiling = round(ceiling, 1)
             return proj_total, proj_ppg, proj_floor, proj_ceiling, "preseason_model"
 
     if has_ml_predictions and schedule_available:
@@ -562,10 +623,10 @@ def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions:
             proj_ppg = round(total / 17, 1)
             # No per-player confidence_score available on this path (that's
             # specific to PreseasonProjector's predict_with_details) --
-            # _floor_ceiling_spread falls back to FLOOR_CEILING_DEFAULT_CONFIDENCE.
-            spread = _floor_ceiling_spread(total, None, row.get("position"))
-            proj_floor = round(max(0, total - spread), 1)
-            proj_ceiling = round(total + spread, 1)
+            # _floor_ceiling falls back to FLOOR_CEILING_DEFAULT_CONFIDENCE.
+            floor, ceiling = _floor_ceiling(total, None, row.get("position"))
+            proj_floor = round(floor, 1)
+            proj_ceiling = round(ceiling, 1)
             return proj_total, proj_ppg, proj_floor, proj_ceiling, "weekly_18w"
 
     return None, None, None, None, None

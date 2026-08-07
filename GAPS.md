@@ -4198,3 +4198,90 @@ Tier 2 table and the earlier "scoped out" list entry updated inline
 above to point here. Not attempting a browser-automation scraper against
 covers.com without an explicit ask, given the fragility/ToS concerns and
 that it wouldn't even solve the historical-backfill half of the problem.
+
+## §11.2.C: asymmetric floor/ceiling shipped, full mixture-density network scoped down (2026-08-06)
+
+User asked to scope out §11.2.C ("Mixture Density / Bimodal Output
+Modeling," filed HIGH EFFORT, deferred pending "a dedicated design
+discussion"). Checked the premise against real data before committing to
+any architecture, rather than trusting the cited paper's framing at face
+value.
+
+**The population isn't classically bimodal.** Real `player_weekly_stats`
+histograms (2018-2025, all 4 positions) show a right-skewed decay from a
+mode near 0, not two separate humps — but that conflates many different
+player archetypes (starters, committee backs, inactive/injured games),
+so it's not the right test. The real test: computed skew, kurtosis, and
+Pfister's bimodality coefficient (BC) on real 2025 backtest residuals
+(`actual - predicted`, 5,612 predictions, this session's v30 run).
+
+| Position | Skew | Kurtosis | BC (>0.555 = bimodal) |
+|---|---|---|---|
+| QB | 0.48 | 0.12 | 0.39 |
+| RB | 1.28 | 2.78 | 0.46 |
+| WR | 1.14 | 2.05 | 0.45 |
+| TE | 1.37 | 4.03 | 0.41 |
+
+All four positions land well below the bimodality threshold — the
+cited paper's literal "two-component Poisson mixture" framing doesn't
+hold up on this project's own data. But residuals **are** meaningfully
+right-skewed and heavy-tailed (real positive skew, real excess kurtosis
+on RB/WR/TE), consistent with "mostly-typical-or-below outcomes +
+occasional real boom games," just not two discrete humps.
+
+**Scoped down to what the data actually supports**: the properly-sized
+version of this fix is asymmetric floor/ceiling, not a neural mixture
+density network. The existing floor/ceiling formula
+(`scripts/generate_draft_data.py`, fixed 2026-08-05 earlier this
+session) was a single *symmetric* relative spread applied equally above
+and below the point total — exactly the kind of shape mismatch the
+confirmed skew predicts. Fixed that specific, real problem instead of
+building new model architecture:
+
+- Rebuilt the real prediction-vs-actual dataset behind the existing
+  formula (it wasn't committed as a script last time, only its fitted
+  coefficients survived) as `scripts/calibrate_floor_ceiling.py` — real
+  `PreseasonProjector` predictions vs. real season totals, 2,034
+  player-seasons, 2019-2025.
+- Fit two one-sided quantile regressions (q=0.067 floor, q=0.933
+  ceiling, matching the same 86.6% target as before) instead of one
+  symmetric one, same covariates (`log(pred_total)`, `confidence_score`,
+  position).
+- Validated on the same genuine holdout protocol as the existing formula
+  (fit 2019-2022, test 2023-2025). **Real, measured improvement**: the
+  symmetric formula's floor was almost never actually breached (2.5% vs.
+  the 6.7% it was supposed to be — needlessly conservative) while its
+  ceiling was slightly too tight (7.6% vs 6.7%). The asymmetric fit gets
+  both sides close to target (7.5% / 7.5%), a **3x reduction in per-side
+  miscalibration** (sum of |actual-target| gap: 0.051 → 0.016). Overall
+  coverage dropped slightly (89.9% → 85.0%, vs. an 86.6% target) — this
+  is expected and fine, since the symmetric formula's 89.9% was itself
+  an artifact of over-covering on the floor side while under-covering on
+  the ceiling side, not a real calibration win.
+- Shipped: replaced `_floor_ceiling_spread()` with `_floor_ceiling()`
+  (returns `(floor, ceiling)` directly instead of one symmetric spread),
+  updated both call sites in `_resolve_projection()`. Kept the old
+  symmetric formula's code in place but unused, for reference/rollback.
+- Spot-checked on the real, live 2026 draft board after regenerating it:
+  the asymmetry direction itself is meaningful, not degenerate — elite,
+  already-near-max-usage players (C.McCaffrey: 321.5 total, -220.3
+  floor-side / +114.1 ceiling-side) carry more real downside (injury/
+  role-loss risk) than upside (already near their ceiling), while the
+  gap narrows or reverses for lower-total players. This is a sensible,
+  differentiated pattern the old symmetric formula couldn't express at
+  all.
+- 5 new unit tests (`tests/test_generate_draft_data.py::TestFloorCeiling`
+  — floor/ceiling never cross the point estimate, floor never negative,
+  missing-confidence fallback, and the asymmetry itself). Full existing
+  suite (`test_generate_draft_data.py` + `test_snake_draft_sim.py` +
+  `test_preseason_projector.py`, 31 tests) stays green.
+
+**A full neural MDN remains on the table as a bigger follow-up** if a
+future session finds the asymmetric fix isn't enough — but building one
+before checking whether this much cheaper fix already solved the real,
+confirmed problem (skew, not bimodality) would have been over-engineering
+relative to what the data actually supports. GAPS.md's §11.2.C entry
+above is now partially addressed (asymmetric shape) rather than fully
+open (whole new architecture) — updating the original item's framing
+would require a full rewrite of that section rather than a quick edit,
+so leaving that entry as historical context and pointing here instead.

@@ -72,3 +72,40 @@ def test_load_season_data_applies_authoritative_positions(tmp_path, monkeypatch)
 
     assert len(df) == 1
     assert df.iloc[0]["position"] == "TE"
+
+
+class TestFloorCeiling:
+    """GAPS.md §11.2.C follow-up: asymmetric floor/ceiling replaced the
+    symmetric spread formula after real backtest residuals were confirmed
+    right-skewed (not classically bimodal, but not symmetric either)."""
+
+    def test_floor_never_exceeds_point_estimate(self):
+        for total in [5.0, 50.0, 150.0, 300.0]:
+            for position in ["QB", "RB", "WR", "TE"]:
+                floor, ceiling = gdd._floor_ceiling(total, 0.7, position)
+                assert floor <= total, f"floor {floor} > total {total} for {position}"
+
+    def test_ceiling_never_below_point_estimate(self):
+        for total in [5.0, 50.0, 150.0, 300.0]:
+            for position in ["QB", "RB", "WR", "TE"]:
+                floor, ceiling = gdd._floor_ceiling(total, 0.7, position)
+                assert ceiling >= total, f"ceiling {ceiling} < total {total} for {position}"
+
+    def test_floor_never_negative(self):
+        for total in [1.0, 5.0, 50.0]:
+            floor, _ = gdd._floor_ceiling(total, 0.3, "RB")
+            assert floor >= 0.0
+
+    def test_missing_confidence_falls_back_to_default(self):
+        floor_a, ceiling_a = gdd._floor_ceiling(100.0, None, "WR")
+        floor_b, ceiling_b = gdd._floor_ceiling(100.0, gdd.FLOOR_CEILING_DEFAULT_CONFIDENCE, "WR")
+        assert floor_a == floor_b
+        assert ceiling_a == ceiling_b
+
+    def test_spread_is_asymmetric_around_point_estimate(self):
+        """The whole point of this fix: floor-distance and ceiling-distance
+        should generally differ, unlike the old symmetric formula."""
+        floor, ceiling = gdd._floor_ceiling(120.0, 0.7, "RB")
+        floor_dist = 120.0 - floor
+        ceiling_dist = ceiling - 120.0
+        assert floor_dist != ceiling_dist
