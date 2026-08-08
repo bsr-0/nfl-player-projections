@@ -207,13 +207,36 @@ class UtilizationScoreCalculator:
         return merged
     
     def _calculate_team_totals_from_players(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate team totals from aggregated player data."""
+        """Calculate team totals from aggregated player data.
+
+        team_snaps and team_rush_attempts are true team-level values already
+        present on `df` whenever it's sourced from
+        DatabaseManager.get_all_players_for_training() (player_weekly_stats.team_snaps
+        and the team_stats-joined team_rush_attempts respectively) -- both reflect
+        the whole team for that game, independent of which player rows happen to
+        be in `df` after upstream filtering (min_games, filter_to_eligible_players,
+        or a position-scoped query). Recomputing them from df's own rows would
+        (a) under-count whenever df isn't the complete roster for that game, and
+        (b) for snaps specifically, be wrong even with a complete roster: every
+        snap is one play that ~11 offensive players simultaneously share credit
+        for, so summing individual snap_count double/triple/N-counts the same
+        play instead of reconstructing the team's real play count. Previously
+        this function always recomputed both via groupby-sum and merged with no
+        `suffixes=`, so when a same-named column already existed on `df` (as it
+        always does in live serving/training), pandas silently split it into
+        `team_snaps_x`/`team_snaps_y`, and every per-position share formula's
+        `df.get("team_snaps", snap_count)` fallback then silently self-divided
+        (snap_share_pct = snap_count/snap_count = 100%) instead of erroring --
+        see GAPS.md, 2026-08-08. So: preserve any pre-existing team_snaps/
+        team_rush_attempts untouched, and only fall back to recomputing (using
+        max() for snap_count, not sum(), for the reason above) when truly absent.
+        """
         # Check which columns exist for grouping and aggregation
         group_cols = []
         for col in ["team", "season", "week"]:
             if col in df.columns:
                 group_cols.append(col)
-        
+
         if not group_cols:
             # No grouping possible -- set team totals to NaN so that
             # downstream share calculations produce NaN rather than
@@ -224,36 +247,64 @@ class UtilizationScoreCalculator:
                 "Share-based utilization components will be NaN."
             )
             df = df.copy()
-            df["team_targets"] = np.nan
-            df["team_rush_attempts"] = np.nan
-            df["team_snaps"] = np.nan
+            for col in ["team_targets", "team_rush_attempts", "team_snaps"]:
+                if col not in df.columns:
+                    df[col] = np.nan
             return df
-        
-        # Build aggregation dict based on available columns
-        agg_dict = {}
+
+        # team_snaps/team_rush_attempts: preserve if already present (true
+        # team-level values, not a player-row sum -- see docstring). targets/
+        # receptions have no pre-existing source and are correctly summed
+        # (each target/reception is attributable to exactly one player, unlike
+        # a shared snap), subject to the same roster-completeness caveat.
+        preserve_if_present = {"team_snaps", "team_rush_attempts"}
         col_mapping = {
             "targets": "team_targets",
-            "receptions": "team_receptions", 
+            "receptions": "team_receptions",
             "rushing_attempts": "team_rush_attempts",
             "snap_count": "team_snaps",
         }
-        
+        fallback_agg = {
+            "snap_count": "max",
+            "rushing_attempts": "sum",
+            "targets": "sum",
+            "receptions": "sum",
+        }
+
+        # Build aggregation dict based on available columns
+        agg_dict = {}
         for col, new_name in col_mapping.items():
+            if new_name in preserve_if_present and new_name in df.columns:
+                continue
             if col in df.columns:
-                agg_dict[col] = "sum"
-        
+                agg_dict[col] = fallback_agg[col]
+
         if not agg_dict:
-            # No columns to aggregate
+            # Nothing to recompute -- all target columns already present.
             return df
-        
+
         team_totals = df.groupby(group_cols).agg(agg_dict).reset_index()
-        
+
         # Rename columns
         rename_dict = {col: col_mapping[col] for col in agg_dict.keys()}
         team_totals = team_totals.rename(columns=rename_dict)
-        
-        merged = df.merge(team_totals, on=group_cols, how="left")
-        
+
+        # Defense-in-depth: if a target column unexpectedly already exists
+        # despite the preserve-if-present check above (e.g. a future schema
+        # change), fail loudly via an obviously-wrong suffixed column that
+        # gets dropped-with-warning, instead of silently splitting into a
+        # same-looking column that downstream code can't find by name.
+        merged = df.merge(team_totals, on=group_cols, how="left",
+                           suffixes=("", "_recompute_collision"))
+        collision_cols = [c for c in merged.columns if c.endswith("_recompute_collision")]
+        if collision_cols:
+            import warnings
+            warnings.warn(
+                f"Unexpected team-total column collision: {collision_cols}; "
+                "dropping recomputed duplicates and keeping the pre-existing values."
+            )
+            merged = merged.drop(columns=collision_cols)
+
         return merged
     
     def _calculate_rb_utilization(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -229,11 +229,149 @@ masking it is gone, possibly a benchmark-population mismatch (top RBs
 vs. all RBs). Needs a real, apples-to-apples (matched player
 population) accuracy pass, not just aggregate means — tracked in §5.
 
+**RESOLVED — real apples-to-apples check (2026-08-07, `scripts/validate_rb_te_accuracy.py`):**
+Called the real `NFLPredictor` class (same `initialize()`+`predict(n_weeks=1,
+top_n=2000)` pattern as `generate_app_data.py`, no retraining) against 8 past
+2025 weeks (10-17), joined every prediction 1:1 to the real `fantasy_points`
+actual for that exact player_id/season/week (2,361 matched rows), and split
+by a snap-share-verified starter cut (`utilization_scores.snap_share >= 50`,
+on its native 0-100 scale — see GAPS.md's snap_share data-bug entry for why
+`player_weekly_stats.snap_share` could not be used for this).
+
+| Pos | Cut | n | MAE | RMSE | R² | bias (pred/actual) |
+|---|---|---|---|---|---|---|
+| RB | full population | 618 | 8.42 | 9.45 | -0.254 | 1.73 |
+| RB | starters-only | 204 | 7.18 | 8.79 | 0.017 | **1.20** |
+| TE | full population | 510 | 5.08 | 7.34 | -0.425 | 0.19 |
+| TE | starters-only | 301 | 6.37 | 8.73 | -0.618 | **0.22** |
+
+**RB "runs hot" — mostly a population-mismatch artifact, not a new bug.**
+Bias drops from 1.73x (full eligible pool, including many low-snap
+players) to 1.20x among real starters — a real but modest over-prediction,
+consistent with (smaller than) the pre-existing ~2x RB over-prediction
+documented earlier in this section. Not fully closed, but far less severe
+than the raw aggregate-mean comparison suggested.
+
+**TE zero-median — CONFIRMED REAL BUG, not legitimate backups.** Among
+TE predictions `< 0.5` (n=274), actual `fantasy_points` median is 2.55
+and 43.8% actually scored >3.0 points; 117 of those 274 are snap-share-
+verified starters (`util_snap_share >= 50`). Spot-checked individual rows
+confirm this is severe, not noise: Trey McBride predicted 6.76 / actual
+37.4 (wk15), George Kittle predicted 2.77 / actual 24.7 (wk11), Kyle
+Pitts predicted 4.59 / actual 45.6 (wk15). TE starters-only bias (0.22x)
+is essentially unchanged from the full-population bias (0.19x) — this is
+not a population artifact, it's a genuine live prediction defect
+affecting real starting tight ends. Root cause not yet investigated —
+tracked as a new, sharper item in §5 (was previously a hedge, now a
+confirmed bug).
+
+**FULLY RESOLVED (2026-08-08)**: root-caused to two compounding bugs
+(full mechanism and code changes in GAPS.md's 2026-08-08 entries):
+
+- **Bug #1**: `pbp_stats_aggregator.py`'s `merge_with_snaps()` inflated
+  `player_weekly_stats.team_snaps` ~10x for 2025 by summing every
+  player's individual snap credit instead of the team's real play
+  count. Fixed by deriving `team_snaps` from the median of each
+  player's implied team total (`offense_snaps/offense_pct`, nflverse's
+  own verified per-player share), falling back to `max(offense_snaps)`.
+- **Bug #3** (found while re-auditing before re-ingesting, per explicit
+  request to be skeptical of more bugs in this area — much larger than
+  Bug #1): `UtilizationScoreCalculator._calculate_team_totals_from_players()`
+  (`utilization_score.py`) recomputed `team_snaps`/`team_rush_attempts`
+  via groupby-sum and merged with no `suffixes=` kwarg. Since both
+  columns already existed as true team-level values on the input `df`
+  (from `player_weekly_stats`/`team_stats` joins), the merge silently
+  split them into `team_snaps_x`/`team_snaps_y`, and every per-position
+  share formula's `df.get("team_snaps", snap_count)` fallback then
+  silently self-divided (`snap_share_pct = snap_count/snap_count = 100%`)
+  — a degenerate bimodal 0/100 pattern present in **both training and
+  serving, for every position and every season back to 2018**, not
+  2025-specific. `team_rush_attempts` collided the same way, breaking
+  RB's `rush_share_pct`/`touch_share_pct` too — a second, previously
+  unflagged instance of the same bug, and a plausible contributor to
+  the pre-existing RB over-prediction pattern documented earlier in
+  this section. Fixed by preserving pre-existing `team_snaps`/
+  `team_rush_attempts` instead of shadowing them, with `max()` (not
+  `sum()`) as the fallback aggregator for snap-like columns.
+
+Re-ingested 2025 data, retrained (`--fast --no-tune`), refreshed the
+`utilization_scores` DB table, and re-ran `validate_rb_te_accuracy.py`
+(2025 weeks 10-17, all 4 positions, 2,361 matched rows):
+
+| Pos | Cut | n | MAE | RMSE | R² | bias (pred/actual) | vs. pre-fix bias |
+|---|---|---|---|---|---|---|---|
+| RB | full | 566 | 4.48 | 6.65 | 0.344 | 0.83 | was 1.73 |
+| RB | starters-only | 191 | 6.77 | 9.40 | -0.189 | 0.68 | was 1.20 |
+| WR | full | 884 | 4.52 | 6.42 | 0.213 | 0.82 | was 1.06 |
+| TE | full | 495 | 3.57 | 5.26 | 0.280 | 0.84 | was 0.19 |
+| TE | starters-only | 293 | 4.29 | 6.22 | 0.190 | 0.78 | was 0.22 |
+
+TE near-zero predictions (`<0.5`) collapsed from n=274 to **n=3**. TE
+and RB full-population R² both went from negative to positive. This is
+the real fix, not just a milder version of the earlier
+population-mismatch explanation — both root causes are now confirmed
+and closed.
+
+**New regression surfaced, not caused by this fix**: QB metrics got
+*worse* (full bias 0.68 vs. previous 0.85, R² -0.108 vs. 0.163;
+starters-only bias 0.10, R² -1.75). Root-caused to a **separate,
+pre-existing `players` table bug**: at least 13 real WR/RB/TE players
+(D.Moore, D.Singletary, C.Kmet, J.Waddle, C.Olave, B.Hall, and others —
+confirmed via `passing_attempts<5` combined with real `rushing_attempts`/
+`targets` volume) are mislabeled `position='QB'` in the `players` table.
+The model correctly predicts near-zero passing production for them
+(since they never pass), while their real `fantasy_points` reflects
+genuine receiving/rushing production — a severe, spurious
+under-prediction that drags down the QB slice's aggregate metrics. This
+predates this session and is unrelated to Bugs #1/#3; it's surfaced now
+because the QB predictions are noisier this run, and because it directly
+inflates the "starters-only" QB count (56 vs. the previous run's 6,
+since these mislabeled skill players legitimately clear a snap-share
+starter threshold under a QB label). Logged as a new item in §5; not
+fixed in this session (needs its own investigation into the `players`
+table position-assignment/roster-sync logic in `nfl_data_loader.py`).
+
+**Accepted, documented limitations** (not blocking, see GAPS.md
+2026-08-08 entries for full detail): `team_targets`/`team_receptions`
+(no pre-existing DB source) can still under-count when the input
+population is filtered (`min_games`, `filter_to_eligible_players`, or a
+position-scoped `predict(position=...)` call) — a real but much
+lower-severity issue than the collision bug. The redundant double-call
+to `calculate_all_scores()` in `feature_preparation.py` (lines 330/337)
+was left in place — with the collision fixed, both calls now produce
+identical, stable results, so it's a harmless inefficiency rather than
+a correctness bug; removing it is a separate future cleanup.
+
+**QB regression FIXED (2026-08-08, same session)**: root-caused and
+fixed the mislabeled-QB bug (full mechanism in GAPS.md). Fixed both the
+code (`src/data/pbp_stats_aggregator.py`) and the 30 already-corrupted
+`players` table rows. Verified live (no retrain needed — `predict.py`
+reads `position` straight from the DB): Derrick Henry, Christian
+McCaffrey, Cole Kmet, Jaylen Waddle, and Cooper Kupp all now correctly
+route to their real position's component model with plausible
+predictions. Re-ran `validate_rb_te_accuracy.py`: QB full-population
+bias 0.68→**0.82**, R² -0.108→**0.134** (recovered to essentially the
+pre-regression baseline of 0.85/0.163). "QB starters-only" now
+correctly shows zero rows — real QBs never compute `snap_share_pct` at
+all (`utilization_score.py`'s QB branch doesn't set it), so the
+previous run's 56 "QB starters" were *exactly* the misclassified
+skill players (who do have a real snap share) being counted under the
+wrong label; their removal from the QB slice is the clean, mechanistic
+confirmation that the fix addressed the actual cause, not a
+coincidental improvement.
+
 ---
 
 ## 5. Not yet tried
 
-- [ ] **PRIORITY — §4**: real, apples-to-apples RB/TE accuracy check post-injury-fix (matched player population vs. real actuals, not aggregate means) — RB runs hot (13.81 vs ~8.7), TE median still 0.00 (n=85/147 zero, plausibly legitimate backups, not yet confirmed).
+- [x] ~~real, apples-to-apples RB/TE accuracy check post-injury-fix~~ — done 2026-08-07, see §4. RB "hot" was mostly population mismatch (1.20x bias among real starters, not 1.73x). TE zero-median is a **confirmed real bug**, not legitimate backups.
+- [x] ~~root-cause TE's near-zero live predictions~~ — done 2026-08-07 (same session), see GAPS.md. TE's `receiving_yards` component model's top feature (`snap_share_pct_roll3_mean`, coef=-1.0) is fed a ~10x-deflated value for every 2025 row, a direct downstream effect of the `team_snaps` bug below.
+- [x] ~~fix + verify `pbp_stats_aggregator.py`'s team_snaps inflation~~ — done 2026-08-08. Fixed, re-ingested, retrained, verified.
+- [x] ~~re-run `scripts/validate_rb_te_accuracy.py` post-fix~~ — done 2026-08-08, see §4. TE bias 0.19→0.84, RB bias 1.73→0.83, both R² negative→positive.
+- [x] ~~root-cause + fix Bug #3 (`utilization_score.py` team-total collision)~~ — done 2026-08-08, see §4 and GAPS.md. Was silently degenerate for every position/season since this code existed, not just 2025.
+- [x] ~~mislabeled QB players~~ — fixed 2026-08-08, see GAPS.md. Root-caused, fixed at the code level (`pbp_stats_aggregator.py`), and corrected 30 already-corrupted `players` rows directly. QB metrics recovered fully post-fix (bias 0.68→0.82, R² -0.108→0.134).
+- [ ] Lower priority: `team_targets`/`team_receptions` under-count when input population is filtered (`min_games`, `filter_to_eligible_players`, position-scoped queries) — accepted limitation, see GAPS.md 2026-08-08 entry.
+- [ ] Lower priority: redundant double-call to `calculate_all_scores()` in `feature_preparation.py` (lines 330/337) — harmless now that the collision is fixed (both calls produce identical output), but still wasteful; safe cleanup for later.
 - [ ] `EnsemblePredictor` sanity-bounds clip — does it help or hurt real predictions?
 - [ ] `PositionModel` at production alpha / with tuning on (current numbers used `tune_hyperparameters=False`)
 - [ ] Lookback-depth sweep for §2c (2yr vs 3yr vs 4yr+, 3 was picked arbitrarily)

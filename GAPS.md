@@ -4774,3 +4774,474 @@ QB/WR accuracy improved substantially. RB/TE still need a dedicated,
 apples-to-apples accuracy pass (matched real-vs-predicted player
 populations, not just aggregate means) before calling either "fixed."
 
+---
+
+## Real apples-to-apples RB/TE accuracy check (matched population) — 2026-08-07
+
+Built `scripts/validate_rb_te_accuracy.py` to close the "Not fully
+resolved" gap above. Methodology:
+
+- Calls the real `NFLPredictor` class (`initialize()` +
+  `predict(n_weeks=1, position=None, top_n=2000)`, the exact pattern
+  `scripts/generate_app_data.py` uses in production) — **no retraining**.
+- Targets a *past* week without retraining or editing `src/predict.py`
+  by subclassing `NFLPredictor` (`HistoricalNFLPredictor`, overrides
+  `_load_player_data` to truncate to rows strictly before the target
+  `(season, week)`) and patching the module-level
+  `src.predict.get_prediction_target_week()` per call via
+  `unittest.mock.patch` so `predict()`'s internal season/week overwrite
+  targets the historical week instead of "today."
+- Joins each prediction to `player_weekly_stats.fantasy_points` for the
+  exact same `player_id`/`season`/`week` (inner join; unmatched predicted
+  players — did-not-play — are counted and reported, not silently
+  zero-filled).
+- Reuses `_calc_metrics` from `src/evaluation/ts_backtester.py` for
+  MAE/RMSE/R²; adds a bias ratio (`predicted.mean()/actual.mean()`) as
+  the real apples-to-apples version of the earlier aggregate-mean
+  comparison.
+- Splits full population vs. a snap-share-verified "starters-only" cut
+  (`utilization_scores.snap_share >= 50`, its native 0-100 scale) to
+  separate real population-mismatch effects from genuine prediction bugs.
+
+**Critical caveat**: `data/models/model_metadata.json` shows the
+currently-serving model's `train_seasons` includes 2025 — every week
+validated here (10-17) is in-sample. This is a **serving-path plumbing
+check** (did the injury-prob fix produce sane, correctly-matched
+per-player numbers), not a generalization/skill measurement. Real
+out-of-sample numbers are `ts_backtester.py`'s walk-forward retrain
+(TRACKING.md §2a: RB R²=0.341, TE R²=0.236, real 2025 holdout).
+
+**Results** (2,361 matched rows, 2025 weeks 10-17, all 4 positions run
+for context; full table in TRACKING.md §4):
+
+- **RB "runs hot" is mostly a population-mismatch artifact.** Bias
+  1.73x on the full eligible pool (min_games=1, includes many low-snap
+  players) drops to 1.20x among real starters. A real but modest
+  over-prediction remains — smaller than, but consistent with, the
+  pre-existing ~2x RB over-prediction documented elsewhere in this file
+  — not a new or newly-severe issue.
+- **TE zero-median is a confirmed real bug, not legitimate backups.**
+  TE starters-only bias is 0.22x, barely different from the full-
+  population 0.19x — ruling out "these are just backups" as an
+  explanation. Among near-zero predictions (`<0.5`, n=274), actual
+  median is 2.55 and 43.8% actually scored >3.0; 117 of those 274 are
+  snap-share-verified starters. Spot-checked individually: Trey McBride
+  predicted 6.76 / actual 37.4 (wk15), George Kittle predicted 2.77 /
+  actual 24.7 (wk11), Kyle Pitts predicted 4.59 / actual 45.6 (wk15).
+  These are real starting/high-usage tight ends the live model is
+  severely under-predicting. **Root cause found (2026-08-07, same
+  session)**: this is a direct downstream effect of the
+  `player_weekly_stats.team_snaps` inflation bug documented in the next
+  entry. `snap_share_pct_roll3_mean` (raw `snap_count/team_snaps*100`,
+  rolled 3-game) is TE's most heavily-weighted `receiving_yards`
+  component feature (`coef=-1.0045`, largest-magnitude coefficient in
+  that model). For 2025 rows this feature computes to ~2.9 instead of
+  its healthy ~55-90 range, and the component model's internal
+  `StandardScaler` (fit mostly on healthy 2018-2024 data, mean≈0.30 on
+  whatever scale it was fit on) turns that into a wildly out-of-distribution
+  z-score, which the large negative coefficient then converts into a
+  large, spurious downward pull on every 2025 TE prediction. Reproduced
+  directly: manually inspecting McBride's wk15 feature row and the
+  model's `predict_components()` output confirmed abnormal input →
+  crushed output, end to end. Fixing the upstream `team_snaps` bug
+  (below) and retraining should resolve this; not yet verified with a
+  post-fix retrain (that's the next step, tracked in TRACKING.md §5).
+
+**Side-effect finding**: building the starters-only cut surfaced a
+separate real data bug — `player_weekly_stats.snap_share` is broken for
+season 2025 specifically. Documented in its own entry immediately below.
+
+---
+
+## Data bug found in passing: `player_weekly_stats.snap_share` is broken for 2025 only — 2026-08-07
+
+Discovered while building the starters-only cut for the RB/TE accuracy
+check above: `player_weekly_stats.snap_share` for season 2025 is capped
+at 0-0.18 (mean 0.059), while every other season (2018-2024) has the
+expected 0-1 range with mean ~0.55:
+
+| Season | min | max | mean |
+|---|---|---|---|
+| 2018 | 0.0 | 1.0 | 0.570 |
+| 2020 | 0.0 | 1.0 | 0.541 |
+| 2022 | 0.0 | 1.0 | 0.556 |
+| 2023 | 0.0 | 1.0 | 0.546 |
+| 2024 | 0.0 | 1.0 | 0.553 |
+| **2025** | **0.0** | **0.184** | **0.059** |
+
+Real starters (e.g. Trey McBride, a clear 90%+ snap-share TE1) show
+`player_weekly_stats.snap_share = 0.084` for 2025 wk15, while
+`utilization_scores.snap_share` (same player/week, computed separately)
+correctly shows `92.4` — confirming `utilization_scores.snap_share` is
+healthy (just on a 0-100 scale, not 0-1) and the bug is isolated to
+`player_weekly_stats.snap_share`'s 2025 computation.
+
+**ROOT CAUSE CONFIRMED (2026-08-07, follow-up session)**: `team_snaps`
+in `player_weekly_stats` is set in `pbp_stats_aggregator.py`'s
+`merge_with_snaps()` (`snap_share = snap_count / team_snaps`, lines
+410-414), where `team_snaps` is computed as
+`snap_pos.groupby(['season','week','team'])['offense_snaps'].sum()`
+(lines 371-376) — **summing every individual player's own snap count
+for the team/week, instead of the team's actual offensive play count.**
+Since ~11+ offensive players are each credited with most of the same
+~55-75 snaps that game, summing them inflates `team_snaps` to roughly
+(avg snaps per player × number of credited players) ≈ 10x the real
+per-game play count. Verified directly against the real
+`nfl_data_py.import_snap_counts()` source data (which is itself
+completely healthy — Trey McBride wk15 2025: `offense_snaps=61`,
+`offense_pct=0.92`, matching `player_weekly_stats.snap_count=61` and
+`utilization_scores.snap_share=92.4` exactly):
+
+| | 2023 wk10 ARI | 2025 wk10 ARI |
+|---|---|---|
+| players credited with snaps | 47 | 48 |
+| sum(offense_snaps) | 715 | 836 |
+| max(offense_snaps) (real team play count) | 65 | 76 |
+
+**Why only 2025 is affected**: this summing bug exists identically in
+every season's raw snap-count source (2023 shows the same ~11x
+inflation pattern if you sum instead of max) — but it only reaches
+`player_weekly_stats` for the season(s) that are ingested via the PBP
+reconstruction fallback path (`pbp_stats_aggregator.merge_with_snaps`,
+`nfl_data_loader.py:329-338`), which is used when `nfl_data_py`'s
+official aggregated weekly stats aren't yet published for a season —
+i.e. the **current, in-progress season only**. Completed historical
+seasons (2018-2024) are ingested via the standard
+`nfl.import_weekly_data()` path, which sources `team_snaps` correctly
+and was never affected. This means the bug isn't 2025-specific in any
+special sense — it's "whichever season is currently in-progress at
+ingestion time," so it will recur for 2026 once that season starts
+unless fixed. **Minimal fix**: replace `.sum()` with `.max()` in the
+`team_snaps` groupby at `pbp_stats_aggregator.py:371-376` (the
+highest-snap player on a team is a reasonable proxy for total team
+plays); the technically correct fix is to derive team offensive play
+count directly from `self.pbp_data` (already available in the same
+class) rather than from summed player-level snap credits at all.
+
+**Impact — confirmed to reach live training/serving features, not just
+this diagnostic script.** `feature_engineering.py`'s
+`_create_advanced_requirement_features` (called from the main
+`create_features()` pipeline, line 230 — used by both training via
+`feature_preparation.py` and serving via `predict.py`'s
+`_prepare_features`) computes `is_three_down_back` directly from the raw
+`snap_share` column (lines 3143-3152): `snap_roll >= 0.5` gated on a
+4-game rolling mean of `df["snap_share"]`. For 2025 rows this column
+tops out at 0.184, so `snap_roll >= 0.5` can never be true —
+`is_three_down_back` is silently always 0 for every RB in 2025,
+in both training data and live predictions. Separately,
+`train_position_models.py`'s `POSITION_FEATURES` also lists raw
+`snap_share`/`snap_share_roll3` as primary/rolling features for
+RB/WR (lines 27, 48+) — not yet confirmed whether `PositionModel`/
+`train_position_models.py` is on the currently-live training path or a
+dormant one (check TRACKING.md's model registry); if live, those
+features are corrupted for 2025 too. `preseason_projector.py` and
+`preseason_features.py` are unaffected — they already source
+`snap_share` from `utilization_scores` (`us.snap_share`/`COALESCE`),
+not `player_weekly_stats`.
+
+**Should not be trusted until fixed**: any 2025-dated `snap_share`,
+`snap_count`, `team_snaps`, or `is_three_down_back` value sourced from
+`player_weekly_stats` — training features, live predictions, and
+starter/backup classification alike. `utilization_scores.snap_share`
+(0-100 scale) is unaffected and was used instead for
+`validate_rb_te_accuracy.py`'s starter cut.
+
+**FIXED (2026-08-08)**: `pbp_stats_aggregator.py`'s `merge_with_snaps()`
+now derives `team_snaps` from the median of each player's implied team
+total (`offense_snaps / offense_pct`, nflverse's own already-verified
+per-player share — `offense_pct` was present in the source data all
+along but unused), falling back to `max(offense_snaps)` when
+`offense_pct` is unavailable. Verified directly against real 2025 data
+before re-ingesting: Trey McBride's `team_snaps` now comes out 55-84
+per game (was 605-924), `snap_share` 0.84-0.97 (was 0.08-0.09),
+matching `offense_pct` almost exactly. Re-ingested via
+`python -m src.data.nfl_data_loader --seasons 2025` (after deleting the
+stale `pbp_advanced_2025.parquet`/`pbp_team_advanced_2025.parquet`
+caches, which otherwise silently reuse the pre-fix values). DB
+confirmed healthy post-ingestion: `player_weekly_stats.snap_share` for
+2025 now has min=0.0, max=1.0, avg=0.56 (was avg=0.059), matching every
+other season's ~0.55 average exactly.
+
+---
+
+## Bug #3 (much larger than Bug #1): `utilization_score.py` team-total merge collision — silently degenerate since this code existed, not just 2025 — 2026-08-08
+
+Found while re-auditing for more bugs before re-ingesting Bug #1's fix,
+per explicit instruction to be skeptical of the code already written.
+This is a separate, pre-existing, larger defect than the `team_snaps`
+inflation above.
+
+**Root cause**: `UtilizationScoreCalculator._calculate_team_totals_from_players()`
+(`src/features/utilization_score.py`, then lines 209-257) computed
+team-level totals by grouping the input `df` on `['team','season','week']`
+and summing each player's own stat (`snap_count→team_snaps`,
+`rushing_attempts→team_rush_attempts`, `targets→team_targets`,
+`receptions→team_receptions`), then merged with **no `suffixes=`
+kwarg**. This is invoked via `_merge_player_team_data()` whenever
+`team_df` doesn't have ≥3 of a specific 7-column list — i.e. whenever
+`team_df` is the empty `pd.DataFrame()`, which is how **every live
+production path** calls it: `predict.py:629` (serving),
+`feature_preparation.py:330/337/344` (training, called twice),
+`backtester.py:1597`, `utilization.py:299` (feeds
+`scripts/generate_app_data.py`, the production web app's data),
+`realtime_integration.py:195`, `audit_2025_backtest.py`.
+
+The input `df` (from `DatabaseManager.get_all_players_for_training()`)
+**already has** genuinely-correct, true team-level `team_snaps` (from
+`player_weekly_stats.team_snaps`) and `team_rush_attempts` (from the
+`team_stats` join, `database.py:2016`) columns before this function
+ever runs. Because the freshly-aggregated totals frame produced columns
+with the *same names*, the no-`suffixes` merge silently split them into
+`team_snaps_x`/`team_snaps_y` and `team_rush_attempts_x`/
+`team_rush_attempts_y` instead of clean columns. Downstream, every
+per-position share formula does `df.get("team_snaps", snap_count)` /
+`df.get("team_rush_attempts", rushing_attempts)` — since the exact name
+no longer existed post-collision, `.get()` silently fell back to the
+player's **own** count, producing `snap_share_pct =
+snap_count/snap_count*100 = 100` (self-division) for every player with
+nonzero snaps (0 for zero-snap players) — and identically for
+`rush_share_pct`/`touch_share_pct` via `team_rush_attempts` (a second,
+previously-unflagged instance of the same collision, affecting RB
+specifically — a plausible contributor to the pre-existing RB
+over-prediction pattern documented in TRACKING.md, independent of the
+TE-focused investigation that found this).
+
+**Verified this predates 2025 and isn't season-specific**: reproduced
+identically on both a live-serving-shaped call and a training-shaped
+call on 2018-2024 historical data — `snap_share_pct` came out bimodal
+(exactly 0 or exactly 100), not a real percentage distribution, in
+both cases. This has been silently degenerate since this code path
+existed, not something introduced this session or specific to 2025.
+
+**Train/serve distribution mismatch, not just "consistently wrong"**:
+`feature_preparation.py` calls `calculate_all_scores()` **twice** in a
+row on `train_data` (lines 330 and 337, sandwiched around
+`fit_percentile_bounds`). Call 1 collides `team_snaps`/
+`team_rush_attempts` (self-division, as above) but leaves
+`team_targets`/`team_receptions` clean (they have no pre-existing
+source, so nothing to collide with on call 1). Call 2 re-runs on call
+1's *output*: `team_snaps`/`team_rush_attempts` now merge in cleanly
+(call 1 already shadowed the originals to `_x`/`_y`), but using
+`_calculate_team_totals_from_players`'s own sum of `snap_count` across
+**all four positions** on that team/week simultaneously — not the true
+single-team play count — deflating the ratio ~4-5x (this is why the
+saved `feature_scaler_bounded.joblib`'s fit-time `data_max_` for
+`snap_share_pct`/`snap_share_pct_roll3_mean` was ~34-41, not the
+bimodal 100 a single call produces — resolves a loose thread flagged
+honestly-unresolved in the original TE-crush entry above). **Serving
+only calls this once** (`predict.py:629`), so it got the bimodal 0/100
+self-division version — training and serving were seeing genuinely
+different, both-wrong distributions for these features, not just a
+shared wrong one.
+
+**Blast radius confirmed via full codebase search**: the "healthy"-
+looking stored `utilization_scores` DB table (populated by
+`scripts/repopulate_utilization.py`, which passes a real `team_df` from
+`db.get_team_stats()` and so never hits `_calculate_team_totals_from_players`
+at all) is not a safe alternate source in practice — every live
+pipeline that runs `get_all_players_for_training()` (which SQL-joins
+the healthy `util_snap_share`/`util_target_share`/etc. from that same
+table) and *then* calls `calculate_all_scores()` **overwrites those
+exact column names in place** with the freshly-recomputed (buggy)
+values (`utilization_score.py` RB/WR/TE branches). Feature-selection
+leakage filtering (`src/utils/leakage.py`) only excludes the bare
+`utilization_score`/`utilization_score_raw` column names — `snap_share_pct`,
+`rush_share_pct`, `touch_share_pct`, `util_snap_share`, `util_target_share`,
+`util_rush_share`, `util_rolling_*`, `util_lag_*` are all live input
+features to `ComponentPredictor`/`EnsemblePredictor`. `utilization_score_raw`
+(built from the same buggy `_pct` columns) also feeds `target_util_1w/4w/18w`
+training-label construction, used by `fit_utilization_weights`/
+`train_utilization_to_fp_per_position` regardless of the primary
+per-week target mode.
+
+**Fix** (`src/features/utilization_score.py`,
+`_calculate_team_totals_from_players`): preserve pre-existing
+`team_snaps`/`team_rush_attempts` instead of recomputing/shadowing
+them (they reflect the true team for that game regardless of which
+player rows happen to be in `df` after upstream filtering); only
+fall back to computing them when genuinely absent, using `max()` (not
+`sum()`) for `snap_count` specifically — a snap is one play that ~11
+players simultaneously share credit for, so summing double/triple/
+N-counts the same play, same reasoning as Bug #1's fix.
+`team_targets`/`team_receptions` keep `sum()` (correct in principle —
+each target/reception is attributable to exactly one player). Added an
+explicit `suffixes=("", "_recompute_collision")` to the merge as
+defense-in-depth: if a future schema change reintroduces a name
+collision, it now fails loudly (a warning + an obviously-wrong column
+that gets dropped) instead of silently degrading into self-division
+again.
+
+**Verified in isolation before re-ingesting**: on 2018-2024
+training-shaped data, `team_snaps`/`team_rush_attempts` are now clean
+single columns (no `_x`/`_y` split); `rush_share_pct` for RB went from
+bimodal to a smooth distribution (mean 25.8%, median 15.4%, p75 47.4%,
+max 100%); real bell-cow spot checks are plausible (Ja'Marr Chase 2022
+wk1 and Rob Gronkowski 2018 wk20 playoffs both correctly hit exactly
+100% snap share on games where they played every snap). Calling
+`calculate_all_scores()` twice in a row (matching `feature_preparation.py`'s
+pattern) now produces byte-identical output both times (previously
+diverged, per the deflated-vs-bimodal discrepancy above) — the
+defensive `suffixes=` logic correctly catches and drops the
+second call's `team_targets`/`team_receptions` collision too, even
+though those two columns weren't explicitly added to the
+preserve-if-present set (an emergent side benefit of the generic
+defense-in-depth mechanism, not something specifically designed for).
+
+**Not fixed, deliberately left as-is**: the redundant double-call in
+`feature_preparation.py` (lines 330/337) — with the collision fixed,
+both calls now produce identical, stable output, so it's a harmless
+inefficiency rather than a correctness bug. It exists to re-run
+`_norm`/`utilization_score` normalization after `fit_percentile_bounds`
+runs between the two calls; removing it entirely is a separate,
+lower-priority cleanup, not attempted this session to keep the fix
+minimal and targeted.
+
+**Accepted, documented limitation**: even with this fix,
+`team_targets`/`team_receptions` (which have no pre-existing DB source
+to preserve) can still under-count whenever the input `df` is a
+filtered subset of the real roster for that game — training's
+`min_games=4` default (`src/models/data_loading.py:21`), `predict.py`'s
+`filter_to_eligible_players` (drops all historical rows for players
+outside a recent-seasons eligibility window), or a position-scoped
+`predict(position=...)` call (would sum only one position's players per
+team, missing the other three positions' contribution entirely). This
+is real but much lower-severity than the collision bug (a legitimate
+approximation that can undercount, vs. a catastrophic bimodal
+degenerate value) — not fixed this session, no clean available fix
+without a genuine team-level targets/receptions data source.
+
+## Full re-verification after both fixes — 2026-08-08
+
+Re-ingested 2025 data, retrained (`--fast --no-tune`, per the earlier
+documented OOM constraint on full Optuna tuning), refreshed the
+`utilization_scores` DB table via `repopulate_utilization.py`, and
+re-ran `scripts/validate_rb_te_accuracy.py` (2025 weeks 10-17, all 4
+positions, 2,361 matched rows). Full results table in TRACKING.md §4.
+Headline: TE bias 0.19x→0.84x (R² -0.425→0.280), RB bias 1.73x→0.83x
+(R² -0.254→0.344), TE near-zero predictions n=274→n=3. Both root
+causes are confirmed fixed, not just mitigated.
+
+**New, separate bug surfaced by the re-run (not caused by this
+session's fixes)**: QB metrics got worse (bias 0.68 vs. previous 0.85;
+starters-only bias 0.10, R²=-1.75). Investigated and root-caused to a
+**pre-existing `players` table data-quality bug**: at least 13 real
+WR/RB/TE players are mislabeled `position='QB'` — confirmed via SQL
+(`passing_attempts<5` combined with real `rushing_attempts`/`targets`
+volume): D.Moore, D.Singletary, G.Olszewski, J.Jennings, C.Kmet,
+J.Waddle, C.Olave, T.Burks, B.Hall, I.Williams, T.Warren, R.Harvey,
+Q.Judkins. Spot-checked directly: `predict()`'s own live output labels
+Derrick Henry (`player_id=00-0032764`, a real RB) as `position='QB'`,
+sourced straight from the `players` table (`SELECT position FROM
+players WHERE player_id='00-0032764'` returns `'QB'`). The model
+correctly predicts near-zero passing production for these players
+(they genuinely never pass), while their real `fantasy_points` reflects
+real receiving/rushing volume — a severe, spurious under-prediction
+that drags down the QB slice's aggregate metrics and inflates the
+apparent "starters-only" QB count (56 this run vs. 6 previously, since
+these mislabeled skill players legitimately clear a snap-share starter
+threshold under the wrong position label). This predates this session
+entirely and is unrelated to Bugs #1/#3.
+
+---
+
+## Bug #4: mislabeled-QB root cause found and fixed — trick-play passes corrupt `players.position` permanently — 2026-08-08
+
+Root-caused the QB mislabeling bug flagged above, at the request to fix
+it (not just log it).
+
+**Mechanism**: `pbp_stats_aggregator.py`'s `aggregate_passing_stats()`
+hardcodes `position='QB'` (line ~197) for every row with a pass
+attempt — correct for genuine QBs. `aggregate_rushing_stats()`/
+`aggregate_receiving_stats()` produce separate rows for the same player
+with no position set at all. `aggregate_all_stats()` then does
+`all_stats = pd.concat([passing, skill], ...)`, and for any player who
+both passed *and* rushed/received in the same game (a real dual-threat
+QB — or a real RB/WR who threw a single trick-play/wildcat pass, like
+Derrick Henry or Christian McCaffrey), this produces two rows for the
+same `(player_id, season, week)` key. The duplicate-collapse step
+(lines ~566-579) summed numeric stats correctly but took `"first"` for
+string columns including `position` — and since the passing row was
+concatenated first, `"first"` always picked the hardcoded `'QB'`, even
+for a player whose real activity that week was 12 carries and 1 target
+plus a single trick-play pass attempt.
+
+That mislabeled row then flowed into `nfl_data_loader.py`'s
+`_store_weekly_data()`, which calls `db.insert_player({'position':
+row['position'], ...})` (`INSERT OR REPLACE`) for **every** weekly row
+during ingestion — so whichever week for that player_id happened to be
+processed last in that ingestion's row order determined the player's
+permanently-stored `players.position`. Once corrupted, it stayed
+corrupted indefinitely: `pbp_stats_aggregator.py`'s `_infer_position()`
+checks the `players` table lookup *before* its own heuristic
+(intentionally, per the 2026-04-25 fix documented in its docstring, to
+prefer the "authoritative" stored value) — so even on a subsequent,
+otherwise-correct re-ingestion, the cached wrong value would keep
+winning over any fresh inference, for every week of that player's
+career, not just the trick-play week. This explains why the corruption
+was permanent rather than self-correcting on the next data refresh.
+
+Confirmed this is a real, wide-reaching, pre-existing bug, not new:
+broadened the detection query (career `passing_attempts` vs.
+`rushing_attempts + targets`) and found **30** affected players (not
+just the 13 first spotted), including Derrick Henry, Christian
+McCaffrey, Cooper Kupp, D.J. Moore, Courtland Sutton, Cole Kmet, Jaylen
+Waddle, Chris Olave, Breece Hall, Devin Singletary, David Montgomery,
+and 19 lower-profile/sparse-data players. **Deliberately excluded**
+Taysom Hill (`00-0033357`, 310 career passing attempts) from the
+automatic correction — he's a genuine hybrid QB/gadget player with real
+meaningful passing volume, not a trick-play mislabel, and deciding his
+"true" position is a real judgment call, not a bug fix.
+
+**Fix, two parts, both required for durability**:
+1. Code (`pbp_stats_aggregator.py`): the duplicate-collapse step no
+   longer takes `"first"` for `position` — it's dropped from the
+   collapse entirely (set to `NaN` for every collapsed row), so
+   `_infer_position()` (called afterward on the full frame) decides
+   using the *summed* stats and the players-table lookup, not an
+   arbitrary row-concat order. Also hardened `_infer_position()`'s
+   heuristic itself as defense-in-depth (for players not yet in the
+   `players` table): it previously returned `'QB'` for *any* nonzero
+   `passing_attempts`; it now requires `passing_attempts >= 5 AND
+   passing_attempts >= (rushing_attempts + targets)` — passing must be
+   the dominant activity, not merely present.
+2. Data: the code fix alone doesn't retroactively correct already-
+   stored bad values (and wouldn't durably override them either, since
+   the players-table lookup is checked *before* the heuristic and would
+   keep returning the old wrong value). Directly corrected the 30
+   affected `players` rows via a data-driven SQL correction (same
+   rush-vs-target logic as the heuristic: RB if `rushing_attempts >
+   targets`, else TE if `receiving_yards/targets < 8`, else WR).
+
+**Verified end-to-end, no retrain needed**: re-ran
+`PBPStatsAggregator().aggregate_all_stats(season=2025)` fresh — Derrick
+Henry's week 3 (the actual trick-play week, `passing_attempts=1`) now
+correctly shows `position='RB'`, matching all his other 16 weeks
+(previously only that one week would have re-corrupted on a future
+re-ingestion). Live `predict()` call confirms Henry, McCaffrey, Kmet,
+Waddle, and Kupp all now route to their correct position's component
+model with plausible predictions (no retrain required — `predict.py`
+reads `position` live from the DB via `get_all_players_for_training`'s
+SQL join, not a baked-in training artifact). Re-ran
+`scripts/validate_rb_te_accuracy.py`: QB full-population bias
+0.68→**0.82**, R² -0.108→**0.134** (recovered to essentially the
+pre-regression baseline of 0.85/0.163 from before this whole
+investigation started). "QB starters-only" now correctly shows zero
+rows — real QBs never compute `snap_share_pct` at all (confirmed
+earlier in this file: `utilization_score.py`'s QB branch doesn't set
+it), so the previous run's 56 "QB starters" were *exactly* the
+misclassified skill players (who do have a real snap share) being
+counted under the wrong label. Their disappearance from the QB slice
+is the clean mechanistic confirmation that the fix addressed the real
+cause.
+
+**Not fixed / accepted judgment calls**: Taysom Hill's position was
+deliberately left as-is (see above — a real ambiguous case, not a bug).
+The ~7 near-zero-data players in the correction set (empty names,
+1-3 total career plays recorded) were corrected using the same logic
+as everyone else, but with such sparse data the "correct" position is
+low-confidence either way — low-impact given how little they
+contribute to any model. No full historical re-ingestion was run (the
+code fix is self-healing for future ingestions of any season; the
+targeted `players`-table correction fixes the current state without
+needing to reprocess 2006-2025 from scratch).
+

@@ -368,12 +368,48 @@ class PBPStatsAggregator:
 
         snap_pos['name'] = snap_pos['player']
         snap_pos['snap_count'] = snap_pos['offense_snaps'].fillna(0).astype(int)
-        team_snaps = (
+
+        # team_snaps = the team's actual offensive play count for that game.
+        # Previously computed via groupby(...)['offense_snaps'].sum() --
+        # summing every individual player's own snap count instead of the
+        # team's actual play count. Since ~11+ offensive players are each
+        # credited with most of the same ~55-75 snaps that game, this
+        # inflated team_snaps to roughly (avg snaps per player * num
+        # credited players), ~10x the real total -- crushing every derived
+        # snap_share/snap_share_pct feature for whichever season is
+        # ingested via this PBP path (GAPS.md, 2026-08-07, "team_snaps
+        # inflation" entry). Prefer the team total implied by each
+        # player's own offense_pct (nflverse's own verified per-player
+        # share: offense_snaps / offense_pct); the median across the
+        # team/week is robust to individual rounding noise. Fall back to
+        # max(offense_snaps) -- the single most-used player, a reasonable
+        # proxy for total team plays -- when offense_pct is unavailable.
+        if 'offense_pct' in snap_pos.columns:
+            implied = np.where(
+                snap_pos['offense_pct'] > 0,
+                snap_pos['offense_snaps'] / snap_pos['offense_pct'],
+                np.nan,
+            )
+            team_snaps = (
+                pd.DataFrame({
+                    'season': snap_pos['season'], 'week': snap_pos['week'],
+                    'team': snap_pos['team'], '_implied': implied,
+                })
+                .groupby(['season', 'week', 'team'], as_index=False)['_implied']
+                .median()
+                .rename(columns={'_implied': 'team_snaps'})
+            )
+        else:
+            team_snaps = pd.DataFrame(columns=['season', 'week', 'team', 'team_snaps'])
+        max_snaps = (
             snap_pos.groupby(['season', 'week', 'team'], as_index=False)['offense_snaps']
-            .sum()
-            .rename(columns={'offense_snaps': 'team_snaps'})
+            .max()
+            .rename(columns={'offense_snaps': 'team_snaps_max'})
         )
-        team_snaps['team_snaps'] = team_snaps['team_snaps'].fillna(0).astype(int)
+        team_snaps = max_snaps.merge(team_snaps, on=['season', 'week', 'team'], how='left')
+        team_snaps['team_snaps'] = team_snaps['team_snaps'].fillna(team_snaps['team_snaps_max'])
+        team_snaps = team_snaps.drop(columns=['team_snaps_max'])
+        team_snaps['team_snaps'] = team_snaps['team_snaps'].round().fillna(0).astype(int)
         snap_pos = snap_pos.merge(team_snaps, on=['season', 'week', 'team'], how='left')
         snap_pos['team_snaps'] = snap_pos['team_snaps'].fillna(0).astype(int)
 
@@ -527,8 +563,21 @@ class PBPStatsAggregator:
             if col in all_stats.columns:
                 all_stats[col] = all_stats[col].fillna(0)
 
-        # QBs who rush appear in both passing and skill groups — merge duplicate rows
-        # by summing numeric stats and taking the first value for string columns.
+        # Players who both passed AND rushed/received in the same game appear
+        # in both the passing and skill groups — merge duplicate rows by
+        # summing numeric stats. String columns default to "first", but
+        # `position` must NOT: `aggregate_passing_stats` hardcodes
+        # position='QB' (line ~197) for anyone with a pass attempt, including
+        # a single trick-play pass thrown by a real RB/WR (Derrick Henry,
+        # Christian McCaffrey, etc.) — since the passing row is concatenated
+        # first (`all_stats = pd.concat([passing, skill], ...)` above),
+        # "first" always picks 'QB' over the skill row's real position for
+        # these dual-source rows, permanently corrupting `players.position`
+        # on the next ingestion of that week (INSERT OR REPLACE, no
+        # correction mechanism -- see GAPS.md, 2026-08-08). Instead, drop
+        # `position` from this collapse entirely so `_infer_position` (called
+        # below on the full frame) decides it from the SUMMED stats plus the
+        # players-table lookup, not an arbitrary row-concat order.
         _key = ["player_id", "season", "week"]
         if all_stats.duplicated(subset=_key, keep=False).any():
             valid_id = all_stats["player_id"].astype(str).str.strip() != ""
@@ -537,9 +586,11 @@ class PBPStatsAggregator:
             if not to_collapse.empty:
                 _num = to_collapse.select_dtypes(include="number").columns.difference(_key).tolist()
                 _str = to_collapse.columns.difference(_key).difference(_num).tolist()
+                _str_no_pos = [c for c in _str if c != "position"]
                 _agg = {c: "sum" for c in _num}
-                _agg.update({c: "first" for c in _str})
+                _agg.update({c: "first" for c in _str_no_pos})
                 to_collapse = to_collapse.groupby(_key, as_index=False, sort=False).agg(_agg)
+                to_collapse["position"] = np.nan
                 all_stats = pd.concat([keep, to_collapse], ignore_index=True)
 
         # Extract opponent from PBP data
@@ -614,12 +665,20 @@ class PBPStatsAggregator:
             if cached:
                 return cached
 
-        # If has passing attempts, likely QB
-        if row.get('passing_attempts', 0) > 0:
+        # If passing is the dominant activity, likely QB. A bare nonzero
+        # passing_attempts (typically exactly 1) is common for trick-play
+        # passes thrown by RBs/WRs (Derrick Henry, Christian McCaffrey,
+        # etc.) -- require passing to meaningfully dominate rush/target
+        # volume, not just be present, or a single-trick-play game
+        # misclassifies a real skill player as QB (GAPS.md, 2026-08-08).
+        pass_att = row.get('passing_attempts', 0) or 0
+        rush_att = row.get('rushing_attempts', 0) or 0
+        tgt = row.get('targets', 0) or 0
+        if pass_att >= 5 and pass_att >= (rush_att + tgt):
             return 'QB'
 
         # If has rushing attempts but few/no targets, likely RB
-        if row.get('rushing_attempts', 0) > row.get('targets', 0):
+        if rush_att > tgt:
             return 'RB'
 
         # Distinguish TE from WR: TEs typically have fewer receiving yards per
