@@ -112,6 +112,121 @@ disabled — kept here as the historical record of why.
 | TD mean-reversion (`TouchdownRegressor`) | — | Confirmed **disabled**, not tested against enabled | **Removed** (`TouchdownRegressor` class deleted from `production_model.py`, its already-commented-out call site in `ensemble.py` deleted, `validate_methodology.py`'s check for it deleted) — was already inert. |
 | Asymmetric floor/ceiling vs. old symmetric formula | real 2023-2025 holdout, per-side coverage | **Real win.** Symmetric: floor breached 2.5% (target 6.7%, over-conservative), ceiling breached 7.6%. Asymmetric: 7.5%/7.5%, both near target. 3x reduction in per-side miscalibration. | **Kept** — the only step (`scripts/generate_draft_data.py`) with a measured real accuracy win. |
 
+### 2f. Target-mode comparison (fp vs util vs component, v30 features, 2025 holdout, real)
+
+First real apples-to-apples 3-way, 4-position comparison — prior record
+(`data/models/qb_target_choice.json`) was QB-only and predates
+`FEATURE_VERSION=30` and the 2026-08-08 bug fixes. Ran
+`scripts/run_ts_backtest.py --season 2025 --target-mode {fp,util,component}`
+(same harness/season/model as §2a, ridge, all defaults) — all 3 runs
+produced identical n=5,612 (same eligible-player population, differ only
+in target mode).
+
+| Pos | fp R² / MAE | util R² / MAE | component R² / MAE |
+|---|---|---|---|
+| QB | 0.244 / 6.44 | 0.184 / 6.87 | 0.242 / 6.45 |
+| RB | 0.380 / 4.76 | -0.046 / 6.64 | 0.380 / 4.76 |
+| WR | 0.283 / 4.69 | 0.006 / 5.65 | 0.285 / 4.66 |
+| TE | 0.279 / 3.82 | 0.011 / 4.49 | 0.280 / 3.81 |
+| **Agg** | **0.358 / 4.73** | **0.096 / 5.81** | **0.359 / 4.72** |
+
+**`util` is clearly worse across every position** (agg R² 0.096 vs.
+~0.358, RB even goes negative) — predicting a utilization score and
+converting to FP loses real signal versus predicting points-relevant
+targets directly. **`fp` and `component` are statistically tied**
+(agg R² 0.358 vs. 0.359, MAE 4.73 vs. 4.72, per-position deltas all
+≤0.002 R²) — confirms production's current all-`component` config
+(`config/settings.py`'s `MODEL_CONFIG["position_target_type"]`) is a
+real, validated choice under the current feature set, not a stale
+default. **No config change warranted** — `component` retains the
+inherent advantage of also producing the individual stat-line
+breakdown (pass_yds, rush_tds, etc.) that `fp` mode can't, at no
+accuracy cost.
+
+fp-mode run also served as this task's sanity check against §2a: n=5,612
+matched exactly, MAE 4.73 matched exactly, agg R² 0.358 vs. §2a's 0.335
+(small real drift, consistent with the 2026-08-08 data fixes landing
+since §2a was measured — not a tooling regression).
+
+### 2g. Real walk-forward validation of §2c (season-total, expanding window, `scripts/walk_forward_preseason.py`)
+
+§2b/§2c were a single pooled 2023-2025 holdout — exactly the kind of
+one-shot split §6 warns is unstable on small samples. Reran as a real
+expanding-window walk-forward: for each test season, fit fresh on every
+season strictly before it, score on that season alone, repeat. First
+pass used every season back to 2007 (`--min-train-seasons 3`) and
+surfaced the pitfall directly — 2011/2012 folds (trained on only
+2006-2010, thin/pre-modern-feature data) scored R²=-0.61 and -2.55,
+wildly unstable. Restricted to the modern-feature era relevant to
+production today (test seasons 2019-2025, 7 folds) for the numbers
+below. **Candidate here is a single Ridge-on-full-features fit per
+position** (the §2c WR/TE winning architecture) — it does not
+reproduce QB's nonlinear `PositionModel` or RB's `UpstreamCalibrator`
+variants, which were never captured in a reusable script; out of scope
+for this pass.
+
+| Pos | production R² (mean±std) | candidate R² (mean±std) | production MAE | candidate MAE | n_folds |
+|---|---|---|---|---|---|
+| QB | 0.319±0.105 | 0.287±0.162 | 79.4 | 77.7 | 7 |
+| RB | 0.446±0.05 | 0.405±0.11 | 55.9 | 55.5 | 7 |
+| WR | 0.488±0.06 | 0.509±0.06 | 50.6 | 48.5 | 7 |
+| TE | 0.508±0.049 | 0.512±0.07 | 37.6 | 34.0 | 7 |
+
+**Production numbers hold up well under real walk-forward** — closely
+match §2b's single-split figures (e.g. RB 0.446 vs. 0.456, WR 0.488 vs.
+0.485), confirming §2b wasn't a lucky split. **WR/TE candidate wins are
+real but smaller than originally reported** (WR +0.021 R² here vs.
++0.080 in §2c; TE +0.004 vs. +0.008) — still a consistent, real
+(if modest) edge. **RB's original "win" mostly evaporates**: R² is now
+clearly worse for the candidate (0.405 vs. 0.446), MAE is only
+marginally better (55.5 vs. 55.9) — this directly confirms §6's
+pitfall warning that the original RB number was a test-set-size
+artifact, not a real win. **QB's Ridge-only candidate underperforms
+production** (0.287 vs. 0.319) — expected, since it's missing the
+nonlinear `PositionModel` architecture §2c's QB win actually depended
+on; this run doesn't test that variant, so it neither confirms nor
+refutes the original QB claim. Full per-fold data in
+`data/backtest_results/walk_forward_preseason_20260809_031743.json`.
+
+### 2h. Real walk-forward validation of §2d (in-season rest-of-season, expanding window, `scripts/walk_forward_multiweek.py`)
+
+§2d was a single train≤2022/test-2023-2025-pooled split. Reran as a
+real walk-forward (test seasons 2021-2025, 5 folds each), training
+`MultiWeekModel` fresh per fold via the same target/feature helpers as
+`train_position_models.py` (never calling `.save()` — that would have
+overwritten the live production `.joblib` artifacts; verified via
+before/after md5 that no production files were touched).
+
+| Pos | 1w R² (mean±std) | 4w R² (mean±std) | 18w R² (mean±std) |
+|---|---|---|---|
+| QB | 0.240±0.021 | 0.848±0.011 | 0.970±0.009 |
+| RB | 0.209±0.138 | 0.559±0.054 | 0.199±0.038 |
+| WR | 0.163±0.017 | 0.485±0.013 | 0.156±0.051 |
+| TE | 0.160±0.012 | 0.506±0.021 | 0.229±0.033 |
+
+**Found a real, separate issue while building this**: the 4w/18w
+targets are variable-length rolling sums (`min_periods=1`) that shrink
+near season-end, so target *magnitude* correlates with in-season
+timing almost mechanically (`corr(week, target_18w)=0.576` for 2025
+QBs) — any feature proxying "games remaining" can predict that
+magnitude without real forecasting skill. QB's 18w R²=0.970 is likely
+inflated by exactly this (full mechanism logged in GAPS.md's
+2026-08-09 entry). This doesn't fully explain the picture on its own —
+RB/WR/TE's 18w R² (0.16-0.23) is much lower than QB's despite the same
+target construction applying to all four — but it's reason enough to
+**not trust 4w/18w R² at face value**. **Only the 1w horizon is
+unaffected** (fixed window of exactly 1, always fully populated) and
+its numbers (0.16-0.24) are in a plausible, stable range consistent
+with §2a's weekly figures. §2d's original single-number-per-position
+table (QB R²=0.049, RB 0.483, WR 0.406, TE -0.416) can't be reconciled
+against any of the three horizons above — the original ad-hoc script
+was never saved, so which horizon/target definition it used is
+unknown. Treat §2d's original numbers as superseded by this table, and
+treat this table's 4w/18w columns as directional only until the target
+construction is fixed (tracked in GAPS.md, not yet fixed — needs a
+design decision, not a mechanical patch). Full per-fold data in
+`data/backtest_results/walk_forward_multiweek_20260809_091323.json`.
+
 ---
 
 ## 3. Post-processing pipeline (order of operations, live paths)
@@ -375,8 +490,8 @@ coincidental improvement.
 - [ ] `EnsemblePredictor` sanity-bounds clip — does it help or hurt real predictions?
 - [ ] `PositionModel` at production alpha / with tuning on (current numbers used `tune_hyperparameters=False`)
 - [ ] Lookback-depth sweep for §2c (2yr vs 3yr vs 4yr+, 3 was picked arbitrarily)
-- [ ] `component` vs `util` vs `fp` target mode recheck since v30's feature additions
-- [ ] Real walk-forward validation of §2c/§2d (currently one train/test split)
+- [x] ~~`component` vs `util` vs `fp` target mode recheck since v30's feature additions~~ — done 2026-08-09, see §2f. `util` is clearly worse (agg R² 0.096 vs. ~0.358); `fp`/`component` are statistically tied. Production's all-`component` config confirmed correct, no change made.
+- [x] ~~Real walk-forward validation of §2c/§2d (currently one train/test split)~~ — done 2026-08-09, see §2g and §2h.
 - [ ] RB: try 1-2yr lookback instead of dropping multi-year entirely
 - [ ] Test `Hybrid4WeekModel`/`DeepSeasonLongModel` — real trained artifacts, never evaluated
 - [ ] Test `MultiWeekModel` for RB/WR/TE from a saved artifact (only QB has one; this session's test retrained fresh)

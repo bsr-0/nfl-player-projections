@@ -5245,3 +5245,47 @@ code fix is self-healing for future ingestions of any season; the
 targeted `players`-table correction fixes the current state without
 needing to reprocess 2006-2025 from scratch).
 
+## Found in passing: `MultiWeekModel`'s 4w/18w targets likely have inflated R² from a variable-window artifact, not real forecasting skill — 2026-08-09
+
+Found while building `scripts/walk_forward_multiweek.py` (real
+walk-forward validation of TRACKING.md §2d, requested separately —
+logging this specific sub-finding here per standing instruction since
+it's a distinct, deeper issue than the walk-forward task itself).
+
+**Mechanism**: `train_position_models.py::create_targets()` builds the
+`n`-week target as `df.groupby([player_id, season])["fantasy_points"]
+.transform(lambda x: x.shift(-1).rolling(window=n, min_periods=1).sum())`.
+`min_periods=1` means a player in week 15 of an 18-game season gets a
+target that's the sum of however many games remain (as few as 1-3),
+while a player in week 1 gets the sum of up to 18. The raw *magnitude*
+of the target is therefore driven heavily by how many games are left
+in the season — a fact any feature correlated with in-season timing
+(cumulative games played, rolling-window features whose availability
+changes by week, etc.) can predict trivially, without any real
+skill-forecasting content.
+
+**Evidence**: querying `target_18w` by week for 2025 QBs shows mean
+target rising monotonically from ~16.5 (week 1) to 270+ (weeks 19-21,
+playoffs) with `corr(week, target_18w) = 0.576` — a strong, mechanical
+relationship. A fresh walk-forward run (`walk_forward_multiweek.py`,
+QB, test_season=2025) scored `18w: R²=0.976`, `4w: R²=0.844`, vs.
+`1w: R²=0.222` — the 1-week target isn't affected by this artifact
+(rolling window of exactly 1, always full), and its R² is in a
+plausible range consistent with other weekly-single-game numbers
+elsewhere in TRACKING.md (§2a: QB weekly R²≈0.24). The 4w/18w jump to
+0.84-0.98 is the red flag: TRACKING.md §2d's original (single-split,
+never re-derived) QB number was R²=0.049, wildly different from either
+of these — meaning it's unclear what target definition or horizon that
+original ad-hoc, unsaved script actually used, so it cannot be
+reconciled with these new numbers either way.
+
+**Not fixed** — this is a target-definition question (should the
+n-week target require a full `n` games of history to be scored at all,
+or be normalized to points-per-remaining-game instead of a raw sum?)
+that needs a design decision, not a mechanical bug fix. Logged here
+per the "always fix small/safe bugs immediately, log bigger ones right
+away" standing instruction — this is the "bigger" case. Until resolved,
+**treat `MultiWeekModel`'s reported 4w/18w R² anywhere in this repo
+(TRACKING.md §2d and any future walk-forward extension of it) as
+unreliable/inflated; only the 1w horizon is currently trustworthy.**
+
