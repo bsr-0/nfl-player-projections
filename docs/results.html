@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2025 Model Validation &amp; 2026 Projections</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --success:        #006300;
+
+    --series-1: #2a78d6; /* blue */
+    --series-2: #eb6834; /* orange */
+    --series-3: #1baf7a; /* aqua */
+    --series-4: #eda100; /* yellow */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --success:        #0ca30c;
+
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page-plane);
+    color: var(--text-primary);
+  }
+  header {
+    padding: 32px 24px 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  header h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  header p { color: var(--text-secondary); margin: 0; font-size: 0.95rem; }
+
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 64px;
+  }
+
+  section {
+    margin-top: 40px;
+  }
+  section h2 {
+    font-size: 1.15rem;
+    margin: 0 0 4px;
+  }
+  section .subtitle {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    margin: 0 0 16px;
+  }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .tile-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .tile .label {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 6px;
+  }
+  .tile .value {
+    font-size: 1.6rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .tile .sub {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin-top: 4px;
+  }
+
+  .bars {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 70px;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.88rem;
+  }
+  .bar-row .bar-label {
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .bar-row .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .bar-track {
+    background: var(--gridline);
+    border-radius: 4px;
+    height: 14px;
+    position: relative;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+  }
+  .bar-row .bar-value {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover { color: var(--text-primary); }
+  th.sorted::after { content: " \25BE"; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; }
+
+  .table-wrap {
+    overflow-x: auto;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px 16px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 760px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .tab-btn {
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .tab-btn.active {
+    color: var(--text-primary);
+    border-color: var(--series-1);
+    font-weight: 600;
+  }
+
+  .filter-row {
+    margin-bottom: 12px;
+  }
+  .filter-row input {
+    width: 100%;
+    max-width: 280px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+  }
+
+  footer {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 40px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+  }
+
+  .error-neg { color: var(--series-1); }
+  .error-pos { color: var(--series-2); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>2025 Model Validation &amp; 2026 Projections</h1>
+  <p id="source-line">Loading&hellip;</p>
+</header>
+
+<main>
+
+  <section id="section-overall">
+    <h2>2025 walk-forward accuracy</h2>
+    <p class="subtitle">Out-of-sample weekly fantasy-point predictions, expanding-window backtest across the full 2025 season.</p>
+    <div class="tile-row" id="overall-tiles"></div>
+  </section>
+
+  <section id="section-baselines">
+    <h2>Model vs. baseline heuristics</h2>
+    <p class="subtitle">Mean absolute error (points) &mdash; lower is better.</p>
+    <div class="card">
+      <div class="bars" id="baseline-bars"></div>
+    </div>
+  </section>
+
+  <section id="section-by-position">
+    <h2>Accuracy by position</h2>
+    <p class="subtitle">Mean absolute error (points) &mdash; lower is better.</p>
+    <div class="card">
+      <div class="bars" id="position-bars"></div>
+    </div>
+  </section>
+
+  <section id="section-decision">
+    <h2>Lineup decision quality</h2>
+    <p class="subtitle">Win rate of model-optimal lineups across 22 weeks of the 2025 season, vs. three benchmarks.</p>
+    <div class="tile-row" id="decision-tiles"></div>
+  </section>
+
+  <section id="section-misses">
+    <h2>2025 season-total misses</h2>
+    <p class="subtitle">Predicted vs. actual full-season fantasy points, players with 8+ games. Biggest under- and over-estimates.</p>
+    <div class="two-col">
+      <div>
+        <h3 style="font-size:0.9rem;color:var(--text-secondary);margin:0 0 8px;">Model underestimated</h3>
+        <div class="table-wrap"><table id="table-under"></table></div>
+      </div>
+      <div>
+        <h3 style="font-size:0.9rem;color:var(--text-secondary);margin:0 0 8px;">Model overestimated</h3>
+        <div class="table-wrap"><table id="table-over"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="section-2026">
+    <h2>2026 season projections</h2>
+    <p class="subtitle">Full-season fantasy-point projections from the current model, with floor/ceiling range.</p>
+    <div class="tabs" id="pos-tabs"></div>
+    <div class="filter-row"><input type="text" id="player-filter" placeholder="Filter by player or team&hellip;"></div>
+    <div class="table-wrap"><table id="table-2026"></table></div>
+  </section>
+
+</main>
+
+<footer>
+  Static data generated by <code>scripts/generate_results_page.py</code>. Not updated automatically.
+</footer>
+
+<script>
+const SERIES_COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)'];
+
+function fmt(n, digits = 1) {
+  if (n === null || n === undefined || Number.isNaN(n)) return '—';
+  return Number(n).toFixed(digits);
+}
+
+function pct(n, digits = 1) {
+  if (n === null || n === undefined || Number.isNaN(n)) return '—';
+  return (Number(n) * 100).toFixed(digits) + '%';
+}
+
+function renderBars(containerId, rows, valueKey, maxValue, formatter = fmt) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  rows.forEach((row, i) => {
+    const pctWidth = Math.max(2, (row[valueKey] / maxValue) * 100);
+    const div = document.createElement('div');
+    div.className = 'bar-row';
+    div.innerHTML = `
+      <span class="bar-label"><span class="swatch" style="background:${SERIES_COLORS[i % 4]}"></span>${row.label}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${pctWidth}%;background:${SERIES_COLORS[i % 4]}"></span></span>
+      <span class="bar-value">${formatter(row[valueKey])}</span>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function renderTiles(containerId, tiles) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  tiles.forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'tile';
+    div.innerHTML = `
+      <div class="label">${t.label}</div>
+      <div class="value">${t.value}</div>
+      ${t.sub ? `<div class="sub">${t.sub}</div>` : ''}
+    `;
+    el.appendChild(div);
+  });
+}
+
+function renderMissTable(tableId, rows) {
+  const el = document.getElementById(tableId);
+  const cls = tableId === 'table-under' ? 'error-neg' : 'error-pos';
+  el.innerHTML = `
+    <thead><tr>
+      <th>Player</th><th>Pos</th><th class="num">Pred</th><th class="num">Actual</th><th class="num">Diff</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map(r => `
+        <tr>
+          <td>${r.name} <span style="color:var(--text-muted)">${r.team || ''}</span></td>
+          <td>${r.position}</td>
+          <td class="num">${fmt(r.predicted_total, 0)}</td>
+          <td class="num">${fmt(r.actual_total, 0)}</td>
+          <td class="num ${cls}">${r.error > 0 ? '+' : ''}${fmt(r.error, 0)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  `;
+}
+
+let projectionsData = [];
+let currentPos = 'ALL';
+let sortKey = 'projection_total';
+let sortDir = -1;
+
+function renderProjectionsTable() {
+  const filterText = document.getElementById('player-filter').value.trim().toLowerCase();
+  let rows = projectionsData.filter(p => currentPos === 'ALL' || p.position === currentPos);
+  if (filterText) {
+    rows = rows.filter(p =>
+      (p.name || '').toLowerCase().includes(filterText) ||
+      (p.team || '').toLowerCase().includes(filterText)
+    );
+  }
+  rows = rows.slice().sort((a, b) => {
+    const av = a[sortKey] ?? -Infinity;
+    const bv = b[sortKey] ?? -Infinity;
+    if (typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+  rows = rows.slice(0, 100);
+
+  const columns = [
+    ['name', 'Player'], ['team', 'Team'], ['position', 'Pos'], ['adp', 'ADP'],
+    ['projection_total', 'Proj Total'], ['projection_ppg', 'Proj PPG'],
+    ['floor', 'Floor'], ['ceiling', 'Ceiling'], ['risk_score', 'Risk'],
+  ];
+  const numCols = new Set(['adp', 'projection_total', 'projection_ppg', 'floor', 'ceiling', 'risk_score']);
+
+  const table = document.getElementById('table-2026');
+  table.innerHTML = `
+    <thead><tr>
+      ${columns.map(([key, label]) => `
+        <th class="${numCols.has(key) ? 'num' : ''} ${sortKey === key ? 'sorted' : ''}" data-key="${key}">${label}</th>
+      `).join('')}
+    </tr></thead>
+    <tbody>
+      ${rows.map(p => `
+        <tr>
+          <td>${p.name}</td>
+          <td>${p.team || ''}</td>
+          <td>${p.position}</td>
+          <td class="num">${p.adp ?? '—'}</td>
+          <td class="num">${fmt(p.projection_total, 0)}</td>
+          <td class="num">${fmt(p.projection_ppg, 1)}</td>
+          <td class="num">${fmt(p.floor, 0)}</td>
+          <td class="num">${fmt(p.ceiling, 0)}</td>
+          <td class="num">${fmt(p.risk_score, 0)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  `;
+
+  table.querySelectorAll('th[data-key]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (sortKey === key) {
+        sortDir *= -1;
+      } else {
+        sortKey = key;
+        sortDir = -1;
+      }
+      renderProjectionsTable();
+    });
+  });
+}
+
+async function main() {
+  const [backtest, projections] = await Promise.all([
+    fetch('data/backtest_2025.json').then(r => r.json()),
+    fetch('data/projections_2026.json').then(r => r.json()),
+  ]);
+
+  document.getElementById('source-line').textContent =
+    `Backtest: ${backtest.source_file} (run ${new Date(backtest.backtest_date).toLocaleDateString()}) · ` +
+    `${backtest.n_predictions.toLocaleString()} predictions · ${projections.length} players projected for 2026`;
+
+  // Overall tiles
+  renderTiles('overall-tiles', [
+    { label: 'MAE', value: fmt(backtest.overall.mae), sub: 'points/week' },
+    { label: 'RMSE', value: fmt(backtest.overall.rmse), sub: 'points/week' },
+    { label: 'R²', value: fmt(backtest.overall.r2, 3), sub: 'variance explained' },
+    { label: 'Predictions', value: backtest.n_predictions.toLocaleString(), sub: '2025 season' },
+  ]);
+
+  // Baseline comparison bars
+  const baselineLabels = {
+    model: 'Model', trailing_avg_3w: 'Trailing 3-wk avg',
+    season_avg: 'Season avg', blended_heuristic: 'Blended heuristic',
+  };
+  const baselineOrder = ['model', 'trailing_avg_3w', 'season_avg', 'blended_heuristic'];
+  const baselineRows = baselineOrder
+    .filter(k => backtest.baselines[k])
+    .map(k => ({ label: baselineLabels[k], mae: backtest.baselines[k].mae }));
+  const maxBaseline = Math.max(...baselineRows.map(r => r.mae));
+  renderBars('baseline-bars', baselineRows, 'mae', maxBaseline);
+
+  // By-position bars
+  const posOrder = ['QB', 'RB', 'WR', 'TE'];
+  const posRows = posOrder
+    .filter(p => backtest.by_position[p])
+    .map(p => ({ label: p, mae: backtest.by_position[p].mae }));
+  const maxPos = Math.max(...posRows.map(r => r.mae));
+  renderBars('position-bars', posRows, 'mae', maxPos);
+
+  // Decision quality tiles
+  const dq = backtest.decision_quality;
+  renderTiles('decision-tiles', [
+    {
+      label: 'vs. replacement lineup', value: pct(dq.vs_replacement.win_rate),
+      sub: `${dq.vs_replacement.wins}-${dq.vs_replacement.losses}, avg margin ${fmt(dq.vs_replacement.avg_margin)} pts`,
+    },
+    {
+      label: 'vs. hindsight-optimal', value: pct(dq.vs_hindsight.win_rate),
+      sub: `${dq.vs_hindsight.wins}-${dq.vs_hindsight.losses}, p=${fmt(dq.vs_hindsight.p_value, 3)}`,
+    },
+    {
+      label: 'vs. season oracle', value: pct(dq.vs_oracle.win_rate),
+      sub: `${dq.vs_oracle.wins}-${dq.vs_oracle.losses} (oracle = best possible lineup)`,
+    },
+  ]);
+
+  // Miss tables
+  const acc = backtest.prediction_accuracy;
+  renderMissTable('table-under', acc.biggest_underestimates);
+  renderMissTable('table-over', acc.biggest_overestimates);
+
+  // 2026 projections
+  projectionsData = projections;
+  const tabsEl = document.getElementById('pos-tabs');
+  ['ALL', 'QB', 'RB', 'WR', 'TE'].forEach(pos => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (pos === currentPos ? ' active' : '');
+    btn.textContent = pos;
+    btn.addEventListener('click', () => {
+      currentPos = pos;
+      tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProjectionsTable();
+    });
+    tabsEl.appendChild(btn);
+  });
+  document.getElementById('player-filter').addEventListener('input', renderProjectionsTable);
+  renderProjectionsTable();
+}
+
+main();
+</script>
+
+</body>
+</html>
