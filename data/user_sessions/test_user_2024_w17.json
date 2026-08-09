@@ -1,0 +1,21 @@
+{
+  "_comment": "Test user — 2024 Week 17 fantasy CHAMPIONSHIP game. User won 115.08 to 110.20. 10-team PPR league with QB/RB/RB/WR/WR/TE/FLEX/D-ST. v1 prototype scores QB+RB+RB+WR+WR+TE+FLEX (7); D/ST not tracked. Bench is unknown — needs to be captured from user during session for swap recommendations to be meaningful.",
+  "league": {
+    "format": "PPR",
+    "size": 10,
+    "scoring_notes": "Standard PPR; D/ST and K used in actual roster but not v1 prototype.",
+    "starters_slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1},
+    "roster_size": 15
+  },
+  "starters": [
+    {"name": "J.Burrow",      "position": "QB", "_actual_pts": 36.98},
+    {"name": "J.Mixon",       "position": "RB", "_actual_pts": 5.9},
+    {"name": "J.McLaughlin",  "position": "RB", "_actual_pts": 9.6},
+    {"name": "T.Hill",        "position": "WR", "_actual_pts_pending_at_screenshot": true},
+    {"name": "P.Nacua",       "position": "WR", "_actual_pts": 22.9},
+    {"name": "M.Andrews",     "position": "TE", "_actual_pts": 14.8},
+    {"name": "J.Addison",     "position": "WR", "_flex_slot": true, "_actual_pts_pending_at_screenshot": true}
+  ],
+  "_bench_TODO": "Fill in during session — user will know their full 15-player roster",
+  "bench": []
+}

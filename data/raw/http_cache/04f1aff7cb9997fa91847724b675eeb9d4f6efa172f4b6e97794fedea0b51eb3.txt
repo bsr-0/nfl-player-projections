@@ -1,0 +1,1 @@
+{"id":"07f552badfa8a565d1be22123713e4da","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T17:00:00Z","home_team":"Detroit Lions","away_team":"New York Jets","bookmakers":[]}

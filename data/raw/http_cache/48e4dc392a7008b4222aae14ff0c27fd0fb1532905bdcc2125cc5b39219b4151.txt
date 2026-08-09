@@ -1,0 +1,1 @@
+{"id":"b225458a282e140c44c45651255f2f6c","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T17:00:00Z","home_team":"Buffalo Bills","away_team":"Los Angeles Chargers","bookmakers":[]}

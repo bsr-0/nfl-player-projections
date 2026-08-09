@@ -37,17 +37,19 @@ venv/
 ENV/
 env/
 
-# Data – all generated/binary files; regenerate locally
-# NOTE: anchored to repo root — a bare "data/" also matched src/data/ and
-# scripts/data/, silently untracking real pipeline source code for the
-# entire life of the repo. Only the top-level data/ (DB + model artifacts)
-# is meant to be ignored.
-/data/
+# Data – only large/binary/generated files stay ignored; everything else
+# under data/ (JSON, CSVs, small parquet outputs) is tracked in main.
 scripts/data/cache/
 *.db
+*.db-shm
+*.db-wal
+*.db.bak*
 *.joblib
 *.pkl
 *.pickle
+# Timestamped pipeline snapshot parquets (bronze/silver/gold) — ~3.4GB,
+# regenerate locally rather than version.
+/data/artifacts/
 
 # Frontend
 frontend/node_modules/

@@ -1,0 +1,1 @@
+{"id":"a73a76599a4f3422803e57bd8f61b626","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-05T00:20:00Z","home_team":"Carolina Panthers","away_team":"Detroit Lions","bookmakers":[]}

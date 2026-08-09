@@ -1,0 +1,1 @@
+{"id":"8c94552d022acec4a0458d70c19d3da9","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-10T00:15:00Z","home_team":"Seattle Seahawks","away_team":"New England Patriots","bookmakers":[]}

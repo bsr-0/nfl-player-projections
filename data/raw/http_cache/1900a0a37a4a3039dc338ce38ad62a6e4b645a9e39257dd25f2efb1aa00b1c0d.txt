@@ -1,0 +1,1 @@
+{"id":"9d2b09e0f9b6dd5ce0d985894f4f98fa","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T20:05:00Z","home_team":"San Francisco 49ers","away_team":"Arizona Cardinals","bookmakers":[]}

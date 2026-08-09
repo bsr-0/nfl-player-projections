@@ -1,0 +1,73 @@
+{
+  "generated_at": "2026-08-08T06:46:47.265075",
+  "feature_version": "30",
+  "metadata_file": "/Users/benrosen/nfl-player-projections/data/models/model_metadata.json",
+  "training_metadata": {
+    "training_date": "2026-08-08T06:46:47.264793",
+    "feature_version": "30",
+    "train_seasons": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "test_season": 2026,
+    "positions_trained": [
+      "QB",
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "oof_metrics": {},
+    "test_metrics": {},
+    "n_features_per_position": {
+      "QB": 56,
+      "RB": 62,
+      "WR": 64,
+      "TE": 63
+    },
+    "previous_training_date": "2026-08-07T07:17:15.850100",
+    "previous_feature_version": "30",
+    "rollback_available": true,
+    "n_rollback_versions": 5,
+    "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
+    "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
+  },
+  "top10_features_per_position": {},
+  "feature_importance_stability": {
+    "QB": {
+      "overlap_pct": null,
+      "stable": true,
+      "new_features": [],
+      "dropped_features": []
+    },
+    "RB": {
+      "overlap_pct": null,
+      "stable": true,
+      "new_features": [],
+      "dropped_features": []
+    },
+    "WR": {
+      "overlap_pct": null,
+      "stable": true,
+      "new_features": [],
+      "dropped_features": []
+    },
+    "TE": {
+      "overlap_pct": null,
+      "stable": true,
+      "new_features": [],
+      "dropped_features": []
+    }
+  },
+  "drift_threshold_pct": 20.0,
+  "retraining_config": {
+    "schedule": "Tuesday",
+    "auto_retrain": true,
+    "degradation_threshold_pct": 20.0
+  }
+}

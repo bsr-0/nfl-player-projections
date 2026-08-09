@@ -1,0 +1,1 @@
+{"id":"0283a29e1b38ef78b29b904fd56a16dd","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-20T17:00:00Z","home_team":"Chicago Bears","away_team":"Minnesota Vikings","bookmakers":[]}

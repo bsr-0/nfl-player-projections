@@ -1,0 +1,1 @@
+{"id":"cb77efed7e711d25a72c1a2a0a1af119","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-13T20:25:00Z","home_team":"Minnesota Vikings","away_team":"Green Bay Packers","bookmakers":[]}

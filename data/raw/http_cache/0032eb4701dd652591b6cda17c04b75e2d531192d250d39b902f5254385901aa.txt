@@ -1,0 +1,1 @@
+{"id":"664e6bda5721dc63be16bcf7d962a436","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-04T17:00:00Z","home_team":"New York Giants","away_team":"Arizona Cardinals","bookmakers":[]}

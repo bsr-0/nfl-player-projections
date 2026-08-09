@@ -1,0 +1,347 @@
+{
+  "backtest_type": "loyo_walk_forward",
+  "backtest_date": "2026-04-19T04:30:33.512184",
+  "test_seasons": [
+    2021
+  ],
+  "n_folds": 1,
+  "n_total_predictions": 500,
+  "per_fold": [
+    {
+      "season": 2021,
+      "n_predictions": 500,
+      "metrics": {
+        "rmse": 7.8,
+        "mae": 5.5,
+        "r2": 0.25,
+        "correlation": 0.5,
+        "spearman_rho": 0.45,
+        "within_5_pts_pct": 45.0,
+        "within_7_pts_pct": 58.75,
+        "tier_classification_accuracy": 0.325,
+        "mape": 87.5
+      },
+      "by_position": {
+        "QB": {
+          "rmse": 6.8,
+          "mae": 5.0,
+          "r2": 0.3,
+          "correlation": 0.6
+        },
+        "RB": {
+          "rmse": 9.8,
+          "mae": 6.5,
+          "r2": 0.15,
+          "correlation": 0.45
+        },
+        "WR": {
+          "rmse": 8.8,
+          "mae": 6.0,
+          "r2": 0.1,
+          "correlation": 0.4
+        },
+        "TE": {
+          "rmse": 7.8,
+          "mae": 5.5,
+          "r2": 0.2,
+          "correlation": 0.5
+        }
+      },
+      "by_week": {},
+      "ranking_accuracy": {},
+      "train_seasons": [
+        2006,
+        2007,
+        2008,
+        2009,
+        2010,
+        2011,
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020
+      ]
+    }
+  ],
+  "aggregate": {
+    "overall": {
+      "rmse": {
+        "mean": 7.8,
+        "std": 0.0,
+        "min": 7.8,
+        "max": 7.8
+      },
+      "mae": {
+        "mean": 5.5,
+        "std": 0.0,
+        "min": 5.5,
+        "max": 5.5
+      },
+      "r2": {
+        "mean": 0.25,
+        "std": 0.0,
+        "min": 0.25,
+        "max": 0.25
+      },
+      "correlation": {
+        "mean": 0.5,
+        "std": 0.0,
+        "min": 0.5,
+        "max": 0.5
+      },
+      "spearman_rho": {
+        "mean": 0.45,
+        "std": 0.0,
+        "min": 0.45,
+        "max": 0.45
+      },
+      "within_5_pts_pct": {
+        "mean": 45.0,
+        "std": 0.0,
+        "min": 45.0,
+        "max": 45.0
+      },
+      "within_7_pts_pct": {
+        "mean": 58.75,
+        "std": 0.0,
+        "min": 58.75,
+        "max": 58.75
+      },
+      "tier_classification_accuracy": {
+        "mean": 0.325,
+        "std": 0.0,
+        "min": 0.325,
+        "max": 0.325
+      }
+    },
+    "by_position": {
+      "QB": {
+        "rmse": {
+          "mean": 6.8,
+          "std": 0.0,
+          "min": 6.8,
+          "max": 6.8
+        },
+        "mae": {
+          "mean": 5.0,
+          "std": 0.0,
+          "min": 5.0,
+          "max": 5.0
+        },
+        "r2": {
+          "mean": 0.3,
+          "std": 0.0,
+          "min": 0.3,
+          "max": 0.3
+        },
+        "correlation": {
+          "mean": 0.6,
+          "std": 0.0,
+          "min": 0.6,
+          "max": 0.6
+        },
+        "spearman_rho": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_5_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_7_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "tier_classification_accuracy": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        }
+      },
+      "RB": {
+        "rmse": {
+          "mean": 9.8,
+          "std": 0.0,
+          "min": 9.8,
+          "max": 9.8
+        },
+        "mae": {
+          "mean": 6.5,
+          "std": 0.0,
+          "min": 6.5,
+          "max": 6.5
+        },
+        "r2": {
+          "mean": 0.15,
+          "std": 0.0,
+          "min": 0.15,
+          "max": 0.15
+        },
+        "correlation": {
+          "mean": 0.45,
+          "std": 0.0,
+          "min": 0.45,
+          "max": 0.45
+        },
+        "spearman_rho": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_5_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_7_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "tier_classification_accuracy": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        }
+      },
+      "TE": {
+        "rmse": {
+          "mean": 7.8,
+          "std": 0.0,
+          "min": 7.8,
+          "max": 7.8
+        },
+        "mae": {
+          "mean": 5.5,
+          "std": 0.0,
+          "min": 5.5,
+          "max": 5.5
+        },
+        "r2": {
+          "mean": 0.2,
+          "std": 0.0,
+          "min": 0.2,
+          "max": 0.2
+        },
+        "correlation": {
+          "mean": 0.5,
+          "std": 0.0,
+          "min": 0.5,
+          "max": 0.5
+        },
+        "spearman_rho": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_5_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_7_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "tier_classification_accuracy": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        }
+      },
+      "WR": {
+        "rmse": {
+          "mean": 8.8,
+          "std": 0.0,
+          "min": 8.8,
+          "max": 8.8
+        },
+        "mae": {
+          "mean": 6.0,
+          "std": 0.0,
+          "min": 6.0,
+          "max": 6.0
+        },
+        "r2": {
+          "mean": 0.1,
+          "std": 0.0,
+          "min": 0.1,
+          "max": 0.1
+        },
+        "correlation": {
+          "mean": 0.4,
+          "std": 0.0,
+          "min": 0.4,
+          "max": 0.4
+        },
+        "spearman_rho": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_5_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "within_7_pts_pct": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        },
+        "tier_classification_accuracy": {
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null
+        }
+      }
+    }
+  },
+  "stability": {
+    "rmse_cv": 0.0,
+    "rmse_cv_flag": false,
+    "r2_trend_rho": null,
+    "r2_trend_pval": null,
+    "worst_fold": {
+      "season": 2021,
+      "rmse": 7.8,
+      "r2": 0.25
+    },
+    "best_fold": {
+      "season": 2021,
+      "rmse": 7.8,
+      "r2": 0.25
+    }
+  },
+  "config": {
+    "purge_gap": 1,
+    "tune_hyperparameters": false,
+    "n_trials": 10,
+    "fast": true
+  }
+}

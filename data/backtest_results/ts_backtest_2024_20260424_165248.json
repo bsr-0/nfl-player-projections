@@ -1,0 +1,957 @@
+{
+  "season": 2024,
+  "backtest_type": "expanding_window_weekly_refit",
+  "backtest_date": "2026-04-24T16:35:38.768325",
+  "n_predictions": 5480,
+  "positions": [
+    "QB",
+    "RB",
+    "WR",
+    "TE"
+  ],
+  "metrics": {
+    "mae": 4.975723520785658,
+    "rmse": 6.53677811402311,
+    "r2": 0.3359261145461798,
+    "mape": 201.9899385463106,
+    "n": 5480
+  },
+  "by_week": {
+    "1": {
+      "mae": 4.937556331016234,
+      "rmse": 6.273387935871878,
+      "r2": 0.28959852098150995,
+      "mape": 206.8175092972179,
+      "n": 303
+    },
+    "2": {
+      "mae": 4.8596452418459135,
+      "rmse": 6.264296148472428,
+      "r2": 0.2893613193332306,
+      "mape": 206.37905633359125,
+      "n": 302
+    },
+    "3": {
+      "mae": 5.275134955560557,
+      "rmse": 7.031810280590031,
+      "r2": 0.24561954642903316,
+      "mape": 189.82248412230663,
+      "n": 311
+    },
+    "4": {
+      "mae": 4.853117066859516,
+      "rmse": 6.278171697891565,
+      "r2": 0.34092134151830933,
+      "mape": 176.78030651154717,
+      "n": 294
+    },
+    "5": {
+      "mae": 5.243590205173946,
+      "rmse": 6.996905891156178,
+      "r2": 0.22147901652879887,
+      "mape": 178.78272083933092,
+      "n": 258
+    },
+    "6": {
+      "mae": 5.11083681797997,
+      "rmse": 6.522321009559904,
+      "r2": 0.3121664770353182,
+      "mape": 259.642709828186,
+      "n": 271
+    },
+    "7": {
+      "mae": 5.1747964542143645,
+      "rmse": 6.359542669594258,
+      "r2": 0.26000646470555866,
+      "mape": 207.6147502080592,
+      "n": 297
+    },
+    "8": {
+      "mae": 4.925966360804623,
+      "rmse": 6.293391543631342,
+      "r2": 0.3734667516884097,
+      "mape": 167.98186442257386,
+      "n": 312
+    },
+    "9": {
+      "mae": 4.82133313108653,
+      "rmse": 6.329429756510723,
+      "r2": 0.3705260033473986,
+      "mape": 256.6990316569183,
+      "n": 291
+    },
+    "10": {
+      "mae": 4.499793527365276,
+      "rmse": 6.01464102498838,
+      "r2": 0.35350084777531054,
+      "mape": 208.7273323843144,
+      "n": 265
+    },
+    "11": {
+      "mae": 5.240931237702556,
+      "rmse": 6.949890376703113,
+      "r2": 0.3529476043604193,
+      "mape": 181.75879671714898,
+      "n": 282
+    },
+    "12": {
+      "mae": 4.8336991710158514,
+      "rmse": 6.36206461965436,
+      "r2": 0.35755150240344935,
+      "mape": 206.62089874415122,
+      "n": 252
+    },
+    "13": {
+      "mae": 4.71245218882232,
+      "rmse": 6.155914493482513,
+      "r2": 0.36404622091873284,
+      "mape": 164.5164672880629,
+      "n": 303
+    },
+    "14": {
+      "mae": 5.15513069943167,
+      "rmse": 7.1097148197772535,
+      "r2": 0.3846130602237682,
+      "mape": 178.77667112435216,
+      "n": 246
+    },
+    "15": {
+      "mae": 5.088623293570462,
+      "rmse": 6.866677408021497,
+      "r2": 0.33522831804700015,
+      "mape": 200.08813118799446,
+      "n": 312
+    },
+    "16": {
+      "mae": 4.756325154945148,
+      "rmse": 6.281135342746839,
+      "r2": 0.3935488627822269,
+      "mape": 158.34285727030476,
+      "n": 303
+    },
+    "17": {
+      "mae": 5.04377490543419,
+      "rmse": 6.71690428825867,
+      "r2": 0.40118867623448873,
+      "mape": 237.26027072099893,
+      "n": 317
+    },
+    "18": {
+      "mae": 4.968450150393147,
+      "rmse": 6.80901575182533,
+      "r2": 0.26195498240321413,
+      "mape": 158.17565112581275,
+      "n": 308
+    },
+    "19": {
+      "mae": 4.783074708408835,
+      "rmse": 6.05149579784211,
+      "r2": 0.32538749429039304,
+      "mape": 282.10285234597126,
+      "n": 117
+    },
+    "20": {
+      "mae": 5.155169312924605,
+      "rmse": 6.590827426990849,
+      "r2": 0.37046662450527057,
+      "mape": 452.86607227566185,
+      "n": 76
+    },
+    "21": {
+      "mae": 5.505338511365624,
+      "rmse": 7.136068134055899,
+      "r2": 0.43898345356129276,
+      "mape": 177.98807968136418,
+      "n": 40
+    },
+    "22": {
+      "mae": 5.3532175173779635,
+      "rmse": 7.193836689596731,
+      "r2": 0.45860215265326176,
+      "mape": 245.39482936514244,
+      "n": 20
+    }
+  },
+  "by_position": {
+    "QB": {
+      "mae": 6.408376158318909,
+      "rmse": 7.982806456525139,
+      "r2": 0.2586917392008167,
+      "mape": 491.0511445921724,
+      "n": 676
+    },
+    "RB": {
+      "mae": 5.00008147532561,
+      "rmse": 6.601382845120078,
+      "r2": 0.3512392069041299,
+      "mape": 255.68454232849112,
+      "n": 1289
+    },
+    "TE": {
+      "mae": 4.332359515482365,
+      "rmse": 5.725606156840083,
+      "r2": 0.2082220867586987,
+      "mape": 116.54503754360836,
+      "n": 482
+    },
+    "WR": {
+      "mae": 4.748302111020313,
+      "rmse": 6.266572035029684,
+      "r2": 0.28353305572222653,
+      "mape": 120.60757797934912,
+      "n": 3033
+    }
+  },
+  "drawdown": {
+    "max_drawdown_weeks": 20,
+    "weekly_rank_accuracy": [
+      {
+        "week": 1,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 2,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 3,
+        "rank_accuracy": 0.4
+      },
+      {
+        "week": 4,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 5,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 6,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 7,
+        "rank_accuracy": 0.2
+      },
+      {
+        "week": 8,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 9,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 10,
+        "rank_accuracy": 0.4
+      },
+      {
+        "week": 11,
+        "rank_accuracy": 0.2
+      },
+      {
+        "week": 12,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 13,
+        "rank_accuracy": 0.0
+      },
+      {
+        "week": 14,
+        "rank_accuracy": 0.3
+      },
+      {
+        "week": 15,
+        "rank_accuracy": 0.2
+      },
+      {
+        "week": 16,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 17,
+        "rank_accuracy": 0.3
+      },
+      {
+        "week": 18,
+        "rank_accuracy": 0.1
+      },
+      {
+        "week": 19,
+        "rank_accuracy": 0.3
+      },
+      {
+        "week": 20,
+        "rank_accuracy": 0.4
+      },
+      {
+        "week": 21,
+        "rank_accuracy": 0.6
+      },
+      {
+        "week": 22,
+        "rank_accuracy": 0.8
+      }
+    ]
+  },
+  "weekly_performance_path": [
+    {
+      "week": 1,
+      "rmse": 6.273,
+      "mae": 4.938,
+      "r2": 0.2896
+    },
+    {
+      "week": 2,
+      "rmse": 6.264,
+      "mae": 4.86,
+      "r2": 0.2894
+    },
+    {
+      "week": 3,
+      "rmse": 7.032,
+      "mae": 5.275,
+      "r2": 0.2456
+    },
+    {
+      "week": 4,
+      "rmse": 6.278,
+      "mae": 4.853,
+      "r2": 0.3409
+    },
+    {
+      "week": 5,
+      "rmse": 6.997,
+      "mae": 5.244,
+      "r2": 0.2215
+    },
+    {
+      "week": 6,
+      "rmse": 6.522,
+      "mae": 5.111,
+      "r2": 0.3122
+    },
+    {
+      "week": 7,
+      "rmse": 6.36,
+      "mae": 5.175,
+      "r2": 0.26
+    },
+    {
+      "week": 8,
+      "rmse": 6.293,
+      "mae": 4.926,
+      "r2": 0.3735
+    },
+    {
+      "week": 9,
+      "rmse": 6.329,
+      "mae": 4.821,
+      "r2": 0.3705
+    },
+    {
+      "week": 10,
+      "rmse": 6.015,
+      "mae": 4.5,
+      "r2": 0.3535
+    },
+    {
+      "week": 11,
+      "rmse": 6.95,
+      "mae": 5.241,
+      "r2": 0.3529
+    },
+    {
+      "week": 12,
+      "rmse": 6.362,
+      "mae": 4.834,
+      "r2": 0.3576
+    },
+    {
+      "week": 13,
+      "rmse": 6.156,
+      "mae": 4.712,
+      "r2": 0.364
+    },
+    {
+      "week": 14,
+      "rmse": 7.11,
+      "mae": 5.155,
+      "r2": 0.3846
+    },
+    {
+      "week": 15,
+      "rmse": 6.867,
+      "mae": 5.089,
+      "r2": 0.3352
+    },
+    {
+      "week": 16,
+      "rmse": 6.281,
+      "mae": 4.756,
+      "r2": 0.3935
+    },
+    {
+      "week": 17,
+      "rmse": 6.717,
+      "mae": 5.044,
+      "r2": 0.4012
+    },
+    {
+      "week": 18,
+      "rmse": 6.809,
+      "mae": 4.968,
+      "r2": 0.262
+    },
+    {
+      "week": 19,
+      "rmse": 6.051,
+      "mae": 4.783,
+      "r2": 0.3254
+    },
+    {
+      "week": 20,
+      "rmse": 6.591,
+      "mae": 5.155,
+      "r2": 0.3705
+    },
+    {
+      "week": 21,
+      "rmse": 7.136,
+      "mae": 5.505,
+      "r2": 0.439
+    },
+    {
+      "week": 22,
+      "rmse": 7.194,
+      "mae": 5.353,
+      "r2": 0.4586
+    }
+  ],
+  "scenario_sensitivity": {
+    "optimistic": {
+      "mae": 4.975723520785658,
+      "rmse": 6.53677811402311,
+      "r2": 0.3359261145461798,
+      "mape": 201.9899385463106,
+      "n": 5480
+    },
+    "base": {
+      "mae": 5.602562196491122,
+      "rmse": 7.326767521679051,
+      "r2": 0.16571633869788682,
+      "mape": 221.92064950683368,
+      "n": 5480
+    },
+    "pessimistic": {
+      "mae": 7.387953229160145,
+      "rmse": 9.457733318162227,
+      "r2": -0.39015441435361287,
+      "mape": 281.55758075386296,
+      "n": 5480
+    }
+  },
+  "friction_analysis": {
+    "base_rmse": 6.53677811402311,
+    "data_delay_weeks": 0,
+    "delay_adjusted_rmse": 6.537,
+    "roster_lock_penalty_pct": 0.0,
+    "friction_adjusted_rmse": 6.537,
+    "total_friction_impact_pct": 0.0
+  },
+  "baselines": {
+    "trailing_avg_3w": {
+      "mae": 5.143222760591378,
+      "rmse": 6.969504259704596,
+      "r2": 0.24899029713626952,
+      "mape": 162.0607635633668,
+      "n": 5366,
+      "model_beats_baseline": true
+    },
+    "season_avg": {
+      "mae": 4.969293598336534,
+      "rmse": 6.794194529585644,
+      "r2": 0.29761043121289643,
+      "mape": 137.23430548153343,
+      "n": 4918,
+      "model_beats_baseline": true
+    },
+    "blended_heuristic": {
+      "mae": 4.90698071019433,
+      "rmse": 6.545802903914935,
+      "r2": 0.33409118477120614,
+      "mape": 180.27162307605838,
+      "n": 5480,
+      "model_beats_baseline": true
+    },
+    "model": {
+      "mae": 4.975723520785658,
+      "rmse": 6.53677811402311,
+      "r2": 0.3359261145461798,
+      "mape": 201.9899385463106,
+      "n": 5480
+    }
+  },
+  "decision_quality": {
+    "win_rate": 0.7273,
+    "wins": 16,
+    "losses": 6,
+    "p_value": 0.0262,
+    "significant_at_05": true,
+    "n_weeks": 22,
+    "avg_margin": 11.82,
+    "payout_multiplier": 1.8,
+    "break_even_win_rate": 0.5556,
+    "vs_oracle": {
+      "win_rate": 0.0,
+      "wins": 0,
+      "losses": 22,
+      "p_value": 1.0,
+      "significant_at_05": false,
+      "avg_margin": -72.16,
+      "worst_loss": -102.9,
+      "best_win": -11.0,
+      "roi": -1.0
+    },
+    "vs_hindsight": {
+      "win_rate": 0.7273,
+      "wins": 16,
+      "losses": 6,
+      "p_value": 0.0262,
+      "significant_at_05": true,
+      "avg_margin": 11.82,
+      "worst_loss": -25.9,
+      "best_win": 49.0,
+      "roi": 0.3091
+    },
+    "vs_replacement": {
+      "win_rate": 1.0,
+      "wins": 22,
+      "losses": 0,
+      "p_value": 0.0,
+      "significant_at_05": true,
+      "avg_margin": 50.88,
+      "worst_loss": 4.5,
+      "best_win": 83.3,
+      "roi": 0.8
+    },
+    "avg_model_score": 108.7,
+    "avg_oracle_score": 180.85,
+    "avg_hindsight_score": 96.87,
+    "avg_replacement_score": 57.81,
+    "avg_projection_error": 7.9,
+    "weekly_results": [
+      {
+        "season": "2024",
+        "week": 1,
+        "model_actual": 128.7,
+        "model_projected": 109.11,
+        "oracle_actual": 170.6,
+        "hindsight_actual": 128.7,
+        "replacement_actual": 54.1,
+        "vs_oracle_margin": -41.9,
+        "vs_hindsight_margin": 0.0,
+        "vs_replacement_margin": 74.6,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": false,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.0,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 2,
+        "model_actual": 84.1,
+        "model_projected": 89.87,
+        "oracle_actual": 180.5,
+        "hindsight_actual": 68.3,
+        "replacement_actual": 55.7,
+        "vs_oracle_margin": -96.4,
+        "vs_hindsight_margin": 15.8,
+        "vs_replacement_margin": 28.4,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.5,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 3,
+        "model_actual": 124.3,
+        "model_projected": 98.66,
+        "oracle_actual": 197.4,
+        "hindsight_actual": 80.0,
+        "replacement_actual": 64.0,
+        "vs_oracle_margin": -73.1,
+        "vs_hindsight_margin": 44.3,
+        "vs_replacement_margin": 60.3,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.6667,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 4,
+        "model_actual": 91.5,
+        "model_projected": 100.76,
+        "oracle_actual": 177.6,
+        "hindsight_actual": 83.8,
+        "replacement_actual": 52.0,
+        "vs_oracle_margin": -86.1,
+        "vs_hindsight_margin": 7.7,
+        "vs_replacement_margin": 39.5,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.75,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 5,
+        "model_actual": 105.2,
+        "model_projected": 97.51,
+        "oracle_actual": 175.4,
+        "hindsight_actual": 92.6,
+        "replacement_actual": 70.8,
+        "vs_oracle_margin": -70.2,
+        "vs_hindsight_margin": 12.6,
+        "vs_replacement_margin": 34.4,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.8,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 6,
+        "model_actual": 95.6,
+        "model_projected": 101.95,
+        "oracle_actual": 173.0,
+        "hindsight_actual": 91.2,
+        "replacement_actual": 59.8,
+        "vs_oracle_margin": -77.4,
+        "vs_hindsight_margin": 4.4,
+        "vs_replacement_margin": 35.8,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.8333,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 7,
+        "model_actual": 104.0,
+        "model_projected": 106.63,
+        "oracle_actual": 166.4,
+        "hindsight_actual": 96.0,
+        "replacement_actual": 51.5,
+        "vs_oracle_margin": -62.4,
+        "vs_hindsight_margin": 8.0,
+        "vs_replacement_margin": 52.5,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.8571,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 8,
+        "model_actual": 107.3,
+        "model_projected": 104.34,
+        "oracle_actual": 183.8,
+        "hindsight_actual": 88.4,
+        "replacement_actual": 70.2,
+        "vs_oracle_margin": -76.5,
+        "vs_hindsight_margin": 18.9,
+        "vs_replacement_margin": 37.1,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.875,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 9,
+        "model_actual": 125.5,
+        "model_projected": 103.19,
+        "oracle_actual": 188.9,
+        "hindsight_actual": 131.8,
+        "replacement_actual": 42.2,
+        "vs_oracle_margin": -63.4,
+        "vs_hindsight_margin": -6.3,
+        "vs_replacement_margin": 83.3,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": false,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7778,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 10,
+        "model_actual": 103.2,
+        "model_projected": 107.71,
+        "oracle_actual": 189.7,
+        "hindsight_actual": 72.2,
+        "replacement_actual": 31.6,
+        "vs_oracle_margin": -86.5,
+        "vs_hindsight_margin": 31.0,
+        "vs_replacement_margin": 71.6,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.8,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 11,
+        "model_actual": 114.8,
+        "model_projected": 105.91,
+        "oracle_actual": 215.2,
+        "hindsight_actual": 109.7,
+        "replacement_actual": 66.2,
+        "vs_oracle_margin": -100.4,
+        "vs_hindsight_margin": 5.1,
+        "vs_replacement_margin": 48.6,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.8182,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 12,
+        "model_actual": 84.3,
+        "model_projected": 99.01,
+        "oracle_actual": 187.2,
+        "hindsight_actual": 110.2,
+        "replacement_actual": 79.8,
+        "vs_oracle_margin": -102.9,
+        "vs_hindsight_margin": -25.9,
+        "vs_replacement_margin": 4.5,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": false,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.75,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 13,
+        "model_actual": 108.8,
+        "model_projected": 102.72,
+        "oracle_actual": 178.9,
+        "hindsight_actual": 80.0,
+        "replacement_actual": 69.4,
+        "vs_oracle_margin": -70.1,
+        "vs_hindsight_margin": 28.8,
+        "vs_replacement_margin": 39.4,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7692,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 14,
+        "model_actual": 128.0,
+        "model_projected": 105.6,
+        "oracle_actual": 225.0,
+        "hindsight_actual": 79.0,
+        "replacement_actual": 87.9,
+        "vs_oracle_margin": -97.0,
+        "vs_hindsight_margin": 49.0,
+        "vs_replacement_margin": 40.1,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7857,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 15,
+        "model_actual": 117.2,
+        "model_projected": 104.08,
+        "oracle_actual": 198.4,
+        "hindsight_actual": 112.7,
+        "replacement_actual": 50.8,
+        "vs_oracle_margin": -81.2,
+        "vs_hindsight_margin": 4.5,
+        "vs_replacement_margin": 66.4,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.8,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 16,
+        "model_actual": 90.6,
+        "model_projected": 104.77,
+        "oracle_actual": 190.8,
+        "hindsight_actual": 114.2,
+        "replacement_actual": 33.0,
+        "vs_oracle_margin": -100.2,
+        "vs_hindsight_margin": -23.6,
+        "vs_replacement_margin": 57.6,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": false,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.75,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 17,
+        "model_actual": 109.6,
+        "model_projected": 103.87,
+        "oracle_actual": 192.3,
+        "hindsight_actual": 109.1,
+        "replacement_actual": 45.9,
+        "vs_oracle_margin": -82.7,
+        "vs_hindsight_margin": 0.5,
+        "vs_replacement_margin": 63.7,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7647,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 18,
+        "model_actual": 111.9,
+        "model_projected": 104.23,
+        "oracle_actual": 204.6,
+        "hindsight_actual": 126.1,
+        "replacement_actual": 39.5,
+        "vs_oracle_margin": -92.7,
+        "vs_hindsight_margin": -14.2,
+        "vs_replacement_margin": 72.4,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": false,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7222,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 19,
+        "model_actual": 85.3,
+        "model_projected": 97.85,
+        "oracle_actual": 152.5,
+        "hindsight_actual": 66.5,
+        "replacement_actual": 38.4,
+        "vs_oracle_margin": -67.2,
+        "vs_hindsight_margin": 18.8,
+        "vs_replacement_margin": 46.9,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7368,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 20,
+        "model_actual": 154.9,
+        "model_projected": 100.53,
+        "oracle_actual": 165.9,
+        "hindsight_actual": 108.9,
+        "replacement_actual": 75.5,
+        "vs_oracle_margin": -11.0,
+        "vs_hindsight_margin": 46.0,
+        "vs_replacement_margin": 79.4,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.75,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 21,
+        "model_actual": 122.7,
+        "model_projected": 88.47,
+        "oracle_actual": 158.1,
+        "hindsight_actual": 82.0,
+        "replacement_actual": 80.3,
+        "vs_oracle_margin": -35.4,
+        "vs_hindsight_margin": 40.7,
+        "vs_replacement_margin": 42.4,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": true,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7619,
+        "cumulative_win_rate_vs_replacement": 1.0
+      },
+      {
+        "season": "2024",
+        "week": 22,
+        "model_actual": 93.8,
+        "model_projected": 80.67,
+        "oracle_actual": 106.6,
+        "hindsight_actual": 99.8,
+        "replacement_actual": 53.3,
+        "vs_oracle_margin": -12.8,
+        "vs_hindsight_margin": -6.0,
+        "vs_replacement_margin": 40.5,
+        "won_vs_oracle": false,
+        "won_vs_hindsight": false,
+        "won_vs_replacement": true,
+        "cumulative_win_rate_vs_oracle": 0.0,
+        "cumulative_win_rate_vs_hindsight": 0.7273,
+        "cumulative_win_rate_vs_replacement": 1.0
+      }
+    ],
+    "roster_slots": {
+      "QB": 1,
+      "RB": 2,
+      "WR": 2,
+      "TE": 1
+    }
+  },
+  "diagnostics": {
+    "model_refit_per_week": true,
+    "expanding_window": true,
+    "leakage_check_passed": true,
+    "leakage_filter_applied": true,
+    "scaling_fit_on_train_only": true,
+    "feature_engineering_per_fold": true
+  }
+}

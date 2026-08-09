@@ -1,0 +1,1 @@
+{"id":"fafc649c455e32a0f2ba1bd06e2039bc","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-20T17:00:00Z","home_team":"Tennessee Titans","away_team":"Philadelphia Eagles","bookmakers":[]}

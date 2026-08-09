@@ -1,0 +1,30 @@
+{
+  "_comment": "Test user — 2025 Week 15 fantasy PLAYOFF SEMIFINALS game (one win from the championship). User lost 161.7 to 169.82 (was favored at 80% win prob). 10-team PPR league with QB/RB/RB/WR/WR/TE/FLEX/D-ST/K. v1 prototype scores QB+RB+RB+WR+WR+TE+FLEX (7); D/ST and K not tracked. User's stated regret: started C.Loveland over H.Fannin at TE — Loveland's breakout actually started Week 16, so the call was wrong for Week 15; user believes had he benched Loveland for Fannin he would have won the semi and the championship. User does not have historical lineup or full bench records — bench is only partially known (Fannin was the bench TE used in the regret call); other bench slots will remain unfilled.",
+  "_round": "playoff_semifinals",
+  "_pivotal_decision": {
+    "slot": "TE",
+    "started": "C.Loveland",
+    "benched": "H.Fannin",
+    "user_retrospective": "wrong call for week 15 — Loveland's breakout started week 16; starting Fannin would have closed the 8.12-pt gap and (per user) led to the championship"
+  },
+  "league": {
+    "format": "PPR",
+    "size": 10,
+    "scoring_notes": "Standard PPR; D/ST + K used in actual roster but not v1 prototype.",
+    "starters_slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1},
+    "roster_size": 15
+  },
+  "starters": [
+    {"name": "J.Burrow",     "position": "QB", "_actual_pts": 5.5},
+    {"name": "T.Etienne",    "position": "RB", "_actual_pts": 31.5},
+    {"name": "R.Harvey",     "position": "RB", "_actual_pts": 10.5},
+    {"name": "N.Collins",    "position": "WR", "_actual_pts": 23.5},
+    {"name": "A.St. Brown",  "position": "WR", "_actual_pts": 41.4},
+    {"name": "C.Loveland",   "position": "TE", "_actual_pts_pending": true, "_note": "user's actual TE start; week-15 score not provided by user, recoverable from walk-forward CSV"},
+    {"name": "D.Metcalf",    "position": "WR", "_flex_slot": true, "_actual_pts_pending_at_screenshot": true}
+  ],
+  "_bench_TODO": "User confirmed they do NOT have historical lineup or bench data. Only the bench TE (Fannin) is known — recovered from the user's stated regret. Other bench slots will remain empty.",
+  "bench": [
+    {"name": "H.Fannin", "position": "TE", "_actual_pts": 12.0, "_note": "known bench player only by virtue of being the un-started alternative in the pivotal TE decision"}
+  ]
+}

@@ -1,0 +1,142 @@
+[
+  {
+    "player": "Kenneth Walker III",
+    "mult": 1.28,
+    "note": "KC: Mahomes + elite OL (Super Bowl MVP)"
+  },
+  {
+    "player": "Jahmyr Gibbs",
+    "mult": 1.22,
+    "note": "DET: Solo featured back, Montgomery traded"
+  },
+  {
+    "player": "Wan'Dale Robinson",
+    "mult": 1.2,
+    "note": "TEN: Alpha WR role (new team)"
+  },
+  {
+    "player": "Romeo Doubs",
+    "mult": 1.2,
+    "note": "NE: Inherits Diggs target share"
+  },
+  {
+    "player": "Jaylen Waddle",
+    "mult": 1.15,
+    "note": "DEN: Better QB/scheme fit"
+  },
+  {
+    "player": "Michael Pittman Jr.",
+    "mult": 1.15,
+    "note": "PIT: WR1 with Rodgers returning"
+  },
+  {
+    "player": "Kyle Pitts",
+    "mult": 1.17,
+    "note": "ATL: Tua + Stefanski TE-friendly scheme"
+  },
+  {
+    "player": "Drake London",
+    "mult": 1.1,
+    "note": "ATL: Stefanski play-action + Tua"
+  },
+  {
+    "player": "Bijan Robinson",
+    "mult": 1.1,
+    "note": "ATL: Stefanski wide-zone, best RB fit"
+  },
+  {
+    "player": "Ladd McConkey",
+    "mult": 1.15,
+    "note": "LAC: McDaniel OC, Herbert stays"
+  },
+  {
+    "player": "Brock Bowers",
+    "mult": 1.12,
+    "note": "LV: Kubiak OC, 27.9% play-action rate"
+  },
+  {
+    "player": "Chigoziem Okonkwo",
+    "mult": 1.12,
+    "note": "WAS: Step up to alpha TE role"
+  },
+  {
+    "player": "Travis Etienne",
+    "mult": 1.1,
+    "note": "NO: Featured back, Kamara 3rd-down only"
+  },
+  {
+    "player": "David Montgomery",
+    "mult": 1.1,
+    "note": "HOU: Featured back role"
+  },
+  {
+    "player": "Breece Hall",
+    "mult": 1.07,
+    "note": "NYJ: QB upgrade to Geno Smith"
+  },
+  {
+    "player": "Mike Evans",
+    "mult": 1.05,
+    "note": "SF: Pass-heavy scheme upgrade"
+  },
+  {
+    "player": "Malik Willis",
+    "mult": 0.6,
+    "note": "MIA: Unproven starter (replaced Tua)"
+  },
+  {
+    "player": "Tyreek Hill",
+    "mult": 0.75,
+    "note": "MIA: Major QB downgrade (Willis)"
+  },
+  {
+    "player": "Alvin Kamara",
+    "mult": 0.67,
+    "note": "NO: 3rd-down only, Etienne took RB1"
+  },
+  {
+    "player": "Tyler Allgeier",
+    "mult": 0.77,
+    "note": "ARI: Crowded backfield, limited role"
+  },
+  {
+    "player": "Marvin Mims",
+    "mult": 0.8,
+    "note": "DEN: Waddle absorbs targets"
+  },
+  {
+    "player": "Aaron Rodgers",
+    "mult": 0.55,
+    "note": "Age 43, final season declared \u2014 retirement risk, no 2027 value"
+  },
+  {
+    "player": "Tua Tagovailoa",
+    "mult": 0.85,
+    "note": "ATL: Concussion history (5 career), QB competition uncertainty"
+  },
+  {
+    "player": "Geno Smith",
+    "mult": 0.85,
+    "note": "NYJ: ECR 244 reflects team/age skepticism; discount from SEA peak extrapolation"
+  },
+  {
+    "player": "Fernando Mendoza",
+    "mult": 0.58,
+    "note": "Unproven: limited NFL track record, model has no reliable baseline"
+  },
+  {
+    "player": "Michael Penix Jr.",
+    "mult": 0.72,
+    "note": "ATL: backup behind Tua; ECR 250 confirms low starter expectations"
+  },
+  {
+    "player": "Keenan Allen",
+    "mult": 0.62,
+    "note": "ECR 260: aging WR, experts see near end-of-career; model anchors to peak seasons"
+  },
+  {
+    "player": "Deshaun Watson",
+    "mult": 0.60,
+    "note": "CLE: recurring injuries, ECR 294, limited games expected"
+  }
+]

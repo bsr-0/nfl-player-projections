@@ -1,0 +1,1 @@
+{"id":"c327223d76a3b7b0db8c6c104442f44b","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-04T20:05:00Z","home_team":"Minnesota Vikings","away_team":"Miami Dolphins","bookmakers":[]}

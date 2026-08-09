@@ -1,0 +1,157 @@
+{
+  "target_definition": "PPR fantasy points \u2014 awaiting 2026 NFL schedule",
+  "training_data_range": "2018-2025",
+  "positions": [
+    "QB",
+    "RB",
+    "WR",
+    "TE"
+  ],
+  "schedule_incorporated": true,
+  "upcoming_season": 2026,
+  "prev_season": 2025,
+  "has_ml_predictions": false,
+  "version": "v2.0.0",
+  "last_updated": "2026-08-05T12:54:58.608335",
+  "training_date": "2026-08-05T12:54:58.608335",
+  "test_season": 2026,
+  "n_features_per_position": {
+    "QB": 55,
+    "RB": 61,
+    "WR": 62,
+    "TE": 61
+  },
+  "training_metrics": {},
+  "backtest_results": {
+    "QB": {
+      "rmse": 14.88,
+      "mae": 12.42,
+      "r2": -2.112,
+      "mape": 96.2,
+      "correlation": 0.241,
+      "directional_accuracy_pct": 55.0,
+      "within_3_pts_pct": 13.6,
+      "within_5_pts_pct": 22.1,
+      "within_7_pts_pct": 31.3,
+      "within_10_pts_pct": 43.2,
+      "spearman_rho": 0.241,
+      "tier_classification_accuracy": 0.241,
+      "boom_bust": {
+        "boom_prevalence": 0.21689259645464026,
+        "bust_prevalence": 0.17413972888425444,
+        "boom_precision": 0.0,
+        "boom_recall": 0.0,
+        "boom_f1": 0.0,
+        "bust_precision": 0.19828641370869032,
+        "bust_recall": 0.9700598802395209,
+        "bust_f1": 0.32926829268292684
+      },
+      "vor_rank_correlation": 0.22,
+      "mae_rmse_ratio": 0.835,
+      "spearman_top50": 0.241
+    },
+    "RB": {
+      "rmse": 6.29,
+      "mae": 4.49,
+      "r2": 0.289,
+      "mape": 63.0,
+      "correlation": 0.559,
+      "directional_accuracy_pct": 74.5,
+      "within_3_pts_pct": 44.7,
+      "within_5_pts_pct": 68.5,
+      "within_7_pts_pct": 83.3,
+      "within_10_pts_pct": 91.1,
+      "spearman_rho": -0.147,
+      "tier_classification_accuracy": 0.51,
+      "boom_bust": {
+        "boom_prevalence": 0.07981927710843373,
+        "bust_prevalence": 0.3772590361445783,
+        "boom_precision": 0.0,
+        "boom_recall": 0.0,
+        "boom_f1": 0.0,
+        "bust_precision": 0.6373390557939914,
+        "bust_recall": 0.592814371257485,
+        "bust_f1": 0.6142709410548087
+      },
+      "vor_rank_correlation": 0.577,
+      "mae_rmse_ratio": 0.714,
+      "spearman_top50": -0.147
+    },
+    "WR": {
+      "rmse": 6.16,
+      "mae": 4.49,
+      "r2": 0.212,
+      "mape": 67.2,
+      "correlation": 0.49,
+      "directional_accuracy_pct": 72.8,
+      "within_3_pts_pct": 44.0,
+      "within_5_pts_pct": 69.9,
+      "within_7_pts_pct": 82.0,
+      "within_10_pts_pct": 89.9,
+      "spearman_rho": -0.061,
+      "tier_classification_accuracy": 0.519,
+      "boom_bust": {
+        "boom_prevalence": 0.07345175228036485,
+        "bust_prevalence": 0.40950552088334136,
+        "boom_precision": 0.0,
+        "boom_recall": 0.0,
+        "boom_f1": 0.0,
+        "bust_precision": 0.6,
+        "bust_recall": 0.5732708089097304,
+        "bust_f1": 0.5863309352517986
+      },
+      "vor_rank_correlation": 0.467,
+      "mae_rmse_ratio": 0.73,
+      "spearman_top50": -0.061
+    },
+    "TE": {
+      "rmse": 5.4,
+      "mae": 3.83,
+      "r2": 0.097,
+      "mape": 57.5,
+      "correlation": 0.43,
+      "directional_accuracy_pct": 64.5,
+      "within_3_pts_pct": 53.1,
+      "within_5_pts_pct": 74.2,
+      "within_7_pts_pct": 85.9,
+      "within_10_pts_pct": 93.0,
+      "spearman_rho": 0.14,
+      "tier_classification_accuracy": 0.562,
+      "boom_bust": {
+        "boom_prevalence": 0.04092526690391459,
+        "bust_prevalence": 0.46708185053380785,
+        "boom_precision": 0.0,
+        "boom_recall": 0.0,
+        "boom_f1": 0.0,
+        "bust_precision": 0.5990712074303406,
+        "bust_recall": 0.7371428571428571,
+        "bust_f1": 0.6609735269000854
+      },
+      "vor_rank_correlation": 0.424,
+      "mae_rmse_ratio": 0.711,
+      "spearman_top50": 0.14
+    }
+  },
+  "top_features": {},
+  "methodology": {
+    "model_type": "LightGBM ensemble with XGBoost and Ridge regression",
+    "training_window": "2018-2025",
+    "test_season": "2026",
+    "scoring_format": "PPR (1 point per reception)",
+    "features_description": "50 features per position including utilization scores, rolling averages (3/5/8 week windows), lag features, team context, matchup quality, and advanced play-by-play metrics",
+    "overfitting_prevention": [
+      "Time-series cross-validation with gap seasons",
+      "Recency decay weighting (half-life 2-4 seasons)",
+      "Feature selection via stability bootstrap (30 iterations)",
+      "Correlation threshold filtering (r > 0.92)",
+      "VIF multicollinearity checks (VIF > 10)",
+      "Early stopping with 25 rounds patience"
+    ],
+    "horizons": [
+      "1-week",
+      "4-week",
+      "Full season (18-week)"
+    ]
+  },
+  "data_basis_note": "The 2026 NFL schedule has not been released. Projections will appear once the schedule is available. No extrapolations are used. The Model Performance tab shows how the model performed on the 2025 season (out-of-sample)."
+}

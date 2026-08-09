@@ -1,0 +1,31 @@
+{
+  "__meta__": {
+    "generated_at": "2026-05-09",
+    "source_file": "backtest_2025_20260509.json",
+    "description": "Latest measured backtest metrics and minimum acceptable thresholds. Update after each retrain. Thresholds enforce quality floors — tighten as model improves.",
+    "note": "Tier 3 retrain: PreseasonProjector + tighter recency weighting (halflife 1.5). Weekly walk-forward metrics below. Season-total model (preseason_projector.json) achieves RB=0.604, WR=0.496, TE=0.460 R² on 2025 OOS holdout."
+  },
+  "measured": {
+    "overall": {
+      "r2": -0.025,
+      "correlation": 0.399,
+      "mae": 5.36,
+      "rmse": 7.23,
+      "directional_accuracy_pct": 69.0,
+      "avg_predicted": 8.07,
+      "avg_actual": 8.26
+    },
+    "by_position": {
+      "QB": {"r2": 0.139, "correlation": 0.396, "mae": 5.66},
+      "WR": {"r2": -0.168, "correlation": 0.379, "mae": 5.21},
+      "TE": {"r2": -0.130, "correlation": 0.304, "mae": 4.63},
+      "RB": {"r2": -0.012, "correlation": 0.433, "mae": 5.82}
+    }
+  },
+  "thresholds": {
+    "min_overall_r2": -0.2,
+    "min_position_r2": -0.25,
+    "min_overall_correlation": 0.2,
+    "max_bias_pct": 40
+  }
+}

@@ -1,0 +1,1 @@
+{"id":"17a730b7d399feeab6a78c30767c29d2","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T17:00:00Z","home_team":"Indianapolis Colts","away_team":"Houston Texans","bookmakers":[]}

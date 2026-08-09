@@ -1,0 +1,1 @@
+{"id":"573cc0ef39631a4f6673ec843a8bedd4","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-04T17:00:00Z","home_team":"Buffalo Bills","away_team":"New England Patriots","bookmakers":[]}

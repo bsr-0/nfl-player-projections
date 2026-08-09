@@ -1,0 +1,1 @@
+{"id":"2a529c108305ffa049d8b6cfdbaa4d36","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T17:00:00Z","home_team":"Washington Commanders","away_team":"Seattle Seahawks","bookmakers":[]}

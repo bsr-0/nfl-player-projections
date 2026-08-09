@@ -1,0 +1,10 @@
+{
+  "url": "https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl_super_bowl_winner/odds",
+  "params": {
+    "date": "2024-09-05T17:00:00Z",
+    "regions": "us",
+    "markets": "outrights",
+    "oddsFormat": "american"
+  },
+  "fetched_at": 1778903261.318474
+}

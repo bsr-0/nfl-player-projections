@@ -1,0 +1,1 @@
+{"id":"f1724dead3eab61546033032fc782375","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T20:05:00Z","home_team":"Tampa Bay Buccaneers","away_team":"Minnesota Vikings","bookmakers":[]}

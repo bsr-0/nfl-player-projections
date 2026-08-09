@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-08-04T20:07:36.105356+00:00",
+  "status": "fail",
+  "checks": {
+    "cache_exists": {
+      "passed": true,
+      "rows": 34249
+    },
+    "snap_data_populated": {
+      "passed": true,
+      "nonzero_snap_rows": 29201
+    },
+    "no_duplicates": {
+      "passed": false,
+      "duplicate_rows": 4
+    },
+    "fantasy_points_formula": {
+      "passed": true,
+      "rows_with_diff_gt_1": 0,
+      "mean_abs_diff": 0.0039
+    },
+    "no_ghost_rows": {
+      "passed": false,
+      "ghost_rows": 742,
+      "ghost_pct": 2.17
+    },
+    "position_coverage": {
+      "passed": true,
+      "counts": {
+        "WR": 13523,
+        "RB": 7699,
+        "TE": 7018,
+        "QB": 5920,
+        "K": 57,
+        "DST": 32
+      },
+      "missing": []
+    }
+  },
+  "failures": [
+    "4 duplicate (player_id, season, week) rows found",
+    "742 skill-position rows (2.2%) have all stat columns null"
+  ]
+}

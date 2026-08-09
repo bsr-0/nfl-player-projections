@@ -1,0 +1,50 @@
+[
+  {
+    "season": 2024,
+    "scrape_date": "2024-09-06",
+    "ranking": "preseason_ml",
+    "slot_ranks": [
+      4,
+      3,
+      3,
+      3,
+      5,
+      5,
+      5,
+      6,
+      6,
+      6
+    ],
+    "mean_rank": 4.6,
+    "best_rank": 3,
+    "worst_rank": 6,
+    "mean_model_actual": 1670.6,
+    "mean_adp_actual": 1630.7,
+    "lift_vs_adp_mean": 39.9,
+    "wins_vs_adp_mean_slots": 7
+  },
+  {
+    "season": 2025,
+    "scrape_date": "2025-09-05",
+    "ranking": "preseason_ml",
+    "slot_ranks": [
+      10,
+      10,
+      10,
+      10,
+      9,
+      9,
+      9,
+      9,
+      10,
+      10
+    ],
+    "mean_rank": 9.6,
+    "best_rank": 9,
+    "worst_rank": 10,
+    "mean_model_actual": 1241.8,
+    "mean_adp_actual": 1578.6,
+    "lift_vs_adp_mean": -336.8,
+    "wins_vs_adp_mean_slots": 0
+  }
+]

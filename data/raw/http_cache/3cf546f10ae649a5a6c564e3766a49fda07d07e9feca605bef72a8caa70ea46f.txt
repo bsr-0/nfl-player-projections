@@ -1,0 +1,1 @@
+{"id":"1b4f2e60ce83fa1d63a5dff83769d27c","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-04T17:00:00Z","home_team":"Philadelphia Eagles","away_team":"Los Angeles Rams","bookmakers":[]}

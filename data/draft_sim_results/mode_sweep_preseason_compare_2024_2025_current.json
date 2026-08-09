@@ -1,0 +1,98 @@
+[
+  {
+    "season": 2024,
+    "scrape_date": "2024-09-06",
+    "ranking": "preseason_ml",
+    "slot_ranks": [
+      8,
+      9,
+      8,
+      3,
+      9,
+      5,
+      5,
+      4,
+      4,
+      4
+    ],
+    "mean_rank": 5.9,
+    "best_rank": 3,
+    "worst_rank": 9,
+    "mean_model_actual": 1624.5,
+    "mean_adp_actual": 1671.0,
+    "lift_vs_adp_mean": -46.5,
+    "wins_vs_adp_mean_slots": 4
+  },
+  {
+    "season": 2024,
+    "scrape_date": "2024-09-06",
+    "ranking": "preseason_ppg17",
+    "slot_ranks": [
+      10,
+      9,
+      10,
+      10,
+      10,
+      10,
+      8,
+      8,
+      8,
+      8
+    ],
+    "mean_rank": 9.1,
+    "best_rank": 8,
+    "worst_rank": 10,
+    "mean_model_actual": 1459.8,
+    "mean_adp_actual": 1698.1,
+    "lift_vs_adp_mean": -238.3,
+    "wins_vs_adp_mean_slots": 0
+  },
+  {
+    "season": 2025,
+    "scrape_date": "2025-09-05",
+    "ranking": "preseason_ml",
+    "slot_ranks": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      9,
+      10,
+      10,
+      10
+    ],
+    "mean_rank": 9.9,
+    "best_rank": 9,
+    "worst_rank": 10,
+    "mean_model_actual": 1271.2,
+    "mean_adp_actual": 1555.8,
+    "lift_vs_adp_mean": -284.6,
+    "wins_vs_adp_mean_slots": 0
+  },
+  {
+    "season": 2025,
+    "scrape_date": "2025-09-05",
+    "ranking": "preseason_ppg17",
+    "slot_ranks": [
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      10,
+      10
+    ],
+    "mean_rank": 9.2,
+    "best_rank": 9,
+    "worst_rank": 10,
+    "mean_model_actual": 1231.3,
+    "mean_adp_actual": 1598.9,
+    "lift_vs_adp_mean": -367.5,
+    "wins_vs_adp_mean_slots": 0
+  }
+]

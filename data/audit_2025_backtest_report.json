@@ -1,0 +1,818 @@
+{
+  "check_1_percentile_bounds": {
+    "zero_width_count": 7,
+    "full_range_count": 4,
+    "valid_count": 11,
+    "zero_width": [
+      {
+        "key": "RB|snap_share_pct",
+        "position": "RB",
+        "component": "snap_share_pct",
+        "lo": 0.0,
+        "hi": 0.0
+      },
+      {
+        "key": "WR|snap_share_pct",
+        "position": "WR",
+        "component": "snap_share_pct",
+        "lo": 0.0,
+        "hi": 0.0
+      },
+      {
+        "key": "WR|redzone_targets_pct",
+        "position": "WR",
+        "component": "redzone_targets_pct",
+        "lo": 0.0,
+        "hi": 0.0
+      },
+      {
+        "key": "WR|route_participation_pct",
+        "position": "WR",
+        "component": "route_participation_pct",
+        "lo": 0.0,
+        "hi": 0.0
+      },
+      {
+        "key": "TE|snap_share_pct",
+        "position": "TE",
+        "component": "snap_share_pct",
+        "lo": 0.0,
+        "hi": 0.0
+      },
+      {
+        "key": "TE|redzone_targets_pct",
+        "position": "TE",
+        "component": "redzone_targets_pct",
+        "lo": 0.0,
+        "hi": 0.0
+      },
+      {
+        "key": "TE|inline_rate_pct",
+        "position": "TE",
+        "component": "inline_rate_pct",
+        "lo": 100.0,
+        "hi": 100.0
+      }
+    ],
+    "full_range": [
+      {
+        "key": "RB|rush_share_pct",
+        "position": "RB",
+        "component": "rush_share_pct",
+        "lo": 0.0,
+        "hi": 100.0
+      },
+      {
+        "key": "WR|air_yards_share_pct",
+        "position": "WR",
+        "component": "air_yards_share_pct",
+        "lo": 0.0,
+        "hi": 100.0
+      },
+      {
+        "key": "WR|high_value_touch_rate",
+        "position": "WR",
+        "component": "high_value_touch_rate",
+        "lo": 0.0,
+        "hi": 100.0
+      },
+      {
+        "key": "TE|air_yards_share_pct",
+        "position": "TE",
+        "component": "air_yards_share_pct",
+        "lo": 0.0,
+        "hi": 100.0
+      }
+    ],
+    "impact_by_position": {
+      "QB": {
+        "total_weight": 1.0,
+        "corrupted_weight": 0.0,
+        "corrupted_pct": 0.0,
+        "corrupted_components": []
+      },
+      "RB": {
+        "total_weight": 1.0,
+        "corrupted_weight": 0.03,
+        "corrupted_pct": 3.0,
+        "corrupted_components": [
+          "snap_share=0.030"
+        ]
+      },
+      "WR": {
+        "total_weight": 1.0,
+        "corrupted_weight": 0.06,
+        "corrupted_pct": 6.0,
+        "corrupted_components": [
+          "snap_share=0.030",
+          "redzone_targets=0.030",
+          "route_participation=0.000"
+        ]
+      },
+      "TE": {
+        "total_weight": 1.0,
+        "corrupted_weight": 0.503,
+        "corrupted_pct": 50.3,
+        "corrupted_components": [
+          "snap_share=0.030",
+          "redzone_targets=0.030",
+          "inline_rate=0.443"
+        ]
+      }
+    }
+  },
+  "check_2_utilization_distribution": {
+    "QB": {
+      "train_bounds": {
+        "mean": 44.98,
+        "std": 19.78,
+        "p25": 34.6,
+        "p50": 48.86,
+        "p75": 59.13,
+        "n": 12142
+      },
+      "train_rank": {
+        "mean": 44.98,
+        "std": 19.78,
+        "p25": 34.6,
+        "p50": 48.86,
+        "p75": 59.13,
+        "n": 12142
+      },
+      "test_bounds": {
+        "mean": 24.9,
+        "std": 13.37,
+        "p25": 17.24,
+        "p50": 25.26,
+        "p75": 33.27,
+        "n": 644
+      },
+      "test_rank": {
+        "mean": 24.9,
+        "std": 13.37,
+        "p25": 17.24,
+        "p50": 25.26,
+        "p75": 33.27,
+        "n": 644
+      },
+      "mean_shift_z": -1.02
+    },
+    "RB": {
+      "train_bounds": {
+        "mean": 35.95,
+        "std": 12.87,
+        "p25": 28.94,
+        "p50": 34.95,
+        "p75": 43.57,
+        "n": 25447
+      },
+      "train_rank": {
+        "mean": 35.95,
+        "std": 12.87,
+        "p25": 28.94,
+        "p50": 34.95,
+        "p75": 43.57,
+        "n": 25447
+      },
+      "test_bounds": {
+        "mean": 38.03,
+        "std": 12.73,
+        "p25": 30.38,
+        "p50": 36.82,
+        "p75": 45.63,
+        "n": 1181
+      },
+      "test_rank": {
+        "mean": 38.03,
+        "std": 12.73,
+        "p25": 30.38,
+        "p50": 36.82,
+        "p75": 45.63,
+        "n": 1181
+      },
+      "mean_shift_z": 0.16
+    },
+    "WR": {
+      "train_bounds": {
+        "mean": 18.91,
+        "std": 13.74,
+        "p25": 7.22,
+        "p50": 15.24,
+        "p75": 30.08,
+        "n": 40667
+      },
+      "train_rank": {
+        "mean": 18.91,
+        "std": 13.74,
+        "p25": 7.22,
+        "p50": 15.24,
+        "p75": 30.08,
+        "n": 40667
+      },
+      "test_bounds": {
+        "mean": 33.54,
+        "std": 10.4,
+        "p25": 29.06,
+        "p50": 33.73,
+        "p75": 39.19,
+        "n": 3397
+      },
+      "test_rank": {
+        "mean": 33.54,
+        "std": 10.4,
+        "p25": 29.06,
+        "p50": 33.73,
+        "p75": 39.19,
+        "n": 3397
+      },
+      "mean_shift_z": 1.06
+    },
+    "TE": {
+      "train_bounds": {
+        "mean": 16.5,
+        "std": 9.61,
+        "p25": 8.22,
+        "p50": 13.94,
+        "p75": 22.73,
+        "n": 17757
+      },
+      "train_rank": {
+        "mean": 16.5,
+        "std": 9.61,
+        "p25": 8.22,
+        "p50": 13.94,
+        "p75": 22.73,
+        "n": 17757
+      },
+      "test_bounds": {
+        "mean": 28.64,
+        "std": 7.93,
+        "p25": 23.09,
+        "p50": 28.32,
+        "p75": 33.8,
+        "n": 373
+      },
+      "test_rank": {
+        "mean": 28.64,
+        "std": 7.93,
+        "p25": 23.09,
+        "p50": 28.32,
+        "p75": 33.8,
+        "n": 373
+      },
+      "mean_shift_z": 1.26
+    }
+  },
+  "check_3_feature_distributions": {
+    "QB": [
+      {
+        "feature": "fantasy_points_roll3_mean",
+        "train_mean": 0.035,
+        "test_mean": -0.102,
+        "shift_z": -0.09,
+        "var_ratio": 0.93,
+        "status": "OK"
+      },
+      {
+        "feature": "passing_yards",
+        "train_mean": 203.322,
+        "test_mean": 191.77,
+        "shift_z": -0.109,
+        "var_ratio": 0.923,
+        "status": "OK"
+      },
+      {
+        "feature": "boom_rate_roll8",
+        "train_mean": 0.095,
+        "test_mean": 0.081,
+        "shift_z": -0.097,
+        "var_ratio": 0.793,
+        "status": "OK"
+      },
+      {
+        "feature": "season_week_pct",
+        "train_mean": 0.538,
+        "test_mean": 0.562,
+        "shift_z": 0.083,
+        "var_ratio": 1.048,
+        "status": "OK"
+      },
+      {
+        "feature": "prev_season_ppg",
+        "train_mean": 12.974,
+        "test_mean": 11.718,
+        "shift_z": -0.2,
+        "var_ratio": 0.795,
+        "status": "OK"
+      },
+      {
+        "feature": "team_points",
+        "train_mean": 5.885,
+        "test_mean": 21.054,
+        "shift_z": 1.331,
+        "var_ratio": 1.009,
+        "status": "FAIL"
+      },
+      {
+        "feature": "matchup_quality_indicator",
+        "train_mean": 74.587,
+        "test_mean": 35.161,
+        "shift_z": -1.385,
+        "var_ratio": 0.002,
+        "status": "FAIL"
+      },
+      {
+        "feature": "fantasy_points_lag4",
+        "train_mean": 13.202,
+        "test_mean": 12.857,
+        "shift_z": -0.041,
+        "var_ratio": 0.936,
+        "status": "OK"
+      }
+    ],
+    "RB": [
+      {
+        "feature": "utilization_score_roll3_mean",
+        "train_mean": 0.0,
+        "test_mean": 0.0,
+        "shift_z": 0,
+        "var_ratio": 1,
+        "status": "OK"
+      },
+      {
+        "feature": "season_week_pct",
+        "train_mean": 0.531,
+        "test_mean": 0.548,
+        "shift_z": 0.06,
+        "var_ratio": 1.033,
+        "status": "OK"
+      },
+      {
+        "feature": "weighted_opportunities",
+        "train_mean": 20.191,
+        "test_mean": 21.367,
+        "shift_z": 0.076,
+        "var_ratio": 0.939,
+        "status": "OK"
+      },
+      {
+        "feature": "is_workhorse_rb",
+        "train_mean": 0.291,
+        "test_mean": 0.337,
+        "shift_z": 0.101,
+        "var_ratio": 1.041,
+        "status": "OK"
+      },
+      {
+        "feature": "total_touches_lag1",
+        "train_mean": 10.677,
+        "test_mean": 11.222,
+        "shift_z": 0.067,
+        "var_ratio": 0.947,
+        "status": "OK"
+      },
+      {
+        "feature": "cumulative_workload_4w",
+        "train_mean": 41.43,
+        "test_mean": 43.759,
+        "shift_z": 0.082,
+        "var_ratio": 0.956,
+        "status": "OK"
+      },
+      {
+        "feature": "total_yards_roll3_mean",
+        "train_mean": 0.101,
+        "test_mean": 0.215,
+        "shift_z": 0.034,
+        "var_ratio": 1.586,
+        "status": "OK"
+      },
+      {
+        "feature": "total_yards",
+        "train_mean": 52.05,
+        "test_mean": 54.29,
+        "shift_z": 0.05,
+        "var_ratio": 1.016,
+        "status": "OK"
+      }
+    ],
+    "WR": [
+      {
+        "feature": "season_week_pct",
+        "train_mean": 0.536,
+        "test_mean": 0.556,
+        "shift_z": 0.069,
+        "var_ratio": 1.043,
+        "status": "OK"
+      },
+      {
+        "feature": "air_yards",
+        "train_mean": 15.072,
+        "test_mean": 38.099,
+        "shift_z": 0.696,
+        "var_ratio": 1.267,
+        "status": "WARN"
+      },
+      {
+        "feature": "team_points",
+        "train_mean": 6.986,
+        "test_mean": 20.966,
+        "shift_z": 1.176,
+        "var_ratio": 0.945,
+        "status": "FAIL"
+      },
+      {
+        "feature": "average_depth_of_target",
+        "train_mean": 3.169,
+        "test_mean": 8.624,
+        "shift_z": 0.874,
+        "var_ratio": 1.244,
+        "status": "WARN"
+      },
+      {
+        "feature": "cumulative_workload_4w",
+        "train_mean": 12.753,
+        "test_mean": 11.715,
+        "shift_z": -0.122,
+        "var_ratio": 1.034,
+        "status": "OK"
+      },
+      {
+        "feature": "expected_point_diff",
+        "train_mean": -3.964,
+        "test_mean": 0.0,
+        "shift_z": 0.375,
+        "var_ratio": 0.0,
+        "status": "OK"
+      },
+      {
+        "feature": "utilization_score_roll8_std",
+        "train_mean": 0.0,
+        "test_mean": 0.0,
+        "shift_z": 0,
+        "var_ratio": 1,
+        "status": "OK"
+      }
+    ],
+    "TE": [
+      {
+        "feature": "team_points",
+        "train_mean": 4.689,
+        "test_mean": 21.842,
+        "shift_z": 1.664,
+        "var_ratio": 1.134,
+        "status": "FAIL"
+      },
+      {
+        "feature": "season_week_pct",
+        "train_mean": 0.53,
+        "test_mean": 0.573,
+        "shift_z": 0.143,
+        "var_ratio": 1.047,
+        "status": "OK"
+      },
+      {
+        "feature": "team_yards",
+        "train_mean": 284.665,
+        "test_mean": 25.582,
+        "shift_z": -1.606,
+        "var_ratio": 0.576,
+        "status": "FAIL"
+      },
+      {
+        "feature": "average_depth_of_target",
+        "train_mean": 1.397,
+        "test_mean": 5.502,
+        "shift_z": 1.127,
+        "var_ratio": 1.496,
+        "status": "FAIL"
+      },
+      {
+        "feature": "air_yards",
+        "train_mean": 5.49,
+        "test_mean": 22.029,
+        "shift_z": 1.022,
+        "var_ratio": 1.453,
+        "status": "FAIL"
+      },
+      {
+        "feature": "is_late_season",
+        "train_mean": 0.342,
+        "test_mean": 0.397,
+        "shift_z": 0.115,
+        "var_ratio": 1.033,
+        "status": "OK"
+      },
+      {
+        "feature": "matchup_quality_indicator",
+        "train_mean": 78.075,
+        "test_mean": 35.164,
+        "shift_z": -1.595,
+        "var_ratio": 0.002,
+        "status": "FAIL"
+      }
+    ]
+  },
+  "check_4_player_trace": {
+    "QB": [
+      {
+        "player_id": "00-0034796",
+        "name": "L.Jackson",
+        "week": 1,
+        "actual_fp": 16.4,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 21.400000000000006,
+          "rushing_yards_roll3_mean": 61.0,
+          "rushing_attempts_roll3_mean": 10.0,
+          "rushing_tds_roll3_mean": 0.0,
+          "receiving_yards_roll3_mean": 0.0
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 18.1,
+          "total_yards_lag1": 39.0,
+          "total_touches_lag1": 6.0,
+          "total_tds_lag1": 0.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0034857",
+        "name": "J.Allen",
+        "week": 1,
+        "actual_fp": 23.8,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 21.33333333333333,
+          "rushing_yards_roll3_mean": 35.0,
+          "rushing_attempts_roll3_mean": 9.666666666666666,
+          "rushing_tds_roll3_mean": 0.6666666666666666,
+          "receiving_yards_roll3_mean": 0.0
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 21.4,
+          "total_yards_lag1": 39.0,
+          "total_touches_lag1": 11.0,
+          "total_tds_lag1": 0.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0039910",
+        "name": "J.Daniels",
+        "week": 1,
+        "actual_fp": 13.3,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 23.46666666666667,
+          "rushing_yards_roll3_mean": 45.0,
+          "rushing_attempts_roll3_mean": 11.666666666666666,
+          "rushing_tds_roll3_mean": 0.3333333333333333,
+          "receiving_yards_roll3_mean": 0.0
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 23.0,
+          "total_yards_lag1": 48.0,
+          "total_touches_lag1": 6.0,
+          "total_tds_lag1": 1.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      }
+    ],
+    "RB": [
+      {
+        "player_id": "00-0034844",
+        "name": "S.Barkley",
+        "week": 1,
+        "actual_fp": 18.4,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 28.7,
+          "rushing_yards_roll3_mean": 126.66666666666667,
+          "rushing_attempts_roll3_mean": 22.0,
+          "rushing_tds_roll3_mean": 1.6666666666666667,
+          "receiving_yards_roll3_mean": 23.666666666666668
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 15.7,
+          "total_yards_lag1": 97.0,
+          "total_touches_lag1": 31.0,
+          "total_tds_lag1": 0.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0039139",
+        "name": "J.Gibbs",
+        "week": 1,
+        "actual_fp": 15.0,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 35.93333333333333,
+          "rushing_yards_roll3_mean": 120.33333333333333,
+          "rushing_attempts_roll3_mean": 18.333333333333332,
+          "rushing_tds_roll3_mean": 2.0,
+          "receiving_yards_roll3_mean": 49.0
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 35.5,
+          "total_yards_lag1": 175.0,
+          "total_touches_lag1": 20.0,
+          "total_tds_lag1": 2.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0032764",
+        "name": "D.Henry",
+        "week": 1,
+        "actual_fp": 31.2,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 25.033333333333335,
+          "rushing_yards_roll3_mean": 136.0,
+          "rushing_attempts_roll3_mean": 20.666666666666668,
+          "rushing_tds_roll3_mean": 1.6666666666666667,
+          "receiving_yards_roll3_mean": 7.666666666666667
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 14.4,
+          "total_yards_lag1": 84.0,
+          "total_touches_lag1": 16.0,
+          "total_tds_lag1": 1.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      }
+    ],
+    "WR": [
+      {
+        "player_id": "00-0036900",
+        "name": "J.Chase",
+        "week": 1,
+        "actual_fp": 4.6,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 22.399999999999995,
+          "rushing_yards_roll3_mean": 2.3333333333333335,
+          "rushing_attempts_roll3_mean": 0.3333333333333333,
+          "rushing_tds_roll3_mean": 0.0,
+          "receiving_yards_roll3_mean": 98.33333333333333
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 25.6,
+          "total_yards_lag1": 96.0,
+          "total_touches_lag1": 10.0,
+          "total_tds_lag1": 1.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0036963",
+        "name": "A.St. Brown",
+        "week": 1,
+        "actual_fp": 8.5,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 18.466666666666665,
+          "rushing_yards_roll3_mean": 0.0,
+          "rushing_attempts_roll3_mean": 0.0,
+          "rushing_tds_roll3_mean": 0.0,
+          "receiving_yards_roll3_mean": 91.33333333333333
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 21.7,
+          "total_yards_lag1": 137.0,
+          "total_touches_lag1": 8.0,
+          "total_tds_lag1": 0.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0036322",
+        "name": "J.Jefferson",
+        "week": 1,
+        "actual_fp": 14.8,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 12.133333333333333,
+          "rushing_yards_roll3_mean": 0.0,
+          "rushing_attempts_roll3_mean": 0.0,
+          "rushing_tds_roll3_mean": 0.0,
+          "receiving_yards_roll3_mean": 68.0
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 10.8,
+          "total_yards_lag1": 58.0,
+          "total_touches_lag1": 5.0,
+          "total_tds_lag1": 0.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      }
+    ],
+    "TE": [
+      {
+        "player_id": "00-0033288",
+        "name": "G.Kittle",
+        "week": 1,
+        "actual_fp": 12.5,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 14.166666666666663,
+          "rushing_yards_roll3_mean": 0.0,
+          "rushing_attempts_roll3_mean": 0.0,
+          "rushing_tds_roll3_mean": 0.0,
+          "receiving_yards_roll3_mean": 81.66666666666667
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 4.7,
+          "total_yards_lag1": 27.0,
+          "total_touches_lag1": 2.0,
+          "total_tds_lag1": 0.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0030506",
+        "name": "T.Kelce",
+        "week": 1,
+        "actual_fp": 12.7,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 12.166666666666666,
+          "rushing_yards_roll3_mean": 0.0,
+          "rushing_attempts_roll3_mean": 0.0,
+          "rushing_tds_roll3_mean": 0.0,
+          "receiving_yards_roll3_mean": 58.333333333333336
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 7.9,
+          "total_yards_lag1": 39.0,
+          "total_touches_lag1": 4.0,
+          "total_tds_lag1": 0.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      },
+      {
+        "player_id": "00-0033858",
+        "name": "J.Smith",
+        "week": 1,
+        "actual_fp": 12.5,
+        "rolling_features": {
+          "fantasy_points_roll3_mean": 14.133333333333331,
+          "rushing_yards_roll3_mean": 0.0,
+          "rushing_attempts_roll3_mean": 0.0,
+          "rushing_tds_roll3_mean": 0.0,
+          "receiving_yards_roll3_mean": 48.0
+        },
+        "lag_features": {
+          "fantasy_points_lag1": 18.6,
+          "total_yards_lag1": 56.0,
+          "total_touches_lag1": 9.0,
+          "total_tds_lag1": 1.0,
+          "utilization_score_lag1": null
+        },
+        "leakage_flags": []
+      }
+    ]
+  },
+  "check_5_naive_baseline": {
+    "overall": {
+      "baseline_mae": 5.42,
+      "model_mae": 7.56,
+      "model_beats_baseline": false,
+      "baseline_avg_pred": 9.21,
+      "baseline_bias": 1.14,
+      "model_bias": 3.64
+    },
+    "by_position": {
+      "QB": {
+        "model_mae": 5.63,
+        "baseline_mae": 7.01,
+        "model_bias": 1.0,
+        "baseline_bias": 2.67,
+        "model_beats_baseline": true
+      },
+      "RB": {
+        "model_mae": 5.93,
+        "baseline_mae": 5.92,
+        "model_bias": -1.13,
+        "baseline_bias": 0.58,
+        "model_beats_baseline": false
+      },
+      "WR": {
+        "model_mae": 8.55,
+        "baseline_mae": 5.01,
+        "model_bias": 5.61,
+        "baseline_bias": 0.98,
+        "model_beats_baseline": false
+      },
+      "TE": {
+        "model_mae": 7.07,
+        "baseline_mae": 4.79,
+        "model_bias": 5.31,
+        "baseline_bias": 1.76,
+        "model_beats_baseline": false
+      }
+    }
+  }
+}

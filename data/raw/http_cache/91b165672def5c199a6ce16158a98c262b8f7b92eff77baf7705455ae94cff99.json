@@ -1,0 +1,10 @@
+{
+  "url": "https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl/odds",
+  "params": {
+    "date": "2024-09-08T17:00:00Z",
+    "regions": "us",
+    "markets": "spreads",
+    "oddsFormat": "american"
+  },
+  "fetched_at": 1778817483.87729
+}

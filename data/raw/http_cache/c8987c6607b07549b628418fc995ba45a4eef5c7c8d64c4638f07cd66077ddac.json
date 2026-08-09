@@ -1,0 +1,9 @@
+{
+  "url": "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/events/9db4ed15fe34fca1fb62f040cd244591/odds",
+  "params": {
+    "regions": "us",
+    "markets": "player_pass_yds,player_pass_tds,player_pass_completions,player_pass_attempts,player_rush_yds,player_rush_tds,player_rush_attempts,player_receptions,player_reception_yds,player_reception_tds,player_kicking_points",
+    "oddsFormat": "american"
+  },
+  "fetched_at": 1778816328.867594
+}

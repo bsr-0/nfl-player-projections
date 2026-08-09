@@ -1,0 +1,1 @@
+{"timestamp":null,"previous_timestamp":null,"next_timestamp":"2022-07-29T12:05:00Z","data":[]}

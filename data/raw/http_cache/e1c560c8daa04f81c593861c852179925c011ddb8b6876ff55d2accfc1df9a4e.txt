@@ -1,0 +1,1 @@
+{"id":"56e8897681915f7ec92baeee952bb1ae","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-18T00:15:00Z","home_team":"Buffalo Bills","away_team":"Detroit Lions","bookmakers":[]}

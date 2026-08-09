@@ -1,0 +1,1 @@
+{"id":"e0cbd266dcf997089203a1b33ba0333d","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-04T20:25:00Z","home_team":"Las Vegas Raiders","away_team":"Kansas City Chiefs","bookmakers":[]}

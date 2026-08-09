@@ -1,0 +1,45 @@
+{
+  "position": "QB",
+  "top_shap_features": [
+    {
+      "feature": "player_emb_4",
+      "mean_abs_shap": 1.5308991609829505
+    },
+    {
+      "feature": "team_b_points_scored",
+      "mean_abs_shap": 0.20737685348331794
+    },
+    {
+      "feature": "yards_per_carry",
+      "mean_abs_shap": 0.1778967287094641
+    },
+    {
+      "feature": "player_emb_0",
+      "mean_abs_shap": 0.17221130507228316
+    },
+    {
+      "feature": "total_yards",
+      "mean_abs_shap": 0.16171244383617
+    },
+    {
+      "feature": "player_emb_1",
+      "mean_abs_shap": 0.150619892877492
+    },
+    {
+      "feature": "opp_defense_week",
+      "mean_abs_shap": 0.13530007299077515
+    },
+    {
+      "feature": "ngs_avg_air_yards_to_sticks",
+      "mean_abs_shap": 0.12775273095454145
+    },
+    {
+      "feature": "rush_epa_per_play",
+      "mean_abs_shap": 0.11135591717825091
+    },
+    {
+      "feature": "yards_per_td",
+      "mean_abs_shap": 0.0994829593474668
+    }
+  ]
+}

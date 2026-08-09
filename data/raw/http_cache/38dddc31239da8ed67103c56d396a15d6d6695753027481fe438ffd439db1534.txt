@@ -1,0 +1,1 @@
+{"id":"3bfd8bfb4b8e9a365a0877879b73b16b","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-28T00:20:00Z","home_team":"Denver Broncos","away_team":"Los Angeles Rams","bookmakers":[]}

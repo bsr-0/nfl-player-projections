@@ -1,0 +1,1 @@
+{"id":"1f3cfd315a24d1a7dd5859a8e6b88e18","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T17:00:00Z","home_team":"Jacksonville Jaguars","away_team":"New England Patriots","bookmakers":[]}

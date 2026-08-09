@@ -1,0 +1,10 @@
+{
+  "url": "https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl/events/66c7e39643ecae341addae9fff981d0b/odds",
+  "params": {
+    "date": "2024-01-07T17:00:00Z",
+    "regions": "us",
+    "markets": "player_pass_yds,player_pass_tds,player_pass_completions,player_pass_attempts,player_rush_yds,player_rush_tds,player_rush_attempts,player_receptions,player_reception_yds,player_reception_tds,player_kicking_points,player_pass_interceptions,player_sacks,player_tackles_assists",
+    "oddsFormat": "american"
+  },
+  "fetched_at": 1778904686.056454
+}

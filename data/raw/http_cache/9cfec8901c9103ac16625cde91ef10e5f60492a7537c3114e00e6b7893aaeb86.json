@@ -1,0 +1,10 @@
+{
+  "url": "https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl_preseason/odds",
+  "params": {
+    "date": "2024-08-07T17:00:00Z",
+    "regions": "us",
+    "markets": "h2h,spreads,totals",
+    "oddsFormat": "american"
+  },
+  "fetched_at": 1778907439.76597
+}

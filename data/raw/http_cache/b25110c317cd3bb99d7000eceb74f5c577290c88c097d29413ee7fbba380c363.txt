@@ -1,0 +1,1 @@
+{"id":"17885cb8dcade8f6c3bce14b2de805e8","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-13T20:25:00Z","home_team":"Philadelphia Eagles","away_team":"Washington Commanders","bookmakers":[]}

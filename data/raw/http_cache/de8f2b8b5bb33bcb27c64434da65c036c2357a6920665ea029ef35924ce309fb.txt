@@ -1,0 +1,1 @@
+{"id":"1edfa5ceaa1ad2cb57df1c1b908731f6","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-13T20:25:00Z","home_team":"Los Angeles Chargers","away_team":"Arizona Cardinals","bookmakers":[]}

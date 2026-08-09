@@ -1,0 +1,1 @@
+{"id":"613b8cd3a5fab58f7be4e3fd6f76223e","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-27T17:00:00Z","home_team":"Cleveland Browns","away_team":"Carolina Panthers","bookmakers":[]}

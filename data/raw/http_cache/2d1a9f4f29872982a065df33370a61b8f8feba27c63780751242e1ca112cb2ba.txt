@@ -1,0 +1,1 @@
+{"id":"32367f882fac1a0c20a6335619922025","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-22T00:15:00Z","home_team":"Los Angeles Rams","away_team":"New York Giants","bookmakers":[]}

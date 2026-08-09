@@ -1,0 +1,1 @@
+{"id":"6b024bad1abb54f597225e4ab9b39d89","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-11T17:00:00Z","home_team":"New England Patriots","away_team":"Las Vegas Raiders","bookmakers":[]}

@@ -1,0 +1,1 @@
+{"id":"36ad2fa722f4915ef23d2c81351261de","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-20T17:00:00Z","home_team":"Houston Texans","away_team":"Cincinnati Bengals","bookmakers":[]}

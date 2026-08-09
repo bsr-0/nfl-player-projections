@@ -1,0 +1,10 @@
+{
+  "url": "https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl/odds",
+  "params": {
+    "date": "2026-01-03T17:00:00Z",
+    "regions": "us",
+    "markets": "h2h,spreads,totals",
+    "oddsFormat": "american"
+  },
+  "fetched_at": 1778815089.29767
+}

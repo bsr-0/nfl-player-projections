@@ -1,0 +1,1 @@
+{"id":"5ad8135dc2b5f27de0b777acd317855a","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-15T00:15:00Z","home_team":"Kansas City Chiefs","away_team":"Denver Broncos","bookmakers":[]}

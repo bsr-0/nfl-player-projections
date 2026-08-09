@@ -1,0 +1,1 @@
+{"id":"aee7eae1849ebb103b9bf233e9741392","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-20T17:00:00Z","home_team":"Atlanta Falcons","away_team":"Carolina Panthers","bookmakers":[]}

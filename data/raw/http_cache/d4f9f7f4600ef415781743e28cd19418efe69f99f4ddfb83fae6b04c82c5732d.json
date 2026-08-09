@@ -1,0 +1,9 @@
+{
+  "url": "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds",
+  "params": {
+    "regions": "us",
+    "markets": "h2h,spreads,totals",
+    "oddsFormat": "american"
+  },
+  "fetched_at": 1778813703.274642
+}

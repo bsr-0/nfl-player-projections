@@ -1,0 +1,1 @@
+{"id":"c1d3fcec25aaeb06ebd2244d33d338e0","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-13T17:00:00Z","home_team":"Detroit Lions","away_team":"New Orleans Saints","bookmakers":[]}

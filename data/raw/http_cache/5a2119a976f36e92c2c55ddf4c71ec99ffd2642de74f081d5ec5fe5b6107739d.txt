@@ -1,0 +1,1 @@
+{"id":"a7e7efb75a9792ac63480ae6328dca18","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-04T20:25:00Z","home_team":"San Francisco 49ers","away_team":"Denver Broncos","bookmakers":[]}

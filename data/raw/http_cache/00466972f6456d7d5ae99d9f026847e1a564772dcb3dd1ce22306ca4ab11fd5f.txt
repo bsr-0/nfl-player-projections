@@ -1,0 +1,1 @@
+{"id":"50bc247030707d823b9c3581d7eb5760","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-21T00:20:00Z","home_team":"Kansas City Chiefs","away_team":"Indianapolis Colts","bookmakers":[]}

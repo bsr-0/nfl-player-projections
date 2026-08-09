@@ -1,0 +1,1 @@
+{"id":"96d2373cda647873b971f268482bced0","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-10-04T20:25:00Z","home_team":"Seattle Seahawks","away_team":"Los Angeles Chargers","bookmakers":[]}

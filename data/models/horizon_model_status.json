@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-08-08T06:46:46.964823",
+  "train_seasons": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "status_by_position": {
+    "QB": {
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
+    },
+    "RB": {
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
+    },
+    "WR": {
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
+    },
+    "TE": {
+      "hybrid_4w": "skipped_fast_mode",
+      "deep_18w": "skipped_fast_mode"
+    }
+  },
+  "target_semantics": {
+    "QB": {
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
+    },
+    "RB": {
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
+    },
+    "WR": {
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
+    },
+    "TE": {
+      "1w": "component",
+      "4w": "component",
+      "18w": "component"
+    }
+  }
+}

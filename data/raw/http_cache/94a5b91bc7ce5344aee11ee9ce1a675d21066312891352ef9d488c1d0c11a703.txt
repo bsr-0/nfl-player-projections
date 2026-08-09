@@ -1,0 +1,1 @@
+{"timestamp":"2024-01-07T16:55:38Z","previous_timestamp":"2024-01-07T16:50:38Z","next_timestamp":"2024-01-07T17:00:39Z","data":{"id":"52c6f0c38ee6458d03e5caffe56af385","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2024-01-07T21:26:00Z","home_team":"San Francisco 49ers","away_team":"Los Angeles Rams","bookmakers":[]}}

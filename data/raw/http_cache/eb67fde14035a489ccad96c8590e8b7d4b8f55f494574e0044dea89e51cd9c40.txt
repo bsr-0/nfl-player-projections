@@ -1,0 +1,1 @@
+{"id":"e5fbd3b3953b896b1bf897ddadb3cc4b","sport_key":"americanfootball_nfl","sport_title":"NFL","commence_time":"2026-09-25T00:15:00Z","home_team":"Green Bay Packers","away_team":"Atlanta Falcons","bookmakers":[]}
