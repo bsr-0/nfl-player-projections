@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFL Player Projections</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --border:         rgba(11,11,11,0.10);
+    --series-1: #2a78d6; /* blue */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --border:         rgba(255,255,255,0.10);
+      --series-1: #3987e5;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page-plane);
+    color: var(--text-primary);
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 64px 24px;
+  }
+  h1 { font-size: 1.8rem; margin: 0 0 8px; }
+  p.intro { color: var(--text-secondary); margin: 0 0 32px; }
+
+  .card-link {
+    display: block;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    text-decoration: none;
+    color: inherit;
+    margin-bottom: 14px;
+  }
+  .card-link:hover { border-color: var(--series-1); }
+  .card-link h2 {
+    font-size: 1.05rem;
+    margin: 0 0 4px;
+    color: var(--series-1);
+  }
+  .card-link p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  footer {
+    margin-top: 40px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>NFL Player Projections</h1>
+  <p class="intro">ML-based fantasy football projections and model validation.</p>
+
+  <a class="card-link" href="results.html">
+    <h2>2025 Model Validation &amp; 2026 Projections &rarr;</h2>
+    <p>Walk-forward backtest accuracy, lineup decision quality, and full-season 2026 projections by position.</p>
+  </a>
+
+  <footer>More pages coming soon.</footer>
+</main>
+</body>
+</html>
