@@ -214,6 +214,29 @@
     font-weight: 600;
   }
 
+  .main-tabs {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .main-tab-btn {
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    padding: 9px 18px;
+    border-radius: 9px;
+    font-size: 0.92rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .main-tab-btn.active {
+    color: var(--text-primary);
+    border-color: var(--series-1);
+    background: color-mix(in srgb, var(--series-1) 12%, var(--surface-1));
+    font-weight: 600;
+  }
+  .panel[hidden] { display: none; }
+
   .filter-row {
     margin-bottom: 12px;
   }
@@ -245,9 +268,15 @@
 <header>
   <h1>2025 Model Validation &amp; 2026 Projections</h1>
   <p id="source-line">Loading&hellip;</p>
+  <div class="main-tabs" id="main-tabs">
+    <button class="main-tab-btn active" data-panel="panel-backtest">Backtest Validation</button>
+    <button class="main-tab-btn" data-panel="panel-2026">2026 Predictions</button>
+  </div>
 </header>
 
 <main>
+
+<div class="panel" id="panel-backtest">
 
   <section id="section-overall">
     <h2>2025 walk-forward accuracy</h2>
@@ -292,6 +321,10 @@
     </div>
   </section>
 
+</div>
+
+<div class="panel" id="panel-2026" hidden>
+
   <section id="section-2026">
     <h2>2026 season projections</h2>
     <p class="subtitle">Full-season fantasy-point projections from the current model, with floor/ceiling range.</p>
@@ -299,6 +332,8 @@
     <div class="filter-row"><input type="text" id="player-filter" placeholder="Filter by player or team&hellip;"></div>
     <div class="table-wrap"><table id="table-2026"></table></div>
   </section>
+
+</div>
 
 </main>
 
@@ -516,6 +551,14 @@ async function main() {
   document.getElementById('player-filter').addEventListener('input', renderProjectionsTable);
   renderProjectionsTable();
 }
+
+document.getElementById('main-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.main-tab-btn');
+  if (!btn) return;
+  document.querySelectorAll('.main-tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('main > .panel').forEach(p => p.hidden = p.id !== btn.dataset.panel);
+});
 
 main();
 </script>
