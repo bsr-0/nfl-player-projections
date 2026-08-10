@@ -423,6 +423,16 @@ The `_protect_data_dir()` fix in §7.7 treated *any* changed, git-untracked file
 
 **Lesson, stated plainly:** a "restore anything that changed and isn't tracked in git" safety net is unsafe in a repo where the most important asset (the working database) is *intentionally* gitignored. Broad denylist-style protection over a shared, live directory is the wrong shape for this problem; a narrow allowlist of specific known-bad paths is safer even though it requires enumerating them by hand. If a future fold run logs "N allowlisted model-artifact file(s) were written... restoring" for a path not in `_PROTECTED_PATHS`, that's a bug in the allowlist, not evidence to widen it back into a denylist.
 
+### 7.9 Phase 3 (next_focus.md) finding: the hard 2018+ training floor may be leaving accuracy on the table for QB/RB/TE — 2026-08-10
+
+`src/utils/data_manager.py:get_train_test_seasons()` hard-filters training data to `season >= TRAINING_START_YEAR_DEFAULT` (2018) everywhere in production, with an inline comment stating pre-2018 data is "noise for current projections" due to missing NGS/snap counts/modern play-calling norms. Phase 3's training-window/recency-weighting sweep (`src/models/single_week_ppr/windows.py`, `evaluate.py:run_window_comparison`) deliberately bypassed this floor for one experiment — reaching back to `MIN_HISTORICAL_YEAR` (2006) — specifically to test whether that assumption holds. It only partially does.
+
+**Result** (full grid: 4 positions x 5 windows x 3 weightings x 2 architectures x 3 seasons, 420 rows in `data/experiments/phase3_training_window_comparison.csv`): MAE improves **monotonically** from 3-year to full-history windows for QB (6.58→6.37), RB (4.79→4.71), and TE (3.70→3.65) — pre-2018 rows help, not hurt, despite genuinely missing NGS/PBP-EPA/modern-snap-share columns for those seasons (handled via LightGBM's native NaN-aware splits, not `fillna(0)` — see `_build_feature_matrices` in `evaluate.py`, itself a Phase 3 fix since blind `fillna(0)` would have falsely equated "no data" with "zero usage" for those older rows). WR is the exception — flat/mixed past 5 years (4.76-4.79 MAE, within noise), so the floor's stated rationale seems to actually hold there.
+
+**Also found**: recency weighting matters less than production assumes. "None" (uniform) won 13 of 20 position×window combinations on MAE, "linear" 6, and "exponential" — the *only* weighting scheme currently live in production (`src/models/position_models.py:_horizon_recency_weights`, `src/models/ensemble.py`, halflife=1.5 seasons) — won just 1. This doesn't mean exponential decay is wrong for every use case (it wasn't tested against the single-week horizon's actual accuracy needs when it was chosen), but it's a data point suggesting the current halflife may be too aggressive for at least this target.
+
+**Not fixed / not acted on**: this is a research finding from an experimental bypass, not a change to `data_manager.py` or `TRAINING_START_YEAR_DEFAULT` — production behavior is unchanged. Flagging so it doesn't get silently rediscovered later: before Phase 5 (hyperparameter tuning) or any production training-window change, this result is worth revisiting, ideally with a broader per-season/per-bucket breakdown (Phase 4 territory) rather than the single averaged-MAE view here.
+
 ---
 
 ## 8. Feature Engineering Gaps

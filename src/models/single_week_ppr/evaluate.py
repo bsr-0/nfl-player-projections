@@ -1,20 +1,26 @@
-"""Phase 2 (next_focus.md) walk-forward comparison: naive baselines vs. six
-new architectures vs. the existing production methodology, on raw
-`fantasy_points`.
+"""Phase 2 + Phase 3 (next_focus.md) walk-forward evaluation for the
+single-week PPR model.
+
+Phase 2: naive baselines vs. six new architectures vs. the existing
+production methodology, on raw `fantasy_points` (run_comparison).
+Phase 3: training-window size x recency-weighting optimization for the
+best Phase 2 architectures per position (run_window_comparison).
 
 Reuses the existing leakage-safe feature pipeline (`_prepare_training_data`
 in src/models/feature_preparation.py) rather than re-implementing feature
-engineering — see the Phase 2 plan for why. Must not modify any production
-file or overwrite production model artifacts. `settings.MODELS_DIR` is
-redirected to a temp directory per fold (mirroring src/models/train.py's own
-walk-forward loop at train.py:1053-1061), but that redirection alone is NOT
-sufficient: some modules (e.g. src/models/utilization_to_fp.py:16) do
+engineering. Must not modify any production file or overwrite production
+model artifacts. `settings.MODELS_DIR` is redirected to a temp directory per
+fold (mirroring src/models/train.py's own walk-forward loop at
+train.py:1053-1061), but that redirection alone is NOT sufficient: some
+modules (e.g. src/models/utilization_to_fp.py:16) do
 `from config.settings import MODELS_DIR` at import time, so reassigning
 `settings.MODELS_DIR` later doesn't affect their already-bound writes.
-`_protect_models_dir()` below is the real safety net — it snapshots
-data/models/ before the fold and restores any touched files afterward via
-git (tracked files) or deletion (newly-created untracked files). See
-GAPS.md Phase 2 notes for the incident that made this necessary.
+`_protect_data_dir()` below is the real safety net — it snapshots an
+allowlist of known-leaky model-artifact paths before the fold and restores
+any touched files afterward via git (tracked) or deletion (newly-created
+untracked). See GAPS.md §7.7/§7.8 for the incidents that made this
+necessary — including why it's an allowlist, not a denylist over all of
+data/ (a denylist version deleted the production database once already).
 """
 from __future__ import annotations
 
@@ -205,10 +211,26 @@ def _existing_methodology_predictions(trainer, test_df: pd.DataFrame, position: 
     return preds_out
 
 
-def run_fold(position: str, test_season: int, tune_hyperparameters: bool = False, n_trials: int = 0):
+def run_fold(
+    position: str,
+    test_season: int,
+    tune_hyperparameters: bool = False,
+    n_trials: int = 0,
+    train_seasons_override: Optional[Sequence[int]] = None,
+):
     """Loads one (train_seasons, test_season) fold, feature-engineers it via
     the existing leakage-safe pipeline, and extracts the existing-methodology
     prediction for `position` for later comparison.
+
+    train_seasons_override (Phase 3): when given, bypasses load_training_data
+    /get_train_test_seasons entirely — which hard-floor training data at
+    TRAINING_START_YEAR_DEFAULT (2018) with no override parameter — and
+    instead loads raw rows directly via DatabaseManager.get_all_players_for_
+    training() and splits by this explicit season list. _prepare_training_data
+    doesn't care how the caller split train/test, so this is a safe swap that
+    doesn't touch data_manager.py or monkeypatch any config constant (see
+    GAPS.md §7.7/§7.8 for why monkeypatching module-level constants here is
+    unreliable). Without an override, behavior is identical to Phase 2.
 
     Redirects config.settings.MODELS_DIR to a temp dir for the duration of
     the call, AND wraps the whole fold (including load_training_data, which
@@ -218,18 +240,28 @@ def run_fold(position: str, test_season: int, tune_hyperparameters: bool = False
     Returns (train_df, test_df, existing_methodology_pred, train_seasons).
     """
     import config.settings as settings
-    from src.models.data_loading import load_training_data
     from src.models.feature_preparation import _prepare_training_data
 
     old_models_dir = settings.MODELS_DIR
     with _protect_data_dir(), tempfile.TemporaryDirectory() as tmp:
         settings.MODELS_DIR = Path(tmp)
         try:
-            train_data, test_data, train_seasons, _ = load_training_data(
-                [position], test_season=test_season, optimize_training_years=False,
-            )
+            if train_seasons_override is not None:
+                from src.utils.database import DatabaseManager
+                train_seasons = list(train_seasons_override)
+                combined = DatabaseManager().get_all_players_for_training(position=position)
+                train_data = combined[combined["season"].isin(train_seasons)]
+                test_data = combined[combined["season"] == test_season]
+            else:
+                from src.models.data_loading import load_training_data
+                train_data, test_data, train_seasons, _ = load_training_data(
+                    [position], test_season=test_season, optimize_training_years=False,
+                )
+
             if len(test_data) < 20:
                 raise ValueError(f"Not enough test rows for {position} season {test_season}: {len(test_data)}")
+            if len(train_data) < 20:
+                raise ValueError(f"Not enough train rows for {position} seasons {train_seasons}: {len(train_data)}")
 
             train_df, test_df, trainer = _prepare_training_data(
                 train_data, test_data, [position], tune_hyperparameters, n_trials, fast=True,
@@ -250,6 +282,32 @@ def _architectures_for_fold() -> Dict[str, object]:
         "D_hurdle_t5": HurdleModel(threshold=5.0),
         "F_yeojohnson_huber": YeoJohnsonHuber(),
     }
+
+
+def _build_feature_matrices(pos_train: pd.DataFrame, pos_test: pd.DataFrame, feature_cols: List[str]):
+    """X/y split for train/test, given a feature-column list already run
+    through filter_feature_columns.
+
+    Phase 3 note: only fillna(0) for the sklearn fallback path — LightGBM
+    handles NaN natively via missing-aware splits, which is the CORRECT
+    behavior once pre-2018 rows (structurally missing NGS/EPA/modern
+    snap-share columns, not randomly missing) enter the training set via
+    window_to_season_list's floor bypass. fillna(0) would make "no data"
+    indistinguishable from "zero usage," a real distortion for those rows.
+    Phase 2 used unconditional fillna(0), reasonable when all data was
+    already 2018+; kept for the sklearn-fallback case only, since sklearn's
+    GradientBoostingRegressor can't handle NaN at all.
+    """
+    from src.models.single_week_ppr.architectures import HAS_LIGHTGBM
+
+    X_train = pos_train[feature_cols]
+    X_test = pos_test[feature_cols]
+    if not HAS_LIGHTGBM:
+        X_train = X_train.fillna(0)
+        X_test = X_test.fillna(0)
+    y_train = pos_train["fantasy_points"]
+    y_test = pos_test["fantasy_points"]
+    return X_train, y_train, X_test, y_test
 
 
 def run_comparison(
@@ -289,10 +347,7 @@ def run_comparison(
                 logger.warning("Skipping %s/%s: no CAUSAL_FEATURES columns present", position, season)
                 continue
 
-            X_train = pos_train[feature_cols].fillna(0)
-            y_train = pos_train["fantasy_points"]
-            X_test = pos_test[feature_cols].fillna(0)
-            y_test = pos_test["fantasy_points"]
+            X_train, y_train, X_test, y_test = _build_feature_matrices(pos_train, pos_test, feature_cols)
 
             # pos_train/pos_test come from separate DB-query DataFrames, so their
             # integer indices overlap (not globally unique) — concat with
@@ -333,4 +388,139 @@ def run_comparison(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(output_path, index=False)
     print(f"\nSaved comparison table to {output_path} ({len(result)} rows)")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: training-window / recency-weighting comparison
+# ---------------------------------------------------------------------------
+
+WINDOW_OUTPUT_PATH = Path("data/experiments/phase3_training_window_comparison.csv")
+
+# Per position: test only B (Huber, the plan's stated primary candidate) +
+# that position's Phase 2 MAE winner (data/experiments/
+# phase2_single_week_comparison.csv). See Phase 3 plan — weighting/
+# architecture refits are cheap once a fold is loaded; the window reload
+# (4 positions x 5 windows x 3 seasons = 60 fold-loads) is the expensive
+# axis, so architecture count doesn't need to be minimized further.
+PHASE3_WINNER_ARCHITECTURE = {
+    "QB": "C_gbm_mae",
+    "RB": "F_yeojohnson_huber",
+    "WR": "C_gbm_mae",
+    "TE": "C_gbm_mae",
+}
+
+
+def _architectures_for_position(position: str) -> Dict[str, object]:
+    all_arch = _architectures_for_fold()
+    winner_name = PHASE3_WINNER_ARCHITECTURE[position]
+    selected = {"B_gbm_huber": all_arch["B_gbm_huber"]}
+    if winner_name != "B_gbm_huber":
+        selected[winner_name] = all_arch[winner_name]
+    return selected
+
+
+def _append_row_to_csv(row: dict, output_path: Path) -> None:
+    """Appends one row immediately rather than batching a single final
+    write — a killed/timed-out run (Phase 2 nearly lost a full 12-fold run
+    this way) keeps whatever completed so far.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df_row = pd.DataFrame([row])
+    write_header = not output_path.exists()
+    df_row.to_csv(output_path, mode="a", header=write_header, index=False)
+
+
+def run_window_comparison(
+    positions: Optional[Sequence[str]] = None,
+    seasons: Sequence[int] = DEFAULT_VALIDATION_SEASONS,
+    windows: Optional[Sequence[str]] = None,
+    weightings: Optional[Sequence[str]] = None,
+    tune_hyperparameters: bool = False,
+    output_path: Path = WINDOW_OUTPUT_PATH,
+) -> pd.DataFrame:
+    """Phase 3 (next_focus.md): position x architecture x training-window x
+    recency-weighting, using only rolling (walk-forward) validation.
+
+    Deliberately bypasses the codebase's 2018+ training floor via
+    run_fold(train_seasons_override=...) so "10y"/"all" windows are actually
+    distinct from "5y" for our 2023-2025 validation seasons — see Phase 3
+    plan. Naive baselines are NOT recomputed here (they don't depend on
+    training window at all — that's Phase 2's job); existing_methodology is
+    included once per fold for continuity since it's a free side effect of
+    run_fold's _prepare_training_data call.
+    """
+    from config.settings import CAUSAL_FEATURES, POSITIONS
+    from src.models.single_week_ppr.windows import (
+        WINDOW_CANDIDATES, WEIGHTING_SCHEMES, window_to_season_list, compute_recency_weights,
+    )
+    from src.utils.database import DatabaseManager
+    from src.utils.leakage import filter_feature_columns
+
+    positions = list(positions) if positions else POSITIONS
+    windows = list(windows) if windows else list(WINDOW_CANDIDATES)
+    weightings = list(weightings) if weightings else list(WEIGHTING_SCHEMES)
+    rows: List[dict] = []
+
+    for position in positions:
+        architectures = _architectures_for_position(position)
+        available_seasons = sorted(
+            DatabaseManager().get_all_players_for_training(position=position)["season"].dropna().unique().tolist()
+        )
+
+        for season in seasons:
+            for window in windows:
+                print(f"\n=== {position} / test_season={season} / window={window} ===")
+                train_seasons = window_to_season_list(window, season, available_seasons)
+                if not train_seasons:
+                    logger.warning("Skipping %s/%s/%s: no training seasons available", position, season, window)
+                    continue
+
+                try:
+                    train_df, test_df, existing_pred, _ = run_fold(
+                        position, season, tune_hyperparameters, train_seasons_override=train_seasons,
+                    )
+                except Exception as e:
+                    logger.warning("Fold %s/%s/%s failed to load: %s", position, season, window, e)
+                    continue
+
+                pos_train = train_df[train_df["position"] == position]
+                pos_test = test_df[test_df["position"] == position]
+                if len(pos_test) < 20:
+                    logger.warning("Skipping %s/%s/%s: only %d test rows", position, season, window, len(pos_test))
+                    continue
+
+                feature_cols = filter_feature_columns(CAUSAL_FEATURES.get(position, []))
+                feature_cols = [c for c in feature_cols if c in pos_train.columns and c in pos_test.columns]
+                if not feature_cols:
+                    logger.warning("Skipping %s/%s/%s: no CAUSAL_FEATURES columns present", position, season, window)
+                    continue
+
+                X_train, y_train, X_test, y_test = _build_feature_matrices(pos_train, pos_test, feature_cols)
+                base_row = {
+                    "position": position, "season": season, "window": window,
+                    "actual_years": len(train_seasons), "n_train_rows": len(pos_train),
+                }
+
+                existing_row = {**base_row, "weighting": "n/a", "model": "existing_methodology",
+                                 **compute_metrics(y_test, existing_pred.reindex(pos_test.index))}
+                rows.append(existing_row)
+                _append_row_to_csv(existing_row, output_path)
+
+                for weighting in weightings:
+                    sample_weight = compute_recency_weights(pos_train["season"], weighting)
+                    for name, model in architectures.items():
+                        try:
+                            model.fit(X_train, y_train, sample_weight=sample_weight)
+                            pred = pd.Series(model.predict(X_test), index=X_test.index)
+                            row = {**base_row, "weighting": weighting, "model": name,
+                                   **compute_metrics(y_test, pred)}
+                            rows.append(row)
+                            _append_row_to_csv(row, output_path)
+                        except Exception as e:
+                            logger.warning("Architecture %s (%s weighting) failed for %s/%s/%s: %s",
+                                            name, weighting, position, season, window, e)
+
+    result = pd.DataFrame(rows)
+    print(f"\n{len(result)} rows appended to {output_path}")
     return result

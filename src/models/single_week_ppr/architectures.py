@@ -87,7 +87,7 @@ class GBMRegressor:
         self.params = {**DEFAULT_GBM_PARAMS, **params}
         self.model = None
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "GBMRegressor":
+    def fit(self, X: pd.DataFrame, y: pd.Series, sample_weight: Optional[np.ndarray] = None) -> "GBMRegressor":
         if HAS_LIGHTGBM:
             self.model = lgb.LGBMRegressor(objective=self.objective, verbosity=-1, **self.params)
         else:
@@ -95,7 +95,7 @@ class GBMRegressor:
             self.model = GradientBoostingRegressor(
                 loss=_SKLEARN_LOSS_MAP[self.objective], **self.params
             )
-        self.model.fit(X, y)
+        self.model.fit(X, y, sample_weight=sample_weight)
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -119,7 +119,7 @@ class HurdleModel:
         self.classifier = None
         self.regressor = None
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "HurdleModel":
+    def fit(self, X: pd.DataFrame, y: pd.Series, sample_weight: Optional[np.ndarray] = None) -> "HurdleModel":
         positive = y > self.threshold
         if HAS_LIGHTGBM:
             self.classifier = lgb.LGBMClassifier(objective="binary", verbosity=-1, **self.params)
@@ -129,10 +129,13 @@ class HurdleModel:
             self.classifier = GradientBoostingClassifier(**self.params)
             self.regressor = GradientBoostingRegressor(loss="squared_error", **self.params)
 
-        self.classifier.fit(X, positive.astype(int))
+        self.classifier.fit(X, positive.astype(int), sample_weight=sample_weight)
         if positive.sum() < 2:
             raise ValueError("HurdleModel needs at least 2 positive-target rows to fit stage 2")
-        self.regressor.fit(X[positive], y[positive])
+        positive_weight = None
+        if sample_weight is not None:
+            positive_weight = np.asarray(sample_weight)[np.asarray(positive)]
+        self.regressor.fit(X[positive], y[positive], sample_weight=positive_weight)
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -157,14 +160,14 @@ class QuantileGBM:
         self.params = {**DEFAULT_GBM_PARAMS, **params}
         self.models: Dict[float, object] = {}
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "QuantileGBM":
+    def fit(self, X: pd.DataFrame, y: pd.Series, sample_weight: Optional[np.ndarray] = None) -> "QuantileGBM":
         for q in self.QUANTILES:
             if HAS_LIGHTGBM:
                 model = lgb.LGBMRegressor(objective="quantile", alpha=q, verbosity=-1, **self.params)
             else:
                 from sklearn.ensemble import GradientBoostingRegressor
                 model = GradientBoostingRegressor(loss="quantile", alpha=q, **self.params)
-            model.fit(X, y)
+            model.fit(X, y, sample_weight=sample_weight)
             self.models[q] = model
         return self
 
@@ -194,9 +197,9 @@ class YeoJohnsonHuber:
         self.transformer = PowerTransformer(method="yeo-johnson")
         self.model = GBMRegressor(objective="huber", **params)
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "YeoJohnsonHuber":
+    def fit(self, X: pd.DataFrame, y: pd.Series, sample_weight: Optional[np.ndarray] = None) -> "YeoJohnsonHuber":
         y_t = self.transformer.fit_transform(y.to_numpy().reshape(-1, 1)).ravel()
-        self.model.fit(X, pd.Series(y_t, index=y.index))
+        self.model.fit(X, pd.Series(y_t, index=y.index), sample_weight=sample_weight)
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:

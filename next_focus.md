@@ -179,7 +179,46 @@ Do not prioritize log transformation because PPR contains negative values.
 
 ⸻
 
-Phase 3 — Optimize Historical Training Data
+Phase 3 — Optimize Historical Training Data [COMPLETE — 2026-08-10]
+
+Full grid run: 4 positions x 5 windows (3y/5y/7y/10y/all) x 3 weightings
+(none/linear/exponential) x 2 architectures per position (B-Huber + that
+position's Phase 2 MAE winner) x 3 validation seasons = 420 rows in
+data/experiments/phase3_training_window_comparison.csv.
+
+Deliberately bypassed the codebase's existing hard 2018+ training floor
+(TRAINING_START_YEAR_DEFAULT, src/utils/data_manager.py) for this
+experiment only, reaching back to MIN_HISTORICAL_YEAR (2006) via
+src/models/single_week_ppr/windows.py, so "10-year"/"all history" would
+actually differ from "5-year" (under the floor they'd be identical for our
+2023-2025 test seasons, since only 5-7 post-2018 seasons ever exist).
+
+Findings:
+- More history helps for QB/RB/TE — MAE improves monotonically from 3y to
+  all-history (QB: 6.58->6.37; RB: 4.79->4.71; TE: 3.70->3.65). Pre-2018 data
+  does NOT hurt despite structural missingness in NGS/EPA/modern-snap-share
+  features there (handled via LightGBM's native NaN splits, not fillna(0) —
+  see below). This pushes back on the codebase's stated rationale for the
+  hard 2018+ floor, at least for these 3 positions.
+- WR is the exception: flat/mixed after 5y (4.76-4.79 MAE across 5y-all,
+  within noise) — extra history doesn't help WR the way it helps the others.
+- Recency weighting: uniform ("none") won 13/20 position x window combos,
+  "linear" 6, "exponential" (the ONLY scheme currently live in production)
+  won just 1. Production may be over-weighting recency relative to what the
+  data supports, at least for the single-week horizon.
+- Best single config per position: QB/WR -> all-history/none/C(GBM-MAE);
+  RB -> all-history/none/F(Yeo-Johnson); TE -> 10-year/none/C(GBM-MAE).
+
+Code changes: sample_weight threaded through all 4 architecture wrapper
+classes; run_fold() gained train_seasons_override to bypass load_training_
+data's hard floor without monkeypatching (2 prior incidents this session
+established that monkeypatching module-level constants is unreliable — see
+GAPS.md §7.7-7.8); feature matrices switched from unconditional fillna(0)
+to LightGBM-native NaN handling (fillna(0) only for the sklearn fallback
+path) since pre-2018 rows have structurally-missing feature families, not
+randomly-missing values. Results append incrementally to CSV per fold
+(Phase 2 lesson: a killed/timed-out run shouldn't lose completed work).
+Tests: tests/test_phase3_window_weighting.py (18 passing).
 
 After identifying promising model architectures, optimize training history and recency weighting.
 
