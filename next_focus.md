@@ -250,7 +250,40 @@ using only rolling validation.
 
 ⸻
 
-Phase 4 — Single-Week Validation
+Phase 4 — Single-Week Validation [COMPLETE — 2026-08-10]
+
+Ran each position's FINAL_CONFIG (chosen architecture/window/weighting from
+Phases 2-3) with row-level predictions saved: 114,989 rows across 4
+positions x 3 seasons in data/experiments/phase4_row_level_predictions.csv
+(src/models/single_week_ppr/final_config.py, tiers.py, analysis.py). Column
+shape matches Phase 10's spec, so this artifact is reusable there.
+
+Overturns the Phase 2/3 "winner" framing — MAE alone was misleading:
+- The winning architectures (C/F/quantile-p50) all carry NEGATIVE bias of
+  -1.1 to -1.3 points on average, vs. existing_methodology's near-zero bias
+  (-0.04). They win on MAE but systematically underpredict.
+- Broken out by player tier: the new architectures' advantage all but
+  disappears for the ELITE tier specifically (QB 6.34 vs 6.42, RB tied
+  6.76 vs 6.76, TE 5.12 vs 5.17, WR tied 6.46 vs 6.46) — the improvement
+  Phase 2/3 found is concentrated in depth/starter/waiver/rookie tiers, not
+  the players most likely to matter for lineup decisions.
+- Predicted-score-bucket breakdown is inconsistent across positions: WR's
+  "20+" bucket sees the new architecture dramatically outperform existing
+  methodology (4.40 vs 7.86 MAE), but QB/RB's "20+" buckets are roughly a
+  wash. Not a uniform pattern to generalize from.
+- Quantile calibration (averaged across seasons, all 4 positions): p25
+  coverage ~0.26-0.30 (slightly over nominal 0.25), p50 ~0.50-0.53 (on
+  target), p75 ~0.73-0.75 (on target), but p90 is UNDER nominal 0.90 at
+  every single position (0.855-0.887) — the ceiling estimate is
+  systematically too conservative across the board, not just noise in one
+  position (confirms/strengthens the Phase 2 finding).
+
+Net: before treating Phase 2/3's per-position "winner" as final, the bias
+and elite-tier findings above should inform Phase 12 (final model
+selection) — a lower-bias, existing-methodology-like option may be
+preferable for elite-player decisions even if its overall MAE is slightly
+higher. Full writeup: GAPS.md §7.10. Tests: tests/test_phase4_analysis.py
+(22 passing).
 
 Use expanding/rolling time-series validation.
 

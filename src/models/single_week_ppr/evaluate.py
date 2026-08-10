@@ -1,10 +1,13 @@
-"""Phase 2 + Phase 3 (next_focus.md) walk-forward evaluation for the
-single-week PPR model.
+"""Phase 2 + Phase 3 + Phase 4 (next_focus.md) walk-forward evaluation for
+the single-week PPR model.
 
 Phase 2: naive baselines vs. six new architectures vs. the existing
 production methodology, on raw `fantasy_points` (run_comparison).
 Phase 3: training-window size x recency-weighting optimization for the
 best Phase 2 architectures per position (run_window_comparison).
+Phase 4: row-level predictions for each position's FINAL_CONFIG (chosen
+architecture/window/weighting from Phases 2-3), enabling bucket/tier/
+calibration breakdowns in analysis.py (run_final_validation).
 
 Reuses the existing leakage-safe feature pipeline (`_prepare_training_data`
 in src/models/feature_preparation.py) rather than re-implementing feature
@@ -523,4 +526,156 @@ def run_window_comparison(
 
     result = pd.DataFrame(rows)
     print(f"\n{len(result)} rows appended to {output_path}")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: row-level predictions for FINAL_CONFIG, for bucket/tier/
+# calibration breakdowns (analysis.py)
+# ---------------------------------------------------------------------------
+
+ROW_LEVEL_OUTPUT_PATH = Path("data/experiments/phase4_row_level_predictions.csv")
+
+# Column order matches next_focus.md Phase 10's "Save Out-of-Sample
+# Predictions" spec (player/position/season/week/actual_ppr/prediction/
+# model/fold/training_window/weighting_strategy + p25/p50/p75/p90) so this
+# artifact is reusable there rather than rebuilt.
+ROW_LEVEL_COLUMNS = [
+    "player", "position", "season", "week", "actual_ppr", "prediction", "model",
+    "fold", "training_window", "weighting_strategy", "p25", "p50", "p75", "p90",
+]
+
+
+def _append_df_to_csv(df: pd.DataFrame, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not output_path.exists()
+    df.to_csv(output_path, mode="a", header=write_header, index=False)
+
+
+def _build_row_level_frame(
+    pos_test: pd.DataFrame,
+    y_test: pd.Series,
+    pred_series: Optional[pd.Series],
+    model_name: str,
+    base_meta: dict,
+    extra_cols: Optional[Dict[str, pd.Series]] = None,
+) -> pd.DataFrame:
+    out = pd.DataFrame(index=pos_test.index)
+    out["player"] = pos_test["player_id"] if "player_id" in pos_test.columns else None
+    out["week"] = pos_test["week"]
+    out["actual_ppr"] = y_test
+    out["prediction"] = pred_series.reindex(pos_test.index) if pred_series is not None else np.nan
+    out["model"] = model_name
+    for k, v in base_meta.items():
+        out[k] = v
+    for col in ("p25", "p50", "p75", "p90"):
+        out[col] = extra_cols[col].reindex(pos_test.index) if extra_cols and col in extra_cols else np.nan
+    return out[ROW_LEVEL_COLUMNS].reset_index(drop=True)
+
+
+def run_final_validation(
+    positions: Optional[Sequence[str]] = None,
+    seasons: Sequence[int] = DEFAULT_VALIDATION_SEASONS,
+    tune_hyperparameters: bool = False,
+    output_path: Path = ROW_LEVEL_OUTPUT_PATH,
+) -> pd.DataFrame:
+    """Phase 4: for each position's FINAL_CONFIG (chosen architecture/window/
+    weighting from Phases 2-3), saves ROW-LEVEL predicted-vs-actual pairs
+    (not aggregated metrics) for baselines + existing_methodology + the
+    winning architecture + QuantileGBM. analysis.py consumes this for
+    bucket/tier/calibration breakdowns.
+    """
+    from config.settings import CAUSAL_FEATURES, POSITIONS
+    from src.models.single_week_ppr.final_config import FINAL_CONFIG
+    from src.models.single_week_ppr.windows import window_to_season_list, compute_recency_weights
+    from src.utils.database import DatabaseManager
+    from src.utils.leakage import filter_feature_columns
+
+    positions = list(positions) if positions else POSITIONS
+    all_frames: List[pd.DataFrame] = []
+    all_arch = _architectures_for_fold()
+
+    for position in positions:
+        cfg = FINAL_CONFIG[position]
+        available_seasons = sorted(
+            DatabaseManager().get_all_players_for_training(position=position)["season"].dropna().unique().tolist()
+        )
+
+        for season in seasons:
+            print(f"\n=== FINAL VALIDATION {position} / test_season={season} / {cfg} ===")
+            train_seasons = window_to_season_list(cfg["window"], season, available_seasons)
+            if not train_seasons:
+                logger.warning("Skipping %s/%s: no training seasons available", position, season)
+                continue
+            try:
+                train_df, test_df, existing_pred, _ = run_fold(
+                    position, season, tune_hyperparameters, train_seasons_override=train_seasons,
+                )
+            except Exception as e:
+                logger.warning("Fold %s/%s failed to load: %s", position, season, e)
+                continue
+
+            pos_train = train_df[train_df["position"] == position]
+            pos_test = test_df[test_df["position"] == position]
+            if len(pos_test) < 20:
+                logger.warning("Skipping %s/%s: only %d test rows", position, season, len(pos_test))
+                continue
+
+            feature_cols = filter_feature_columns(CAUSAL_FEATURES.get(position, []))
+            feature_cols = [c for c in feature_cols if c in pos_train.columns and c in pos_test.columns]
+            if not feature_cols:
+                logger.warning("Skipping %s/%s: no CAUSAL_FEATURES columns present", position, season)
+                continue
+
+            X_train, y_train, X_test, y_test = _build_feature_matrices(pos_train, pos_test, feature_cols)
+            sample_weight = compute_recency_weights(pos_train["season"], cfg["weighting"])
+            base_meta = {
+                "position": position, "season": season, "fold": season,
+                "training_window": cfg["window"], "weighting_strategy": cfg["weighting"],
+            }
+
+            # Baselines (free — same combined-index trick as run_comparison).
+            combined = pd.concat([pos_train, pos_test], ignore_index=True)
+            test_uid_index = combined.index[-len(pos_test):]
+            for name, series in naive_baselines(combined).items():
+                pred = series.loc[test_uid_index]
+                pred.index = pos_test.index
+                frame = _build_row_level_frame(pos_test, y_test, pred, name, base_meta)
+                all_frames.append(frame)
+                _append_df_to_csv(frame, output_path)
+
+            # Existing methodology (free — already computed by run_fold).
+            frame = _build_row_level_frame(
+                pos_test, y_test, existing_pred.reindex(pos_test.index), "existing_methodology", base_meta,
+            )
+            all_frames.append(frame)
+            _append_df_to_csv(frame, output_path)
+
+            # Winning architecture for this position.
+            try:
+                model = all_arch[cfg["architecture"]]
+                model.fit(X_train, y_train, sample_weight=sample_weight)
+                pred = pd.Series(model.predict(X_test), index=X_test.index)
+                frame = _build_row_level_frame(pos_test, y_test, pred, cfg["architecture"], base_meta)
+                all_frames.append(frame)
+                _append_df_to_csv(frame, output_path)
+            except Exception as e:
+                logger.warning("Winning architecture %s failed for %s/%s: %s",
+                                cfg["architecture"], position, season, e)
+
+            # Quantile model, for calibration analysis.
+            try:
+                qmodel = QuantileGBM().fit(X_train, y_train, sample_weight=sample_weight)
+                qpred = qmodel.predict(X_test)
+                frame = _build_row_level_frame(
+                    pos_test, y_test, qpred["p50"], "E_quantile_gbm", base_meta,
+                    extra_cols={c: qpred[c] for c in ("p25", "p50", "p75", "p90")},
+                )
+                all_frames.append(frame)
+                _append_df_to_csv(frame, output_path)
+            except Exception as e:
+                logger.warning("QuantileGBM failed for %s/%s: %s", position, season, e)
+
+    result = pd.concat(all_frames, ignore_index=True) if all_frames else pd.DataFrame(columns=ROW_LEVEL_COLUMNS)
+    print(f"\n{len(result)} row-level predictions appended to {output_path}")
     return result

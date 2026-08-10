@@ -433,6 +433,20 @@ The `_protect_data_dir()` fix in §7.7 treated *any* changed, git-untracked file
 
 **Not fixed / not acted on**: this is a research finding from an experimental bypass, not a change to `data_manager.py` or `TRAINING_START_YEAR_DEFAULT` — production behavior is unchanged. Flagging so it doesn't get silently rediscovered later: before Phase 5 (hyperparameter tuning) or any production training-window change, this result is worth revisiting, ideally with a broader per-season/per-bucket breakdown (Phase 4 territory) rather than the single averaged-MAE view here.
 
+### 7.10 Phase 4 (next_focus.md) finding: the Phase 2/3 "winning" architectures beat MAE but carry real bias and lose their edge for elite players — 2026-08-10
+
+Phase 4 ran each position's `FINAL_CONFIG` (chosen architecture/window/weighting from Phases 2-3: `src/models/single_week_ppr/final_config.py`) and saved **row-level** predictions (114,989 rows, `data/experiments/phase4_row_level_predictions.csv`) instead of only fold-aggregated metrics, then broke results out by predicted-score bucket and player tier (`src/models/single_week_ppr/tiers.py`, `analysis.py`) — axes Phase 2/3's aggregate MAE couldn't see.
+
+**Bias.** Aggregated across all positions/seasons: the winning architectures (C=GBM-MAE, F=Yeo-Johnson+Huber, E=quantile median) all carry **-1.1 to -1.3 mean bias** (systematic underprediction), vs. `existing_methodology`'s **-0.04** (essentially unbiased). This was flagged as a risk back in Phase 2 (GAPS.md §7.6 predates this, findings were in `next_focus.md` only) but Phase 4's full-dataset numbers make it concrete: these architectures win on MAE partly *because* they're willing to guess low more often, not purely because they're more accurate in a symmetric sense.
+
+**Player tier.** New tier definition (`tiers.py`, prior-season PPG, position-adjusted, leakage-safe — see module docstring for why the two existing tier concepts in this repo, `ROOKIE_ARCHETYPES` and `tier_classification_accuracy`, weren't reused as-is). Broken out by tier, the winning architectures beat `existing_methodology` consistently for depth/starter/waiver/rookie tiers (0.1-0.5 MAE improvement) but the gap **collapses to a wash for the "elite" tier** at every position: QB 6.34 vs 6.42, RB tied 6.76 vs 6.76, TE 5.12 vs 5.17, WR tied 6.46 vs 6.46. The tier most likely to matter for actual lineup decisions is exactly where Phase 2/3's "winner" stops winning.
+
+**Predicted-score bucket.** New (`assign_score_bucket` in `tiers.py`, fixed 0-5/5-10/10-15/15-20/20+ ranges on the model's own weekly prediction). No consistent pattern across positions — WR's "20+" bucket shows the new architecture dramatically ahead (4.40 vs 7.86 MAE), QB/RB's "20+" buckets are roughly tied. Not something to generalize a rule from; noted as a per-position quirk.
+
+**Quantile calibration**, averaged across seasons per position (extends Phase 2's per-fold numbers with a position-level view): p25 coverage 0.26-0.30 (target 0.25, slightly over everywhere), p50 0.50-0.53 (on target), p75 0.73-0.75 (on target), **p90 under-covers at every single position (0.855-0.887 vs target 0.90)** — this is now confirmed as a systematic pattern, not noise in one position/season from Phase 2. The model's "ceiling" estimate is reliably too conservative across the board.
+
+**Not acted on yet**: no config was changed as a result of this — `FINAL_CONFIG` still reflects the Phase 2/3 choices. This is deliberately a findings-gathering phase; the bias/elite-tier results should inform Phase 12 (final model selection), where a lower-bias option may be preferable for elite-player-heavy decisions even at a small MAE cost. Flagging now so it isn't rediscovered late in the project.
+
 ---
 
 ## 8. Feature Engineering Gaps
