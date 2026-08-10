@@ -388,6 +388,41 @@ The component predictor (predict individual stats → assemble FP) and the main 
 - Ridge α=10,000 provides strong regularization but also compresses prediction variance (documented as "variance compression")
 - Component predictors use Ridge with α fitted from CV — moderate overfitting risk for per-stat models with small sample sizes
 
+### 7.6 Phase 1 leakage audit (next_focus.md) — 2026-08-09/10
+
+Audit performed while starting Phase 1 of `next_focus.md` (new single-week/18-week PPR modeling plan). Found and fixed two live leakage bugs.
+
+**Fixed: same-week own-team stats in `get_all_players_for_training` (`src/utils/database.py`).**
+The `team_stats` join used `pws.week = ts.week` (same week as the target game), unlike the adjacent `team_defense_stats` join which correctly used `week - 1`. A player's own stat line is a direct component of same-week team totals (e.g. a WR's receiving yards are part of `team_yards`; a QB's attempts are part of `team_pass_attempts`), so this leaked target information into training on the live production path (`train.py` → `data_loading.load_training_data()` → `get_all_players_for_training()`). Fixed by joining `team_stats` from `week - 1`, mirroring the opponent-defense pattern, with a matching runtime `ValueError` assertion on the new `own_team_stats_week` sentinel column. This is a different bug from the two rookie-feature leakage bugs in §7.2 — those were feature-computation bugs in `advanced_rookie_injury.py`; this was a raw SQL join condition.
+
+**Fixed: injury/status timing not verified pre-kickoff (`src/data/external_data.py`).**
+Originally documented as an unfixable-without-new-data limitation, then fixed once we checked what `nfl_data_py.import_injuries()` actually returns: it already includes a `date_modified` timestamp per report (previously unused — dropped during column selection in `get_player_injury_status`). `src/data/injury_validator.py` (freshness-only, dead code, zero callers) never used it either. Cross-checking `date_modified` against real kickoff times (`nfl_data_py.import_schedules()` `gameday`+`gametime`, US/Eastern → UTC) across 2018–2025 found 24 of 45,337 injury reports (0.05%) were modified *after* that week's kickoff — e.g. Thursday/short-week games where a "final" report update landed post-game. `InjuryDataLoader._load_kickoff_times()` (new) computes per-team-week kickoff from schedules; `get_player_injury_status()` now drops any report row where `date_modified > kickoff` before building injury features, and prints the count dropped. Rows with no verifiable timestamp or unmatched schedule are kept as-is — missingness is not leakage. `src/data/injury_validator.py` remains dead code (freshness-only, doesn't check pre-kickoff) — still unused, not wired in, left as-is since this fix supersedes what it would have done.
+
+**Added: formal feature-availability registry (`src/utils/leakage.py`).**
+`FEATURE_AVAILABILITY` + `audit_feature_availability()` — a single-source-of-truth mapping from feature-name pattern to availability rule (e.g. "week - 1, runtime-asserted", "prediction week, schedule is fixed", "assumed ... UNVERIFIED"), covering every feature family named in `next_focus.md` Phase 1 (rolling/season-to-date, opponent/own-team stats, schedule/Vegas/weather, draft capital, injury/status). `audit_feature_availability(columns)` flags any column not covered by this registry or the existing `is_leakage_feature()` guard, so new features get classified instead of silently passing through unaudited.
+
+**Added: `tests/test_leakage_guards.py`** — 28 regression tests covering the two fixes above (in-memory SQLite fixture verifying `own_team_stats_week` is always `week - 1`) plus `is_leakage_feature`/`audit_feature_availability` classification. Note: the `tests/` directory itself had been fully deleted from git in an earlier commit (`0194107 Delete tests directory`) — only stale `.pyc` cache remained locally, no test source files existed anywhere in the repo before this. Also note: running bare `pytest` in this environment currently fails at collection (`ImportError: cannot import name 'FixtureDef' from 'pytest'`) because a globally-installed `pytest-asyncio==1.3.0` is incompatible with the repo-pinned `pytest==7.4.4` (`pytest-asyncio` isn't even in `requirements.txt` — it's environment pollution, not a repo dependency). Workaround: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest ...`. Not fixed here since it's a global environment issue, not a repo bug — flagging so it isn't silently rediscovered.
+
+### 7.7 Phase 2 (next_focus.md) incident: `settings.MODELS_DIR` redirection does not prevent production-artifact writes — 2026-08-10
+
+While building `src/models/single_week_ppr/` (Phase 2 architecture comparison), the walk-forward-fold pattern in `src/models/train.py` (`settings.MODELS_DIR = Path(tmp)` before calling `_prepare_training_data`, lines ~1053-1061) was reused to keep experimental training runs from overwriting real production model artifacts. It did not work: a smoke run for WR/2024 silently overwrote `data/models/component_wr.json`, `data/models/util_to_fp_wr.joblib`, and `data/models/data_quality_gate_refresh.json`, plus `data/data_availability_cache.json` and `data/utilization_percentile_bounds.json` (outside `data/models/` entirely).
+
+**Root cause:** several modules bind `MODELS_DIR` at *import* time via `from config.settings import MODELS_DIR` (e.g. `src/models/utilization_to_fp.py:16`) rather than reading `config.settings.MODELS_DIR` dynamically at call time. Reassigning `settings.MODELS_DIR` after those modules are already imported has no effect on their already-bound local name — their reads/writes still target the real path. `load_training_data()`'s `auto_refresh_data()` call and the utilization-weight-fitting step write to `data/` paths outside `MODELS_DIR` altogether, so even a fully-working redirect wouldn't have caught them.
+
+**This means `train.py`'s own `--walk-forward` flag likely has the same leak** — worth a follow-up audit before trusting walk-forward runs not to mutate production artifacts. Not fixed here (out of scope for Phase 2; flagging per standing directive to log gaps immediately rather than let them slide).
+
+**Fixed for Phase 2's own code (v1, superseded by §7.8):** `_protect_data_dir()` (`src/models/single_week_ppr/evaluate.py`) — snapshots mtimes of every file under `data/` (excluding `data/experiments/`, Phase 2's own output dir) before a fold runs, and after, restores any touched file via `git checkout --` (tracked) or deletion (newly-created untracked). This is a real safety net independent of whether any given module respects `MODELS_DIR` redirection, wraps the *entire* fold (including `load_training_data`, not just `_prepare_training_data`), and logs a warning whenever it has to intervene. Verified: three consecutive WR/2024 smoke runs after the fix left `git status` clean except the intentional `data/experiments/phase2_single_week_comparison.csv` output.
+
+### 7.8 Phase 2 incident #2 (self-inflicted by the §7.7 fix): the "safety net" deleted the production database — 2026-08-10
+
+The `_protect_data_dir()` fix in §7.7 treated *any* changed, git-untracked file under `data/` as pollution to be deleted. `data/nfl_data.db` is gitignored (`*.db`) and is **legitimately, intentionally** written by `auto_refresh_data()` inside `load_training_data()` — that's normal operation, not pollution. During the QB/RB/TE/WR full sweep runs, the database's mtime changed (a legitimate refresh write) inside a `_protect_data_dir()`-wrapped fold, so at the end of that run the "safety net" `unlink()`'d the entire production SQLite database (110,283 `player_weekly_stats` rows, 2,868 players, 33 tables of ingested data). The next `DatabaseManager()` instantiation silently recreated an empty DB from schema (`CREATE TABLE IF NOT EXISTS`), so the failure was silent — a 245KB empty file that looked structurally fine, discovered only when the user asked "anything in Phase 2 we missed?" and a scoping check (`get_all_players_for_training()` returning 0 rows) caught it.
+
+**Recovered** from `data/nfl_data.db.bak-lar-jac-20260804154651` (405MB, dated 2026-08-04, an existing backup unrelated to this session — not something this session created). Restored via `cp`, verified `player_weekly_stats` row count matches exactly (110,283), then ran `auto_refresh_data(force_check=True)` to catch up: the 2025 season was already complete in the backup (regular-season/playoff data doesn't change after the fact), so the only real gap filled was the 2026 schedule (272 games). **No data was permanently lost** — the Phase 2 sweep results themselves (`data/experiments/phase2_single_week_comparison.csv`) are unaffected/trustworthy, because all 4 positions' folds produced row counts consistent with a fully-populated database throughout their execution; the deletion happened in a `finally` block *after* each run's real work was done.
+
+**Fixed properly this time:** `_protect_data_dir()` now uses an **allowlist** (`_PROTECTED_PATHS` = `data/models/`, `data/data_availability_cache.json`, `data/utilization_percentile_bounds.json` — the exact three things empirically observed leaking in §7.7) instead of a denylist over all of `data/`. `data/nfl_data.db` (or any other live, evolving, gitignored data asset) can never be touched by this function again, regardless of whether it changes during a protected block — silence on that file is the whole point.
+
+**Lesson, stated plainly:** a "restore anything that changed and isn't tracked in git" safety net is unsafe in a repo where the most important asset (the working database) is *intentionally* gitignored. Broad denylist-style protection over a shared, live directory is the wrong shape for this problem; a narrow allowlist of specific known-bad paths is safer even though it requires enumerating them by hand. If a future fold run logs "N allowlisted model-artifact file(s) were written... restoring" for a path not in `_PROTECTED_PATHS`, that's a bug in the allowlist, not evidence to widen it back into a denylist.
+
 ---
 
 ## 8. Feature Engineering Gaps
@@ -5288,4 +5323,294 @@ away" standing instruction — this is the "bigger" case. Until resolved,
 **treat `MultiWeekModel`'s reported 4w/18w R² anywhere in this repo
 (TRACKING.md §2d and any future walk-forward extension of it) as
 unreliable/inflated; only the 1w horizon is currently trustworthy.**
+
+---
+
+## Data quality audit: `team_stats.time_of_possession` / `third_down_conv` always 0 (2026-08-09)
+
+Found while scanning `data/nfl_data.db` for all-zero/constant columns (a
+sweep the user specifically asked for after noticing it wasn't part of
+routine integrity checks like duplicate-key or out-of-range scans).
+
+**`team_stats.points_per_drive` was also constant 0** — this one *was*
+a small/safe fix, applied directly: `pbp_stats_aggregator.py`'s drive
+metrics block matched on a `drive_result` column that no longer exists
+in current `nfl_data_py.import_pbp_data()` output (renamed
+`fixed_drive_result` at some point upstream). Every row silently fell
+into the zero-fallback branch. Fixed by trying both column names
+(`src/data/pbp_stats_aggregator.py` around the "Drive metrics" block).
+Verified against live 2024 PBP data: `points_per_drive` now has
+mean≈2.29, std≈0.96 instead of being pinned at 0.
+
+**`time_of_possession` and `third_down_conv` are NOT a rename bug —
+they are simply never computed.** `PBPStatsAggregator.aggregate_team_stats()`
+does not produce these columns at all (confirmed via direct column
+inspection on live 2024 PBP output — `points_scored`/`points_allowed`
+are also absent). `src/data/nfl_data_loader.py::_store_team_stats_dataframe()`
+reads them via `row.get(col)` and stores `None` when missing;
+`database.py::insert_team_stats()` upserts with
+`COALESCE(excluded.col, team_stats.col)` against a column with
+`DEFAULT 0` — so the very first insert established 0, and every
+subsequent upsert (with `None` from the missing source column)
+COALESCEs right back to that same 0 forever. Net effect: these two
+columns look present and populated (only 2 NULLs out of 11,048 rows)
+but have carried zero information since inception.
+
+**Fixed (2026-08-09, follow-up)** — added aggregation logic to
+`PBPStatsAggregator.aggregate_team_stats()`: `third_down_conv` is
+`third_down_converted / (third_down_converted + third_down_failed)`
+per team/week using nfl_data_py's native per-play flags; `time_of_possession`
+sums each distinct drive's `drive_time_of_possession` ("MM:SS" string,
+parsed via new `_mmss_to_seconds()` helper) per team/week and reports
+minutes. Verified against live 2024 PBP: third-down conv rate 0-0.82
+range (league mean ≈0.39, matches real NFL); TOP ≈24-34 min/team/game,
+summing to ~60 for both teams in a game as expected. Regenerated
+`data/raw/pbp_team_advanced_{2018..2025}.parquet` caches and re-upserted
+`team_stats` in the DB — league-wide season means now ≈0.36-0.39 (3rd
+down) and ≈28.6-30.4 min (TOP), both in the expected historical range,
+with real per-team-week variance (68-75 / 416-454 distinct values per
+season respectively). 2006-2017 remain 0 — same pre-existing scope gap
+as `points_per_drive` above (team-level PBP stats were never loaded for
+those years; only 2018+ has cached team-advanced parquet files).
+
+Previously logged as "not fixed, requires new aggregation logic, doesn't
+meet the small/safe bar" — that assessment held until the user asked
+for it directly. `team_stats.time_of_possession` and
+`.third_down_conv` are now real, populated data (2018+); they are not
+yet read by `feature_engineering.py` — wiring them into the
+team-matchup feature block (same place `points_per_drive` is consumed,
+`feature_engineering.py`'s `team_metrics` list) is a follow-up if
+useful, not required for the data itself to be correct.
+
+---
+
+## `player_weekly_stats` situational-usage columns are stale (near-zero DB, correct pipeline) (2026-08-09)
+
+Found via a low-variance scan the user asked for explicitly (not just
+strict-constant / all-null — "one value covers >=97% of non-null rows"),
+run after the `points_per_drive` fix above. Flagged columns in
+`player_weekly_stats`: `rush_plays`, `pass_plays`, `neutral_rushes`,
+`third_down_targets`, `short_yardage_rushes`, `redzone_targets`,
+`goal_line_touches`, `two_minute_targets` (and likely `neutral_targets`,
+`high_leverage_touches`, `rush_inside_5/10`, `targets_15_plus` — same
+family, not individually re-verified) — all 97-99% zero DB-wide.
+
+**Confirmed real, not natural sparsity**: filtered to RB rows with
+`rushing_attempts + targets > 3` (i.e. players with genuine volume),
+`redzone_targets` nonzero only 1.3%, `goal_line_touches` 2.0%,
+`rush_plays` 5.2% — implausible for backs with real touches.
+
+**Root cause is a stale table, not a live bug** — traced the full
+pipeline (`PBPStatsAggregator.aggregate_all_stats()` →
+`NFLDataLoader._merge_advanced_pbp_features()` →
+`_standardize_weekly_columns()`) against live 2024 PBP data end to end:
+every stage produces correct, plausible nonzero rates (e.g.
+`redzone_targets` 30.6% nonzero, `rush_plays` 99.9% nonzero among
+`rushing_attempts>3` rows, matching the aggregator's own direct output
+of 21-72% for the situational columns). **The current code is correct.**
+The DB values are stale — `player_weekly_stats` (110,283 rows,
+2006-2025) was populated by an older run of this pipeline, before the
+current advanced-PBP-merge logic existed or reached its present form
+(same class of drift as the `points_per_drive` finding above, just on
+the primary training table instead of `team_stats`).
+
+**Not fixed** — deliberately not run without checking in first. Unlike
+the `team_stats` refresh (8 seasons, ~4,500 rows, cheap/low-risk), a
+full `player_weekly_stats` reload touches the entire training table
+(20 seasons, 110K rows), takes real wall-clock time (per-season
+nflverse/PBP fetches back to 2006), and invalidates
+`data/cached_features.parquet` (stale `FEATURE_VERSION`) and whatever
+models were trained on the current stale values — worth scoping (full
+history vs. recent seasons only, dry-run row-count diff first) before
+committing. User was asked whether/how to scope a refresh as of this
+write-up (answer pending); until resolved, treat any RB/WR/TE
+situational-usage feature (redzone share, goal-line touches, third-down
+role, etc.) downstream as unreliable.
+
+---
+
+## Broader referential-integrity / low-variance sweep (2026-08-09, cont'd)
+
+Continuation of the data-quality audit at the user's request ("let's move
+on to the other steps you suggest to catch bugs"). Findings, most to
+least significant:
+
+**1,090 `players` rows (38% of the table) have a blank `name`, covering
+31,683 player-weeks (~29% of all `player_weekly_stats` rows) and
+253,808 fantasy points of real, played production.** Root cause:
+`NFLDataLoader._store_weekly_data()` (`nfl_data_loader.py:671`) does
+`_to_scalar_str(row['name'], '')` — defaults to `''` when the source
+row has no name. Confirmed **100% confined to seasons 2006-2016**
+(monotonically declining count going further back; zero occurrences
+2017+). Since `TRAINING_START_YEAR_DEFAULT = 2018` and these rows are
+only ever used as historical rolling-feature *context* (joined by the
+still-intact `player_id`, never as training targets), this does not
+appear to corrupt any numeric feature — `name` isn't part of any
+feature computation. Impact is cosmetic/display-only (draft board,
+player lookups) for pre-2018 player identity, not model accuracy.
+**Not fixed** — no immediate action needed unless something surfaces
+pre-2018 player names to a UI; logging in case a display path
+(`scripts/generate_draft_data.py` or similar) ever iterates historical
+seasons and hits blank names unexpectedly.
+
+**`qbr` table's `player_id` is ESPN's own athlete-ID scheme (e.g.
+`3139477` for Mahomes), not GSIS — 100% orphan rate against `players`,
+can never join as-is.** Confirmed via grep that nothing in
+`src/features/` or `src/models/` currently reads `qbr`, so this is
+inert (same class as `weighted_opportunity` in the first entry above —
+dead table, not active corruption). Would need a name-based or
+ESPN-ID-crosswalk join to ever use QBR data as a feature.
+
+**`weekly_rosters_v2` (77% orphan) and `injuries_nflpy` (69% orphan)
+against `players` — not a bug, a scope mismatch.** `players` is only
+ever populated as a side-effect of loading weekly *stat* rows
+(`nfl_data_loader.py:674`, inside `_store_weekly_data`), so it means
+"has a recorded stat line," not "was ever on a roster." Roster and
+injury-report data naturally reference a much broader population
+(inactive, IR, practice-squad players) that never gets a `players` row.
+Anyone joining roster/injury tables to `players` for name/position/DOB
+metadata should expect ~70-77% of rows to not resolve — this is
+expected, not something to fix, but worth knowing before trusting an
+injury-adjusted feature that silently drops most non-starters.
+
+**Fixed (2026-08-09, follow-up) — `rosters` table was empty for a real
+reason, not just "never run": `scripts/ingest_rookie_data.py`'s
+`ingest_rosters()` called `nfl.import_rosters(seasons)`, which no
+longer exists in the installed `nfl_data_py` version** (renamed
+upstream; `AttributeError: module 'nfl_data_py' has no attribute
+'import_rosters'. Did you mean: '__import_rosters'`) — the same class
+of bug as the `drive_result`→`fixed_drive_result` rename above, just
+in a standalone script instead of the main pipeline, so it never
+surfaced in day-to-day runs. Current API is `import_seasonal_rosters()`
+(there's also `import_weekly_rosters()`, presumably what already
+populates `weekly_rosters_v2`). Swapped the call
+(`scripts/ingest_rookie_data.py:62`), verified output schema still has
+every column `bulk_insert_rosters()` expects (`player_id`,
+`player_name`, `position`, `team`, `season`, `birth_date`, `height`,
+`weight`, `college`, `jersey_number`, `status`, `years_exp`), fixed the
+stale docstring in `database.py:1178`, then ran
+`python scripts/ingest_rookie_data.py --only rosters`: 67,354 roster
+records inserted (seasons 2000-2026). Verified
+`scripts/snake_draft_sim.py`'s actual query (`SELECT ... FROM rosters
+WHERE player_name IS NOT NULL AND position IN ('QB','RB','WR','TE')`)
+now returns 20,490 rows instead of 0 — the simulator is unblocked.
+Bonus: `backfill_players_from_rosters()` (called automatically at the
+end of the ingest script) also backfilled `players.college`/
+`birth_date` for 1,835 of 2,868 players, fixing the "college all-null"
+finding from the very first pass of this audit at no extra cost.
+
+**Checked and clean, no action needed:** `data/cached_features.parquet`
+matches the current `FEATURE_VERSION` (`30`, both cache and
+`data/models/feature_version.txt` share today's mtime — not stale).
+`data/draft_picks.parquet` / `combine_data.parquet` / `injuries.parquet`
+are not orphaned duplicates of `draft_picks_v2`/`combine_data_v2`/
+`injuries_nflpy` — same refresh mtime, and `draft_picks.parquet` is
+actively read directly by `feature_engineering.py` (parquet used for
+fast feature-engineering reads, DB table for querying/joins — intentional
+dual storage, not drift). Name-collision check (`players` grouped by
+`name`+`position`) found only expected abbreviated-name ambiguity
+(e.g. "J.Williams" WR resolving to 4 distinct real players) — harmless
+since all downstream joins key on `player_id`, never `name`.
+
+---
+
+## Remaining items from the user's original checklist (2026-08-09, cont'd)
+
+**`snap_counts`/`weekly_pfr` orphan check (via PFR->GSIS crosswalk,
+`get_pfr_to_gsis_map()`) — not a bug.** `snap_counts` covers every
+position (LB, CB, DE, OL, etc. all present, confirmed via
+`GROUP BY position`), while `players` only ever gets skill positions
+that appear in `player_weekly_stats`. Same scope mismatch as the
+roster/injury tables above. `weekly_pfr`'s much lower 8.4% orphan rate
+(vs. snap_counts' ~64%) is consistent with it already being
+skill-position-focused.
+
+**Team-level `snap_share` sanity (sum per team/week) — clean.**
+Distribution is tightly centered at 5-6 (max observed 6.66) across all
+team-weeks, not the ~100%/1.0 pattern that would indicate
+double-counting. Makes sense once scoped correctly:
+`player_weekly_stats` only covers QB/RB/WR/TE, so a team-week sum
+here represents roughly "1 QB + 4-5 skill-position slots," not all 11
+offensive players (which would include OL, not present in this table).
+
+**Season-coverage cliff check — clean for `snap_counts`/`ngs_*`,
+real bug found and fixed in `game_odds`.** `snap_counts`,
+`ngs_passing`, `ngs_rushing`, `ngs_receiving` all show smooth,
+gradually-varying row counts per season (2018-2025), no cliffs.
+`game_odds` had 2,759 rows (1.05% of the table, 150 distinct events)
+with **blank `season`/`week`**, invisible to the
+`idx_game_odds_season_week` index and any season-filtered query.
+
+Root cause: `_parse_market_outcomes()` in `src/scrapers/odds_scraper.py`
+always returns `season: None, week: None` in its row dict (it only has
+event_id/teams/commence_time from the odds API, not NFL schedule
+context) — only the historical-backfill workflow
+(`scrape_historical_season`) separately overrode this after the fact;
+the four live/current-odds call sites (`scrape_current` etc.) never
+did, so every live scrape run has been silently accumulating
+season/week-less rows.
+
+Confirmed via one example (TEN@PIT, `commence_time` originally
+2020-10-04) that this isn't just "missing metadata" but actively
+**wrong if naively date-matched** — that game was COVID-postponed to
+Week 7 (2020-10-25); a date-based backfill would have mismatched it.
+Fixed properly: backfilled the 134 resolvable historical events
+(2,593 of the 2,759 rows) by matching `(home_team, away_team, season)`
+against the local `schedule` table — team-pair matching rather than
+date matching, so postponements resolve correctly regardless of which
+date odds were captured on. The remaining 166 rows (16 events) are
+genuinely unmatchable: Super Bowl/conference-championship **futures
+markets** for hypothetical matchups that never happened (e.g. "GB vs
+KC" priced ahead of Super Bowl LV, when the actual game was
+Buccaneers-Chiefs) — correctly has no `schedule` row, not a bug.
+
+Also fixed the recurrence: `save_game_odds_to_db()` (`odds_scraper.py`)
+now resolves `season`/`week` from the `schedule` table at insert time
+for every call site (not just the historical-backfill path), using the
+same postponement-safe team-pair matching. Verified with a synthetic
+row reproducing the exact TEN@PIT case: resolves to `season=2020,
+week=7` on insert instead of persisting `None`.
+
+**Duplicate/near-duplicate players (name+birth_date), leakage risk
+review, and `manual_adjustments_2026.json`/`rookie_priors.json` drift
+— completed in the same session, see below.**
+
+**Duplicate players (name+birth_date) — clean.** No collisions across
+the 64% of `players` rows with `birth_date` populated (would indicate
+the same real person split across two `player_id`s; none found).
+
+**Leakage review — no issues found.** All 31 `.rolling()` calls in
+`src/features/feature_engineering.py` are leak-safe: 30 call
+`.shift(1)` immediately before `.rolling(...)`, and the one exception
+(line 3078, boom/bust rate) is correct despite not having its own
+`.shift(1)` — it operates on `shifted_fp` (line 3062), which was
+already lagged upstream, so a second shift would be wrong, not missing.
+No season-total-joined-onto-every-week pattern found either. Situational
+PBP columns (`redzone_targets` etc.) are aggregated per
+`(season, week, player)`, not full-season, by construction. Not an
+exhaustive line-by-line audit of every feature, but the pattern is
+consistent enough not to flag as a live concern.
+
+**`manual_adjustments_2026.json` — clean, no drift.** Cross-checked
+all 28 entries' implied team (parsed from each note's "TEAM: reason"
+prefix) against current 2026 roster data; every one matches. One
+apparent mismatch (Tyler Allgeier: noted "ARI", roster data said "AZ")
+turned out to be a team-code inconsistency in the `rosters` table
+itself, not a stale adjustment — see below.
+
+**Found in passing: `rosters` table has 3 different codes for
+Arizona (`ARI`/`ARZ`/`AZ`, from this session's `import_seasonal_rosters()`
+backfill spanning 2000-2026) plus similar duplicates for Baltimore
+(`BAL`/`BLT`), Cleveland (`CLE`/`CLV`), and Houston (`HOU`/`HST`) —
+nflverse used different abbreviation conventions in different
+historical seasons and `bulk_insert_rosters()` doesn't normalize them.
+Confirmed **zero functional impact**: the only consumer,
+`scripts/snake_draft_sim.py`, displays `rosters.team` but never joins
+on it. Logged as cosmetic/low-priority rather than fixed.
+
+**`rookie_priors.json` — not stale, intentional design.**
+`scripts/compute_rookie_priors.py --fit-until` defaults to 2023
+specifically so 2024/2025 rookies are held out as an out-of-sample
+validation set (per the script's own `--help` text) — the file's
+`fit_window: [2006, 2023]` is deliberate, not a forgotten refit.
 

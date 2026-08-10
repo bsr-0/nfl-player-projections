@@ -212,3 +212,101 @@ def sanitize_schedule_df(df: pd.DataFrame) -> pd.DataFrame:
     if not cols_to_drop:
         return df
     return df.drop(columns=cols_to_drop, errors="ignore")
+
+
+# -----------------------------------------------------------------------------
+# Feature availability registry
+# -----------------------------------------------------------------------------
+#
+# Formalizes, per feature family, when that family's data is actually known
+# relative to the week being predicted. This is the single source of truth
+# for "available_timestamp <= prediction_timestamp" — it classifies column
+# *identity*, not row-level nulls (a missing value is not leakage; a column
+# whose value could only be known after kickoff is).
+#
+# Each entry: (prefix_or_substring_match, human-readable availability rule).
+# Order matters only in that the first match wins, most-specific first.
+FEATURE_AVAILABILITY: Tuple[Tuple[str, str], ...] = (
+    # Model outputs / targets / backtest artifacts are never inputs at all —
+    # already hard-blocked by is_leakage_feature(), listed here for completeness.
+    ("predicted_", "MODEL OUTPUT — never a valid input feature"),
+    ("projection_", "MODEL OUTPUT — never a valid input feature"),
+    ("target_", "TARGET — never a valid input feature"),
+    ("baseline_", "BACKTEST ARTIFACT — never a valid input feature"),
+    # Opponent / own-team box-score aggregates: joined from week - 1 in
+    # get_all_players_for_training (src/utils/database.py), enforced by a
+    # runtime ValueError assertion on opp_defense_week / own_team_stats_week.
+    ("opp_fpts_allowed", "week - 1 (runtime-asserted in database.py)"),
+    ("fantasy_points_allowed_", "week - 1 (runtime-asserted in database.py)"),
+    ("team_points", "week - 1 (runtime-asserted in database.py)"),
+    ("team_yards", "week - 1 (runtime-asserted in database.py)"),
+    ("team_pass_attempts", "week - 1 (runtime-asserted in database.py)"),
+    ("team_rush_attempts", "week - 1 (runtime-asserted in database.py)"),
+    ("team_redzone_attempts", "week - 1 (runtime-asserted in database.py)"),
+    ("team_plays", "week - 1 (runtime-asserted in database.py)"),
+    ("team_neutral_", "week - 1 (runtime-asserted in database.py)"),
+    ("team_drive_", "week - 1 (runtime-asserted in database.py)"),
+    ("team_avg_drive_epa", "week - 1 (runtime-asserted in database.py)"),
+    ("team_points_per_drive", "week - 1 (runtime-asserted in database.py)"),
+    ("team_pace_sec_per_play", "week - 1 (runtime-asserted in database.py)"),
+    # Player rolling / season-to-date aggregates: shift(1) applied before
+    # .rolling()/.expanding() throughout feature_engineering.py, database.py,
+    # season_long_features.py, qb_features.py, evaluation/baselines.py.
+    ("_roll3", "week - 1 and earlier (shift(1) before .rolling())"),
+    ("_roll5", "week - 1 and earlier (shift(1) before .rolling())"),
+    ("_rolling_", "week - 1 and earlier (shift(1) before .rolling())"),
+    ("_s2d_lag1", "week - 1 and earlier (shift(1) before .expanding())"),
+    ("prev_season_", "prior season (fully known pre-kickoff)"),
+    ("_season_prior", "prior season (fully known pre-kickoff)"),
+    ("career_year_flag", "prior season and earlier (fully known pre-kickoff)"),
+    ("bayesian_prior_ppg", "prior data only, expanding mean (shift(1) applied)"),
+    # Schedule / market / environment: legitimately known before kickoff of
+    # the predicted week (Vegas lines close pre-game, schedule is fixed,
+    # weather forecasts are pre-game estimates).
+    ("implied_team_total", "known pre-kickoff (Vegas line)"),
+    ("spread", "known pre-kickoff (Vegas line)"),
+    ("sos_next_", "prediction week (schedule is fixed in advance)"),
+    ("sos_rank_next_", "prediction week (schedule is fixed in advance)"),
+    ("favorable_matchups_next_", "prediction week (schedule is fixed in advance)"),
+    ("expected_games_next_", "prediction week (derived from prior injury history)"),
+    ("wind_speed_mph", "pre-kickoff forecast"),
+    ("is_dome", "static stadium attribute"),
+    ("precipitation_flag", "pre-kickoff forecast"),
+    ("temperature_bucket", "pre-kickoff forecast"),
+    # Draft capital / combine / identity: fixed at draft time, static per player.
+    ("is_rookie", "static player attribute"),
+    ("rookie_draft_value", "fixed at draft time"),
+    ("combine_score", "fixed at combine, static per player"),
+    ("depth_chart_rank", "most recent depth chart snapshot, prior to prediction week"),
+    # Injury/status: enforced pre-kickoff via nfl_data_py's date_modified
+    # timestamp vs. schedule kickoff time (InjuryDataLoader._load_kickoff_times
+    # in src/data/external_data.py); post-kickoff reports are dropped before
+    # feature construction. See GAPS.md §7.6.
+    ("injury_score", "pre-kickoff (runtime-filtered in external_data.py)"),
+    ("injury_prob_next_", "pre-kickoff (runtime-filtered in external_data.py)"),
+    ("injury_risk_score_", "pre-kickoff (runtime-filtered in external_data.py)"),
+    ("expected_missed_games_", "assumed week - 1 report (UNVERIFIED — see GAPS.md)"),
+    ("availability_3yr", "prior seasons (fully known pre-kickoff)"),
+)
+
+
+def audit_feature_availability(columns: Iterable[str]) -> List[str]:
+    """Return columns not covered by is_leakage_feature() or FEATURE_AVAILABILITY.
+
+    Existing feature columns should either be blocked outright (is_leakage_feature)
+    or have a documented availability rule (FEATURE_AVAILABILITY). Anything left
+    over is unclassified and should be reviewed before use as a model input —
+    this does NOT mean it is leaking, only that its availability timing hasn't
+    been audited yet.
+    """
+    unclassified: List[str] = []
+    for col in columns:
+        if not col:
+            continue
+        col_l = col.lower()
+        if is_leakage_feature(col):
+            continue
+        if any(pattern in col_l for pattern, _rule in FEATURE_AVAILABILITY):
+            continue
+        unclassified.append(col)
+    return unclassified

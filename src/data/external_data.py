@@ -76,11 +76,11 @@ class InjuryDataLoader:
     
     def __init__(self):
         self.cache = {}
-    
+
     def load_injuries(self, seasons: List[int]) -> pd.DataFrame:
         """Load injury data for specified seasons."""
         print(f"Loading injury data for seasons: {seasons}")
-        
+
         all_injuries = []
         for season in seasons:
             try:
@@ -92,7 +92,7 @@ class InjuryDataLoader:
                 if '404' not in str(e):
                     print(f"  Warning: Could not load {season} injuries: {e}")
                 continue
-        
+
         if all_injuries:
             injuries = pd.concat(all_injuries, ignore_index=True)
             print(f"  Loaded {len(injuries)} injury records")
@@ -100,11 +100,52 @@ class InjuryDataLoader:
         else:
             print(f"  No injury data available for requested seasons")
             return pd.DataFrame()
-    
+
+    def _load_kickoff_times(self, seasons: List[int]) -> pd.DataFrame:
+        """Return (season, week, team, kickoff) kickoff timestamps from schedules.
+
+        Used to verify injury reports were filed before kickoff (GAPS.md §7.6).
+        Kickoff is estimated as gameday + gametime in US/Eastern (NFL's
+        scheduling timezone), converted to UTC to match date_modified.
+        """
+        try:
+            schedules = nfl.import_schedules(seasons)
+        except Exception as e:
+            print(f"  Warning: could not load schedules for kickoff-time check: {e}")
+            return pd.DataFrame(columns=['season', 'week', 'team', 'kickoff'])
+
+        if schedules.empty or 'gameday' not in schedules.columns:
+            return pd.DataFrame(columns=['season', 'week', 'team', 'kickoff'])
+
+        naive = pd.to_datetime(
+            schedules['gameday'].astype(str) + ' ' + schedules['gametime'].fillna('13:00'),
+            errors='coerce',
+        )
+        kickoff = naive.dt.tz_localize(
+            'America/New_York', ambiguous='NaT', nonexistent='NaT'
+        ).dt.tz_convert('UTC')
+
+        home = pd.DataFrame({
+            'season': schedules['season'], 'week': schedules['week'],
+            'team': schedules['home_team'], 'kickoff': kickoff,
+        })
+        away = pd.DataFrame({
+            'season': schedules['season'], 'week': schedules['week'],
+            'team': schedules['away_team'], 'kickoff': kickoff,
+        })
+        return pd.concat([home, away], ignore_index=True)
+
     def get_player_injury_status(self, injuries_df: pd.DataFrame) -> pd.DataFrame:
         """
         Process injuries into player-week injury status.
-        
+
+        Rows whose report was filed AFTER that week's kickoff (per
+        nfl_data_py's date_modified vs. schedule kickoff time) are dropped —
+        a post-kickoff "final" status update can leak game-outcome information
+        (e.g. an in-game injury) into a pre-game feature. Rows with no
+        verifiable timestamp/kickoff match are kept as-is (missingness is
+        not leakage — see GAPS.md §7.6).
+
         Returns DataFrame with:
         - player_id, season, week
         - injury_status (Out/Doubtful/Questionable/Probable)
@@ -113,10 +154,25 @@ class InjuryDataLoader:
         """
         if injuries_df.empty:
             return pd.DataFrame()
-        
+
         # Standardize column names
         df = injuries_df.copy()
-        
+
+        if 'date_modified' in df.columns and 'team' in df.columns:
+            kickoffs = self._load_kickoff_times(sorted(df['season'].dropna().unique().tolist()))
+            if not kickoffs.empty:
+                before = len(df)
+                df = df.merge(kickoffs, on=['season', 'week', 'team'], how='left')
+                post_kickoff = df['date_modified'].notna() & df['kickoff'].notna() & (
+                    df['date_modified'] > df['kickoff']
+                )
+                if post_kickoff.any():
+                    print(f"  Dropping {post_kickoff.sum()}/{before} injury reports "
+                          f"modified after kickoff (leakage guard, GAPS.md §7.6)")
+                    df = df[~post_kickoff].drop(columns=['kickoff'])
+                else:
+                    df = df.drop(columns=['kickoff'])
+
         # Map status to scores
         if 'report_status' in df.columns:
             df['injury_status'] = df['report_status']

@@ -1175,7 +1175,7 @@ class DatabaseManager:
     # ------------------------------------------------------------------
 
     def bulk_insert_rosters(self, df: pd.DataFrame) -> int:
-        """Bulk insert roster data from a DataFrame (e.g. nfl.import_rosters())."""
+        """Bulk insert roster data from a DataFrame (e.g. nfl.import_seasonal_rosters())."""
         col_map = {
             "full_name": "player_name",
             "gsis_id": "player_id",
@@ -2003,9 +2003,11 @@ class DatabaseManager:
                                       min_games: int = 4) -> pd.DataFrame:
         """Get all player data suitable for model training.
 
-        NOTE: Opponent defense stats are joined from the PRIOR week to prevent
-        data leakage. Same-week opponent stats encode the target (the player's
-        own fantasy points contribute to the opponent's "points allowed").
+        NOTE: Opponent defense stats AND own-team stats are joined from the
+        PRIOR week to prevent data leakage. Same-week team stats encode the
+        target (the player's own stat line is a direct component of team
+        totals like team_yards/team_pass_attempts/team_points, and same-week
+        opponent stats encode the target via the opponent's "points allowed").
         """
         query = """
             SELECT pws.*, p.name, p.position,
@@ -2025,6 +2027,7 @@ class DatabaseManager:
                    ts.avg_drive_epa as team_avg_drive_epa,
                    ts.points_per_drive as team_points_per_drive,
                    ts.pace_sec_per_play as team_pace_sec_per_play,
+                   ts.week as own_team_stats_week,
                    tds.fantasy_points_allowed_qb, tds.fantasy_points_allowed_rb,
                    tds.fantasy_points_allowed_wr, tds.fantasy_points_allowed_te,
                    tds.week as opp_defense_week,
@@ -2036,7 +2039,7 @@ class DatabaseManager:
             LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
                 AND pws.season = us.season AND pws.week = us.week
             LEFT JOIN team_stats ts ON pws.team = ts.team
-                AND pws.season = ts.season AND pws.week = ts.week
+                AND pws.season = ts.season AND ts.week = pws.week - 1
             LEFT JOIN team_defense_stats tds ON pws.opponent = tds.team
                 AND tds.season = pws.season AND tds.week = pws.week - 1
             LEFT JOIN team_coaching_staff tcs ON pws.team = tcs.team
@@ -2061,6 +2064,15 @@ class DatabaseManager:
             if bad.any():
                 sample = df.loc[bad, ["player_id", "season", "week", "opponent", "opp_defense_week"]].head(3)
                 raise ValueError(f"Leakage detected: opponent defense stats not shifted. Sample: {sample.to_dict(orient='records')}")
+
+        # Own-team stats must be strictly prior-week too; a player's own stat
+        # line is a direct component of same-week team totals (team_yards,
+        # team_pass_attempts, team_points, etc.), so same-week join leaks target.
+        if "own_team_stats_week" in df.columns and "week" in df.columns:
+            bad = df["own_team_stats_week"].notna() & (df["own_team_stats_week"] >= df["week"])
+            if bad.any():
+                sample = df.loc[bad, ["player_id", "season", "week", "team", "own_team_stats_week"]].head(3)
+                raise ValueError(f"Leakage detected: own-team stats not shifted. Sample: {sample.to_dict(orient='records')}")
 
         # Filter to players with minimum games
         if min_games > 0:
