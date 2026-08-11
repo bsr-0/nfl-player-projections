@@ -370,6 +370,15 @@ bumped to 31. Verified via real production smoke train (WR, --fast
 column 0% NaN / 0-100 range / mean ~64% catch rate (sane). Full writeup:
 GAPS.md §8.1.
 
+Phase 6b follow-up (same day): user directly asked whether team run/pass
+tendency and hybrid usage (pass-catching RBs, rushing WRs) were captured.
+Two more real gaps found and fixed: team_neutral_pass_rate_oe_roll3_mean
+(all 4 positions) and rush_share_pct_roll3_mean (WR only — RB already had
+it). FEATURE_VERSION bumped to 32, verified the same way (67 features,
+Deebo-Samuel-topped rush-share sanity check). Feature-count/ablation
+testing (never done in Phases 2-5) scoped but not started — needs explicit
+go-ahead. Full writeup: GAPS.md §8.4.
+
 After the modeling strategy is established, improve the feature set.
 
 Prioritize:

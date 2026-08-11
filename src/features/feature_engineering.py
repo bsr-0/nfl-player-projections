@@ -1356,6 +1356,10 @@ class FeatureEngineer:
             # features (e.g. recv_epa_per_target, 2018+).
             "team_pct_11_personnel", "team_pct_12_personnel",
             "team_pct_21_personnel", "team_pct_13_personnel",
+            # v32: team pass-rate-over-expected (GAPS.md Phase 6b follow-up)
+            # — already joined onto the raw frame from team_stats (week - 1,
+            # same as team_plays above), just needs rolling to be causal.
+            "team_neutral_pass_rate_oe",
         ]
         for col in roll_cols:
             if col not in df.columns:

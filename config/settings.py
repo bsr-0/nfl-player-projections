@@ -351,6 +351,8 @@ CAUSAL_FEATURES = {
         "team_pct_12_personnel_roll3_mean", "team_pct_21_personnel_roll3_mean",
         # v30: offensive-line run-block quality (GAPS.md §11.1.H).
         "team_run_block_ybc_avg_roll3_mean",
+        # v32: team pass-rate-over-expected (GAPS.md Phase 6b follow-up).
+        "team_neutral_pass_rate_oe_roll3_mean",
     ],
     "WR": [
         "snap_share_pct_roll3_mean",
@@ -412,6 +414,9 @@ CAUSAL_FEATURES = {
         # imperfect proxy (can't separate route-runners from in-line
         # pass-blockers on the same play).
         "team_sack_rate_allowed_roll3_mean", "pbp_pass_play_participation_pct_roll3_mean",
+        # v32: rushing usage (jet sweeps/end-arounds) + team pass-rate-over-
+        # expected (GAPS.md Phase 6b follow-up).
+        "rush_share_pct_roll3_mean", "team_neutral_pass_rate_oe_roll3_mean",
     ],
     "TE": [
         "snap_share_pct_roll3_mean",
@@ -471,6 +476,8 @@ CAUSAL_FEATURES = {
         # participation rate (GAPS.md §11.1.C/D/H follow-up; see WR list
         # above for the "not true route participation" caveat).
         "team_sack_rate_allowed_roll3_mean", "pbp_pass_play_participation_pct_roll3_mean",
+        # v32: team pass-rate-over-expected (GAPS.md Phase 6b follow-up).
+        "team_neutral_pass_rate_oe_roll3_mean",
     ],
     "QB": [
         # Volume (3-week rolling)
@@ -525,6 +532,8 @@ CAUSAL_FEATURES = {
         # v30: offensive-line pass-block quality (GAPS.md §11.1.H) — most
         # direct beneficiary, affects time to throw.
         "team_sack_rate_allowed_roll3_mean",
+        # v32: team pass-rate-over-expected (GAPS.md Phase 6b follow-up).
+        "team_neutral_pass_rate_oe_roll3_mean",
     ],
 }
 
@@ -664,7 +673,8 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "31"  # v31: rolling catch rate (catch_rate_roll3_mean, RB/WR/TE) — GAPS.md §8.1 Phase 6 (next_focus.md) audit; also corrects 10 stale "missing" items in that section, actually resolved v24-v30 — see FEATURE_VERSION history below
+FEATURE_VERSION = "32"  # v32: team pass-rate-over-expected (team_neutral_pass_rate_oe_roll3_mean, all 4 positions) + WR rushing usage (rush_share_pct_roll3_mean) — GAPS.md Phase 6b follow-up, two real gaps missed by the v31/Phase 6 audit — see FEATURE_VERSION history below
+# v31: rolling catch rate (catch_rate_roll3_mean, RB/WR/TE) — GAPS.md §8.1 Phase 6 (next_focus.md) audit; also corrects 10 stale "missing" items in that section, actually resolved v24-v30
 # v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H)
 # v29: offensive personnel grouping usage (team_pct_11/12/21/13_personnel_roll3_mean, GAPS.md §3.3/§11.1.E) — parsed from PBP offense_personnel, 2016+ coverage
 FEATURE_VERSION_FILENAME = "feature_version.txt"

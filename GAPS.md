@@ -544,6 +544,18 @@ Missing:
 - Defensive personnel injuries: "CB1 out → 25% more yards allowed to WRs"
 - Red zone defensive efficiency by position
 
+### 8.4 Phase 6b (next_focus.md follow-up): two real gaps the Phase 6 audit missed — 2026-08-10
+
+The user asked directly whether the feature set captures (a) team run/pass play-calling tendency and (b) hybrid usage (pass-catching RBs, rushing WRs). Checking the actual `CAUSAL_FEATURES` lists (not the — by then already-corrected — §8.1 audit) found two real, previously-uncaught gaps:
+
+**Team pass/rush tendency — fixed, v32.** `team_neutral_pass_rate_oe` (pass-rate-over-expected, the standard metric for isolating a team's play-calling *preference* from what game script/down-distance would predict) already arrived in the raw training DataFrame via `get_all_players_for_training()` (`src/utils/database.py:2022-2024`, joined from `week - 1`, leakage-safe per the §7.6 fix) but was never referenced anywhere in `src/features/feature_engineering.py` and never entered `CAUSAL_FEATURES` for any position — the data existed, nothing consumed it. Added `"team_neutral_pass_rate_oe"` to the `roll_cols` list in `_create_causal_rolling_features` (same mechanism as `team_plays`/`team_pace_sec_per_play`), producing `team_neutral_pass_rate_oe_roll3_mean`, now in `CAUSAL_FEATURES` for all 4 positions. Verified sane: mean ≈0, range roughly -0.33 to +0.20 (a rate-difference metric, correctly centered near zero).
+
+**WR rushing usage (jet sweeps/end-arounds) — fixed, v32.** `rush_share_pct` was already computed position-agnostically (`_create_base_features`, each row's own `rushing_attempts` over that team-week's total, no position filter) and already in `roll_cols` — so `rush_share_pct_roll3_mean` was already being computed for WR rows, just never selected into `CAUSAL_FEATURES["WR"]`. Pure config addition, no new computation. Verified with real data: Deebo Samuel's rows top the sorted-by-value list at 100% rolling rush share — exactly the gadget-usage archetype this feature exists to capture.
+
+Both verified via a real production smoke train (`--positions WR --fast --no-tune`): 67 features (up from 65 post-Phase-6), `feature_version.txt=32`, no errors.
+
+**Not done — feature-count/ablation testing.** Separately asked whether OOS error was ever tested across different feature subsets or feature counts. No — Phases 2-5 held `CAUSAL_FEATURES` fixed throughout every architecture/window/weighting/hyperparameter experiment; this was never in `next_focus.md`'s phase structure either. Scoped as a possible follow-up (LightGBM-importance-ranked nested subsets — top-10/20/30/all — reusing the existing walk-forward fold-loading machinery in `single_week_ppr/evaluate.py`) but not started; needs an explicit go-ahead given it's comparable in cost to Phase 3's full grid.
+
 ---
 
 ## 9. Data Pipeline Gaps
