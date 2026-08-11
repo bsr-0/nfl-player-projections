@@ -125,6 +125,17 @@ class DatabaseManager:
                     "pass_plays": "INTEGER DEFAULT 0",
                     "rush_plays": "INTEGER DEFAULT 0",
                     "recv_targets": "INTEGER DEFAULT 0",
+                    # Complete-player-game-panel prerequisite (GAPS.md):
+                    # provenance for rows inserted to fix training-target
+                    # selection bias -- 'nflverse_stats' (real box-score
+                    # row) / 'inferred_snap_verified_zero' (2018+, snap-
+                    # confirmed played-but-zero) / 'inferred_roster_zero_
+                    # low_confidence' (2006-2017, roster-based candidate).
+                    # No DEFAULT here -- _validate_ddl's regex doesn't
+                    # accept quoted string literals (by design, to keep
+                    # the ALTER-TABLE-DDL injection guard simple); backfill
+                    # via an explicit UPDATE right after instead.
+                    "data_source": "TEXT",
                     "pass_epa": "REAL DEFAULT 0",
                     "rush_epa": "REAL DEFAULT 0",
                     "recv_epa": "REAL DEFAULT 0",
@@ -149,6 +160,11 @@ class DatabaseManager:
                             f"ALTER TABLE player_weekly_stats ADD COLUMN "
                             f"{_validate_identifier(col)} {_validate_ddl(ddl)}"
                         )
+                if "data_source" not in existing_cols:
+                    cursor.execute(
+                        "UPDATE player_weekly_stats SET data_source = 'nflverse_stats' "
+                        "WHERE data_source IS NULL"
+                    )
             except Exception as e:
                 # Unlike the schedule-table migration below, this loop
                 # already pre-checks existing_cols before each ALTER, so

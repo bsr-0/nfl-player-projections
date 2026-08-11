@@ -5553,6 +5553,96 @@ metadata should expect ~70-77% of rows to not resolve — this is
 expected, not something to fix, but worth knowing before trusting an
 injury-adjusted feature that silently drops most non-starters.
 
+**SUPERSEDED — 2026-08-10 (Complete Player-Game Panel prerequisite).**
+The entry above correctly diagnosed the *mechanism* but wrongly concluded
+"expected, not something to fix" — it was scoped only to feature-join
+hygiene (metadata resolving cleanly), not evaluated against training-
+target selection bias. The user flagged, unprompted, that this exact
+mechanism means `player_weekly_stats` (the source of every model built
+this session) silently has NO row at all for "played but produced zero
+fantasy points" — indistinguishable from "didn't play." Verified
+empirically: joining `weekly_rosters_v2` (active-roster status, 2024-2025
+only) against `player_weekly_stats` for season 2024 showed 25-40% of
+active-roster player-weeks (QB 39.4%, TE 37.6%, RB 27.6%, WR 24.8%) had no
+stats row at all. Confirmed the mechanism directly — `nfl_data_py.
+import_weekly_data([2024])` itself never contains a row for Joe Flacco
+(IND) on weeks he didn't attempt a pass; this is upstream of our ingestion
+code, not a filter bug in it.
+
+**Fixed**: built the complete player-game panel. Two-tier eligibility rule
+(`scripts/build_complete_player_game_panel.py`):
+- **2018-2025**: `snap_counts` (PFR→GSIS mapped via the existing
+  `get_pfr_to_gsis_map()`, `nfl_data_loader.py`) confirms `offense_snaps >
+  0` for a (player, team, season, week) with no existing stats row — a
+  precise "took the field" signal. Tag: `inferred_snap_verified_zero`
+  (8,667 rows).
+- **2006-2017** (no snap-level data available that far back): `weekly_
+  rosters` (backfilled via the already-existing but never-run `scripts/
+  backfill_weekly_rosters.py --seasons 2006 2025` — table was empty, 0
+  rows, before this), `status='ACT'`, tightened to require the player has
+  ≥1 REAL `player_weekly_stats` row elsewhere that season (any real row —
+  doesn't require `fantasy_points > 0` on that other row, just legitimate
+  statistical participation that season). Weaker signal, explicitly tagged
+  low-confidence so it's never mistaken for the snap-verified tier: `data_
+  source='inferred_roster_zero_low_confidence'` (25,226 rows after
+  excluding bye weeks — see below).
+- Position scope: QB/RB/WR/TE only. Never bye weeks (schedule-derived
+  opponent required; ~3,726 candidate rows correctly dropped as bye weeks,
+  spot-checked directly — e.g. DAL/LV/KC/LAC were confirmed absent from
+  the actual 2006 week-3 schedule). Never non-rostered/no-evidence players.
+- **Player identity**: exact `gsis_id` lookup (raw `weekly_rosters`
+  parquet already carries it — same scheme as `players.player_id`, no
+  fuzzy matching needed). 78 genuinely new `players` rows inserted, logged
+  to `data/experiments/complete_panel_new_players_audit.csv`. 491
+  candidate rows were **excluded** for a position conflict against an
+  existing `players` row rather than silently trusting either source —
+  correctly caught real position-switchers (Ty Montgomery WR→RB,
+  Cordarrelle Patterson WR→RB, J.D. McKissic RB/WR hybrid, Andrew Beck
+  FB/TE) as ambiguous rather than guessing.
+- **New bug found and fixed en route**: `weekly_rosters` uses era-specific
+  team codes (`ARZ`/`BLT`/`CLV`/`HST`/`OAK`/`SD`/`SL`) that `schedule` and
+  `player_weekly_stats` don't — both of those already normalize
+  retroactively to modern codes (`ARI`/`BAL`/`CLE`/`HOU`/`LV`/`LAC`/`LA`).
+  Same class of bug as the already-documented LAR/JAC mismatch (this
+  section, §9.2), different table/codes. Without normalizing
+  (`TEAM_CODE_NORMALIZATION` in the build script), ~29% of 2006-2017
+  candidates lost their schedule-derived opponent and were silently
+  dropped; after the fix, the true bye-week rate (~13%) is what's left.
+- Schema: `player_weekly_stats.data_source` column added (`ALTER TABLE`
+  migration in `database.py`'s existing check-and-add pattern), backfilled
+  to `'nflverse_stats'` for all 110,283 pre-existing real rows so every
+  row's provenance is unambiguous.
+
+**Sensitivity analysis (population statistics only, no models retrained
+yet)** — quantifying how much the data-generating distribution actually
+changed:
+
+| Population | Player-games | Zero-PPR rate | QB | RB | TE | WR |
+|---|---|---|---|---|---|---|
+| A. Original | 101,625 | 6.3% | 1.6% | 2.0% | 10.6% | 8.5% |
+| B. Corrected (all) | 135,518 | 29.7% | 31.9% | 19.2% | 40.4% | 29.3% |
+| C. Corrected (snap-verified only) | 110,292 | 13.7% | 2.5% | 5.2% | 25.1% | 16.0% |
+
+The original data understated true zero-production-game frequency by
+**roughly 5x** (6.3% → 29.7%). This is not a marginal correction — it's a
+materially different target-variable distribution, especially for TE/QB
+(deep backups/blocking specialists who rarely score are now correctly
+represented) and especially in the 2006-2017 era (34.3% zero rate in the
+corrected panel vs. 5.9% originally — the low-confidence tier is doing a
+lot of the work there, which is exactly why it's kept distinguishable via
+`data_source` rather than blended in silently).
+
+**Not done — re-running Phases 2-7 on the corrected panel.** Every result
+from this session's Phases 2-7 (architecture selection, window/recency
+optimization, hyperparameter tuning, feature ablation, season projection)
+was built on the pre-fix, selection-biased data and should be treated as
+provisional. Given the scale of the distributional shift shown above —
+particularly relevant to the two-stage/hurdle architecture (D), which
+specifically needs true zero observations to learn `P(PPR > 0)` and could
+not have learned it correctly before this fix — a re-run is the clear next
+step, but is deliberately not attempted in this same pass given how large
+this data fix already was on its own.
+
 **Fixed (2026-08-09, follow-up) — `rosters` table was empty for a real
 reason, not just "never run": `scripts/ingest_rookie_data.py`'s
 `ingest_rosters()` called `nfl.import_rosters(seasons)`, which no

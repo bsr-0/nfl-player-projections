@@ -1,5 +1,17 @@
 NFL Fantasy PPR — Final Modeling Plan
 
+⚠ 2026-08-10: Complete Player-Game Panel prerequisite landed (GAPS.md,
+search "SUPERSEDED — 2026-08-10"). `player_weekly_stats` was missing
+"played but scored zero" rows entirely (silently indistinguishable from
+"didn't play") — confirmed empirically, ~5x understatement of true
+zero-production-game frequency (6.3% -> 29.7% in the corrected panel).
+Phases 2-7 below were ALL built and validated on the pre-fix data and
+should be treated as PROVISIONAL, not final, until re-run on the corrected
+panel — that re-run has not happened yet. This is most consequential for
+architecture D (two-stage/hurdle), which specifically needs true zero
+observations to learn P(PPR > 0) and could not have learned it correctly
+before this fix.
+
 Goal
 
 Build two related but distinct products:
@@ -423,7 +435,21 @@ Maintain strict temporal availability.
 
 ⸻
 
-Phase 7 — Build the 18-Week Projection
+Phase 7 — Build the 18-Week Projection [MECHANISM BUILT, REAL RUN PENDING — 2026-08-10]
+
+src/models/single_week_ppr/season_projection.py: option C design (per-week
+formula on retrospective seasons — synthetic feature rows for missed weeks,
+reusing/extending Predictor.predict()'s carry-forward mechanism, plus a new
+non-circular prior-seasons-only P(plays) estimator). 8 unit tests passing.
+The real end-to-end run against 2023-2025 was intentionally NOT executed —
+mid-smoke-test, the Complete Player-Game Panel issue above was raised and
+took priority, since Phase 7's "missed week" concept is now understood
+differently (a synthetic-row estimate) than the corrected panel's explicit
+inferred-zero rows (a real row with data_source provenance). Re-evaluate
+Phase 7's design against the corrected panel before running it for real —
+it may need to change (e.g. use real inferred-zero rows directly where
+available, reserving the synthetic-row mechanism only for weeks with no
+row of any kind) rather than just re-running as-is.
 
 Do not simply apply the single-week model's validation framework to an 18-week target.
 
