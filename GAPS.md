@@ -556,6 +556,14 @@ Both verified via a real production smoke train (`--positions WR --fast --no-tun
 
 **Not done — feature-count/ablation testing.** Separately asked whether OOS error was ever tested across different feature subsets or feature counts. No — Phases 2-5 held `CAUSAL_FEATURES` fixed throughout every architecture/window/weighting/hyperparameter experiment; this was never in `next_focus.md`'s phase structure either. Scoped as a possible follow-up (LightGBM-importance-ranked nested subsets — top-10/20/30/all — reusing the existing walk-forward fold-loading machinery in `single_week_ppr/evaluate.py`) but not started; needs an explicit go-ahead given it's comparable in cost to Phase 3's full grid.
 
+### 8.5 Phase 6c: feature-count ablation — no evidence to trim the feature set — 2026-08-10
+
+Executed the §8.4 follow-up. `src/models/single_week_ppr/ablation.py` (+ `scripts/run_phase6c_ablation.py`, `tests/test_phase6c_ablation.py`): for each position's `FINAL_CONFIG` fold, fit once on the full feature set to rank LightGBM gain-based importance, then refit fresh on top-10/20/30/all subsets and score on the true outer test season. 48 rows across 4 positions × 3 seasons × 4 feature-count candidates, `data/experiments/phase6c_feature_ablation.csv`.
+
+**Result: MAE improves (or holds flat) monotonically from 10 → all features, at every position** — TE 3.690→3.587 (largest gain), RB 4.578→4.543, WR 4.647→4.627, QB 6.178→6.144 (smallest gain, and QB has the fewest features to begin with, 57 vs. up to 67 for WR). No position shows degradation at higher feature counts within the tested range. Bias also stays roughly stable across feature counts per position (doesn't get meaningfully worse as features are added), consistent with §7.10/§7.11's finding that the bias problem is a loss-function/target-skew property, not a feature-count or overfitting artifact.
+
+**Conclusion: the current ~57-67-feature `CAUSAL_FEATURES` set is not past the point of diminishing returns for the tree-based `FINAL_CONFIG` architectures** — there's no evidence here to justify trimming it, and modest further feature additions (per §8.4's `catch_rate`/`team_neutral_pass_rate_oe`/`rush_share_pct` additions) are plausibly still net-positive rather than adding noise. This is specific to tree-based models (see the module docstring / the multicollinearity discussion in this session) — it says nothing about whether the current feature set would be too large/collinear for the *actually-deployed* Ridge-based production path (`src/models/component_predictor.py`), which was flagged but not tested.
+
 ---
 
 ## 9. Data Pipeline Gaps

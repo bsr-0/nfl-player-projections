@@ -379,6 +379,17 @@ Deebo-Samuel-topped rush-share sanity check). Feature-count/ablation
 testing (never done in Phases 2-5) scoped but not started — needs explicit
 go-ahead. Full writeup: GAPS.md §8.4.
 
+Phase 6c (same day, follow-up executed): feature-count ablation, run for
+real. 48 rows (4 positions x 3 seasons x 4 feature-count candidates:
+10/20/30/all), src/models/single_week_ppr/ablation.py. Finding: MAE
+improves monotonically from 10->all features at every position (no
+degradation at higher counts) — current ~57-67-feature CAUSAL_FEATURES
+set is not past diminishing returns for the tree-based FINAL_CONFIG
+architectures. Specific to tree models (robust to multicollinearity);
+says nothing about the actually-deployed Ridge-based production path
+(src/models/component_predictor.py), which is a separate, unresolved
+question. Full writeup: GAPS.md §8.5.
+
 After the modeling strategy is established, improve the feature set.
 
 Prioritize:
