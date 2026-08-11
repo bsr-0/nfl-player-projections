@@ -205,3 +205,35 @@ class YeoJohnsonHuber:
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         y_t_pred = self.model.predict(X)
         return self.transformer.inverse_transform(y_t_pred.reshape(-1, 1)).ravel()
+
+
+class BoxCoxHuber:
+    """Shifted-Box-Cox-transformed target + Huber GBM, inverse-transformed
+    at predict time. Supplementary to F (Yeo-Johnson) — requested as a
+    quick follow-up test, not part of the original architecture list.
+
+    Box-Cox requires a strictly positive input, unlike Yeo-Johnson — single-
+    game PPR is not strictly positive (fumbles/INTs push some games
+    negative, others land at exactly 0; see GAPS.md Phase 2 notes on why
+    Yeo-Johnson was chosen originally). Handled here with the standard
+    shift workaround: y_shifted = y - min(y) + 1, guaranteeing positivity,
+    with the shift stored and reversed at predict time alongside the
+    inverse power transform.
+    """
+
+    def __init__(self, **params):
+        self.transformer = PowerTransformer(method="box-cox")
+        self.model = GBMRegressor(objective="huber", **params)
+        self.shift_: float = 0.0
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, sample_weight: Optional[np.ndarray] = None) -> "BoxCoxHuber":
+        self.shift_ = 1.0 - float(y.min())  # guarantees y + shift_ >= 1 > 0
+        y_shifted = y.to_numpy() + self.shift_
+        y_t = self.transformer.fit_transform(y_shifted.reshape(-1, 1)).ravel()
+        self.model.fit(X, pd.Series(y_t, index=y.index), sample_weight=sample_weight)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        y_t_pred = self.model.predict(X)
+        y_shifted_pred = self.transformer.inverse_transform(y_t_pred.reshape(-1, 1)).ravel()
+        return y_shifted_pred - self.shift_

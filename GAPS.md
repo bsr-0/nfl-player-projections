@@ -447,6 +447,16 @@ Phase 4 ran each position's `FINAL_CONFIG` (chosen architecture/window/weighting
 
 **Not acted on yet**: no config was changed as a result of this — `FINAL_CONFIG` still reflects the Phase 2/3 choices. This is deliberately a findings-gathering phase; the bias/elite-tier results should inform Phase 12 (final model selection), where a lower-bias option may be preferable for elite-player-heavy decisions even at a small MAE cost. Flagging now so it isn't rediscovered late in the project.
 
+### 7.11 Phase 5 (next_focus.md) finding: hyperparameter tuning barely moved MAE and didn't touch the bias problem — 2026-08-10
+
+Nested-CV Optuna tuning (`src/models/single_week_ppr/tuning.py`, `evaluate.py:run_tuned_validation`), 100 trials per (position, outer-test-season) fold. Design: inner walk-forward CV strictly within each fold's *training* seasons (`inner_walk_forward_folds`, purge gap from `MODEL_CONFIG["cv_gap_seasons"]`) — the outer 2023/2024/2025 test seasons used by Phases 2-4 are never touched by the search itself, so this stays a fair nested-CV comparison against Phase 4's default-hyperparameter results (same architecture/window/weighting/test rows, only hyperparameters differ). Deliberately did NOT reuse `position_models.py`'s `_subsample_for_tuning` trick (already flagged as a concern in §7.4) — with no repeated feature engineering per trial, there was no need to subsample for speed.
+
+**Result**: tuning changed MAE by less than 0.03 points in every position — QB actually got marginally *worse* (default 6.089 → tuned 6.113), RB/WR/TE improved by 0.008-0.019 (noise-level). Bias was essentially unchanged everywhere (RB/WR/TE still -1.06 to -1.36, QB still around -0.32). Full tuned-hyperparameter values: `data/experiments/phase5_tuned_hyperparameters.csv`; row-level tuned predictions: `data/experiments/phase5_tuned_predictions.csv` (16,427 rows).
+
+**Why this matters**: it confirms, rather than fixes, the Phase 4 bias finding. If the negative bias in RB/WR/TE's winning architectures were an artifact of poorly-chosen hyperparameters (e.g. too-shallow trees underfitting the tails), a real 100-trial search around a much wider parameter range should have found *something* better. It didn't, meaningfully. That's consistent with the bias being a structural property of median-seeking loss functions (MAE/Huber) applied to a right-skewed target (see §7.10 / the mid-session bias-vs-underfitting discussion) — not a tuning problem, and not fixable by tuning. It also means Phase 2's "reasonable defaults" were already close to a local optimum for this problem, which is itself a useful, if unglamorous, result: the compute spent here wasn't wasted, it's evidence against a hypothesis (that better hyperparameters would close the gap) that could otherwise have lingered unexamined into Phase 12.
+
+**Not acted on**: `FINAL_CONFIG` unchanged — the marginal tuned-parameter deltas aren't worth adopting as the new default given how close to noise they are, and doing so would complicate reproducibility for a sub-0.03-MAE gain. If Phase 12's final model selection revisits the bias problem, the fix should target the loss function or a post-hoc calibration step, not further hyperparameter search.
+
 ---
 
 ## 8. Feature Engineering Gaps

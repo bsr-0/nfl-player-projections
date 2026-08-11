@@ -15,6 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models.single_week_ppr.architectures import (
+    BoxCoxHuber,
     GBMRegressor,
     HurdleModel,
     QuantileGBM,
@@ -132,6 +133,35 @@ class TestYeoJohnsonHuber:
         mae_model = np.abs(preds - y).mean()
         mae_mean = np.abs(y.mean() - y).mean()
         assert mae_model < mae_mean
+
+
+class TestBoxCoxHuber:
+    def test_fit_predict_with_negative_targets(self):
+        """Box-Cox requires strictly positive input, unlike Yeo-Johnson —
+        this must handle negative PPR via the shift workaround (quick
+        follow-up test to F, requested after the bias/skew discussion)."""
+        rng = np.random.default_rng(3)
+        n = 200
+        X = pd.DataFrame({"x": rng.uniform(0, 10, n)})
+        y = pd.Series(X["x"] * 2 - 5 + rng.normal(0, 1, n))  # ranges negative to positive
+        assert (y < 0).any()
+
+        model = BoxCoxHuber(n_estimators=50)
+        model.fit(X, y)
+        preds = model.predict(X)
+
+        assert len(preds) == len(X)
+        assert np.isfinite(preds).all()
+        mae_model = np.abs(preds - y).mean()
+        mae_mean = np.abs(y.mean() - y).mean()
+        assert mae_model < mae_mean
+
+    def test_shift_guarantees_positivity(self):
+        y = pd.Series([-7.0, -3.0, 0.0, 5.0, 20.0])
+        model = BoxCoxHuber(n_estimators=10)
+        assert (y.to_numpy() + (1.0 - float(y.min()))).min() >= 1.0
+        model.shift_ = 1.0 - float(y.min())
+        assert model.shift_ == pytest.approx(8.0)
 
 
 class TestNaiveBaselines:

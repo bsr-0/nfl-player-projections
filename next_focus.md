@@ -318,7 +318,26 @@ For quantile models, measure calibration/coverage.
 
 ⸻
 
-Phase 5 — Hyperparameter Tuning
+Phase 5 — Hyperparameter Tuning [COMPLETE — 2026-08-10]
+
+Nested-CV Optuna tuning (100 trials, inner walk-forward split within each
+fold's training seasons only — outer 2023/2024/2025 test seasons never
+touched by the search, per the user-confirmed design) for each position's
+FINAL_CONFIG architecture. src/models/single_week_ppr/tuning.py,
+run_tuned_validation() in evaluate.py. Results: data/experiments/
+phase5_tuned_predictions.csv (row-level, 16,427 rows) + phase5_tuned_
+hyperparameters.csv (winning params per position/season).
+
+Finding: tuning barely moved the needle. QB got marginally WORSE
+(+0.024 MAE), RB/WR/TE improved marginally (-0.008 to -0.019 MAE) — noise-
+level changes, not a meaningful lift. Bias was essentially unchanged in
+every position (still -1.0 to -1.4 for RB/WR/TE, -0.32 for QB). This
+reinforces the Phase 4 finding rather than fixing it: the bias is a
+loss-function/target-skew artifact (median-seeking losses vs. a
+right-skewed target), not an undertuned-model artifact — 100 trials of
+real hyperparameter search around Phase 2's "reasonable defaults" couldn't
+touch it, which is itself informative. Full writeup: GAPS.md §7.11.
+Tests: tests/test_phase5_tuning.py (8 passing).
 
 Only after selecting:
 
