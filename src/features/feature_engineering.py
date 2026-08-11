@@ -1320,6 +1320,9 @@ class FeatureEngineer:
             "passing_attempts", "passing_tds",
             "yards_per_carry", "yards_per_target", "yards_per_attempt",
             "completion_pct",
+            # v31: raw catch_rate already existed (_create_base_features
+            # above) but was never rolled — Phase 6 (next_focus.md) gap.
+            "catch_rate",
             # QB efficiency signals (from PBP, 2018+)
             "pass_epa_per_play", "pass_success_rate",
             "pass_wpa_per_play", "rush_epa_per_play",

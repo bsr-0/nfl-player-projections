@@ -463,32 +463,58 @@ Nested-CV Optuna tuning (`src/models/single_week_ppr/tuning.py`, `evaluate.py:ru
 
 ### 8.1 Missing features by impact tier
 
+**STALE TABLES BELOW — corrected 2026-08-10 (Phase 6, next_focus.md).** A
+fresh audit found that 10 of the items this section lists as "missing" had
+actually already been resolved between `FEATURE_VERSION` v24 and v30, well
+before this correction was written. The tables are left below for
+historical record, with each row's actual current status noted — do not
+treat anything here as an open TODO without checking `CAUSAL_FEATURES` in
+`config/settings.py` first, per the standing directive to verify wired
+state before acting on it.
+
 **Tier 1: High impact, data available now**
 
-| Feature | Source | Why it matters | Current status |
+| Feature | Source | Why it matters | Status (as of v30) |
 |---------|--------|---------------|----------------|
-| **Depth chart position** | `depth_charts` table (591K rows in DB) | Distinguishes WR1 from WR3; critical pre-season | In DB, NOT used |
-| **Contracts / contract year** | `contracts` table (51K rows in DB) | Contract year players historically outperform | In DB, NOT used |
-| **Weekly PFR advanced stats** | `nfl.import_weekly_pfr()` | Drops, pressures, bad throws — QB predictive signal | Not ingested |
-| **Position-specific target allocation** | Computable from `player_weekly_stats` | Team targets RBs X%, WRs Y%, TEs Z% | Not computed |
-| **Team plays per game / tempo** | Computable from `team_stats.pace_sec_per_play` | More plays = more fantasy opportunity | In DB, NOT used |
+| **Depth chart position** | `depth_charts` table (591K rows in DB) | Distinguishes WR1 from WR3; critical pre-season | **RESOLVED** — `depth_chart_rank` in `CAUSAL_FEATURES` for all 4 positions |
+| **Contracts / contract year** | `contracts` table (51K rows in DB) | Contract year players historically outperform | **RESOLVED** — `is_contract_year`, `contract_apy_rank`, all 4 positions |
+| **Weekly PFR advanced stats** | `nfl.import_weekly_pfr()` | Drops, pressures, bad throws — QB predictive signal | **RESOLVED** — `qb_pressure_pct_roll3_mean`/`qb_bad_throw_pct_prior` (QB), `recv_drop_pct_roll3_mean` (WR/TE) |
+| **Position-specific target allocation** | Computable from `player_weekly_stats` | Team targets RBs X%, WRs Y%, TEs Z% | **RESOLVED** (v24) — `team_rb_target_share_roll3_mean` / `team_wr_target_share_roll3_mean` / `team_te_target_share_roll3_mean` |
+| **Team plays per game / tempo** | Computable from `team_stats.pace_sec_per_play` | More plays = more fantasy opportunity | **RESOLVED** (v24) — `team_plays_roll3_mean`, `team_pace_sec_per_play_roll3_mean`, all 4 positions |
 
 **Tier 2: Medium impact, requires new ingestion**
 
-| Feature | Source | Why it matters |
-|---------|--------|---------------|
-| **Coaching staff identity** | NFL.com, ESPN rosters | New OC = scheme change = target distribution shift |
-| **Personnel grouping %** | FTN charting data (`nfl.import_ftn_data()`) | 11 vs. 12 personnel snap % predicts TE/WR opportunity |
-| **Weather (outdoor games)** | Weather API | Cold/wind depresses passing; rain increases fumbles |
-| **Seasonal PFR (prior-season summary)** | `nfl.import_seasonal_pfr()` | Pre-season drop rate, bad throw % for cold-start |
-| **Vegas preseason win totals** | `nfl.import_win_totals()` | Team quality proxy for full-season game script |
+| Feature | Source | Why it matters | Status (as of v30) |
+|---------|--------|---------------|----------------|
+| **Coaching staff identity** | NFL.com, ESPN rosters | New OC = scheme change = target distribution shift | **RESOLVED** (v24) — `coaching_change`, `coaching_adaptation_score`, `coaching_stability`, `coaching_change_impact` |
+| **Personnel grouping %** | FTN charting data (`nfl.import_ftn_data()`) | 11 vs. 12 personnel snap % predicts TE/WR opportunity | **RESOLVED** (v29) — `team_pct_11/12/21/13_personnel_roll3_mean`, parsed from PBP `offense_personnel` (2016+), not FTN |
+| **Weather (outdoor games)** | Weather API | Cold/wind depresses passing; rain increases fumbles | **RESOLVED** (v23) — `wind_speed_mph`, `is_dome`, `precipitation_flag`, `temperature_bucket` |
+| **Seasonal PFR (prior-season summary)** | `nfl.import_seasonal_pfr()` | Pre-season drop rate, bad throw % for cold-start | **RESOLVED** — QB pocket/accuracy priors, RB broken-tackles prior, WR/TE drop-rate prior |
+| **Vegas preseason win totals** | `nfl.import_win_totals()` | Team quality proxy for full-season game script | **CONFIRMED INFEASIBLE**, not just missing — see note below |
 
-**STALE — corrected 2026-08-06**: `nfl.import_win_totals()` is not this
-data despite the name — it's per-game weekly odds (spread/total/
-moneyline), not season-long win-total futures, and this project's
-`game_odds` table already has that fully covered. No free source for
-real preseason win-total futures was found. See "No viable free source
-for Vegas preseason win totals" further down in this doc.
+**Vegas preseason win totals — confirmed infeasible, not a gap to close.**
+`nfl.import_win_totals()` is not this data despite the name — it's
+per-game weekly odds (spread/total/moneyline), not season-long win-total
+futures, and this project's `game_odds` table already has that fully
+covered. No free source for real preseason win-total futures was found.
+See "No viable free source for Vegas preseason win totals" further down
+in this doc.
+
+**Route participation — also confirmed infeasible with currently-ingested
+data (Phase 6 audit).** No `route`/`routes_run` column exists in
+`ngs_receiving`, `ngs_rushing`, or `weekly_pfr`; `nfl_data_py` has no
+participation/routes import function at all. v30's
+`pbp_pass_play_participation_pct_roll3_mean` is already the best available
+proxy (its own code comment says so explicitly) — nothing further is
+actionable here without a new external data source.
+
+**Rolling catch rate — the one real gap this audit found, closed in v31.**
+Raw `catch_rate` (`receptions/targets * 100`) was already computed in
+`_create_base_features` (`src/features/feature_engineering.py`) but never
+rolled into a leakage-safe feature. Added `catch_rate_roll3_mean` to
+`CAUSAL_FEATURES["RB"/"WR"/"TE"]` via the existing generic rolling engine
+(`_create_causal_rolling_features`) — same mechanism as every neighboring
+`*_roll3_mean` feature, no new leakage-safety code needed.
 
 **Tier 3: Lower impact or high implementation cost**
 

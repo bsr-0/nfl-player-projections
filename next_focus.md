@@ -351,7 +351,24 @@ This prevents wasting compute optimizing an inferior architecture.
 
 ⸻
 
-Phase 6 — Feature Engineering
+Phase 6 — Feature Engineering [COMPLETE — 2026-08-10]
+
+Fresh audit found CAUSAL_FEATURES (config/settings.py, then v30) already
+covered nearly everything in this phase's Opportunity/Efficiency/Context
+priority list, built up over 30 prior feature-version bumps — GAPS.md
+§8.1's "missing features" table was stale (10 of its items were actually
+already resolved v24-v30; corrected in GAPS.md). Two real gaps remained:
+route participation (confirmed genuinely infeasible — no route/routes_run
+data in any ingested source, nfl_data_py has no participation import) and
+rolling catch rate (real gap — raw catch_rate existed but was never rolled
+into a leakage-safe feature). Added catch_rate_roll3_mean to
+CAUSAL_FEATURES[RB/WR/TE] via the existing generic rolling engine
+(src/features/feature_engineering.py:_create_causal_rolling_features) —
+same shift(1) mechanism as every neighboring feature. FEATURE_VERSION
+bumped to 31. Verified via real production smoke train (WR, --fast
+--no-tune): 65 features (up from 64), feature_version.txt=31, new
+column 0% NaN / 0-100 range / mean ~64% catch rate (sane). Full writeup:
+GAPS.md §8.1.
 
 After the modeling strategy is established, improve the feature set.
 

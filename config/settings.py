@@ -307,6 +307,8 @@ CAUSAL_FEATURES = {
         "rushing_attempts_roll3_mean", "targets_roll3_mean",
         "rushing_tds_roll3_mean", "yards_per_carry_roll3_mean",
         "ngs_rush_yards_over_expected_per_att_roll3_mean",
+        # v31: receiving-efficiency signal for pass-catching RBs
+        "catch_rate_roll3_mean",
         # PBP efficiency (2018+) — EPA captures play value in context
         "rush_epa_per_play_roll3_mean",
         "opp_fpts_allowed", "opp_fpts_allowed_s2d_lag1", "opp_fpts_allowed_dvoa_adjusted_lag1",
@@ -355,6 +357,8 @@ CAUSAL_FEATURES = {
         "target_share_pct_roll3_mean", "air_yards_share_pct_roll3_mean",
         "targets_roll3_mean", "receptions_roll3_mean",
         "receiving_tds_roll3_mean", "yards_per_target_roll3_mean",
+        # v31: hands reliability / target-to-catch conversion
+        "catch_rate_roll3_mean",
         "ngs_avg_separation_roll3_mean",
         # NGS target depth + YAC ability (2018+) — route type and elusiveness signal
         "ngs_avg_intended_air_yards_roll3_mean",
@@ -414,6 +418,8 @@ CAUSAL_FEATURES = {
         "target_share_pct_roll3_mean",
         "targets_roll3_mean", "receptions_roll3_mean",
         "receiving_tds_roll3_mean", "yards_per_target_roll3_mean",
+        # v31: hands reliability / target-to-catch conversion
+        "catch_rate_roll3_mean",
         "ngs_avg_separation_roll3_mean",
         # NGS target depth + YAC ability (2018+) — route type and elusiveness signal
         "ngs_avg_intended_air_yards_roll3_mean",
@@ -658,7 +664,8 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "30"  # v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H) — see FEATURE_VERSION history below
+FEATURE_VERSION = "31"  # v31: rolling catch rate (catch_rate_roll3_mean, RB/WR/TE) — GAPS.md §8.1 Phase 6 (next_focus.md) audit; also corrects 10 stale "missing" items in that section, actually resolved v24-v30 — see FEATURE_VERSION history below
+# v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H)
 # v29: offensive personnel grouping usage (team_pct_11/12/21/13_personnel_roll3_mean, GAPS.md §3.3/§11.1.E) — parsed from PBP offense_personnel, 2016+ coverage
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
