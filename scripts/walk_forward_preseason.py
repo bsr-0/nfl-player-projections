@@ -37,7 +37,6 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -93,19 +92,6 @@ def _metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     }
 
 
-def _phase7_metrics(phase7_df: pd.DataFrame, position: str, test_season: int) -> Optional[dict]:
-    """Metrics for Phase 7's summed-weekly season projection, reusing its
-    already-computed output rather than retraining anything here."""
-    if phase7_df is None or phase7_df.empty:
-        return None
-    sub = phase7_df[(phase7_df["position"] == position) & (phase7_df["season"] == test_season)]
-    if sub.empty:
-        return None
-    actual = sub["actual_season_total"].to_numpy(dtype=float)
-    preds = sub["predicted_season_total"].to_numpy(dtype=float)
-    return _metrics(actual, preds)
-
-
 def _aggregate(fold_metrics: list) -> dict:
     """Mean/std across folds (unweighted -- each season counts once,
     regardless of player count) plus a pooled figure (all folds' predictions
@@ -141,6 +127,15 @@ def main():
         default=Path("data/experiments/phase7_season_projection.csv"),
         help="Phase 7 (summed-weekly) season projection output CSV -- loaded "
              "as-is, not retrained. Pass a missing/empty path to skip that arm.",
+    )
+    parser.add_argument(
+        "--intersect-populations", action="store_true",
+        help="Restrict all 3 arms to the common player_id intersection per "
+             "position/fold before scoring (isolates architecture from "
+             "population-breadth differences; models are still trained on "
+             "each arm's own full training set, only the *scored* test rows "
+             "are restricted). Skips a position/fold if the intersection is "
+             "too small (<MIN_INTERSECTION) to trust.",
     )
     args = parser.parse_args()
 
@@ -179,50 +174,71 @@ def main():
     VARIANTS = ("production", "candidate", "phase7")
     fold_records = {v: {p: [] for p in POSITIONS} for v in VARIANTS}
 
+    MIN_INTERSECTION = 15
+
     for test_season in test_seasons:
         print(f"\n--- Fold: test_season={test_season} ---")
 
-        # --- Production ---
         train_p = prod_pairs[prod_pairs["curr_season"] < test_season]
         test_p = prod_pairs[prod_pairs["curr_season"] == test_season]
+        proj = None
         if not train_p.empty and not test_p.empty:
             proj = PreseasonProjector()
             proj.fit(train_p)
-            for pos in POSITIONS:
-                pos_test = test_p[test_p["position"] == pos]
-                if pos not in proj.models or pos_test.empty:
+
+        train_c = cand_pairs[cand_pairs["target_season"] < test_season] if not cand_pairs.empty else cand_pairs
+        test_c = cand_pairs[cand_pairs["target_season"] == test_season] if not cand_pairs.empty else cand_pairs
+
+        for pos in POSITIONS:
+            pos_test_p = test_p[test_p["position"] == pos] if proj is not None else test_p.iloc[0:0]
+            pos_train_c = train_c[train_c["position"] == pos] if not train_c.empty else train_c
+            pos_test_c = test_c[test_c["position"] == pos] if not test_c.empty else test_c
+            pos_test_p7 = (
+                phase7_df[(phase7_df["position"] == pos) & (phase7_df["season"] == test_season)]
+                if not phase7_df.empty else phase7_df
+            )
+
+            if args.intersect_populations:
+                common_ids = (
+                    set(pos_test_p["player_id"]) & set(pos_test_c["player_id"])
+                    & set(pos_test_p7["player"])
+                )
+                if len(common_ids) < MIN_INTERSECTION:
+                    print(f"  [{pos}] intersection too small ({len(common_ids)} < "
+                          f"{MIN_INTERSECTION}) -- skipping this position/fold entirely")
                     continue
-                preds = proj.predict(pos_test, pos)
-                actual = pos_test["season_total"].to_numpy(dtype=float)
+                pos_test_p = pos_test_p[pos_test_p["player_id"].isin(common_ids)]
+                pos_test_c = pos_test_c[pos_test_c["player_id"].isin(common_ids)]
+                pos_test_p7 = pos_test_p7[pos_test_p7["player"].isin(common_ids)]
+                print(f"  [{pos}] intersected population: {len(common_ids)} players")
+
+            # --- Production ---
+            if proj is not None and pos in proj.models and not pos_test_p.empty:
+                preds = proj.predict(pos_test_p, pos)
+                actual = pos_test_p["season_total"].to_numpy(dtype=float)
                 m = _metrics(actual, preds)
                 m["test_season"] = test_season
                 fold_records["production"][pos].append(m)
                 print(f"  production {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
-        # --- Candidate ---
-        train_c = cand_pairs[cand_pairs["target_season"] < test_season] if not cand_pairs.empty else cand_pairs
-        test_c = cand_pairs[cand_pairs["target_season"] == test_season] if not cand_pairs.empty else cand_pairs
-        for pos in POSITIONS:
-            pos_train = train_c[train_c["position"] == pos] if not train_c.empty else train_c
-            pos_test = test_c[test_c["position"] == pos] if not test_c.empty else test_c
-            if len(pos_train) < MIN_SAMPLES or pos_test.empty:
-                continue
-            model, scaler, features = _fit_candidate(pos_train, RIDGE_ALPHA_BY_POSITION[pos])
-            preds = _predict_candidate(model, scaler, features, pos_test)
-            actual = pos_test["season_total"].to_numpy(dtype=float)
-            m = _metrics(actual, preds)
-            m["test_season"] = test_season
-            fold_records["candidate"][pos].append(m)
-            print(f"  candidate  {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
+            # --- Candidate ---
+            if len(pos_train_c) >= MIN_SAMPLES and not pos_test_c.empty:
+                model, scaler, features = _fit_candidate(pos_train_c, RIDGE_ALPHA_BY_POSITION[pos])
+                preds = _predict_candidate(model, scaler, features, pos_test_c)
+                actual = pos_test_c["season_total"].to_numpy(dtype=float)
+                m = _metrics(actual, preds)
+                m["test_season"] = test_season
+                fold_records["candidate"][pos].append(m)
+                print(f"  candidate  {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
-        # --- Phase 7 (summed-weekly) -- loaded, not retrained ---
-        for pos in POSITIONS:
-            m = _phase7_metrics(phase7_df, pos, test_season)
-            if m is None:
-                continue
-            m["test_season"] = test_season
-            fold_records["phase7"][pos].append(m)
-            print(f"  phase7     {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
+            # --- Phase 7 (summed-weekly) -- loaded, not retrained ---
+            if not pos_test_p7.empty:
+                actual = pos_test_p7["actual_season_total"].to_numpy(dtype=float)
+                preds = pos_test_p7["predicted_season_total"].to_numpy(dtype=float)
+                m = _metrics(actual, preds)
+                m["test_season"] = test_season
+                fold_records["phase7"][pos].append(m)
+                print(f"  phase7     {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
     print(f"\n{'='*70}\nAGGREGATE (mean across folds, unweighted)\n{'='*70}")
     summary = {v: {} for v in VARIANTS}

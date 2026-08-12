@@ -601,11 +601,14 @@ a third arm (minimal scope, no new model training). Result: summed-
 weekly (Phase 7) beats both the production Ridge and a richer untested
 candidate direct model by a wide margin at every position (roughly
 40-50% lower MAE, e.g. QB 47.9 vs. 81.2/81.9, TE 19.5 vs. 33.6/29.8) --
-not a close call. One unresolved caveat: Phase 7 is scored on a
-meaningfully larger, likely easier-on-average population than the direct
-models (looser eligibility filter), so some of the gap could be
-population breadth rather than pure architecture -- flagged, not yet
-isolated via a forced-intersection re-check.
+not a close call. Population confound isolated same day (GAPS.md, search
+"population confound isolated"): re-ran with all 3 arms forced onto the
+common player_id intersection per fold (`--intersect-populations`).
+Phase 7's MAE rises 8-21% under the matched, established-veteran-only
+population (confirming part of its original edge did come from also
+handling easier backups/rookies) but it still beats both direct models
+by 26-40% at every position even then -- the headline result holds up,
+not an artifact of unequal test populations.
 
 ⸻
 

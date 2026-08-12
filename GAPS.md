@@ -6193,3 +6193,47 @@ Full fold-by-fold and aggregate results saved to
 production/candidate's normal 2018-2025 walk-forward is unaffected by
 this change, with Phase 7 correctly limited to its 3 available folds).
 
+**Follow-up: population confound isolated — 2026-08-12.** Added
+`--intersect-populations` to `scripts/walk_forward_preseason.py`:
+restricts all 3 arms to the common `player_id` intersection per
+position/fold before scoring (models still trained on their own full
+training set — only the *scored* test rows are narrowed), skipping a
+position/fold if the intersection is below 15 players. Refactored the
+per-fold loop from 3 sequential all-position blocks into a single
+per-position loop so all 3 arms' test frames are available together for
+the intersection; verified the refactor is a pure no-op when the flag is
+off (re-ran without `--intersect-populations`, byte-identical MAE/R²/n
+to the pre-refactor run above). Removed `_phase7_metrics()`, now dead
+code after being inlined into the per-position loop.
+
+**Result: production's own eligibility filter (`MIN_GAMES=6` prior
+season) turns out to already be the strictest of the three** — its `n`
+is unchanged before/after intersecting (112/226/428/272 for QB/RB/WR/TE,
+identical to the un-intersected run), meaning candidate and Phase 7 were
+simply narrowed down to production's existing population, not a novel
+smaller set. This makes the intersected comparison a clean answer to
+"how do all 3 perform on exactly the same, established-veteran-only
+population":
+
+| Position | Production MAE | Candidate MAE | Phase 7 MAE (matched) | Phase 7 MAE (original, unmatched) |
+|---|---|---|---|---|
+| QB | 81.2 | 80.4 | 58.1 | 47.9 |
+| RB | 55.8 | 54.8 | 32.8 | 27.5 |
+| WR | 47.3 | 42.9 | 31.5 | 26.2 |
+| TE | 33.6 | 29.9 | 22.2 | 19.5 |
+
+**Conclusion: the population-breadth confound is real but does not
+explain away the result.** Phase 7's MAE rises 8-21% when restricted to
+only the population production requires (confirming part of its original
+edge really was from correctly handling easier backups/rookies that
+production's stricter filter excludes) — but summed-weekly still beats
+both direct models by a clear 26-40% margin at every position even under
+this matched, apples-to-apples comparison. Phase 8's headline conclusion
+(summed-weekly > direct season-total prediction, for this pipeline)
+holds up under scrutiny, not just as an artifact of unequal test
+populations.
+
+Saved to `data/backtest_results/walk_forward_preseason_20260812_122701.json`
+(intersected) alongside `..._122649.json` (re-run of the original
+unintersected mode, confirming the refactor didn't change prior results).
+
