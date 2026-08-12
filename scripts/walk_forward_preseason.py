@@ -17,6 +17,17 @@ reproduce the bespoke per-position variants (QB's nonlinear PositionModel,
 RB's UpstreamCalibrator) -- those were never captured in a reusable script
 and are out of scope for this pass; see TRACKING.md for the note.
 
+Phase 8 (next_focus.md) adds a third arm: "phase7" -- the summed-weekly
+season projection from src/models/single_week_ppr/season_projection.py,
+loaded from its already-computed output CSV rather than retrained here.
+Two honesty caveats, not smoothed over: (1) each arm is scored on its own
+natural eligible population (production/candidate already don't share one
+either -- different SQL-level filters), so `n` is printed per arm per fold
+for the reader to judge comparability, not forced into an intersection;
+(2) the phase7 CSV only covers 2023-2025, so its arm is silently skipped
+for folds outside that range while production/candidate still run their
+full default walk-forward (back to ~2009) unaffected.
+
 Usage:
     python scripts/walk_forward_preseason.py
     python scripts/walk_forward_preseason.py --test-seasons 2022 2023 2024 2025
@@ -26,6 +37,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -81,6 +93,19 @@ def _metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     }
 
 
+def _phase7_metrics(phase7_df: pd.DataFrame, position: str, test_season: int) -> Optional[dict]:
+    """Metrics for Phase 7's summed-weekly season projection, reusing its
+    already-computed output rather than retraining anything here."""
+    if phase7_df is None or phase7_df.empty:
+        return None
+    sub = phase7_df[(phase7_df["position"] == position) & (phase7_df["season"] == test_season)]
+    if sub.empty:
+        return None
+    actual = sub["actual_season_total"].to_numpy(dtype=float)
+    preds = sub["predicted_season_total"].to_numpy(dtype=float)
+    return _metrics(actual, preds)
+
+
 def _aggregate(fold_metrics: list) -> dict:
     """Mean/std across folds (unweighted -- each season counts once,
     regardless of player count) plus a pooled figure (all folds' predictions
@@ -111,6 +136,12 @@ def main():
         "--min-train-seasons", type=int, default=3,
         help="Minimum prior seasons required before a season can be a test fold",
     )
+    parser.add_argument(
+        "--phase7-csv", type=Path,
+        default=Path("data/experiments/phase7_season_projection.csv"),
+        help="Phase 7 (summed-weekly) season projection output CSV -- loaded "
+             "as-is, not retrained. Pass a missing/empty path to skip that arm.",
+    )
     args = parser.parse_args()
 
     db = DatabaseManager()
@@ -126,6 +157,14 @@ def main():
     cand_pairs = build_multiyear_season_pairs(db, all_seasons)
     print(f"  {len(cand_pairs)} rows")
 
+    if args.phase7_csv.exists():
+        phase7_df = pd.read_csv(args.phase7_csv)
+        print(f"Loaded phase7 (summed-weekly) projections: {len(phase7_df)} rows "
+              f"from {args.phase7_csv} (seasons {sorted(phase7_df['season'].unique())})")
+    else:
+        phase7_df = pd.DataFrame()
+        print(f"No phase7 CSV found at {args.phase7_csv} -- that arm will be skipped.")
+
     if args.test_seasons:
         test_seasons = args.test_seasons
     else:
@@ -137,7 +176,8 @@ def main():
         ]
     print(f"\nTest seasons (walk-forward folds): {test_seasons}")
 
-    fold_records = {"production": {p: [] for p in POSITIONS}, "candidate": {p: [] for p in POSITIONS}}
+    VARIANTS = ("production", "candidate", "phase7")
+    fold_records = {v: {p: [] for p in POSITIONS} for v in VARIANTS}
 
     for test_season in test_seasons:
         print(f"\n--- Fold: test_season={test_season} ---")
@@ -175,9 +215,18 @@ def main():
             fold_records["candidate"][pos].append(m)
             print(f"  candidate  {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
+        # --- Phase 7 (summed-weekly) -- loaded, not retrained ---
+        for pos in POSITIONS:
+            m = _phase7_metrics(phase7_df, pos, test_season)
+            if m is None:
+                continue
+            m["test_season"] = test_season
+            fold_records["phase7"][pos].append(m)
+            print(f"  phase7     {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
+
     print(f"\n{'='*70}\nAGGREGATE (mean across folds, unweighted)\n{'='*70}")
-    summary = {"production": {}, "candidate": {}}
-    for variant in ("production", "candidate"):
+    summary = {v: {} for v in VARIANTS}
+    for variant in VARIANTS:
         for pos in POSITIONS:
             agg = _aggregate(fold_records[variant][pos])
             summary[variant][pos] = agg

@@ -6129,3 +6129,67 @@ specifically so 2024/2025 rookies are held out as an out-of-sample
 validation set (per the script's own `--help` text) — the file's
 `fit_window: [2006, 2023]` is deliberate, not a forgotten refit.
 
+---
+
+## Phase 8 (next_focus.md): summed-weekly vs. direct season-total prediction — 2026-08-12
+
+Wired Phase 7's already-computed summed-weekly output into the existing
+season-level walk-forward benchmark (`scripts/walk_forward_preseason.py`,
+which already compared `PreseasonProjector` [production Ridge] against a
+richer untested candidate [`preseason_features.py`'s multi-year/
+team-aware Ridge]) as a third arm, per user-confirmed minimal scope — no
+new model training, `_phase7_metrics()` just loads
+`data/experiments/phase7_season_projection.csv` and reuses the existing
+`_metrics()` helper. Spot-checked against the already-known Phase 7
+numbers before trusting the wiring (aggregate MAE here: QB 47.9/RB 27.5/
+WR 26.2/TE 19.5 vs. the earlier pooled-run numbers 47.92/27.59/26.22/
+19.58 — matches almost exactly, confirming no bug).
+
+**Result — summed-weekly (Phase 7) beats both direct season-total models
+by a wide margin, at every position, on both MAE and R²** (walk-forward,
+seasons 2023-2025, 3 folds each):
+
+| Position | Production MAE / R² | Candidate MAE / R² | Phase 7 MAE / R² |
+|---|---|---|---|
+| QB | 81.2 / 0.375 | 81.9 / 0.103 | **47.9 / 0.742** |
+| RB | 55.8 / 0.499 | 56.2 / 0.435 | **27.5 / 0.818** |
+| WR | 47.3 / 0.557 | 41.9 / 0.611 | **26.2 / 0.769** |
+| TE | 33.6 / 0.582 | 29.8 / 0.587 | **19.5 / 0.726** |
+
+Answers next_focus.md's Phase 8 question directly: for this pipeline, a
+season-total projection built by summing 18 leakage-safe weekly
+predictions is clearly more accurate than a single model predicting the
+season total directly from preseason/prior-season features alone — not a
+close call, roughly 40-50% lower MAE at every position.
+
+**Caveat, not smoothed over — populations aren't identical across arms**,
+consistent with how production and candidate already didn't match each
+other before this change (different SQL-level eligibility filters).
+Phase 7's `n` is meaningfully larger at every position (e.g. QB n=239 vs.
+production's 112/candidate's 132) — Phase 7's eligibility (`>=20` test
+rows per position/season in `season_projection.py`) is looser than
+`PreseasonProjector`'s `MIN_GAMES=6`-prior-season /
+`COUNT(*)>=4`-target-season filter, meaning Phase 7 is scored on a wider,
+likely easier-on-average population (more backups/rookies with partial
+seasons included). This is a real, unresolved confound: some of Phase
+7's advantage could be population breadth rather than pure architectural
+superiority. Not corrected here per the agreed minimal scope (each arm
+reported on its own natural population, matching the file's existing
+precedent) — worth a forced-intersection re-check before treating this
+result as fully conclusive, but the gap is large enough (40-50% MAE
+reduction) that population differences alone are unlikely to fully
+explain it.
+
+**Also notable**: the richer "candidate" direct model
+(`preseason_features.py`'s multi-year/team-aware features) does NOT
+consistently beat the simpler production Ridge — better for WR/TE,
+worse for QB (R² 0.103 vs. 0.375), roughly tied for RB. More features
+didn't straightforwardly help here, unlike the tree-based single-week
+architectures earlier in this session.
+
+Full fold-by-fold and aggregate results saved to
+`data/backtest_results/walk_forward_preseason_20260812_120925.json`
+(2023-2025 only) and `..._121005.json` (full default range, confirms
+production/candidate's normal 2018-2025 walk-forward is unaffected by
+this change, with Phase 7 correctly limited to its 3 available folds).
+

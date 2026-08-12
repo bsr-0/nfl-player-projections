@@ -593,6 +593,20 @@ This answers an important question:
 
 Is season-level prediction more accurate when modeled directly, or when constructed from weekly predictions?
 
+[COMPLETE — 2026-08-12] Answered directly (GAPS.md, search "Phase 8
+(next_focus.md): summed-weekly vs. direct season-total prediction").
+Wired Phase 7's already-computed output into the existing
+`scripts/walk_forward_preseason.py` season-level walk-forward harness as
+a third arm (minimal scope, no new model training). Result: summed-
+weekly (Phase 7) beats both the production Ridge and a richer untested
+candidate direct model by a wide margin at every position (roughly
+40-50% lower MAE, e.g. QB 47.9 vs. 81.2/81.9, TE 19.5 vs. 33.6/29.8) --
+not a close call. One unresolved caveat: Phase 7 is scored on a
+meaningfully larger, likely easier-on-average population than the direct
+models (looser eligibility filter), so some of the gap could be
+population breadth rather than pure architecture -- flagged, not yet
+isolated via a forced-intersection re-check.
+
 ⸻
 
 Phase 9 — 18-Week Quantiles / Simulation
