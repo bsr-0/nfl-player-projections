@@ -7,10 +7,68 @@ search "SUPERSEDED — 2026-08-10"). `player_weekly_stats` was missing
 zero-production-game frequency (6.3% -> 29.7% in the corrected panel).
 Phases 2-7 below were ALL built and validated on the pre-fix data and
 should be treated as PROVISIONAL, not final, until re-run on the corrected
-panel — that re-run has not happened yet. This is most consequential for
-architecture D (two-stage/hurdle), which specifically needs true zero
-observations to learn P(PPR > 0) and could not have learned it correctly
-before this fix.
+panel. This is most consequential for architecture D (two-stage/hurdle),
+which specifically needs true zero observations to learn P(PPR > 0) and
+could not have learned it correctly before this fix.
+
+⚠ 2026-08-10/11 UPDATE: Phases 2 and 3 have now been re-run in full on the
+corrected panel (GAPS.md, search "Phases 2-3 re-run on the corrected
+panel"). Every position's winning architecture changed in Phase 2; the
+window/weighting tradeoff also shifted materially in Phase 3 (QB/TE now
+peak at 7y instead of monotonically improving to "all"; WR now clearly
+prefers 3y; RB still favors "all" but paired with exponential weighting).
+`FINAL_CONFIG` in `src/models/single_week_ppr/final_config.py` has been
+updated accordingly. Phase 4 has also now been re-run using the new
+FINAL_CONFIG (GAPS.md, search "Phase 4 re-run on the corrected panel") —
+the challenger architecture beats existing_methodology at every position,
+but absolute MAE is NOT comparable across the original/corrected runs
+(the corrected eval set has far more legitimate near-zero rows, which
+mechanically lowers MAE regardless of model quality — see GAPS.md for the
+full caveat). Also flagged there: p50 quantile-calibration coverage runs
+notably below nominal specifically for the 2025 test season across all 4
+positions, not yet root-caused. Phase 5 (tuning) has also now been
+re-run (GAPS.md, search "Phase 5 re-run on the corrected panel") — found
+and fixed a real bug where TE's new winner architecture (B_gbm_huber)
+wasn't wired into the tuner at all; tuning gains are small either way
+(QB actually got very slightly worse: +0.02 MAE from tuning, within
+noise; RB/WR/TE improved by 0.02-0.08 MAE). Phase 6c (feature ablation)
+has also now been re-run (GAPS.md, search "Phase 6c re-run on the
+corrected panel") — QB/RB still monotonically improve to "all" features;
+WR/TE now peak at 30 with a tiny (<=0.016 MAE) reversal at "all," within
+noise.
+
+⚠ 2026-08-11 UPDATE: the panel's 2006-2017 zero-row tier was rebuilt
+(GAPS.md, search "SUPERSEDED — 2026-08-11") after the user flagged that
+active-roster status alone isn't evidence of actually playing. Replaced
+with PBP-confirmed participation (passer/rusher/receiver in the raw
+play-by-play) -- a real methodological improvement, but it shrank the
+2006-2017 tier from 25,226 rows down to just 12, because "confirmed
+participation + zero recorded stats that week" is inherently rare without
+snap-count-level granularity. This is a genuine finding, not a failure:
+pre-2018 zero-observation coverage is fundamentally limited by the source
+data, not by this pipeline. Given the tiny magnitude of the change (12
+rows out of ~119K), Phases 2-6c were deliberately NOT re-run a third
+time -- the current FINAL_CONFIG remains the operative choice.
+
+⚠ 2026-08-11/12 UPDATE: Phase 7 (18-week season projection) has been
+redesigned and run for real end-to-end for the first time (GAPS.md,
+search "Phase 7 (18-week season projection) redesigned and run for
+real"). Fixed the availability-rate double-discounting bug (real/inferred
+rows now use P(plays)=1 directly instead of being scaled down again by a
+play-rate prior), added an --exclude-pbp-confirmed-zeros sensitivity
+toggle, and added per-player data_source breakdown columns to the output.
+Also found and fixed a real bug in `src/data/external_data.py`'s injury
+merge (silently discarded real injury lookups whenever the input already
+had an injury_score column -- affects other callers beyond Phase 7 too),
+and a real, live LAR/JAC team-code bug that had left opponent-matchup
+features dead for every Rams/Jaguars player in 2025 (previously
+documented but never fixed). Results: QB substantially over-projects
+(+22.5 bias) while RB/WR/TE all under-project (-6 to -14.5) -- opposite
+directions, not yet explained. Players requiring any synthetic
+(no-data) weeks have roughly double the error of players who don't,
+except QB where the pattern inverts -- also unexplained, flagged for
+follow-up before trusting QB season projections for players who miss
+games.
 
 Goal
 
@@ -62,7 +120,7 @@ available_timestamp <= prediction_timestamp
 
 ⸻
 
-Phase 2 — Single-Week Model [COMPLETE — 2026-08-10]
+Phase 2 — Single-Week Model [COMPLETE — 2026-08-10; RE-RUN ON CORRECTED PANEL COMPLETE — 2026-08-10]
 
 Target/baselines/architectures A-F implemented in src/models/single_week_ppr/
 and evaluated via walk-forward folds (train up to season N-1, test season N)
@@ -191,7 +249,7 @@ Do not prioritize log transformation because PPR contains negative values.
 
 ⸻
 
-Phase 3 — Optimize Historical Training Data [COMPLETE — 2026-08-10]
+Phase 3 — Optimize Historical Training Data [COMPLETE — 2026-08-10; RE-RUN ON CORRECTED PANEL COMPLETE — 2026-08-11]
 
 Full grid run: 4 positions x 5 windows (3y/5y/7y/10y/all) x 3 weightings
 (none/linear/exponential) x 2 architectures per position (B-Huber + that
@@ -262,7 +320,7 @@ using only rolling validation.
 
 ⸻
 
-Phase 4 — Single-Week Validation [COMPLETE — 2026-08-10]
+Phase 4 — Single-Week Validation [COMPLETE — 2026-08-10; RE-RUN ON CORRECTED PANEL COMPLETE — 2026-08-11]
 
 Ran each position's FINAL_CONFIG (chosen architecture/window/weighting from
 Phases 2-3) with row-level predictions saved: 114,989 rows across 4
@@ -330,7 +388,7 @@ For quantile models, measure calibration/coverage.
 
 ⸻
 
-Phase 5 — Hyperparameter Tuning [COMPLETE — 2026-08-10]
+Phase 5 — Hyperparameter Tuning [COMPLETE — 2026-08-10; RE-RUN ON CORRECTED PANEL COMPLETE — 2026-08-11]
 
 Nested-CV Optuna tuning (100 trials, inner walk-forward split within each
 fold's training seasons only — outer 2023/2024/2025 test seasons never
@@ -399,6 +457,12 @@ degradation at higher counts) — current ~57-67-feature CAUSAL_FEATURES
 set is not past diminishing returns for the tree-based FINAL_CONFIG
 architectures. Specific to tree models (robust to multicollinearity);
 says nothing about the actually-deployed Ridge-based production path
+
+RE-RUN ON CORRECTED PANEL COMPLETE — 2026-08-11 (GAPS.md, search "Phase 6c
+re-run on the corrected panel"). QB/RB still monotonically improve out to
+"all" features; WR/TE now peak at 30 features with a tiny (≤0.016 MAE)
+reversal at "all" — within noise, doesn't change the practical takeaway,
+but a genuine difference from the clean pre-fix result.
 (src/models/component_predictor.py), which is a separate, unresolved
 question. Full writeup: GAPS.md §8.5.
 
@@ -435,7 +499,7 @@ Maintain strict temporal availability.
 
 ⸻
 
-Phase 7 — Build the 18-Week Projection [MECHANISM BUILT, REAL RUN PENDING — 2026-08-10]
+Phase 7 — Build the 18-Week Projection [REDESIGNED + REAL RUN COMPLETE — 2026-08-11/12]
 
 src/models/single_week_ppr/season_projection.py: option C design (per-week
 formula on retrospective seasons — synthetic feature rows for missed weeks,

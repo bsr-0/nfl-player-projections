@@ -191,15 +191,60 @@ def build_synthetic_week_row(
     return row
 
 
+def resolve_week_source(
+    week: int,
+    real_weeks: set,
+    data_source: Optional[str],
+    exclude_pbp_confirmed_zeros: bool = False,
+) -> bool:
+    """True if `week` should be predicted from a real/inferred row (P(plays)=1,
+    no availability_rate discount); False if it needs the synthetic
+    carry-forward path (genuinely unknown week, availability_rate applies).
+
+    `data_source` is the row's tag when `week in real_weeks`, else None.
+    `exclude_pbp_confirmed_zeros` treats the weaker 2006-2017 tier
+    (`inferred_pbp_confirmed_zero`) as absent, for sensitivity comparisons.
+    """
+    if week not in real_weeks:
+        return False
+    if exclude_pbp_confirmed_zeros and data_source == "inferred_pbp_confirmed_zero":
+        return False
+    return True
+
+
 def run_season_projection(
     positions: Optional[Sequence[str]] = None,
     seasons: Optional[Sequence[int]] = None,
     output_path=None,
+    exclude_pbp_confirmed_zeros: bool = False,
 ) -> pd.DataFrame:
     """For each position's FINAL_CONFIG fold: fit once, then for every player
-    with >=1 real game that season, sum P(plays)*E[PPR|plays] across every
-    possible week (real prediction where a real row exists, synthetic
-    prediction otherwise), and compare to the real season total.
+    with >=1 real game that season, sum E[PPR] across every possible week,
+    and compare to the real season total.
+
+    Three-way per-week branch (Complete Player-Game Panel-aware, see
+    GAPS.md "SUPERSEDED -- 2026-08-10/11"):
+      - A real `nflverse_stats` row exists -> predict off it directly.
+        P(plays)=1 is already known, so `availability_rate` is NOT applied.
+      - An inferred-zero row exists (`inferred_snap_verified_zero` or
+        `inferred_pbp_confirmed_zero`) -> also predict off it directly, same
+        reasoning: we have direct evidence the player took the field that
+        week, so there's nothing left to discount.
+      - No row of any kind -> genuinely unknown week. Build a synthetic
+        carry-forward feature row and multiply the prediction by
+        `estimate_availability_rate`'s P(plays) estimate, since this is the
+        only case where the outcome is actually uncertain.
+
+    Applying `availability_rate` uniformly to every week (the pre-2026-08-11
+    behavior) double-discounted weeks we already had direct evidence for --
+    real games, including true zero-PPR ones, were being scaled down by a
+    play-rate prior even though P(plays)=1 was already known for them.
+
+    `exclude_pbp_confirmed_zeros`: sensitivity toggle. When True, treats
+    `inferred_pbp_confirmed_zero` rows (the weaker, 2006-2017 tier -- see
+    GAPS.md) as if they didn't exist, falling back to the synthetic path for
+    those weeks instead. Off by default; mirrors the Population B-vs-C
+    comparison used when the panel itself was validated.
     """
     from pathlib import Path
 
@@ -261,8 +306,11 @@ def run_season_projection(
             # includes this fold's train+test frame so mid-season history is present.
             full_history = pd.concat([pos_train, pos_test], ignore_index=True)
 
+            has_data_source = "data_source" in pos_test.columns
+
             for player_id, g in pos_test.groupby("player_id"):
-                real_weeks = set(g["week"].astype(int))
+                g_by_week = {int(w): sub for w, sub in g.groupby(g["week"].astype(int))}
+                real_weeks = set(g_by_week.keys())
                 team = g.sort_values("week")["team"].iloc[0]  # first real game's team this season
                 possible_weeks = possible_weeks_for_team(db, team, season)
                 if not possible_weeks:
@@ -272,9 +320,27 @@ def run_season_projection(
 
                 predicted_total = 0.0
                 weeks_predicted = 0
+                weeks_real_stats = 0
+                weeks_inferred_snap_verified = 0
+                weeks_inferred_pbp_confirmed = 0
+                weeks_synthetic = 0
                 for week in possible_weeks:
-                    if week in real_weeks:
-                        row = g[g["week"] == week][feature_cols]
+                    data_source = (
+                        g_by_week[week]["data_source"].iloc[0]
+                        if week in real_weeks and has_data_source else None
+                    )
+                    treat_as_real = resolve_week_source(
+                        week, real_weeks, data_source, exclude_pbp_confirmed_zeros,
+                    )
+                    if treat_as_real:
+                        row = g_by_week[week][feature_cols]
+                        rate = 1.0
+                        if data_source == "inferred_snap_verified_zero":
+                            weeks_inferred_snap_verified += 1
+                        elif data_source == "inferred_pbp_confirmed_zero":
+                            weeks_inferred_pbp_confirmed += 1
+                        else:
+                            weeks_real_stats += 1
                     else:
                         synth = build_synthetic_week_row(
                             full_history, player_id, season, week, team, db, feature_engineer,
@@ -285,12 +351,14 @@ def run_season_projection(
                         for c in missing:
                             synth[c] = np.nan
                         row = synth[feature_cols]
+                        rate = availability_rate
+                        weeks_synthetic += 1
                     try:
                         pred = float(model.predict(row)[0])
                     except Exception as e:
                         logger.warning("Predict failed for %s week %s: %s", player_id, week, e)
                         continue
-                    predicted_total += pred * availability_rate
+                    predicted_total += pred * rate
                     weeks_predicted += 1
 
                 if weeks_predicted == 0:
@@ -302,6 +370,10 @@ def run_season_projection(
                     "possible_weeks": len(possible_weeks), "weeks_predicted": weeks_predicted,
                     "games_actually_played": len(real_weeks),
                     "availability_rate": availability_rate,
+                    "weeks_real_stats": weeks_real_stats,
+                    "weeks_inferred_snap_verified": weeks_inferred_snap_verified,
+                    "weeks_inferred_pbp_confirmed": weeks_inferred_pbp_confirmed,
+                    "weeks_synthetic": weeks_synthetic,
                     "predicted_season_total": predicted_total,
                     "actual_season_total": actual_total,
                 }

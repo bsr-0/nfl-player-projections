@@ -74,6 +74,8 @@ def _build_model(architecture_name: str, params: dict):
 
     if architecture_name == "C_gbm_mae":
         return GBMRegressor(objective="regression_l1", **params)
+    if architecture_name == "B_gbm_huber":
+        return GBMRegressor(objective="huber", **params)
     if architecture_name == "F_yeojohnson_huber":
         return YeoJohnsonHuber(**params)
     raise ValueError(f"Tuning not implemented for architecture: {architecture_name!r}")
@@ -98,7 +100,7 @@ def tune_hyperparameters_for_fold(
                         architecture_name, sorted(set(seasons_train)))
         return {}
 
-    tune_huber_alpha = architecture_name == "F_yeojohnson_huber"
+    tune_huber_alpha = architecture_name in ("F_yeojohnson_huber", "B_gbm_huber")
     seasons_arr = np.asarray(seasons_train)
 
     def objective(trial: "optuna.Trial") -> float:

@@ -830,6 +830,13 @@ class ExternalDataIntegrator:
                     injury_status = resolver.build_keys(injury_status, source="injury_source", name_col="player_id", team_col="team" if 'team' in injury_status.columns else 'player_id', opponent_col=None).dataframe
                     result['player_id'] = result['canonical_player_id'].where(result['canonical_player_id'] != '', result['player_id'])
                     injury_status['player_id'] = injury_status['canonical_player_id'].where(injury_status['canonical_player_id'] != '', injury_status['player_id'])
+                    # Drop any pre-existing injury_score/is_injured columns before
+                    # merging fresh ones in -- otherwise pandas silently suffixes
+                    # both to injury_score_x/_y (when `result` already carries these
+                    # columns from an earlier pipeline stage, e.g. a carried-forward
+                    # synthetic row in season_projection.py), and every reference to
+                    # result['injury_score'] below raises KeyError.
+                    result = result.drop(columns=['injury_score', 'is_injured'], errors='ignore')
                     result = result.merge(
                         injury_status[['player_id', 'season', 'week', 'injury_score', 'is_injured']],
                         on=['player_id', 'season', 'week'],

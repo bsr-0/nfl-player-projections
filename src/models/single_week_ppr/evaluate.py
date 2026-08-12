@@ -406,11 +406,21 @@ WINDOW_OUTPUT_PATH = Path("data/experiments/phase3_training_window_comparison.cs
 # architecture refits are cheap once a fold is loaded; the window reload
 # (4 positions x 5 windows x 3 seasons = 60 fold-loads) is the expensive
 # axis, so architecture count doesn't need to be minimized further.
+#
+# Updated 2026-08-10 after the Complete Player-Game Panel fix (GAPS.md) —
+# every position's Phase 2 winner changed once trained on the corrected,
+# non-selection-biased data (data/experiments/
+# phase2_single_week_comparison_v2_corrected.csv). RB's literal best-MAE
+# was E_quantile_gbm's median, but E is a supplementary floor/median/
+# ceiling tool per next_focus.md's own framing, not a competing point-
+# estimate architecture -- kept the "winner" selection restricted to the
+# point-estimate architectures (A/B/C/D/F), matching original Phase 2
+# logic; RB's best among those is C_gbm_mae.
 PHASE3_WINNER_ARCHITECTURE = {
-    "QB": "C_gbm_mae",
-    "RB": "F_yeojohnson_huber",
+    "QB": "F_yeojohnson_huber",
+    "RB": "C_gbm_mae",
     "WR": "C_gbm_mae",
-    "TE": "C_gbm_mae",
+    "TE": "B_gbm_huber",
 }
 
 

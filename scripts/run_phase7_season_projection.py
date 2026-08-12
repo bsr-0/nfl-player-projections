@@ -26,9 +26,16 @@ def main():
                          help="Validation seasons (default: 2023 2024 2025)")
     parser.add_argument("--output", type=Path, default=Path("data/experiments/phase7_season_projection.csv"),
                          help="Output CSV path (appended incrementally)")
+    parser.add_argument("--exclude-pbp-confirmed-zeros", action="store_true",
+                         help="Sensitivity toggle: treat the weaker 2006-2017 "
+                              "inferred_pbp_confirmed_zero tier as absent, falling back "
+                              "to synthetic estimation for those weeks instead (default: off)")
     args = parser.parse_args()
 
-    result = run_season_projection(positions=args.positions, seasons=args.seasons, output_path=args.output)
+    result = run_season_projection(
+        positions=args.positions, seasons=args.seasons, output_path=args.output,
+        exclude_pbp_confirmed_zeros=args.exclude_pbp_confirmed_zeros,
+    )
     if result.empty:
         print("No results produced.")
         return
@@ -51,12 +58,13 @@ def main():
     print(split.round(2).to_string())
 
     print("\n" + "=" * 70)
-    print("Naive baseline: assume full health (availability_rate=1.0) instead")
+    print("Reliance on synthetic (unknown-week) estimation vs. real/inferred data")
     print("=" * 70)
-    naive_pred = (result["predicted_season_total"] / result["availability_rate"].replace(0, np.nan))
-    naive_mae = (naive_pred - result["actual_season_total"]).abs().mean()
-    print(f"  Naive (no P(plays) weighting) MAE: {naive_mae:.2f}")
-    print(f"  With P(plays) weighting MAE:       {result['abs_error'].mean():.2f}")
+    result["synthetic_share"] = result["weeks_synthetic"] / result["possible_weeks"].replace(0, np.nan)
+    result["any_synthetic"] = result["weeks_synthetic"] > 0
+    reliance = result.groupby(["position", "any_synthetic"])["abs_error"].agg(["mean", "count"])
+    print(reliance.round(2).to_string())
+    print(f"\n  Mean synthetic-week share of possible_weeks: {result['synthetic_share'].mean():.3f}")
 
 
 if __name__ == "__main__":

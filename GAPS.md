@@ -5632,16 +5632,361 @@ corrected panel vs. 5.9% originally — the low-confidence tier is doing a
 lot of the work there, which is exactly why it's kept distinguishable via
 `data_source` rather than blended in silently).
 
-**Not done — re-running Phases 2-7 on the corrected panel.** Every result
-from this session's Phases 2-7 (architecture selection, window/recency
-optimization, hyperparameter tuning, feature ablation, season projection)
-was built on the pre-fix, selection-biased data and should be treated as
-provisional. Given the scale of the distributional shift shown above —
-particularly relevant to the two-stage/hurdle architecture (D), which
-specifically needs true zero observations to learn `P(PPR > 0)` and could
-not have learned it correctly before this fix — a re-run is the clear next
-step, but is deliberately not attempted in this same pass given how large
-this data fix already was on its own.
+**SUPERSEDED — 2026-08-11 (2006-2017 tier rebuilt: PBP-confirmed
+participation replaces active-roster-status-alone).** The user raised a
+real methodological gap in the `inferred_roster_zero_low_confidence` tier
+above: "active roster status" means *eligible to play*, not *actually
+played* — a backup can be active every week and never take the field
+(coach's decision), which risks injecting **false zeros**, the mirror
+problem of the selection bias this whole fix was built to solve. Verified
+feasible: raw play-by-play (`nfl_data_py.import_pbp_data`) goes back to
+1999, not just 2018, and already carries `passer_player_id` /
+`rusher_player_id` / `receiver_player_id` columns on the same GSIS ID
+scheme as `players.player_id` — a direct "touched the ball" signal,
+stronger than roster status though still a conservative lower bound (a
+blocking-only player or an untargeted route-runner won't show up).
+Spot-checked 2006 vs. 2009 vs. 2010: passer/rusher counts stable
+throughout; receiver-charting coverage is noticeably thinner in 2006-2008
+(~10.3K non-null) than 2009+ (~17.6K) — makes the WR/TE tier even more
+conservative in those years specifically, not a correctness problem.
+
+**Fixed**: backed up the DB
+(`nfl_data.db.bak-pbp-tier-rebuild-20260811134132`), deleted all 25,226
+`inferred_roster_zero_low_confidence` rows (safe — none were real
+`nflverse_stats` rows), and rebuilt the 2006-2017 tier in
+`scripts/build_complete_player_game_panel.py` using
+`load_pbp_confirmed_candidates`: roster `status='ACT'` AND PBP-confirmed
+participation that week AND ≥1 real stat row elsewhere that season (same
+"real stat row" floor as before — deliberately NOT loosened, per explicit
+user direction). New tag: `inferred_pbp_confirmed_zero`.
+
+**Result: only 12 rows survive for the entire 2006-2017 range** (vs. the
+old tier's 25,226) — a real finding, not a bug. Mechanism: touching the
+ball in an NFL game almost always produces *some* countable box-score
+stat (even a 0-yard carry registers `rushing_attempts=1`), so "confirmed
+participation + zero recorded stats that week" is inherently rare without
+snap-count-level granularity. Diagnosed the funnel directly: 603
+player-weeks were PBP-confirmed with no stats row that week; 591 of those
+belong to players with **zero real stats rows for the entire season**
+(e.g. Michael Robinson, a real 8-year 49ers/Seahawks RB/FB, has zero rows
+anywhere in `player_weekly_stats`, any season) — a separate, deeper
+nflverse weekly-stats coverage gap for that era, not something this fix
+should paper over by guessing. The "≥1 real row elsewhere that season"
+floor correctly excludes them. Only 12 remain: players with an
+established season-long stats history whose one specific week is
+PBP-confirmed but stat-row-less (e.g. Matt Schaub, ATL's real backup QB
+in 2006, active + a confirmed play in week 8 with no matching stat line
+that game, while having real rows other weeks that season).
+
+**Also found and fixed en route**: the new PBP-participation cache
+(`fetch_pbp_participation`, filename `pbp_participation_{season}.parquet`)
+collided with an unrelated, pre-existing cache from a different pipeline
+(pass-protection-participation charting, different schema entirely) that
+already used that exact naming convention for 2016-2025. Caught via
+dry-run: row/unique-player counts nearly doubled starting at exactly the
+first season with a pre-existing file (2016), which made no sense as a
+real data discontinuity. Renamed the new cache to
+`pbp_touch_participation_{season}.parquet` to guarantee no future
+collision, deleted the 10 incorrectly-named files this session had
+generated for 2006-2015 (regenerable, no data lost), left the unrelated
+pipeline's files untouched.
+
+**Per user direction, logged rather than discarded or force-converted**:
+the 591 excluded "PBP-confirmed but no season-long stats history" cases
+are written to
+`data/experiments/unresolved_historical_stats_coverage.csv` (new
+`data_source` value: `unresolved_historical_stats_coverage`, used only
+for this audit log — never inserted into `player_weekly_stats`) so the
+gap is visible and re-examinable later, not silently dropped.
+
+**Revised sensitivity numbers** (supersedes the 34.3%/2006-2017 figure
+above, which was built on the now-deleted roster-only tier): with only 12
+rows added for 2006-2017 instead of 25,226, that era's zero-rate is now
+effectively unchanged from the original (uncorrected) data — the fix
+genuinely cannot manufacture pre-2018 zero-observations at scale given
+available data, and correctly says so rather than forcing a number.
+Population B (`inferred_snap_verified_zero` + `inferred_pbp_confirmed_zero`
++ original real rows) is now much closer to Population C
+(snap-verified-only) than originally reported, specifically for
+2006-2017; the 2018-2025 era's numbers in the table above are unaffected
+(that tier was never in question).
+
+**Explicit era distinction going forward** (per user direction): 2018+
+has a reasonably complete "actually played" signal (`snap_counts`) and is
+well-suited to a hurdle-style zero/nonzero decomposition. 2006-2017 does
+not — participation there is only partially observable, and any model
+trained across both eras should be evaluated with era as an explicit
+validation dimension (2006-2017 vs. 2018-2025 splits), not just pooled,
+since the pre-2018 zero rate is likely still biased downward by genuinely
+unresolvable coverage gaps in the source data, not by anything this
+pipeline controls.
+
+**Decision: did NOT re-run Phases 2-6c a third time.** A 12-row change to
+the training population (out of ~119K rows, concentrated in 2016-2017)
+is far too small to plausibly move any Phase 2/3/4/5/6c result outside
+the noise already observed between repeated runs — only QB/TE's 7y window
+and RB's "all" window even reach into this era at all. The current
+(second) re-run's `FINAL_CONFIG` remains the operative choice; re-running
+the full grid a third time for a change this small was judged not worth
+the multi-hour cost. If this reasoning is ever in question, the 12
+affected rows are fully logged above and the comparison is cheap to spot-
+check without a full re-run.
+
+**Phase 7 (18-week season projection) redesigned and run for real —
+2026-08-11.** Previously built but never executed end-to-end (see
+`[MECHANISM BUILT, REAL RUN PENDING]` in the original entry). Redesigned
+per the Complete Player-Game Panel's `data_source` provenance
+(`src/models/single_week_ppr/season_projection.py`):
+- **Availability-rate fix**: the old code multiplied `availability_rate`
+  (P(plays)) onto every week's prediction uniformly, including weeks with
+  a real row — double-discounting outcomes we already had direct evidence
+  for. Now: any week with a real row (`nflverse_stats`,
+  `inferred_snap_verified_zero`, or `inferred_pbp_confirmed_zero`) uses
+  the raw prediction (P(plays)=1, already known); `availability_rate` is
+  reserved for genuinely synthetic weeks (no row of any kind). Extracted
+  the branch decision into a pure, unit-testable function
+  (`resolve_week_source`).
+- **Sensitivity toggle**: `--exclude-pbp-confirmed-zeros` on
+  `scripts/run_phase7_season_projection.py` (off by default) — treats the
+  weaker 2006-2017 tier as absent for a Population-B-vs-C-style
+  comparison.
+- **Output transparency**: added `weeks_real_stats` /
+  `weeks_inferred_snap_verified` / `weeks_inferred_pbp_confirmed` /
+  `weeks_synthetic` breakdown columns to the per-player CSV
+  (`data/experiments/phase7_season_projection.csv`).
+- 5 new unit tests (`TestResolveWeekSource`) plus the pre-existing 8 for
+  `possible_weeks_for_team`/`estimate_availability_rate`/
+  `build_synthetic_week_row` — 13/13 passing, 110/110 full suite.
+
+**Bug found and fixed en route (not scoped to Phase 7, affects
+`add_external_features` broadly)**: `src/data/external_data.py`'s injury
+merge (~line 833) assumed the input DataFrame never already has
+`injury_score`/`is_injured` columns before merging fresh ones in from
+`injury_status`. When it does (e.g. Phase 7's carried-forward synthetic
+rows, which inherit `injury_score` from the real historical row they're
+based on), pandas silently suffixes both to `injury_score_x`/`_y`, and
+the very next line (`result["injury_score"].isna()...`) throws
+`KeyError: 'injury_score'` — caught by the function's own broad
+try/except and silently defaulted to neutral (1.0), so it never crashed
+anything, just silently discarded a real injury lookup on every call
+where the column already existed. Reproduced directly (row with a
+pre-existing `injury_score` column → confirmed `KeyError`), fixed by
+dropping any pre-existing `injury_score`/`is_injured` columns immediately
+before the merge. Verified fix + full 110-test suite pass. Doesn't change
+Phase 7's own output (its synthetic rows force-override `injury_score` to
+a neutral 1.0 immediately afterward regardless, by design — see the
+module docstring's "conditional on playing" note) but likely affects
+other callers of `add_external_features` that don't have that override
+and were silently losing real injury data whenever this collision
+occurred.
+
+**Real run results, seasons 2023-2025, all 4 positions** — first time
+this phase has ever actually executed (`data/experiments/
+phase7_season_projection.csv`, 1,745 total player-seasons):
+
+| Position | MAE | Bias | n | Mean synthetic-week share |
+|---|---|---|---|---|
+| QB | 47.92 | +22.50 | 239 | 0.462 |
+| RB | 27.59 | -6.26 | 409 | 0.346 |
+| WR | 26.22 | -14.50 | 700 | 0.311 |
+| TE | 19.58 | -13.79 | 397 | 0.256 |
+
+Notable, reported as found rather than smoothed over: **QB substantially
+over-projects (+22.5) while RB/WR/TE all under-project (-6 to -14.5)** —
+opposite directions, not just different magnitudes. Also consistent
+across every position: players requiring zero synthetic weeks are
+projected far more accurately than players requiring any (e.g. QB 53.5
+MAE with no synthetic weeks vs. 46.8 with some — inverted from the other
+3 positions, where "any synthetic" reliance roughly doubles the error:
+RB 44.0 vs 23.2, WR 42.4 vs 21.8, TE 28.5 vs 15.3). QB's inversion is
+itself notable and not yet explained — worth investigating before trusting
+QB season projections for players who miss real games during the
+projection window.
+
+**Bug found and fixed en route (real, currently-active, unrelated to
+Phase 7 specifically)**: while auditing GAPS.md for other open issues in
+parallel with this run, re-verified the previously-documented but
+never-fixed §9.2 item "LAR/JAC team code mismatch" and confirmed it was
+still live — `player_weekly_stats.team`/`.opponent` had 386/362 rows
+respectively still coded `LAR`/`JAC` (100% concentrated in season 2025;
+`schedule` and every other table already use the modern `LA`/`JAX`
+codes), meaning opponent-dependent matchup features
+(`opp_fpts_allowed*`, DVP, `possible_weeks_for_team`'s schedule join)
+were silently dead for every Rams/Jaguars player in the current season.
+Checked for `UNIQUE(player_id, season, week)` collision risk before
+touching anything (zero collisions found), backed up the DB
+(`nfl_data.db.bak-lar-jac-fix-20260811221644`), normalized both columns
+in place (`UPDATE ... SET team/opponent = 'LA'/'JAX' WHERE ... = 'LAR'/'JAC'`).
+Row count unchanged (118,962), full 110-test suite still passes. Checked
+`snap_counts`/`weekly_rosters`/`team_stats`/`team_personnel_stats` for the
+same mismatch — none found, isolated to `player_weekly_stats`.
+
+**Phases 2-3 re-run on the corrected panel — 2026-08-10/11.** Both re-run
+in full against the corrected data (`data/experiments/
+phase2_single_week_comparison_v2_corrected.csv`,
+`phase3_training_window_comparison_v2_corrected.csv`; original pre-fix
+CSVs preserved without the `_v2_corrected` suffix for comparison).
+
+Phase 2 (architecture comparison, same 7 architectures A-G, all 4
+positions) — **every position's winning architecture changed**:
+
+| Position | Original winner | Corrected winner |
+|---|---|---|
+| QB | C_gbm_mae | F_yeojohnson_huber |
+| RB | F_yeojohnson_huber | C_gbm_mae (E_quantile_gbm treated as a supplementary floor/median/ceiling tool per next_focus.md's framing, not a competing point-estimate architecture) |
+| WR | C_gbm_mae | C_gbm_mae (unchanged) |
+| TE | C_gbm_mae | B_gbm_huber |
+
+Notably, architecture D (the two-stage/hurdle model — specifically
+designed to exploit the new true-zero rows to learn `P(PPR > 0)`) does
+**not** win at any position, despite being exactly the mechanism this
+data fix was meant to unlock. Reported as found, not forced into the
+expected narrative.
+
+Phase 3 (training-window x recency-weighting grid, full 5-window x
+3-weighting sweep, all 4 positions, matching the original's exact grid
+per explicit user instruction to not scope it down) — new best
+(window, weighting) per position, evaluated using each position's new
+Phase 2 winner:
+
+| Position | Window | Weighting | MAE |
+|---|---|---|---|
+| QB | 7y | none | 6.32 |
+| RB | all | exponential | 4.54 |
+| WR | 3y | none | 4.18 |
+| TE | 7y | none | 2.85 |
+
+Contrast with the original (pre-fix) finding in this section (§7.9)
+that MAE improved monotonically out to full history for QB/RB/TE: on
+corrected data, **QB and TE now peak at 7y and get worse at 10y/all**,
+RB still favors "all" but now specifically paired with exponential
+weighting (recency-downweighting the now-much-larger low-confidence
+2006-2017 zero-tail), and WR now clearly prefers the shortest window
+(3y) rather than being flat/mixed across all windows. The corrected
+zero-inflated target distribution changed the recency/window tradeoff
+materially, not just the point architecture — consistent with what the
+user anticipated when proposing this fix ("I would expect this change
+to potentially alter... the optimal recency strategy").
+
+`FINAL_CONFIG` in `src/models/single_week_ppr/final_config.py` updated
+to these values.
+
+**Phase 4 re-run on the corrected panel — 2026-08-11.** Row-level
+validation re-run for all 4 positions using each position's new
+FINAL_CONFIG (`data/experiments/phase4_row_level_predictions_v2_corrected.csv`,
+139,986 rows; original preserved without the suffix). The challenger
+architecture beats `existing_methodology` (production Ridge) at every
+position, consistent with Phase 2/3's selection:
+
+| Position | Challenger | Challenger MAE | existing_methodology MAE |
+|---|---|---|---|
+| QB | F_yeojohnson_huber | 6.11 | 6.36 |
+| RB | C_gbm_mae | 4.50 | 4.59 |
+| WR | C_gbm_mae | 4.13 | 4.24 |
+| TE | B_gbm_huber | 2.86 | 2.94 |
+
+**Caution — absolute MAE is not comparable across the original and
+corrected datasets.** All positions' MAE dropped noticeably versus the
+original (pre-fix) Phase 4 run (e.g. TE existing_methodology 3.71→2.94,
+QB 6.33→6.36 roughly flat, RB 4.80→4.59, WR 4.85→4.24). This is *not*
+evidence the models "got better" — the corrected eval set now legitimately
+contains far more true zero-PPR rows (up to ~40% for TE, see the
+sensitivity table above), and near-zero rows are mechanically easier to
+predict accurately, pulling the aggregate MAE down regardless of model
+quality. The within-run ranking (challenger vs. existing_methodology vs.
+baselines) is still the valid, meaningful signal; the cross-run absolute
+MAE trend is not and should not be read as "the corrected models are
+substantially more accurate."
+
+Quantile calibration (`E_quantile_gbm`) shows p50 coverage running
+noticeably below the nominal 0.50 for the 2025 test season specifically,
+across all 4 positions (QB 0.435, RB 0.364, WR 0.448, TE 0.446 — vs.
+2023/2024 tracking closer to nominal in the 0.53-0.60 range). Flagged,
+not yet root-caused — plausibly an artifact of the corrected zero-inflated
+target distribution stressing the quantile heads differently than the
+median/MAE point estimate, or a genuine 2025-specific distribution
+shift. Worth investigating before treating quantile outputs (floor/
+ceiling estimates) as reliable for the current season.
+
+**Phase 5 re-run on the corrected panel — 2026-08-11.** Nested-CV
+hyperparameter tuning (100 Optuna trials x 3 seasons) re-run per
+position's new FINAL_CONFIG architecture
+(`data/experiments/phase5_tuned_predictions_v2_corrected.csv`,
+`phase5_tuned_hyperparameters_v2_corrected.csv`).
+
+**Bug found and fixed en route**: `tuning.py:_build_model` only handled
+`C_gbm_mae` and `F_yeojohnson_huber` — the two architectures that won
+Phase 2 on the *original* pre-fix data. TE's new corrected-data winner,
+`B_gbm_huber`, wasn't wired up at all and raised `ValueError: Tuning not
+implemented for architecture: 'B_gbm_huber'` on first attempt. Fixed by
+adding a `B_gbm_huber -> GBMRegressor(objective="huber")` branch,
+confirmed equivalent to `YeoJohnsonHuber`'s own huber wrapping (same
+underlying `GBMRegressor(objective="huber")`, so the existing `alpha`
+(huber-delta) search range applies unchanged) — extended
+`tune_huber_alpha` to cover both `F_yeojohnson_huber` and `B_gbm_huber`.
+Re-ran TE after the fix; the other three positions were unaffected (their
+architectures were already supported) and did not need a re-run.
+
+**Also found and worked around, not fixed**: `run_tuned_validation`
+overwrites `data/experiments/phase5_tuned_hyperparameters.csv` on every
+call (`params_output_path.to_csv`, no append, no CLI override) —
+identical gotcha to the Phase 2 `run_comparison()` overwrite mistake
+documented above. Worked around the same way: ran each position with the
+default path, copied its output to a temp file immediately after, reset
+the tracked file via `git checkout --`, then merged all 4 positions into
+`phase5_tuned_hyperparameters_v2_corrected.csv` at the end. The original
+tracked file's content (from the pre-fix run) was never actually lost —
+confirmed via `git diff --stat` showing only a 4-line change after each
+run, restored cleanly every time.
+
+Tuned vs. default (Phase 4, corrected) MAE, computed directly against the
+corrected Phase 4 baseline rather than trusting the script's own printed
+comparison (which reads a hardcoded, non-overridable path and was
+silently comparing against the *stale pre-fix* Phase 4 file):
+
+| Position | Default MAE | Tuned MAE | Delta |
+|---|---|---|---|
+| QB | 6.113 | 6.133 | +0.021 (worse) |
+| RB | 4.495 | 4.411 | -0.083 (improved) |
+| WR | 4.126 | 4.103 | -0.023 (improved) |
+| TE | 2.857 | 2.804 | -0.053 (improved) |
+
+Small deltas either way — consistent with the original (pre-fix) Phase 5
+finding that tuning provides modest, not transformative, gains over
+Phase 2's already-reasonable defaults. QB is a genuine (if tiny) regression
+from tuning; worth a note but not worth abandoning tuned QB hyperparameters
+over a 0.02 MAE difference within noise.
+
+**Phase 6c re-run on the corrected panel — 2026-08-11.** Feature-count
+ablation (10/20/30/all, `CAUSAL_FEATURES` ranked by LightGBM importance)
+re-run per position's new FINAL_CONFIG architecture
+(`data/experiments/phase6c_feature_ablation_v2_corrected.csv`).
+
+| Position | 10 | 20 | 30 | all |
+|---|---|---|---|---|
+| QB | 6.279 | 6.169 | 6.166 | **6.114** |
+| RB | 4.807 | 4.755 | 4.738 | **4.736** |
+| WR | 4.175 | 4.159 | **4.106** | 4.122 |
+| TE | 2.868 | 2.860 | **2.851** | 2.855 |
+
+QB and RB still monotonically improve out to "all" features, matching
+the original (pre-fix) conclusion. WR and TE now peak at 30 features and
+get very slightly worse at "all" (WR: 4.106→4.122, TE: 2.851→2.855) — a
+small, non-monotonic reversal that wasn't present pre-fix. Differences at
+that scale (≤0.016 MAE) are within noise given no repeated-trial variance
+estimate exists here, so this doesn't override "more features generally
+helps or is neutral" as the practical takeaway for all 4 positions, but
+it's genuinely different from the original clean-monotonic result and
+worth noting rather than glossing over — plausibly the corrected zero-
+inflated target makes the marginal features noisier to fit exactly at the
+full feature count for WR/TE specifically.
+
+**Not yet done — reconsidering and re-running Phase 7 (18-week season
+projection) on the corrected panel.** Per next_focus.md's own note, this
+phase's design likely needs to change to use the new inferred-zero rows
+directly (rather than just re-running the existing synthetic-row
+mechanism as-is) — still pending, not a simple re-run like Phases 2-6c
+were.
 
 **Fixed (2026-08-09, follow-up) — `rosters` table was empty for a real
 reason, not just "never run": `scripts/ingest_rookie_data.py`'s

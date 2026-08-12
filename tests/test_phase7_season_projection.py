@@ -18,6 +18,7 @@ from src.models.single_week_ppr.season_projection import (
     possible_weeks_for_team,
     estimate_availability_rate,
     build_synthetic_week_row,
+    resolve_week_source,
     REGULAR_SEASON_MAX_WEEK,
 )
 
@@ -76,6 +77,39 @@ class TestEstimateAvailabilityRate:
         })
         rate = estimate_availability_rate("P1", "WR", 2023, db, position_avg_fallback=0.75)
         assert rate == 0.75
+
+
+class TestResolveWeekSource:
+    def test_no_row_at_all_is_synthetic(self):
+        assert resolve_week_source(5, real_weeks={1, 2, 3}, data_source=None) is False
+
+    def test_real_stats_row_is_not_discounted(self):
+        assert resolve_week_source(2, real_weeks={1, 2, 3}, data_source="nflverse_stats") is True
+
+    def test_snap_verified_zero_row_is_not_discounted(self):
+        assert resolve_week_source(
+            2, real_weeks={1, 2, 3}, data_source="inferred_snap_verified_zero",
+        ) is True
+
+    def test_pbp_confirmed_zero_row_is_not_discounted_by_default(self):
+        assert resolve_week_source(
+            2, real_weeks={1, 2, 3}, data_source="inferred_pbp_confirmed_zero",
+        ) is True
+
+    def test_exclude_flag_falls_back_to_synthetic_for_pbp_confirmed_only(self):
+        assert resolve_week_source(
+            2, real_weeks={1, 2, 3}, data_source="inferred_pbp_confirmed_zero",
+            exclude_pbp_confirmed_zeros=True,
+        ) is False
+        # Real stats and snap-verified rows are unaffected by the toggle.
+        assert resolve_week_source(
+            2, real_weeks={1, 2, 3}, data_source="nflverse_stats",
+            exclude_pbp_confirmed_zeros=True,
+        ) is True
+        assert resolve_week_source(
+            2, real_weeks={1, 2, 3}, data_source="inferred_snap_verified_zero",
+            exclude_pbp_confirmed_zeros=True,
+        ) is True
 
 
 class TestBuildSyntheticWeekRow:
