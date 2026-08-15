@@ -3,7 +3,7 @@
 
 Reads the latest 2025 walk-forward backtest, data/model_performance.json, and
 the current data/players_{POS}.json projection files, and writes two trimmed
-JSON files consumed by docs/results.html:
+JSON files consumed by docs/index.html:
 
     docs/data/backtest_2025.json
     docs/data/projections_2026.json
