@@ -21,6 +21,7 @@ class TestAddDepthChartRank:
         return pd.DataFrame({
             "gsis_id": ["P1", "P1", "P1"],
             "_key": [202301, 202310, 202401],
+            "_snap_key": [202301, 202310, 202401],
             "depth_chart_rank": [1, 2, 1],
         })
 
@@ -117,3 +118,39 @@ class TestLoadDepthChartAsofTable:
         fe_module._depth_chart_asof_cache.clear()
         assert len(table) == 1
         assert table["gsis_id"].iloc[0] == "P1"
+
+
+class TestStalenessBound:
+    """A season with no depth-chart coverage must not silently inherit an
+    arbitrarily old chart. depth_charts covers 2020-2024 only; 2025 is a live
+    validation season with none and is not backfillable upstream."""
+
+    def _table(self):
+        # P1 last seen 2021 wk1; P2 last seen 2024 wk1
+        return pd.DataFrame({
+            "gsis_id": ["P1", "P2"],
+            "_key": [202101, 202401],
+            "_snap_key": [202101, 202401],
+            "depth_chart_rank": [1, 1],
+        })
+
+    def test_one_season_stale_is_accepted(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table", self._table)
+        df = pd.DataFrame({"player_id": ["P2"], "season": [2025], "week": [5]})
+        out = FeatureEngineer()._add_depth_chart_rank(df)
+        assert out["depth_chart_rank"].iloc[0] == 1  # 2024 -> 2025 is within bound
+
+    def test_multi_season_stale_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table", self._table)
+        df = pd.DataFrame({"player_id": ["P1"], "season": [2025], "week": [5]})
+        out = FeatureEngineer()._add_depth_chart_rank(df)
+        assert out["depth_chart_rank"].iloc[0] == 3  # 2021 -> 2025 is too stale
+
+    def test_synthetic_lookup_shares_the_same_bound(self, monkeypatch):
+        from src.models.single_week_ppr.season_projection import _lookup_depth_chart_rank_asof
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table", self._table)
+        assert _lookup_depth_chart_rank_asof("P2", 2025, 5) == 1   # within bound
+        assert _lookup_depth_chart_rank_asof("P1", 2025, 5) is None  # too stale

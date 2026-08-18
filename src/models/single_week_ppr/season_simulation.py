@@ -182,6 +182,7 @@ def run_season_simulation(
     from src.features.feature_engineering import PositionFeatureEngineer
     from src.models.single_week_ppr.evaluate import (
         DEFAULT_VALIDATION_SEASONS, run_fold, _architectures_for_fold, _append_df_to_csv,
+        FoldFailureTracker,
     )
     from src.models.single_week_ppr.final_config import FINAL_CONFIG
     from src.models.single_week_ppr.season_projection import (
@@ -203,6 +204,7 @@ def run_season_simulation(
     db = DatabaseManager()
     rng = np.random.default_rng(seed)
 
+    tracker = FoldFailureTracker("Phase 9 (season simulation)")
     for position in positions:
         cfg = FINAL_CONFIG[position]
         feature_engineer = PositionFeatureEngineer(position)
@@ -221,7 +223,7 @@ def run_season_simulation(
                     position, season, False, train_seasons_override=train_seasons,
                 )
             except Exception as e:
-                logger.warning("Fold %s/%s failed to load: %s", position, season, e)
+                tracker.record(position, season, e)
                 continue
 
             pos_train = train_df[train_df["position"] == position].reset_index(drop=True)
@@ -297,4 +299,5 @@ def run_season_simulation(
 
     result = pd.DataFrame(all_rows)
     print(f"\n{len(result)} rows appended to {output_path}")
+    tracker.report(output_path)
     return result

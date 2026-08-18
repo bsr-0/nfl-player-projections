@@ -6237,3 +6237,89 @@ Saved to `data/backtest_results/walk_forward_preseason_20260812_122701.json`
 (intersected) alongside `..._122649.json` (re-run of the original
 unintersected mode, confirming the refactor didn't change prior results).
 
+
+---
+
+## Three root-cause fixes before the Phase 5 re-run — 2026-08-18
+
+Found while investigating the synthetic-week bias. All three were latent
+defects that predate this session's work; the depth-chart change merely
+perturbed values enough to expose the first one.
+
+### 1. Silently-dropped folds (highest severity — corrupted a result)
+
+Every phase in `src/models/single_week_ppr/` wraps per-fold loading in a
+broad `except Exception: logger.warning(...); continue`. The broad catch is
+deliberate (one bad fold shouldn't kill a multi-hour grid), but a
+`logger.warning` is the *only* trace — and it vanishes whenever output is
+piped through `tail`, which is how every long run in this session was
+watched.
+
+**This actually corrupted a result.** `_apply_bounded_scaling` raised
+`KeyError: 'air_yards_share_pct_roll3_mean_missing'` on the QB/2025/`all`
+fold, which was swallowed. The Phase 3 grid then reported QB/`all` = 6.18
+MAE computed over **2 of 3 seasons**, making `all` look like a decisive
+winner. It was caught only by noticing 14 rows where 21 were expected. With
+2025 restored the true value is 6.337 — still nominally best, but by 0.025
+over 10y rather than a clear margin. It was one step from being promoted
+into `FINAL_CONFIG`.
+
+**Root cause**: failures were ephemeral, not durable artifacts.
+**Fix**: `FoldFailureTracker` (`evaluate.py`), wired into all 7 fold
+handlers (Phases 2, 3, 4, 5, 6c, 7, 9). Records each failure, prints an
+unmissable end-of-run summary explicitly warning that aggregates are
+computed over incomplete data, and writes a `<output>.failures.json`
+sidecar so incompleteness survives terminal scrollback and is auditable
+after the fact. A clean run now says so affirmatively. 5 tests.
+
+### 2. `_apply_bounded_scaling` train/test column mismatch
+
+`cols = _infer_bounded_columns(train_df)` then `test_df[col]` — assumed
+both frames share a column set. But the missing-indicator step builds
+`<col>_missing` columns **conditionally per frame** (only above 2%
+missingness) and train/test are engineered separately, so a column can
+legitimately exist in one and not the other. Production code, not just
+experiment tooling.
+
+**Fix**: indicator columns absent from test fill with 0 (semantically
+correct — no missingness); any *other* absent column is dropped from
+scaling rather than fabricated. 4 tests.
+
+### 3. Unbounded depth-chart staleness + dirty `depth_charts` table
+
+The new as-of lookup had **no staleness bound**: a season with no coverage
+silently inherited the newest prior season's ranks, however old.
+
+**Coverage reality**: `depth_charts` covers **2020-2024 only**. 2018/2019
+have none (and no prior data to carry). **2025 has none and is NOT
+backfillable** — `nfl.import_depth_charts([2025])` fails upstream
+(`KeyError: 'week'`). So for 2025, a live validation season, rows carry
+2024 ranks and the depth-chart fix is **effectively inert**. This dampens
+any measured effect of the fix in Phases 7/9 and must be kept in view when
+reading those results.
+
+**Fix**: `DEPTH_CHART_MAX_STALENESS_SEASONS = 1`, shared by both the
+real-row (`_add_depth_chart_rank`) and synthetic-row
+(`_lookup_depth_chart_rank_asof`) paths so they can never disagree about
+whether a snapshot is still trustworthy. Beyond the bound → neutral
+default rather than a pretended-known value. Verified this changes
+**nothing** for current data (2018/19 have no prior data; 2020-2024 have
+same-season data; 2025 carries exactly 1 season) — it codifies today's
+behavior as intentional and prevents future pathology. 3 tests.
+
+**DB cleanup** (backed up to `nfl_data.db.bak-depthchart-cleanup-*` first):
+deleted 554,215 `season IS NULL` junk rows and 1,828 exact duplicates;
+638,236 → 82,193 rows, 0 true duplicates remaining (an apparent "524
+remaining" was a NULL-concat artifact in the check query, confirmed via a
+NULL-safe recheck). `player_weekly_stats` untouched at 118,962.
+
+**Two documented data caveats, not bugs:**
+- **1,821 genuinely conflicting ranks in 2024** (same player/week listed at
+  multiple depth slots). Resolved by `MIN` — takes the most prominent
+  listed role, chosen over `first` mainly for determinism. A judgment call,
+  now explicit in code rather than implicit.
+- **Granularity differs by season**: 2024 has 58 distinct `depth_position`
+  values and 2,054 players vs. ~15 and ~600 for 2020-2023 — an upstream
+  format change (full roster vs. a narrow subset), not duplication. So
+  `depth_chart_rank` coverage is season-dependent: a player can get a real
+  rank in 2024 and the neutral default in 2023.

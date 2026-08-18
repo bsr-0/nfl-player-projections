@@ -140,7 +140,9 @@ def _lookup_depth_chart_rank_asof(gsis_id: str, target_season: int, target_week:
     value to use when the source data itself has duplicates (e.g. 2024's
     ~3x-inflated row count).
     """
-    from src.features.feature_engineering import _load_depth_chart_asof_table
+    from src.features.feature_engineering import (
+        _load_depth_chart_asof_table, DEPTH_CHART_MAX_STALENESS_SEASONS,
+    )
 
     table = _load_depth_chart_asof_table()
     if table.empty:
@@ -152,7 +154,13 @@ def _lookup_depth_chart_rank_asof(gsis_id: str, target_season: int, target_week:
     prior_rows = player_rows[player_rows["_key"] <= target_key]
     if prior_rows.empty:
         return None
-    return int(prior_rows.loc[prior_rows["_key"].idxmax(), "depth_chart_rank"])
+    best_key = prior_rows["_key"].idxmax()
+    # Same staleness bound as the real-row path (_add_depth_chart_rank) --
+    # one shared policy, so a synthetic row and a real row never disagree
+    # about whether a given snapshot is still trustworthy.
+    if (target_season - prior_rows.loc[best_key, "_key"] // 100) > DEPTH_CHART_MAX_STALENESS_SEASONS:
+        return None
+    return int(prior_rows.loc[best_key, "depth_chart_rank"])
 
 
 def build_synthetic_week_row(
@@ -384,6 +392,7 @@ def run_season_projection(
     from src.features.feature_engineering import PositionFeatureEngineer
     from src.models.single_week_ppr.evaluate import (
         DEFAULT_VALIDATION_SEASONS, run_fold, _architectures_for_fold, _append_df_to_csv,
+        FoldFailureTracker,
     )
     from src.models.single_week_ppr.final_config import FINAL_CONFIG
     from src.models.single_week_ppr.windows import window_to_season_list
@@ -396,6 +405,7 @@ def run_season_projection(
     all_rows: List[dict] = []
     db = DatabaseManager()
 
+    tracker = FoldFailureTracker("Phase 7 (season projection)")
     for position in positions:
         cfg = FINAL_CONFIG[position]
         feature_engineer = PositionFeatureEngineer(position)
@@ -414,7 +424,7 @@ def run_season_projection(
                     position, season, False, train_seasons_override=train_seasons,
                 )
             except Exception as e:
-                logger.warning("Fold %s/%s failed to load: %s", position, season, e)
+                tracker.record(position, season, e)
                 continue
 
             pos_train = train_df[train_df["position"] == position].reset_index(drop=True)
@@ -506,4 +516,5 @@ def run_season_projection(
 
     result = pd.DataFrame(all_rows)
     print(f"\n{len(result)} rows appended to {output_path}")
+    tracker.report(output_path)
     return result

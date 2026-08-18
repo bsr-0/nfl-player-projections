@@ -55,6 +55,10 @@ _team_matchup_lookup_cache: Dict[Any, Tuple] = {}
 # weekly calls.
 _depth_chart_asof_cache: Dict[Any, pd.DataFrame] = {}
 
+# Max seasons a depth-chart snapshot may be carried forward before it is
+# treated as unknown. 1 = "last season's chart is acceptable, older is not".
+DEPTH_CHART_MAX_STALENESS_SEASONS = 1
+
 
 def _load_depth_chart_asof_table() -> pd.DataFrame:
     """Loads `depth_charts` into an as-of lookup table: one row per
@@ -90,11 +94,22 @@ def _load_depth_chart_asof_table() -> pd.DataFrame:
     raw["week"] = raw["week"].astype(int)
     raw["depth_chart_rank"] = pd.to_numeric(raw["depth_team"], errors="coerce").fillna(3).astype(int)
     raw["_key"] = raw["season"] * 100 + raw["week"]
+    # MIN across duplicate (gsis_id, season, week) entries. The source data
+    # genuinely lists some players in multiple slots for the same week (1,821
+    # such conflicts in 2024 alone), e.g. a receiver listed deeper in the base
+    # formation but first in a sub-package. MIN takes the most prominent
+    # listed role, and is chosen over max/first mainly so the result is
+    # DETERMINISTIC -- `first` would depend on row order and could differ
+    # between runs. This is a judgment call, recorded here rather than left
+    # implicit.
     table = (
         raw.groupby(["gsis_id", "_key"], as_index=False)["depth_chart_rank"].min()
-        .rename(columns={"gsis_id": "gsis_id"})
         .sort_values("_key")
     )
+    # Preserved so callers can measure how stale a matched snapshot is; the
+    # left frame's own `_key` is what survives a merge_asof, so without this
+    # the match's origin would be unrecoverable.
+    table["_snap_key"] = table["_key"]
     _depth_chart_asof_cache[cache_key] = table
     return table
 
@@ -836,7 +851,31 @@ class FeatureEngineer:
             left, table, left_on="_key", right_on="_key", by="gsis_id", direction="backward",
         )
         merged = merged.set_index("_idx").reindex(df.index)
-        df["depth_chart_rank"] = merged["depth_chart_rank"].fillna(3).astype(int).values
+
+        # Bound how far back a snapshot may be carried. Without this the
+        # as-of match is unbounded: a season with no depth-chart coverage
+        # silently inherits the newest prior season's ranks, however old.
+        # depth_charts covers 2020-2024 only -- 2025 (a live validation
+        # season) has none and is NOT backfillable (import_depth_charts([2025])
+        # fails upstream), so 2025 rows carry 2024 ranks. That is acceptable
+        # at one season of staleness (a prior-season depth chart is real, if
+        # noisy, information -- and it is exactly what a preseason projection
+        # would legitimately have), but carrying a rank forward several
+        # seasons is not. Beyond the bound we fall back to the neutral
+        # default rather than pretend to know.
+        stale_seasons = (merged["_key"] // 100) - (merged["_snap_key"] // 100)
+        too_stale = stale_seasons > DEPTH_CHART_MAX_STALENESS_SEASONS
+        ranks = merged["depth_chart_rank"].where(~too_stale)
+        df["depth_chart_rank"] = ranks.fillna(3).astype(int).values
+
+        n_stale = int(too_stale.sum())
+        if n_stale:
+            # print(), not logging: this module has no logger and reports via
+            # print/warnings throughout (matching the surrounding pipeline's
+            # visible-progress style).
+            print(f"  depth_chart_rank: {n_stale}/{len(df)} rows exceeded the "
+                  f"{DEPTH_CHART_MAX_STALENESS_SEASONS}-season staleness bound "
+                  f"and fell back to the neutral default")
         return df
 
     # Class-level cache: the contracts table is static per process, but

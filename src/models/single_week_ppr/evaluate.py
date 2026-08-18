@@ -121,6 +121,62 @@ DEFAULT_VALIDATION_SEASONS = (2023, 2024, 2025)
 COMPARISON_OUTPUT_PATH = Path("data/experiments/phase2_single_week_comparison.csv")
 
 
+class FoldFailureTracker:
+    """Makes skipped folds a durable, impossible-to-miss artifact.
+
+    Every phase in this package wraps per-fold loading in a broad
+    `except ... : continue`. That is deliberate (one bad fold shouldn't kill
+    a multi-hour grid), but as originally written the only trace was a
+    `logger.warning` -- which vanishes whenever output is piped through
+    `tail`, the normal way these long runs are watched. A real bug
+    (train/test column mismatch in _apply_bounded_scaling) silently deleted
+    QB/2025/'all' from a Phase 3 grid this way, and the resulting 2-of-3
+    season average was very nearly promoted into FINAL_CONFIG. It was only
+    caught by noticing an odd row count by hand.
+
+    So: record failures, print a LOUD summary at the end of the run, and
+    write a sidecar JSON next to the output CSV so incompleteness survives
+    the terminal scrollback and is auditable after the fact.
+    """
+
+    def __init__(self, phase: str):
+        self.phase = phase
+        self.failures: List[dict] = []
+
+    def record(self, position: str, season: int, error: Exception, **extra) -> None:
+        self.failures.append({
+            "phase": self.phase, "position": position, "season": int(season),
+            "error_type": type(error).__name__, "error": str(error), **extra,
+        })
+        logger.warning("Fold %s/%s%s failed to load: %s", position, season,
+                       f" {extra}" if extra else "", error)
+
+    def report(self, output_path: Optional[Path] = None) -> None:
+        if not self.failures:
+            print(f"\n[{self.phase}] All folds completed — no silently-dropped folds.")
+            return
+        bar = "!" * 74
+        print(f"\n{bar}")
+        print(f"!! {self.phase}: {len(self.failures)} FOLD(S) FAILED AND WERE EXCLUDED FROM RESULTS")
+        print(f"!! Any aggregate below is computed over INCOMPLETE data — do not")
+        print(f"!! treat it as comparable until these folds are re-run.")
+        for f in self.failures:
+            extra = {k: v for k, v in f.items()
+                     if k not in ("phase", "position", "season", "error_type", "error")}
+            print(f"!!   {f['position']}/{f['season']}{f' {extra}' if extra else ''}: "
+                  f"{f['error_type']}: {f['error']}")
+        print(bar)
+        if output_path is not None:
+            import json
+            sidecar = Path(str(output_path) + ".failures.json")
+            try:
+                sidecar.parent.mkdir(parents=True, exist_ok=True)
+                sidecar.write_text(json.dumps(self.failures, indent=2))
+                print(f"!! Recorded to {sidecar}")
+            except Exception as e:  # never let reporting break a completed run
+                logger.warning("Could not write failure sidecar: %s", e)
+
+
 def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
     """MAE (primary) + secondary metrics (next_focus.md Phase 2 §7)."""
     aligned = pd.DataFrame({"y_true": y_true, "y_pred": y_pred}).dropna()
@@ -329,13 +385,14 @@ def run_comparison(
     positions = list(positions) if positions else POSITIONS
     rows: List[dict] = []
 
+    tracker = FoldFailureTracker("Phase 2 (architecture comparison)")
     for position in positions:
         for season in seasons:
             print(f"\n=== {position} / test_season={season} ===")
             try:
                 train_df, test_df, existing_pred, _ = run_fold(position, season, tune_hyperparameters)
             except Exception as e:
-                logger.warning("Fold %s/%s failed to load: %s", position, season, e)
+                tracker.record(position, season, e)
                 continue
 
             pos_train = train_df[train_df["position"] == position]
@@ -391,6 +448,7 @@ def run_comparison(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(output_path, index=False)
     print(f"\nSaved comparison table to {output_path} ({len(result)} rows)")
+    tracker.report(output_path)
     return result
 
 
@@ -475,6 +533,7 @@ def run_window_comparison(
     weightings = list(weightings) if weightings else list(WEIGHTING_SCHEMES)
     rows: List[dict] = []
 
+    tracker = FoldFailureTracker("Phase 3 (window/weighting grid)")
     for position in positions:
         architectures = _architectures_for_position(position)
         available_seasons = sorted(
@@ -494,7 +553,7 @@ def run_window_comparison(
                         position, season, tune_hyperparameters, train_seasons_override=train_seasons,
                     )
                 except Exception as e:
-                    logger.warning("Fold %s/%s/%s failed to load: %s", position, season, window, e)
+                    tracker.record(position, season, e, window=window)
                     continue
 
                 pos_train = train_df[train_df["position"] == position]
@@ -536,6 +595,7 @@ def run_window_comparison(
 
     result = pd.DataFrame(rows)
     print(f"\n{len(result)} rows appended to {output_path}")
+    tracker.report(output_path)
     return result
 
 
@@ -605,6 +665,7 @@ def run_final_validation(
     all_frames: List[pd.DataFrame] = []
     all_arch = _architectures_for_fold()
 
+    tracker = FoldFailureTracker("Phase 4 (validation)")
     for position in positions:
         cfg = FINAL_CONFIG[position]
         available_seasons = sorted(
@@ -622,7 +683,7 @@ def run_final_validation(
                     position, season, tune_hyperparameters, train_seasons_override=train_seasons,
                 )
             except Exception as e:
-                logger.warning("Fold %s/%s failed to load: %s", position, season, e)
+                tracker.record(position, season, e)
                 continue
 
             pos_train = train_df[train_df["position"] == position]
@@ -688,6 +749,7 @@ def run_final_validation(
 
     result = pd.concat(all_frames, ignore_index=True) if all_frames else pd.DataFrame(columns=ROW_LEVEL_COLUMNS)
     print(f"\n{len(result)} row-level predictions appended to {output_path}")
+    tracker.report(output_path)
     return result
 
 
@@ -728,6 +790,7 @@ def run_tuned_validation(
     all_frames: List[pd.DataFrame] = []
     param_rows: List[dict] = []
 
+    tracker = FoldFailureTracker("Phase 5 (tuning)")
     for position in positions:
         cfg = FINAL_CONFIG[position]
         available_seasons = sorted(
@@ -745,7 +808,7 @@ def run_tuned_validation(
                     position, season, False, train_seasons_override=train_seasons,
                 )
             except Exception as e:
-                logger.warning("Fold %s/%s failed to load: %s", position, season, e)
+                tracker.record(position, season, e)
                 continue
 
             pos_train = train_df[train_df["position"] == position].reset_index(drop=True)
@@ -797,4 +860,5 @@ def run_tuned_validation(
 
     result = pd.concat(all_frames, ignore_index=True) if all_frames else pd.DataFrame(columns=ROW_LEVEL_COLUMNS)
     print(f"\n{len(result)} tuned row-level predictions appended to {output_path}")
+    tracker.report(output_path)
     return result

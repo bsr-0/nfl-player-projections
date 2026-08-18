@@ -74,6 +74,7 @@ def run_ablation(
     from config.settings import CAUSAL_FEATURES, POSITIONS
     from src.models.single_week_ppr.evaluate import (
         DEFAULT_VALIDATION_SEASONS, run_fold, compute_metrics,
+        FoldFailureTracker,
         _build_feature_matrices, _architectures_for_fold, _append_row_to_csv,
     )
     from src.models.single_week_ppr.final_config import FINAL_CONFIG
@@ -86,6 +87,7 @@ def run_ablation(
     positions = list(positions) if positions else POSITIONS
     rows: List[dict] = []
 
+    tracker = FoldFailureTracker("Phase 6c (feature ablation)")
     for position in positions:
         cfg = FINAL_CONFIG[position]
         arch_name = cfg["architecture"]
@@ -104,7 +106,7 @@ def run_ablation(
                     position, season, False, train_seasons_override=train_seasons,
                 )
             except Exception as e:
-                logger.warning("Fold %s/%s failed to load: %s", position, season, e)
+                tracker.record(position, season, e)
                 continue
 
             pos_train = train_df[train_df["position"] == position].reset_index(drop=True)
@@ -149,4 +151,5 @@ def run_ablation(
 
     result = pd.DataFrame(rows)
     print(f"\n{len(result)} rows appended to {output_path}")
+    tracker.report(output_path)
     return result
