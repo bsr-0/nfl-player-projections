@@ -221,6 +221,23 @@ def _apply_bounded_scaling(
     Fit MinMax scaler on bounded columns using train only, apply to train/test, persist artifact.
     """
     cols = _infer_bounded_columns(train_df)
+    # Train/test column reconciliation. The missing-indicator step in
+    # feature_engineering builds `<col>_missing` columns CONDITIONALLY per
+    # frame (only when that frame's missingness exceeds 2%), and train/test
+    # are engineered separately — so a column can legitimately exist in one
+    # and not the other. Without this guard, `test_df[col]` below raises
+    # KeyError and (because callers like run_window_comparison wrap fold
+    # loading in a broad try/except) the entire fold is silently dropped
+    # from results. Observed for real: QB/2025/'all' vanished from a Phase 3
+    # grid with no visible error. Indicator columns absent from test mean
+    # "no missingness here", so 0 is the semantically correct fill; any
+    # OTHER absent column is dropped from scaling rather than invented.
+    if not test_df.empty:
+        absent = [c for c in cols if c not in test_df.columns]
+        for c in absent:
+            if c.endswith("_missing"):
+                test_df[c] = 0
+        cols = [c for c in cols if c in test_df.columns]
     artifact: Dict[str, Any] = {"columns": cols, "scaler": None}
     if not cols:
         return artifact
