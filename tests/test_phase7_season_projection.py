@@ -19,6 +19,7 @@ from src.models.single_week_ppr.season_projection import (
     estimate_availability_rate,
     build_synthetic_week_row,
     resolve_week_source,
+    _lookup_depth_chart_rank_asof,
     REGULAR_SEASON_MAX_WEEK,
 )
 
@@ -112,6 +113,57 @@ class TestResolveWeekSource:
         ) is True
 
 
+class TestLookupDepthChartRankAsof:
+    def _fake_table(self):
+        # (gsis_id, _key=season*100+week, depth_chart_rank)
+        return pd.DataFrame({
+            "gsis_id": ["P1", "P1", "P1", "P2"],
+            "_key": [202301, 202310, 202401, 202305],
+            "depth_chart_rank": [1, 2, 1, 3],
+        })
+
+    def test_strictly_before_excludes_exact_week_match(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table",
+            self._fake_table,
+        )
+        # Week 10 (key=202310) has a snapshot, but target_week=10 itself
+        # must NOT be able to use it -- only strictly earlier is allowed.
+        result = _lookup_depth_chart_rank_asof("P1", 2023, 10)
+        assert result == 1  # falls back to week 1's rank, not week 10's
+
+    def test_uses_most_recent_strictly_prior_snapshot(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table",
+            self._fake_table,
+        )
+        result = _lookup_depth_chart_rank_asof("P1", 2023, 11)
+        assert result == 2  # week 10's snapshot is now strictly prior
+
+    def test_crosses_season_boundary_correctly(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table",
+            self._fake_table,
+        )
+        result = _lookup_depth_chart_rank_asof("P1", 2024, 1)
+        assert result == 2  # 2023 week 10's snapshot, strictly before 2024 week 1
+
+    def test_unknown_player_returns_none(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table",
+            self._fake_table,
+        )
+        assert _lookup_depth_chart_rank_asof("UNKNOWN", 2023, 10) is None
+
+    def test_no_prior_data_returns_none(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.features.feature_engineering._load_depth_chart_asof_table",
+            self._fake_table,
+        )
+        # P2's only snapshot is 2023 week 5 -- nothing strictly before it.
+        assert _lookup_depth_chart_rank_asof("P2", 2023, 5) is None
+
+
 class TestBuildSyntheticWeekRow:
     def test_returns_none_with_no_prior_history(self):
         history = pd.DataFrame({
@@ -179,3 +231,71 @@ class TestBuildSyntheticWeekRow:
 
         result = build_synthetic_week_row(history, "P1", 2023, 2, "KC", db, feature_engineer)
         assert result["injury_score"].iloc[0] == 1.0
+
+    def test_depth_chart_rank_refreshed_on_detected_change(self, monkeypatch):
+        """A demoted player's synthetic row must reflect the real, refreshed
+        rank, not the stale carried-forward value -- the direct fix for
+        the diagnosed real-vs-synthetic season-total bias."""
+        history = pd.DataFrame({
+            "player_id": ["P1", "P1"],
+            "season": [2023, 2023],
+            "week": [1, 1],
+            "team": ["KC", "KC"],
+            "position": ["QB", "QB"],
+            "depth_chart_rank": [1, 2],  # P1's own row = rank 1 (stale, healthy-starter)
+            "snap_share_pct_roll3_mean": [0.9, 0.2],
+        })
+        db = MagicMock()
+        feature_engineer = MagicMock()
+        feature_engineer.refresh_matchup_features.side_effect = lambda df: df
+
+        monkeypatch.setattr(
+            "src.predict.get_schedule_map_for_week", lambda db, season, week: {},
+        )
+        monkeypatch.setattr(
+            "src.data.external_data.add_external_features", lambda df, seasons=None: df,
+        )
+        monkeypatch.setattr(
+            "src.models.single_week_ppr.season_projection._compute_team_rolling_context",
+            lambda team, season, week, n=3: {},
+        )
+        monkeypatch.setattr(
+            "src.models.single_week_ppr.season_projection._lookup_depth_chart_rank_asof",
+            lambda gsis_id, season, week: 2,  # depth chart now shows rank 2, not 1
+        )
+
+        result = build_synthetic_week_row(history, "P1", 2023, 3, "KC", db, feature_engineer)
+        assert result["depth_chart_rank"].iloc[0] == 2
+        # Usage-share rescaled toward rank-2's empirical average from history
+        # (0.2), not left at rank-1's carried-forward stale value (0.9).
+        assert result["snap_share_pct_roll3_mean"].iloc[0] < 0.9
+
+    def test_depth_chart_rank_unchanged_when_no_asof_data(self, monkeypatch):
+        """No prior depth-chart snapshot available (e.g. 2018/2019/2025) ->
+        keep the carried-forward value, don't guess."""
+        history = pd.DataFrame({
+            "player_id": ["P1"], "season": [2018], "week": [1], "team": ["KC"],
+            "position": ["QB"], "depth_chart_rank": [1], "snap_share_pct_roll3_mean": [0.9],
+        })
+        db = MagicMock()
+        feature_engineer = MagicMock()
+        feature_engineer.refresh_matchup_features.side_effect = lambda df: df
+
+        monkeypatch.setattr(
+            "src.predict.get_schedule_map_for_week", lambda db, season, week: {},
+        )
+        monkeypatch.setattr(
+            "src.data.external_data.add_external_features", lambda df, seasons=None: df,
+        )
+        monkeypatch.setattr(
+            "src.models.single_week_ppr.season_projection._compute_team_rolling_context",
+            lambda team, season, week, n=3: {},
+        )
+        monkeypatch.setattr(
+            "src.models.single_week_ppr.season_projection._lookup_depth_chart_rank_asof",
+            lambda gsis_id, season, week: None,
+        )
+
+        result = build_synthetic_week_row(history, "P1", 2018, 2, "KC", db, feature_engineer)
+        assert result["depth_chart_rank"].iloc[0] == 1
+        assert result["snap_share_pct_roll3_mean"].iloc[0] == 0.9

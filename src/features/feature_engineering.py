@@ -48,6 +48,56 @@ warnings.filterwarnings("ignore", message="Mean of empty slice", category=Runtim
 # (GAPS.md, 2026-08-06 perf fix.)
 _team_matchup_lookup_cache: Dict[Any, Tuple] = {}
 
+# Single-entry cache for the depth_charts as-of table (season/week/gsis_id
+# -> rank) -- static per process like the team-matchup lookups above, and
+# rebuilding it (a full-table read + merge_asof sort) on every
+# _add_depth_chart_rank call would be wasteful across a backtest's many
+# weekly calls.
+_depth_chart_asof_cache: Dict[Any, pd.DataFrame] = {}
+
+
+def _load_depth_chart_asof_table() -> pd.DataFrame:
+    """Loads `depth_charts` into an as-of lookup table: one row per
+    (gsis_id, season*100+week) with the deduped depth_team rank, sorted for
+    `pd.merge_asof`. Excludes `season IS NULL` junk rows (a known DB
+    artifact -- 554K rows with no other real data either). Deduplicates
+    2024's ~3x-inflated row count per (season, week, gsis_id) via a
+    deterministic MIN so a rare conflicting-duplicate doesn't produce a
+    nondeterministic result.
+    """
+    cache_key = "depth_chart_asof_table"
+    if cache_key in _depth_chart_asof_cache:
+        return _depth_chart_asof_cache[cache_key]
+
+    import sqlite3
+    from config.settings import DB_PATH
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        raw = pd.read_sql(
+            """SELECT season, week, gsis_id, depth_team FROM depth_charts
+               WHERE season IS NOT NULL AND week IS NOT NULL AND gsis_id IS NOT NULL""",
+            conn,
+        )
+    finally:
+        conn.close()
+    raw = raw.dropna(subset=["season", "week", "gsis_id"])
+
+    if raw.empty:
+        _depth_chart_asof_cache[cache_key] = raw
+        return raw
+
+    raw["season"] = raw["season"].astype(int)
+    raw["week"] = raw["week"].astype(int)
+    raw["depth_chart_rank"] = pd.to_numeric(raw["depth_team"], errors="coerce").fillna(3).astype(int)
+    raw["_key"] = raw["season"] * 100 + raw["week"]
+    table = (
+        raw.groupby(["gsis_id", "_key"], as_index=False)["depth_chart_rank"].min()
+        .rename(columns={"gsis_id": "gsis_id"})
+        .sort_values("_key")
+    )
+    _depth_chart_asof_cache[cache_key] = table
+    return table
+
 
 def _get_team_matchup_lookups(all_team_stats: pd.DataFrame, team_metrics: List[str]) -> Tuple:
     """Build (team_a_avgs, team_b_avgs, inseason_df, mom_df) from the full
@@ -750,37 +800,43 @@ class FeatureEngineer:
         return df
 
     def _add_depth_chart_rank(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add official depth chart rank (1=starter, 2=backup, etc.)."""
-        if "player_id" not in df.columns or "season" not in df.columns:
+        """Add official depth chart rank (1=starter, 2=backup, etc.), as of
+        each row's OWN week -- not just the week-1 preseason designation.
+
+        Previously always looked up `week=1`, so every row (including
+        week 15, 16, 17...) got the SAME preseason rank regardless of real
+        in-season promotions/demotions. Now uses the most recent
+        depth_charts snapshot with week <= this row's own week (that
+        week's own snapshot is legitimate pre-game information, same
+        category as Vegas lines/weather for that game -- not leakage,
+        unlike using a LATER week's snapshot would be). See
+        season_projection.py's `_lookup_depth_chart_rank_asof` for the
+        stricter "week < target_week" convention used for synthetic
+        (not-yet-played) rows -- deliberately a different, stricter cutoff
+        than this one, not the same logic copy-pasted.
+        """
+        if "player_id" not in df.columns or "season" not in df.columns or "week" not in df.columns:
             df["depth_chart_rank"] = 1
             return df
 
-        try:
-            import sqlite3
-            from config.settings import DB_PATH
-            c = sqlite3.connect(str(DB_PATH))
-            # Get week 1 depth chart per player per season (preseason designation)
-            rows = c.execute("""
-                SELECT gsis_id, season, depth_team
-                FROM depth_charts
-                WHERE position IN ('QB','RB','WR','TE')
-                  AND gsis_id IS NOT NULL
-                  AND week = 1
-            """).fetchall()
-            c.close()
-        except Exception:
-            df["depth_chart_rank"] = 1
+        table = _load_depth_chart_asof_table()
+        if table.empty:
+            df["depth_chart_rank"] = 3
             return df
 
-        # Build lookup: (gsis_id, season) → depth rank
-        dc_map = {}
-        for gsis, season, depth in rows:
-            key = (gsis, int(season))
-            dc_map[key] = int(depth) if depth else 3
+        key = pd.to_numeric(df["season"], errors="coerce").fillna(0).astype(int) * 100 \
+            + pd.to_numeric(df["week"], errors="coerce").fillna(0).astype(int)
+        left = pd.DataFrame({
+            "_idx": df.index,
+            "gsis_id": df["player_id"].astype(str).values,
+            "_key": key.values,
+        }).sort_values("_key")
 
-        df["depth_chart_rank"] = df.apply(
-            lambda r: dc_map.get((r.get("player_id"), r.get("season")), 3), axis=1
+        merged = pd.merge_asof(
+            left, table, left_on="_key", right_on="_key", by="gsis_id", direction="backward",
         )
+        merged = merged.set_index("_idx").reindex(df.index)
+        df["depth_chart_rank"] = merged["depth_chart_rank"].fillna(3).astype(int).values
         return df
 
     # Class-level cache: the contracts table is static per process, but
