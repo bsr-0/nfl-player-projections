@@ -7803,3 +7803,79 @@ No fix applied. The obvious candidate — predict conditional means for the
 season-total use case, or calibrate the summed total — is a modelling
 decision, and this project's last "obviously correct" adjustment failed its
 experiment. It wants a pre-registered test with the same discipline.
+
+## Phase 7A follow-up: the calibration diagnostic, and why 7B's upside is small (2026-08-19)
+
+Cheap pre-experiment diagnostic on `phase7_season_projection_v2_playoff_fix.csv`.
+All in-sample; a real 7B must be out-of-fold.
+
+### Conditioning on PREDICTED deciles inverts the picture
+
+Zero-synthetic players (n=403), by **predicted** season-total decile:
+
+| decile | pred | actual | actual/pred |
+|---|---|---|---|
+| 0 | 7.2 | 15.9 | **2.21** |
+| 3 | 46.6 | 71.1 | 1.53 |
+| 6 | 122.2 | 175.3 | 1.44 |
+| 9 | 282.4 | 318.1 | **1.13** |
+
+The ratio **falls** with predicted value, the opposite of the gradient seen
+by *actual* decile (-0.51 -> +3.51). Both are regression to the mean viewed
+from opposite conditioning variables. Using actual deciles to design a
+calibration would have produced the wrong shape — the reason to insist on
+predicted deciles.
+
+An affine fit is adequate: pooled `actual = 17.58 + 1.1159 * predicted`,
+residuals by decile showing noise rather than curvature. b > 1, as the
+median-vs-mean diagnosis predicts. Per position, b ranges 1.056 (QB) to
+1.559 (TE).
+
+### A blanket calibration is NET HARMFUL
+
+Fitting on zero-synthetic players and applying it to everyone:
+
+| group | n | MAE before | MAE after |
+|---|---|---|---|
+| zero-synthetic | 403 | 33.6 | **24.9** |
+| has synthetic | 1,341 | 23.0 | **35.3** |
+| **overall** | 1,744 | **25.43** | **31.55** |
+
+It fixes the 403 and wrecks the 1,341, who were already over-projected.
+Overall season MAE gets 24% worse.
+
+### The information that would fix it is not available at prediction time
+
+Conditioning on `frac_real` (share of weeks with a real row) collapses
+overall MAE to 16.74 and zeroes both groups' bias — but that is **leakage**.
+`frac_real` is derived from how many weeks the player actually appeared,
+i.e. the outcome. It was nearly reported as a result.
+
+Redone with `availability_rate`, the documented prior-seasons-only
+estimator that IS legitimate at prediction time:
+
+| model | overall MAE | zero-synthetic bias |
+|---|---|---|
+| baseline | 25.43 | -29.8 |
+| pred only | 23.74 | -22.0 |
+| pred + availability_rate | 23.61 | -22.2 |
+| pred + avail + interaction | 23.57 | -22.1 |
+
+**A legitimate calibration buys ~7% and leaves the -22 core bias
+essentially intact.** `availability_rate` cannot separate the groups: it
+averages 0.847 for zero-synthetic players against 0.698 for the rest, with
+heavily overlapping distributions. Pre-season, we genuinely do not know who
+will play seventeen games.
+
+### Implication for the plan
+
+7B (season-total calibration) has a small and partly illusory upside: most
+of the apparent gain came from a variable that encodes the outcome. It is
+still worth running out-of-fold to put a real number on it, but it should
+no longer be expected to fix the -22 to -35 bias.
+
+**7C (a mean-oriented weekly objective) is now the more promising branch**,
+because it attacks the median-vs-mean mismatch at source and needs no
+knowledge of who will stay healthy. The 7A decomposition says the bias is
+inherited from the weekly estimator, and this diagnostic says it cannot be
+recovered downstream from information available at projection time.
