@@ -68,9 +68,13 @@ def _load_depth_chart_asof_table() -> pd.DataFrame:
     season/week/depth_team column at all, so a straight insert left them
     unmapped. They are now loaded properly by
     scripts/backfill_depth_charts_2025.py; the filter stays as a guard.
-    Deduplicates 2024's ~3x-inflated row count per (season, week, gsis_id)
-    via a deterministic MIN so a rare conflicting-duplicate doesn't produce
-    a nondeterministic result.
+    Deduplicates per (season, week, gsis_id) via a deterministic MIN so a
+    conflicting duplicate doesn't produce a nondeterministic result. (2024's
+    row count was previously described here as "~3x-inflated" and in need of
+    that dedup; it isn't. 2020-2023 are skill-position-only, while 2024+ hold
+    every position -- the gap is a filter, not duplication. The MIN still
+    matters for the genuinely conflicting listings that do exist: a player
+    named at two depth slots in one week.)
     """
     cache_key = "depth_chart_asof_table"
     if cache_key in _depth_chart_asof_cache:

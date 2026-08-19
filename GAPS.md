@@ -6813,3 +6813,65 @@ with a real Phase 7 run (TE/2023, 129 rows, correct team values).
 **Still uncovered**: there is no regression test for this. A cheap
 single-position smoke test over `run_season_projection` would have caught it
 and would catch the next one; not yet written.
+
+## Historical coverage backfill: depth charts, injuries, NGS (2026-08-19)
+
+`scripts/backfill_all_data.py` hardcodes `SEASONS = list(range(2018, ...))`
+(and, for depth charts, `range(2024, 2026)`). Nothing about the upstream
+data required those floors -- three tables started later than nflverse
+actually carries them. Filled via `scripts/backfill_historical_coverage.py`
+(depth charts 2013-2019, NGS 2016-2017, both pure appends in the existing
+schema) and `scripts/backfill_injuries.py -s 2013 2017`.
+
+| table | was | now | upstream floor |
+|---|---|---|---|
+| `depth_charts` | 2020-2024 | **2013-2025** | 2013 |
+| `player_injuries` | 2018-2025 | **2013-2025** | 2009 |
+| `ngs_*` | 2018-2025 | **2016-2025** | 2016 |
+
+**Effect on `depth_chart_rank`**: 2013-2019 were **100% neutral-default** --
+the feature was entirely dead for seven seasons, not merely noisy. Now
+83-86% of skill-position rows carry a real rank, and the resulting
+distribution (52% / 32% / 16%) closely matches stored 2020-2024, so the
+eras are comparable. 2020/2021 moved 0-1.2%, confirming no contamination of
+already-covered seasons.
+
+### Three things found in passing
+
+**1. `injury_score` has a reporting-rule discontinuity at 2015/2016.**
+"Probable" was abolished by the NFL after 2015 and appears 2,772 / 2,607 /
+2,702 times in 2013/2014/2015 and **exactly 0** from 2016 on. It maps to
+0.85, so `pct_injured` (score < 1.0) runs 14-16% for 2013-2015 and 4-6%
+from 2016 -- a 3-4x cliff that is a reporting artifact, not players getting
+healthier. **Not re-encoded**, because that is a modelling decision, not a
+bug fix: mapping Probable to 1.0 would make the eras comparable but discard
+real within-era signal. Bounded for now by
+`TRAINING_START_YEAR_DEFAULT = 2018`, which excludes the affected seasons;
+it only bites the `"full"` (2006+) preset. **Decide before training on
+`full`.**
+
+**2. `depth_charts` 2020-2023 are skill-position-only.** They contain 0 rows
+outside QB/RB/WR/TE; 2024 and 2025 contain everything. This corrects the
+claim in `_load_depth_chart_asof_table` (and above) that 2024's row count
+was "~3x-inflated" and needed dedup -- 2024 is not inflated, it is simply
+the first season loaded *without* the skill filter. Skill-row counts are
+consistent across every season (~11.4K), so `depth_chart_rank` is
+unaffected either way. 2013-2019 were loaded unfiltered, matching
+2024/2025. **2020-2023 remain a subset** -- reloading them unfiltered would
+make the table uniform, but rewrites existing data, so it was left alone.
+
+**3. `backfill_all_data.py` would have deleted every backfill on its next
+run.** `_save_df` defaults to `if_exists="replace"` -- it drops the table --
+while the script fetches only 2018+. Guarded by `_assert_no_history_lost`,
+which refuses a replace that would drop seasons the incoming frame lacks.
+Verified against the live DB: it now refuses `depth_charts` (would drop
+2025), `ngs_*` (2016-2017) and `snap_counts` (2013-2017, i.e. it also
+protects the *previous* commit's work). Raising beats switching to
+`append`, which would duplicate every existing row instead. 7 tests.
+
+Also removed 3,347 exact-duplicate rows introduced by the 2013-2019 load:
+the feed separates some listings only by `formation`/`game_type`, neither of
+which this table stores, so they arrive identical. The 610 groups with
+genuinely *conflicting* `depth_team` were preserved -- MIN resolves those at
+load time, and collapsing them here would move that policy away from where
+it is documented.

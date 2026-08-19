@@ -23,9 +23,48 @@ from datetime import datetime
 SEASONS = list(range(2018, datetime.now().year + 1))
 
 
+def _assert_no_history_lost(df: pd.DataFrame, table: str, conn: sqlite3.Connection):
+    """Refuse a `replace` that would drop seasons the incoming frame lacks.
+
+    Every loader here writes with `if_exists="replace"` -- it drops the table
+    and recreates it -- while pulling only `SEASONS` (2018+). Any season
+    backfilled by another script therefore gets silently deleted on the next
+    run. That is not hypothetical: depth_charts (2013+),
+    ngs_* (2016+) and snap_counts (2013+) all now extend earlier than
+    `SEASONS`, via backfill_historical_coverage.py and
+    backfill_snap_counts_history.py.
+
+    Raising here rather than switching to `append` is deliberate: append
+    would duplicate every existing row instead. The caller in main() catches
+    and reports per-dataset, so one guarded table doesn't abort the rest.
+    """
+    if "season" not in df.columns:
+        return
+    try:
+        existing = pd.read_sql(
+            f"SELECT DISTINCT season FROM {table} WHERE season IS NOT NULL", conn)
+    except Exception:
+        return  # table doesn't exist yet -- nothing to lose
+    if existing.empty:
+        return
+
+    have = {int(s) for s in existing.season.dropna()}
+    incoming = {int(s) for s in pd.to_numeric(df["season"], errors="coerce").dropna()}
+    lost = sorted(have - incoming)
+    if lost:
+        raise RuntimeError(
+            f"refusing to replace `{table}`: would delete seasons {lost}, "
+            f"which this script does not re-fetch (it pulls {min(incoming)}-"
+            f"{max(incoming)}). Widen SEASONS, or use the dedicated "
+            f"append-only backfill script for the earlier seasons."
+        )
+
+
 def _save_df(df: pd.DataFrame, table: str, conn: sqlite3.Connection,
              if_exists: str = "replace"):
     """Save DataFrame to SQLite, handling numpy types."""
+    if if_exists == "replace":
+        _assert_no_history_lost(df, table, conn)
     # Convert numpy types to native Python for SQLite compatibility
     for col in df.columns:
         if df[col].dtype in (np.int64, np.int32):
@@ -123,18 +162,31 @@ def backfill_injuries_nflpy(conn):
 
 
 def backfill_depth_charts(conn):
-    """Weekly depth charts (starter/backup designation)."""
+    """Weekly depth charts (starter/backup designation).
+
+    Handles only the classic weekly schema (2013-2024). 2025+ ships a daily
+    ESPN-style feed with no season/week/depth_team column at all; loading it
+    here previously kept whatever columns happened to match -- which was
+    `gsis_id` alone -- and wrote 554,215 rows with every key NULL. Those were
+    later deleted as "junk" and the season written off as unbackfillable. Use
+    scripts/backfill_depth_charts_2025.py, which bridges the schemas.
+    """
     import nfl_data_py as nfl
-    print("  Loading depth charts (2024-2025)...")
+    cols = ["season", "club_code", "week", "depth_team",
+            "last_name", "first_name", "football_name",
+            "position", "jersey_number", "gsis_id",
+            "depth_position", "full_name"]
+    print("  Loading depth charts (2013-2024)...")
     try:
-        df = nfl.import_depth_charts(range(2024, 2026))
-        # Compact: keep key columns
-        cols = ["season", "club_code", "week", "depth_team",
-                "last_name", "first_name", "football_name",
-                "position", "jersey_number", "gsis_id",
-                "depth_position", "full_name"]
-        cols = [c for c in cols if c in df.columns]
-        df = df[cols]
+        df = nfl.import_depth_charts(range(2013, 2025))
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            raise RuntimeError(
+                f"depth chart feed is missing {missing} -- upstream changed "
+                f"schema. Do NOT let this fall through to a partial-column "
+                f"write; see scripts/backfill_depth_charts_2025.py."
+            )
+        df = df.dropna(subset=["week", "gsis_id"])[cols].drop_duplicates()
         _save_df(df, "depth_charts", conn)
     except Exception as e:
         print(f"    FAILED: {e}")
