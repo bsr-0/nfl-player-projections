@@ -616,6 +616,8 @@ def run_season_projection(
     seasons: Optional[Sequence[int]] = None,
     output_path=None,
     exclude_pbp_confirmed_zeros: bool = False,
+    architecture_override: Optional[dict] = None,
+    week_output_path=None,
 ) -> pd.DataFrame:
     """For each position's FINAL_CONFIG fold: fit once, then for every player
     with >=1 real game that season, sum E[PPR] across every possible week,
@@ -660,6 +662,10 @@ def run_season_projection(
     output_path = output_path or Path("data/experiments/phase7_season_projection.csv")
     positions = list(positions) if positions else POSITIONS
     all_rows: List[dict] = []
+    # Per-week detail, so a single run yields BOTH the weekly and the season
+    # metrics on identical folds -- Phase 7C compares the two levels and they
+    # must come from the same fit, not from separate runs.
+    week_rows: Optional[List[dict]] = [] if week_output_path is not None else None
     db = DatabaseManager()
 
     tracker = FoldFailureTracker("Phase 7 (season projection)")
@@ -697,7 +703,8 @@ def run_season_projection(
                 logger.warning("Skipping %s/%s: no CAUSAL_FEATURES columns present", position, season)
                 continue
 
-            model = _architectures_for_fold()[cfg["architecture"]]
+            arch_name = (architecture_override or {}).get(position, cfg["architecture"])
+            model = _architectures_for_fold()[arch_name]
             X_train = pos_train[feature_cols]
             y_train = pos_train["fantasy_points"]
             model.fit(X_train, y_train)
@@ -743,6 +750,16 @@ def run_season_projection(
                 weeks_synthetic = 0
                 for wp in week_predictions:
                     rate = 1.0 if wp["is_real"] else availability_rate
+                    if week_rows is not None:
+                        week_rows.append({
+                            "player": player_id, "position": position, "season": season,
+                            "week": int(wp["week"]), "prediction": wp["point_prediction"],
+                            "rate_applied": rate,
+                            "contribution": wp["point_prediction"] * rate,
+                            "actual_ppr": wp["actual_value"], "is_real": wp["is_real"],
+                            "data_source": wp.get("data_source"),
+                            "architecture": arch_name,
+                        })
                     if wp["is_real"]:
                         if wp["data_source"] == "inferred_snap_verified_zero":
                             weeks_inferred_snap_verified += 1
@@ -776,6 +793,10 @@ def run_season_projection(
                 }
                 all_rows.append(result_row)
                 _append_df_to_csv(pd.DataFrame([result_row]), output_path)
+
+    if week_rows is not None:
+        pd.DataFrame(week_rows).to_csv(week_output_path, index=False)
+        print(f"{len(week_rows)} per-week rows written to {week_output_path}")
 
     result = pd.DataFrame(all_rows)
     print(f"\n{len(result)} rows appended to {output_path}")

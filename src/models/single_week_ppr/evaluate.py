@@ -44,7 +44,7 @@ from src.models.single_week_ppr.architectures import (
     GBMRegressor,
     HurdleModel,
     QuantileGBM,
-    YeoJohnsonHuber,
+    YeoJohnsonHuber, YeoJohnsonMSE,
     naive_baselines,
 )
 
@@ -340,6 +340,8 @@ def _architectures_for_fold() -> Dict[str, object]:
         "D_hurdle": HurdleModel(threshold=0.0),
         "D_hurdle_t5": HurdleModel(threshold=5.0),
         "F_yeojohnson_huber": YeoJohnsonHuber(),
+        # Phase 7C treatment arm: objective-only variant of F for QB.
+        "G_yeojohnson_mse": YeoJohnsonMSE(),
     }
 
 

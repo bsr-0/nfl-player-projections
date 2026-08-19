@@ -207,6 +207,36 @@ class YeoJohnsonHuber:
         return self.transformer.inverse_transform(y_t_pred.reshape(-1, 1)).ravel()
 
 
+class YeoJohnsonMSE:
+    """Phase 7C treatment arm for QB: identical to YeoJohnsonHuber except the
+    objective is MSE (mean-oriented) rather than Huber.
+
+    Exists so QB's arm changes ONE thing. Swapping QB straight to
+    `A_gbm_mse` would drop the Yeo-Johnson transform at the same time,
+    confounding the objective test with a target-transform change.
+
+    CAVEAT, and it limits what QB's result can show: minimising MSE in
+    transformed space does not yield the conditional mean in PPR space,
+    because the inverse transform is nonlinear (Jensen). So this is
+    mean-oriented only in the transformed target. QB is the position where
+    the median-vs-mean mechanism predicts the smallest effect anyway (skew
+    0.29, mean-median gap 0.11), so it functions as the near-control arm.
+    """
+
+    def __init__(self, **params):
+        self.transformer = PowerTransformer(method="yeo-johnson")
+        self.model = GBMRegressor(objective="regression", **params)
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, sample_weight: Optional[np.ndarray] = None) -> "YeoJohnsonMSE":
+        y_t = self.transformer.fit_transform(y.to_numpy().reshape(-1, 1)).ravel()
+        self.model.fit(X, pd.Series(y_t, index=y.index), sample_weight=sample_weight)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        y_t_pred = self.model.predict(X)
+        return self.transformer.inverse_transform(y_t_pred.reshape(-1, 1)).ravel()
+
+
 class BoxCoxHuber:
     """Shifted-Box-Cox-transformed target + Huber GBM, inverse-transformed
     at predict time. Supplementary to F (Yeo-Johnson) — requested as a
