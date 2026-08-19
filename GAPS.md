@@ -6567,3 +6567,90 @@ active", not "played all 17".
 practice squad / pre-acquisition produce no synthetic row, rostered backup
 and starter both do, played weeks always survive, uncovered seasons fall
 back to permitting, and the funnel counts every stage.
+
+
+
+## Track B: the availability/residual gradient concentrates in one game (CLOSED 2026-08-18)
+
+**Finding.** The apparent availability/residual gradient on genuine
+observations is largely concentrated in the final real game preceding an
+absence. It is NOT explained by a gradually deteriorating current-season
+role, and it is not a stable property of "fragile" players.
+
+**Evidence.** 2,058 real QB-weeks, 106 QBs, 238 player-seasons, 2023-2025,
+FINAL_CONFIG (F_yeojohnson_huber / window 'all'). No refit -- Phase 4's
+row-level dump already holds these predictions.
+
+Residual approaching an absence (weeks until absence -> mean residual):
+
+| 9+ | 6-8 | 4-5 | 3 | 2 | 1 |
+|---|---|---|---|---|---|
+| -0.29 | -1.61 | -1.64 | -0.08 | -0.41 | **+2.94** |
+
+With player-season fixed effects:
+- trend on weeks_until_absence, all pre-absence weeks: -0.198 (p=0.024)
+- trend **excluding the final week: +0.047 (p=0.603)**
+- final-week indicator: **+4.095 (p<1e-5)**
+
+Between player-seasons, eventual_availability -> mean residual (prior PPG
+controlled): -3.189 (p=0.0005) over all weeks, **-2.061 (p=0.080)**
+excluding spike weeks.
+
+Per-game residual by eventual availability:
+
+| availability | <25% | 25-50% | 50-75% | 75-99% | 100% | span |
+|---|---|---|---|---|---|---|
+| all weeks | +1.10 | +0.05 | -0.59 | -0.59 | -1.80 | 2.90 |
+| excluding spike weeks | -0.87 | -1.18 | -1.72 | -0.90 | -1.80 | **0.93** |
+
+16.7% of weeks account for 68% of the gradient, and the remainder is
+non-monotonic. On the spike week the prediction is normal (8.01) while the
+actual collapses (5.06) -- the signature of an in-game injury or benching.
+
+**Interpretation.** No evidence that a gradually deteriorating current-season
+role explains the effect. The player looks normal going into the absence,
+then something happens during that final game. This is **largely unexplained
+and not actionable from the available pre-game information** -- deliberately
+not "irreducible", which would claim more than the evidence supports.
+
+**Limitations.**
+- Absence health/role classification is crude: typed from weekly_rosters
+  status in the missed week, where 'role' (ACT, dressed, did not play) is
+  every week for a career backup, so it does not separate "was demoted" from
+  "was always the backup".
+- The surviving between-player effect (beta -2.06, p=0.080, n=182) is not
+  zero, only no longer clearly distinguishable from noise.
+- QB only. RB/WR/TE unexamined.
+
+**Decision.** Do not introduce depth-chart or current-role state features
+specifically to address this effect. There is no pre-absence signal for them
+to catch, so it would be feature fishing. The availability-gradient
+investigation is CLOSED.
+
+**What the original gradient decomposed into**: invalid synthetic population
+(fixed -- roster eligibility) + availability weighting (rejected as the
+solution) + final-game adverse event (isolated here) + a weak, non-monotonic
+remainder.
+
+### Reproducibility sweep (2026-08-18)
+
+Run before freezing, because this analysis accumulated enough moving parts
+that the audit trail outweighs another hypothesis test.
+
+- Every consumer that counts "weeks in a season" filters to week <= 18:
+  `season_projection.py`, `season_simulation.py`,
+  `run_availability_comparison.py`, `run_synthetic_row_diagnostic.py`,
+  `run_track_b_exposure.py`. Verified by grep, not by assumption.
+- `run_track_b_exposure.py` now imports REGULAR_SEASON_MAX_WEEK from
+  `season_projection` instead of redefining it, and asserts on exit that no
+  player-season has availability > 1 and max week <= 18.
+- Exclusion ledger printed by the script: 2,146 rows at FINAL_CONFIG, 88
+  playoff weeks excluded, 2,058 retained; 106 players, 238 player-seasons;
+  343 spike weeks; 1,746 weeks with a prior season.
+- Final numbers above re-derived from the regenerated clean artifact.
+
+**Outstanding divergence risk (not fixed)**: `compute_market_projections.py`
+and `build_complete_player_game_panel.py` each define their own
+`REGULAR_SEASON_MAX_WEEK = 18` rather than importing the canonical one. Same
+value today, so nothing is wrong now, but they would drift if the regular
+season ever changes length. Out of scope for this branch.
