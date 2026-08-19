@@ -44,7 +44,7 @@ import pandas as pd
 
 SEASONS = [2016, 2017, 2018, 2024]
 POSITIONS = ["RB", "WR", "TE"]
-OUT_DIR = Path("data/experiments/snap_missingness")
+OUT_DIR = Path("data/experiments/snap_missingness_v2")
 
 
 def configure(variant: str) -> None:
