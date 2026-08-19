@@ -7656,3 +7656,79 @@ not investigated here.
 positions. No evidence to trim `CAUSAL_FEATURES`. Still one run per cell
 with no repeated-trial variance estimate, so differences at the 0.01 scale
 remain uninterpretable.
+
+## Phase 7: the two "unexplained" findings are one effect (2026-08-19)
+
+Analysis of the existing `phase7_season_projection_v2_playoff_fix.csv`
+(2026-08-17, n=1,744). **No re-run required to reach this.**
+
+### Status correction
+
+Two records were stale and contradicted each other. `next_focus.md:502` is
+headed `[REDESIGNED + REAL RUN COMPLETE — 2026-08-11/12]` but the body
+beneath it still reads "The real end-to-end run ... was intentionally NOT
+executed". GAPS.md:5984 likewise says Phase 7 is "not yet done". Both
+predate the completed run, and a further v2 (playoff fix) ran 2026-08-17.
+**Phase 7 has been run three times; it is not pending.**
+
+### The finding
+
+Season-total bias by number of synthetic (no-row) weeks:
+
+| position | 0 | 1-3 | 4-8 | 9-13 | 14+ |
+|---|---|---|---|---|---|
+| QB | **-28.1** | +9.0 | +43.0 | +50.4 | +44.3 |
+| RB | **-35.0** | -9.9 | +5.5 | +18.3 | +22.3 |
+| TE | **-22.8** | -18.6 | -2.4 | +5.9 | +7.5 |
+| WR | **-33.3** | -20.9 | -2.5 | +10.8 | +8.8 |
+
+The gradient is **monotonic and universal**, not QB-specific:
+
+1. Every position **under**-projects players who play a full season
+   (-22.8 to -35.0).
+2. Every position **over**-projects players who miss weeks, increasingly
+   with the number missed.
+3. QB's aggregate bias is positive (+28.9) only because its population
+   skews synthetic — 199 of 238 QB-seasons have synthetic weeks, mean 9.35
+   of them. RB/WR/TE keep negative aggregates because they carry more
+   full-season players and have shallower slopes.
+
+So "QB over-projects while RB/WR/TE under-project, opposite directions, not
+yet explained" is a **population-mix artifact** on top of a single gradient.
+QB's slope is merely the steepest: QBs with 14+ synthetic weeks scored 9.1
+points on the season, i.e. third-stringers who never played, yet are still
+projected at a meaningful rate.
+
+### The second finding was a scale artifact
+
+The recorded "players requiring synthetic weeks have roughly double the
+error, except QB where it inverts" compares raw MAE across groups whose
+targets differ by 2-3x (RB mean actual 164.3 without synthetic weeks vs
+65.7 with). Normalised as MAE / mean actual, the direction reverses and
+becomes consistent:
+
+| position | no synthetic | with synthetic |
+|---|---|---|
+| QB | 12.8% | **57.5%** |
+| RB | 23.2% | 32.6% |
+| TE | 35.3% | 34.4% |
+| WR | 27.5% | 33.3% |
+
+Synthetic-week players are harder everywhere, not easier — and QB is the
+outlier by a wide margin, consistent with the gradient above.
+
+### What this implies, and what it does not
+
+It does **not** reopen the availability-gradient investigation, which Track
+B closed on 2026-08-18 for genuine games. This is the *synthetic-week
+projection* over-estimating heavy-absence players — a different question.
+
+The actionable read: for players who miss most of a season, the per-week
+rate times P(plays) is too high. For QB specifically, missing weeks usually
+means losing the job permanently rather than returning to the same role,
+which the current mechanism does not represent. Not fixed here; this entry
+is the diagnosis.
+
+**Also unaddressed**: the full-season under-projection of -22.8 to -35.0,
+which is present at every position and is the larger effect for the
+population most users care about.
