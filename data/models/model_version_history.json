@@ -1,40 +1,5 @@
 [
   {
-    "training_date": "2026-08-05T00:17:49.326443",
-    "feature_version": "29",
-    "train_seasons": [
-      2018,
-      2019,
-      2020,
-      2021,
-      2022,
-      2023,
-      2024,
-      2025
-    ],
-    "test_season": 2026,
-    "positions_trained": [
-      "QB",
-      "RB",
-      "WR",
-      "TE"
-    ],
-    "oof_metrics": {},
-    "test_metrics": {},
-    "n_features_per_position": {
-      "QB": 55,
-      "RB": 61,
-      "WR": 62,
-      "TE": 61
-    },
-    "previous_training_date": "2026-08-04T23:06:16.306952",
-    "previous_feature_version": "28",
-    "rollback_available": true,
-    "n_rollback_versions": 5,
-    "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
-    "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
-  },
-  {
     "training_date": "2026-08-05T08:19:21.495265",
     "feature_version": "29",
     "train_seasons": [
@@ -168,6 +133,41 @@
       "TE": 63
     },
     "previous_training_date": "2026-08-06T23:25:19.998474",
+    "previous_feature_version": "30",
+    "rollback_available": true,
+    "n_rollback_versions": 5,
+    "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
+    "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
+  },
+  {
+    "training_date": "2026-08-08T06:46:47.264793",
+    "feature_version": "30",
+    "train_seasons": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "test_season": 2026,
+    "positions_trained": [
+      "QB",
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "oof_metrics": {},
+    "test_metrics": {},
+    "n_features_per_position": {
+      "QB": 56,
+      "RB": 62,
+      "WR": 64,
+      "TE": 63
+    },
+    "previous_training_date": "2026-08-07T07:17:15.850100",
     "previous_feature_version": "30",
     "rollback_available": true,
     "n_rollback_versions": 5,

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-08T06:46:46.964823",
+  "generated_at": "2026-08-19T13:25:48.158118",
   "train_seasons": [
     2018,
     2019,
@@ -11,10 +11,6 @@
     2025
   ],
   "status_by_position": {
-    "QB": {
-      "hybrid_4w": "skipped_fast_mode",
-      "deep_18w": "skipped_fast_mode"
-    },
     "RB": {
       "hybrid_4w": "skipped_fast_mode",
       "deep_18w": "skipped_fast_mode"
@@ -29,11 +25,6 @@
     }
   },
   "target_semantics": {
-    "QB": {
-      "1w": "component",
-      "4w": "component",
-      "18w": "component"
-    },
     "RB": {
       "1w": "component",
       "4w": "component",

@@ -631,6 +631,29 @@ class NFLPredictor:
         # Engineer features
         data = self.feature_engineer.create_features(data, include_target=False)
 
+        # Apply the train-fitted snap imputation, same serving-parity contract
+        # as the bounded scaler below. Without this the model is trained on
+        # imputed snap shares but served a NaN that the downstream fillna(0)
+        # turns into "took 0% of snaps" -- a train/inference mismatch worse
+        # than either behaviour applied consistently. The values are LOADED,
+        # never recomputed here: deriving a median from the inference
+        # population would make the transformation depend on who happens to
+        # be predicted.
+        try:
+            from config.settings import MODELS_DIR
+            from src.features.utilization_score import (
+                SNAP_IMPUTATION_FILENAME, apply_snap_imputation, load_snap_imputation,
+            )
+            snap_values = load_snap_imputation(MODELS_DIR / SNAP_IMPUTATION_FILENAME)
+            if snap_values:
+                data = apply_snap_imputation(data, snap_values)
+            else:
+                print("  Warning: snap_imputation.json missing; unknown snap "
+                      "shares will fall through to 0 and will not match "
+                      "training. Retrain to emit it.")
+        except Exception as e:
+            print(f"  Warning: snap imputation skipped ({type(e).__name__}: {e})")
+
         # Keep train/serve parity for advanced rookie/injury features.
         try:
             from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features

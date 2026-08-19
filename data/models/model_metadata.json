@@ -1,6 +1,6 @@
 {
-  "training_date": "2026-08-08T06:46:47.264793",
-  "feature_version": "30",
+  "training_date": "2026-08-19T13:25:48.502570",
+  "feature_version": "33",
   "train_seasons": [
     2018,
     2019,
@@ -13,7 +13,6 @@
   ],
   "test_season": 2026,
   "positions_trained": [
-    "QB",
     "RB",
     "WR",
     "TE"
@@ -21,12 +20,11 @@
   "oof_metrics": {},
   "test_metrics": {},
   "n_features_per_position": {
-    "QB": 56,
-    "RB": 62,
-    "WR": 64,
-    "TE": 63
+    "RB": 64,
+    "WR": 67,
+    "TE": 65
   },
-  "previous_training_date": "2026-08-07T07:17:15.850100",
+  "previous_training_date": "2026-08-08T06:46:47.264793",
   "previous_feature_version": "30",
   "rollback_available": true,
   "n_rollback_versions": 5,
