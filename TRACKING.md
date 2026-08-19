@@ -497,6 +497,7 @@ coincidental improvement.
 - [ ] Test `MultiWeekModel` for RB/WR/TE from a saved artifact (only QB has one; this session's test retrained fresh)
 - [ ] Test `TouchdownRegressor` head-to-head vs. disabled
 - [ ] Feed `MonteCarloSimulator` real data, see if it's usable as-is
+- [ ] Joint sweep of training-years-included × `recency_decay_halflife` (config/settings.py:217-221, currently 1.5 seasons, horizon-aware 1.5/2.5/3.5 for 1w/4w/18w) — more years of history plus a shorter half-life could behave differently than fewer years at the current half-life; not yet tested as a joint grid.
 
 ---
 

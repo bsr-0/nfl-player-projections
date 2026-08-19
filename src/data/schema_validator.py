@@ -137,8 +137,13 @@ def _is_valid_week_for_phase(week: int, phase: Optional[str]) -> bool:
     if normalized in {"PRE", "PRESEASON", "P"}:
         return 0 <= week <= 4
     if normalized in {"POST", "POSTSEASON", "PLAYOFF", "WC", "DIV", "CON", "SB"}:
-        # Some feeds encode postseason as relative weeks (1-5), others as absolute NFL weeks (19-22).
-        return (1 <= week <= 5) or (19 <= week <= 22)
+        # Some feeds encode postseason as relative weeks (1-5), others as
+        # absolute NFL weeks. Pre-2021 seasons had a 17-week regular season,
+        # so postseason absolute numbering there correctly starts at 18
+        # (Wild Card=18 ... Super Bowl=21); 2021+ seasons (18-week regular
+        # season) start postseason at 19. Accept 18-22 rather than trying
+        # to thread the season-dependent boundary here.
+        return (1 <= week <= 5) or (18 <= week <= 22)
     return 1 <= week <= 22
 
 

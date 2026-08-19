@@ -384,17 +384,28 @@ class NFLOddsScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     def save_game_odds_to_db(self, df: pd.DataFrame) -> int:
-        """Upsert game odds rows. Returns count of new rows inserted."""
+        """Upsert game odds rows. Returns count of new rows inserted.
+
+        `normalize_game_odds`/`_parse_market_outcomes` always emit
+        season=None, week=None (they only see event_id/teams/commence_time,
+        not the NFL schedule) -- only the historical-backfill path
+        (`scrape_historical_season`) has separately overridden these.
+        Resolve them here instead, for every call site, via
+        `_resolve_season_week` (see GAPS.md 2026-08-09 entry).
+        """
         if df.empty:
             return 0
         from src.utils.database import DatabaseManager
 
         db = DatabaseManager()
+        resolve = _make_season_week_resolver(db)
+
         count = 0
         with db._get_connection() as conn:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 try:
+                    resolved_season, resolved_week = resolve(row)
                     cursor.execute(
                         """
                         INSERT OR IGNORE INTO game_odds
@@ -407,8 +418,8 @@ class NFLOddsScraper(BaseScraper):
                         (
                             row.get("event_id"),
                             row.get("game_id"),
-                            row.get("season"),
-                            row.get("week"),
+                            resolved_season,
+                            resolved_week,
                             row.get("commence_time"),
                             row.get("home_team"),
                             row.get("away_team"),
@@ -428,17 +439,28 @@ class NFLOddsScraper(BaseScraper):
         return count
 
     def save_player_props_to_db(self, df: pd.DataFrame) -> int:
-        """Upsert player prop rows. Returns count of new rows inserted."""
+        """Upsert player prop rows. Returns count of new rows inserted.
+
+        Same season/week resolution as `save_game_odds_to_db` -- see
+        `_resolve_season_week` and GAPS.md 2026-08-09 entry. Currently
+        0 rows are affected in the DB (player_props_odds has only ever
+        been populated via the historical-backfill path, which already
+        tags season/week), but `normalize_player_props` hardcodes
+        season=None/week=None just like the game-odds path did, so this
+        closes the same latent gap before the live scraper ever hits it.
+        """
         if df.empty:
             return 0
         from src.utils.database import DatabaseManager
 
         db = DatabaseManager()
+        resolve = _make_season_week_resolver(db)
         count = 0
         with db._get_connection() as conn:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 try:
+                    resolved_season, resolved_week = resolve(row)
                     cursor.execute(
                         """
                         INSERT OR IGNORE INTO player_props_odds
@@ -450,8 +472,8 @@ class NFLOddsScraper(BaseScraper):
                         (
                             row.get("event_id"),
                             row.get("game_id"),
-                            row.get("season"),
-                            row.get("week"),
+                            resolved_season,
+                            resolved_week,
                             row.get("commence_time"),
                             row.get("home_team"),
                             row.get("away_team"),
@@ -1101,6 +1123,45 @@ def _parse_market_outcomes(
         "away_point": away_point,
         "fetched_at": fetched_at,
     }
+
+
+def _make_season_week_resolver(db):
+    """Build a row -> (season, week) resolver backed by the local `schedule` table.
+
+    `_parse_market_outcomes` above always emits season=None/week=None (it
+    only has event_id/teams/commence_time from the odds API, not NFL
+    schedule context). Resolves by matching (home_team, away_team,
+    season-guessed-from-commence_time-year) against `schedule`, trying
+    both the naive year and year-1 (for Jan/Feb postseason games
+    belonging to the prior season). Deliberately matches on team pair
+    rather than exact date so a postponed/rescheduled game still
+    resolves correctly (see GAPS.md 2026-08-09 "game_odds" entry -- e.g.
+    a 2020 TEN@PIT game originally scheduled for Oct 4 that was
+    COVID-postponed to Week 7 / Oct 25).
+    """
+    with db._get_connection() as conn:
+        sched = {
+            (season, home, away): week
+            for season, week, home, away in conn.execute(
+                "SELECT season, week, home_team, away_team FROM schedule"
+            )
+        }
+
+    def _resolve(row):
+        season, week = row.get("season"), row.get("week")
+        if season not in (None, "") and week not in (None, ""):
+            return season, week
+        ct = row.get("commence_time") or ""
+        home, away = row.get("home_team"), row.get("away_team")
+        if len(ct) < 7 or not home or not away:
+            return season, week
+        year, month = int(ct[:4]), int(ct[5:7])
+        for guess in ((year - 1 if month <= 2 else year), (year if month <= 2 else year - 1)):
+            if (guess, home, away) in sched:
+                return guess, sched[(guess, home, away)]
+        return season, week
+
+    return _resolve
 
 
 def _get_game_dates_for_season(year: int) -> List[str]:

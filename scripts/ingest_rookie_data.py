@@ -59,7 +59,7 @@ def ingest_rosters(db: DatabaseManager, seasons: list[int]) -> int:
     import nfl_data_py as nfl
 
     print(f"Fetching rosters for {len(seasons)} seasons...")
-    df = nfl.import_rosters(seasons)
+    df = nfl.import_seasonal_rosters(seasons)
     if df.empty:
         print("  No roster data returned.")
         return 0

@@ -397,9 +397,14 @@ class NFLDataLoader:
                         _agg2.update({c: "first" for c in _str})
                         _to_merge = _to_merge.groupby(_dup_key, as_index=False, sort=False).agg(_agg2)
                         df = pd.concat([_keep, _to_merge], ignore_index=True)
-                validate_weekly_data(df, strict=True)
-                # nfl_data_py weekly data only has offensive positions
+                # nfl_data_py weekly data includes a small number of
+                # non-offensive/trick-play rows (long snapper, lineman on a
+                # TD catch, etc.) -- filter to offensive positions BEFORE
+                # strict validation, not after (GAPS.md 2026-08-09): the
+                # validator's position/week checks assume offensive-only
+                # data and crash on exactly the rows this filter removes.
                 df = df[df['position'].isin(OFFENSIVE_POSITIONS)]
+                validate_weekly_data(df, strict=True)
                 df['fantasy_points'] = df.apply(
                     lambda row: self._calculate_fantasy_points(row), axis=1
                 )

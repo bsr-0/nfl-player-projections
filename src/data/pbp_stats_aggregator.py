@@ -846,8 +846,11 @@ class PBPStatsAggregator:
         drive_col = "drive" if "drive" in plays.columns else ("drive_id" if "drive_id" in plays.columns else None)
         if drive_col:
             drive_df = plays[plays[drive_col].notna()].copy()
-            if "drive_result" in drive_df.columns:
-                drive_df["drive_points"] = drive_df["drive_result"].map(_drive_result_to_points).fillna(0)
+            result_col = "drive_result" if "drive_result" in drive_df.columns else (
+                "fixed_drive_result" if "fixed_drive_result" in drive_df.columns else None
+            )
+            if result_col:
+                drive_df["drive_points"] = drive_df[result_col].map(_drive_result_to_points).fillna(0)
             else:
                 drive_df["drive_points"] = 0
             drive_metrics = drive_df.groupby(["season", "week", "posteam", drive_col]).agg(
@@ -870,6 +873,36 @@ class PBPStatsAggregator:
             team_week["drive_success_rate"] = 0.0
             team_week["points_per_drive"] = 0.0
 
+        # Third-down conversion rate
+        if {"third_down_converted", "third_down_failed"}.issubset(plays.columns):
+            td = plays.groupby(["season", "week", "posteam"]).agg(
+                _td_conv=("third_down_converted", "sum"),
+                _td_fail=("third_down_failed", "sum"),
+            ).reset_index().rename(columns={"posteam": "team"})
+            td_denom = td["_td_conv"] + td["_td_fail"]
+            td["third_down_conv"] = np.where(td_denom > 0, td["_td_conv"] / td_denom, np.nan)
+            team_week = team_week.merge(
+                td[["season", "week", "team", "third_down_conv"]], on=["season", "week", "team"], how="left"
+            )
+        else:
+            team_week["third_down_conv"] = np.nan
+
+        # Time of possession (minutes), summed from per-drive MM:SS
+        if drive_col and "drive_time_of_possession" in plays.columns:
+            top_df = plays[plays[drive_col].notna()][
+                ["season", "week", "posteam", drive_col, "drive_time_of_possession"]
+            ].dropna(subset=["drive_time_of_possession"])
+            top_df = top_df.drop_duplicates(subset=["season", "week", "posteam", drive_col])
+            top_df["_top_seconds"] = top_df["drive_time_of_possession"].map(_mmss_to_seconds)
+            top_team = top_df.groupby(["season", "week", "posteam"])["_top_seconds"].sum().reset_index()
+            top_team["time_of_possession"] = top_team["_top_seconds"] / 60.0
+            top_team = top_team.rename(columns={"posteam": "team"})
+            team_week = team_week.merge(
+                top_team[["season", "week", "team", "time_of_possession"]], on=["season", "week", "team"], how="left"
+            )
+        else:
+            team_week["time_of_possession"] = np.nan
+
         # Pace (seconds per play) by team/week
         if {"game_id", "play_id", "game_seconds_remaining"}.issubset(plays.columns):
             pace_df = plays[["season", "week", "posteam", "game_id", "play_id", "game_seconds_remaining"]].copy()
@@ -885,12 +918,23 @@ class PBPStatsAggregator:
         # Ensure required columns exist
         for col in [
             "drive_count", "drive_success_rate", "avg_drive_epa", "points_per_drive",
-            "pace_sec_per_play"
+            "pace_sec_per_play", "third_down_conv", "time_of_possession",
         ]:
             if col not in team_week.columns:
                 team_week[col] = 0.0
 
         return team_week
+
+
+def _mmss_to_seconds(value) -> float:
+    """Parse a PBP 'MM:SS' time-of-possession string into seconds."""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return 0.0
+    try:
+        minutes, seconds = str(value).split(":")
+        return int(minutes) * 60 + int(seconds)
+    except (ValueError, AttributeError):
+        return 0.0
 
 
 def _drive_result_to_points(result) -> int:
