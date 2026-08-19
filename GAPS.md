@@ -6921,3 +6921,79 @@ representation is the open decision recorded above -- resolve it first.
 Scale of the pending change, measured by dry-run: **9,912 rows at the 2018
 default vs 40,618 at 2013**, i.e. ~30,700 rows in 2013-2017 currently
 asserting a zero the snap data could correct.
+
+## AUDIT: does `player_weekly_stats.snap_count = 0` mean zero, or unknown? (2026-08-19)
+
+Run before deciding whether to lower `backfill_snap_counts_to_pws.py`'s 2018
+floor. **Answer: pre-2018 zeros are placeholders for UNKNOWN, and the
+2018+ era is not clean either.** No data was modified.
+
+### 1-2. The stored values cannot be measurements
+
+2006-2017 is **100.0% `snap_count = 0` across ~71,000 rows, with zero
+NULLs** -- and `team_snaps` is identically 100% zero. 2018+ runs 17-20%
+zero. A 100% zero rate is not a measurement, and `team_snaps = 0` is
+definitionally impossible: a team always runs plays. The column has no way
+to say "unknown", so ingestion wrote 0.
+
+### 3-4. Measured against the authoritative `snap_counts` table
+
+Matched by PFR->GSIS id (**92.8%** match pre-2018) rather than by name
+(74.5%) -- see the matching defects below. Of all rows currently stored as
+`snap_count = 0`:
+
+| era | real POSITIVE snaps | confirmed ZERO | unknown (absent) |
+|---|---|---|---|
+| 2013-2017 | **28,483** | 26 | 2,197 |
+| 2018-2025 | **9,695** | 22 | 195 |
+
+**38,178 rows assert zero snaps for a player the authoritative table shows
+on the field.** Only **48 rows in 13 seasons** are confirmed zeros. By
+`data_source`: 25,214 are `nflverse_stats` (real stat rows whose snap_count
+was simply never populated) and 12,959 are `inferred_snap_verified_zero` --
+where "zero" refers to *fantasy points*, not snaps; those players took a
+mean of 29.6 snaps. Both groups are genuinely wrong, not deliberate zeros.
+
+Note the 2018+ row: the era assumed clean has **9,695 wrong zeros**, 97.8%
+of its zeros. The premise "2018+ = actual snap data" does not hold.
+
+The 2,392 "unknown" is an **upper bound**: the PFR->GSIS map covers only
+3,007 of 3,710 distinct 2013-2017 snap ids, so an unmappable player looks
+absent. 2013 carries 1,286 of them versus ~230 for every other season,
+which is map coverage, not a real gap.
+
+### The matcher itself cannot express the distinction
+
+`backfill_snap_counts_to_pws.py` builds its lookup with
+`WHERE offense_snaps > 0`, **excluding zero-snap rows**. It can only ever
+upgrade a 0 to a positive; on a failed match it leaves 0, conflating
+"confirmed zero" with "absent". Two further defects make its name-based key
+unreliable pre-2018:
+
+- **6,435 pre-2018 rows have a blank `players.name`** (2,745 in 2013 falling
+  to 0 by 2017 -- exactly the shape of the apparent "coverage" decline).
+  Zero blanks in 2018+.
+- `_normalize_name` takes the last token as the surname, so
+  `"Odell Beckham Jr."` -> `"O.Jr."` and `"A.J. Green"` -> `"A.Green"`.
+
+Any migration should key on player id, not name.
+
+### 5-6. Downstream cannot represent NULL today
+
+`snap_count`, `snap_share` and `snap_share_roll3` are **trained model
+features** (`train_position_models.py`), so this is not cosmetic. Every path
+collapses unknown into 0:
+
+| site | behaviour |
+|---|---|
+| `pbp_stats_aggregator.py:463` | `snap_count.fillna(0)`, `team_snaps.fillna(0)` -- **converts a NULL straight back to 0 on write** |
+| `pbp_stats_aggregator.py:465` | `snap_share = where(team_snaps > 0, ratio, 0.0)` |
+| `utilization.py:465` | `snap_share = snaps / team_snaps if team_snaps > 0 else 0` |
+| `preseason_features.py:58` | `COALESCE(us.snap_share, 0)` |
+| `quality_gates.py:272` | all-zero treated as ingestion failure (correct reading, but fires on pre-2018) |
+| `nfl_data_loader.py:327` | `(snap_count == 0).all()` used to detect missing data |
+
+**So NULL is required to represent unknown, and the current code cannot
+carry it** -- the aggregator would erase it on the next write. Schema and
+feature logic must change before any backfill, per the checklist. Not
+started; awaiting the representation decision.
