@@ -7362,3 +7362,64 @@ measured it.
 - Adopting variant B remains defensible on correctness grounds (a fabricated
   zero is a false claim regardless of measured lift) but not on the measured
   lift, which belongs to a different feature.
+
+## RESULT: corrected snap-missingness A/B — B does NOT do what it was built to do (2026-08-19)
+
+Re-run of the pre-registered A/B after the three fillers were fixed, so the
+arms differ in the intended way for the first time. Same design, seasons,
+positions, metric, paired methodology and cuts. Passed the mechanical abort
+gate first (A's indicator binary, B's graded, 125/5,787 test rows differing).
+
+### The signature is inverted
+
+Paired change in absolute error (B - A); negative favours B:
+
+| population | n | mean delta | 95% CI | p |
+|---|---|---|---|---|
+| **UNCERTAIN (the target)** | 1,518 | **+0.0363** | [+0.001, +0.068] | 6.9e-04 |
+| — 2016-17 | 992 | -0.0009 | [-0.048, +0.046] | 0.67 (flat) |
+| — 2018+ | 526 | **+0.1064** | [+0.055, +0.155] | 5.5e-08 |
+| **KNOWN (the control)** | 20,279 | **-0.0464** | [-0.051, -0.042] | 3.4e-81 |
+| all rows | 21,797 | -0.0406 | [-0.046, -0.036] | 9.3e-62 |
+
+Overall MAE 4.2835 -> 4.2429 (~0.9%), every era and position improving.
+
+**But the gain comes from the control population, and the target population
+gets WORSE.** The pre-registered reading of a genuine fix was "improves the
+uncertain rows, leaves the known rows alone". This is the opposite: B helps
+the 20,279 rows it should not touch and hurts the 1,518 it was designed for.
+That is the definition of perturbing the model rather than fixing the
+mechanism.
+
+### Why, and it was predicted
+
+The pre-production sanity check recorded that unknown-snap players are
+systematically lower usage -- 55-65% of a known player's fantasy points and
+targets. Imputing the position x era median therefore **overstates** them,
+the model overpredicts, and MAE rises. The fabricated zero was wrong in
+principle but happened to sit closer to this population's true low usage.
+Replacing a too-low fabrication with a too-high one made the target rows
+worse.
+
+### Where that leaves it
+
+- The **storage layer stands regardless**: unknown != zero in the database,
+  38,178 corrected rows, snap coverage back to 2013. None of that depends
+  on this result.
+- The **architecture stands**: train-only position x era medians, persisted
+  with train_seasons, validated on load, applied identically in training,
+  backtest and inference, with missingness surviving the full pipeline.
+  That machinery is correct and now proven by the gate.
+- The **treatment does not**. B is not validated for its stated purpose.
+- The ~0.9% overall gain is real and highly significant but **unexplained**.
+  An unexplained aggregate gain from perturbing 1,258 training rows is not
+  something to ship on the strength of a mechanism it demonstrably does not
+  have.
+
+**Production currently runs B** (SNAP_MISSINGNESS_MODE = "preserve"). One
+flag reverts it. Not reverted unilaterally: adopting or reverting is a
+judgment call, and the honest summary is that B improves aggregate fit while
+harming the only population with a mechanistic story.
+
+Deliberately NOT done: tuning the imputation constant in response to this.
+That is a new experiment, not a fix to this one.

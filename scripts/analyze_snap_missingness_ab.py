@@ -17,7 +17,7 @@ import pandas as pd
 import sqlite3
 from scipy import stats
 
-D = Path("data/experiments/snap_missingness")
+D = Path(sys.argv[1] if len(sys.argv) > 1 else "data/experiments/snap_missingness_v2")
 SEASONS = [2016, 2017, 2018, 2024]
 
 
