@@ -7061,3 +7061,73 @@ inputs and wants its own decision:
 - `preseason_features.py:58` -- `COALESCE(us.snap_share, 0)`
 - `utilization.py:465` -- `snap_share = snaps / team_snaps if team_snaps > 0 else 0`
 - `feature_engineering.py:1514` -- `snap_share_accel ... .fillna(0)`
+
+## AUDIT: read-side snap imputation, and whether NaN can survive (2026-08-19)
+
+Steps 1-3 of the imputation plan. **No code or data changed.** Result: the
+"let the tree models handle missingness" plan does not apply to this
+project, because production is not a tree model.
+
+### Live surface is smaller than it looks
+
+`CAUSAL_FEATURES` (the list actually trained on) contains exactly two
+snap-derived features, and only for RB/WR/TE:
+
+    snap_share_pct_roll3_mean
+    snap_share_accel
+
+**QB has none** -- it is unaffected entirely. `train_position_models.py`'s
+`POSITION_FEATURES` (which declares `snap_count`, `snap_share`,
+`snap_share_roll3`) is NOT the live list; it is consumed only by
+`scripts/walk_forward_multiweek.py`. `snap_share_roll3` is never constructed
+anywhere.
+
+### Where the fabricated zeros actually come from
+
+One upstream site, not three. `safe_divide` (`utils/helpers.py:98`) returns
+`default=0.0` whenever the numerator OR denominator is NaN, so
+`snap_share_pct = safe_divide(snap_count, team_snaps) * 100` is **0.0 for
+every unknown row**. The rolling feature itself is clean --
+`shift(1).rolling(3, min_periods=1).mean()` with no fillna, and pandas skips
+NaN -- so it only ever propagates a zero that was invented upstream.
+`snap_share_accel` then adds its own `.fillna(0)`
+(`feature_engineering.py:1514`).
+
+### Scale (step 2)
+
+| feature | era | currently 0 | fabricated | genuine measured 0 |
+|---|---|---|---|---|
+| `snap_share_pct` | 2013-17 | 1,007 | **983** | 24 |
+| `snap_share_pct` | 2018+ | 123 | **96** | 27 |
+
+`snap_share_pct_roll3_mean` changes on **2,066 of 71,312 rows (2.9%)**, of
+which **77% fall in 2013-17** -- an era that is only 37% of rows, confirming
+missingness is not random. Position spread is proportional (WR 735 / RB 516
+/ TE 339), so no position-specific bias.
+
+### Step 3: NaN CANNOT survive, and not because of a stray fillna
+
+The production model is `ComponentPredictor` -- **Ridge + StandardScaler**,
+chosen deliberately over GradientBoosting (its docstring records that GBT
+systematically underpredicted). Verified directly:
+
+    StandardScaler : passes NaN through
+    Ridge          : ValueError, "Ridge does not accept missing values"
+
+`ComponentPredictor._prepare_array` already does
+`np.nan_to_num(X_arr, nan=0.0)`, and both `ts_backtester.py:421-422` and
+`ensemble.py:843` `fillna(0)` the whole feature matrix before fitting.
+
+So "preserve NaN to the model" is not a config change here -- a linear model
+cannot consume it at all. The three read-side call sites are not the
+blocker; the model family is.
+
+### Consequence for the plan
+
+Option B (NaN + native handling) is unavailable without changing the model
+family, and that trade was already decided the other way on backtest
+evidence. For a linear model the equivalent of native missing handling is an
+explicit missingness indicator plus an imputed value -- Ridge can then fit a
+separate offset for unknown rows instead of being told they took zero snaps.
+That is a model change on 2.9% of rows and wants its own decision; not
+started.
