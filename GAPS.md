@@ -7480,3 +7480,56 @@ new fit generalises better, is not something to ship.
   hypothesis needing its own experiment and name.
 - **Not done**: tuning the imputation constant. This result is precisely
   what a post-hoc tune would have manufactured a story around.
+
+## CLOSED: snap missingness (2026-08-19)
+
+Three questions were entangled at the start; they are now separated, and
+only the middle one was answered "no".
+
+**1. Was the database wrong?** Yes, and it is fixed. `snap_count` was a
+fabricated 0 for 100% of 2006-2017 and for 38,178 rows overall where the
+authoritative table shows the player on the field. NULL now means unknown.
+Snap coverage extends to 2013. **This stands independently of everything
+below.**
+
+**2. Does preserving that distinction improve prediction, via position x era
+median imputation plus a missingness indicator?** No — experimentally
+rejected on a pre-registered A/B that the treatment failed in the direction
+that matters.
+
+**3. Does the missingness itself carry predictive information?** Probably
+yes, and it is the interesting question. Quarantined, unnamed, untested.
+
+### The conclusion, phrased precisely
+
+> Zero is **not semantically correct**, but it is currently the
+> **empirically validated predictive representation** for this feature under
+> this model and this data-generating process.
+
+Those are different responsibilities. The database's job is to record what
+is known; the feature's job is to predict. They disagree here, and the
+disagreement is not an error in either.
+
+### Why they disagree: the missingness is endogenous
+
+Snap observations are not missing at random. They are disproportionately
+missing for **low-usage players** (67% of an average player's fantasy points
+and targets). Averaging an unknown week in as 0 pulls the rolling snap share
+down — which is, accidentally, informative about that low-usage state.
+Omitting or median-filling it raises the value ~15 points and destroys that
+signal.
+
+So the fabricated zero was carrying real information about *why* the
+observation was absent. That is a far more interesting modelling question
+than the choice of imputation constant.
+
+### If this is revisited
+
+Start from "missingness is informative and endogenous". Do **not** reopen
+median-vs-global imputation: that question was answered, and the answer is
+that any central-tendency fill discards the signal the zero was carrying. A
+serious attempt would model the missingness mechanism itself, or use the
+`snap_share_pct_roll3_known` indicator without altering the value.
+
+Do not resume: availability formulations, additional snap sources, QB snap
+reconstruction, Track B forensics, or imputation-constant tuning.
