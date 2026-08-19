@@ -7585,3 +7585,74 @@ naming the exposure. Verified on real data: silent on the default 2018-2025
 window, and on the "full" 2006-2025 preset it reports 8,081 Probable rows.
 `TRAINING_START_YEAR_DEFAULT = 2018` is why this is a warning and not an
 error, and a test pins that relationship.
+
+## Phase 6c re-run on the snap-corrected panel — 2026-08-19 (v3)
+
+`data/experiments/phase6c_feature_ablation_v3_snapfix.csv`. 48 rows, no
+dropped folds. Production mode (`SNAP_MISSINGNESS_MODE = "zero"`),
+FEATURE_VERSION 33. Feature-set sizes are IDENTICAL to v2 (QB 57 / RB 64 /
+TE 65 / WR 67), so v33's change was to how `depth_chart_rank` is computed,
+not to the list — the deltas below are feature *values* and training
+population, not set size.
+
+| Position | 10 | 20 | 30 | all |
+|---|---|---|---|---|
+| QB | 6.076 | 6.069 | **5.944** | 6.067 |
+| RB | 4.417 | 4.353 | 4.337 | **4.336** |
+| TE | 2.812 | 2.814 | 2.810 | **2.810** |
+| WR | 4.174 | 4.093 | **4.057** | 4.060 |
+
+### Every cell improved vs v2
+
+| v3 - v2 | 10 | 20 | 30 | all |
+|---|---|---|---|---|
+| QB | -0.203 | -0.100 | -0.222 | -0.047 |
+| RB | **-0.390** | **-0.402** | **-0.401** | **-0.400** |
+| TE | -0.056 | -0.046 | -0.041 | -0.045 |
+| WR | -0.001 | -0.066 | -0.049 | -0.062 |
+
+**RB's improvement is uniform to within 0.012 across every feature count.**
+A feature-quality gain should interact with whether the improved feature
+falls inside the top-10/20/30; a flat shift does not. That points at the
+training population rather than the features — consistent with RB's
+`window="all"` now pulling in the 4,292 new 2013-2017 zero rows and 28,483
+corrected pre-2018 snap values. WR, whose `window="3y"` (2020-2022) excludes
+every pre-2018 season, improved least (-0.001 at 10 features). QB and TE,
+which also reach pre-2018, sit in between.
+
+**Caveat: cross-run MAE comparability is unverified.** The ablation CSVs do
+not record test-row counts, so it cannot be confirmed from the artifacts
+that v2 and v3 scored the same test population. The within-run comparison
+(10 vs 20 vs 30 vs all on identical data) is unaffected and is what Phase 6c
+actually asks.
+
+### The reversals are a 2025 phenomenon, not a general one
+
+Per season, "all" wins **8 of 12** position-seasons. Every reversal sits in
+2025:
+
+| position | 2023 | 2024 | 2025 |
+|---|---|---|---|
+| QB | all | all | **30** (5.937 vs 6.343 at all) |
+| RB | 30 | all | all |
+| TE | 30 | all | all |
+| WR | all | all | **30** (4.193 vs 4.226 at all) |
+
+v2's WR/TE reversal has essentially vanished — WR's shrank 0.016 -> 0.003,
+TE's 0.004 -> 0.000 (a tie). That reversal was attributed in v2 to "the
+corrected zero-inflated target making marginal features noisier"; on the
+further-corrected panel it does not survive, so that attribution should be
+treated as noise rather than a finding.
+
+A new and larger QB reversal appeared, **entirely in 2025**: 6.343 at "all"
+against 5.937 at 30, a 0.406 gap far outside the ≤0.016 scale of v2's
+reversals. 2025 is the season whose `depth_chart_rank` changed most (44.7%
+of skill rows) and is also the least complete. Worth a look on its own;
+not investigated here.
+
+### Practical takeaway: unchanged
+
+"More features generally helps or is neutral" still holds for all four
+positions. No evidence to trim `CAUSAL_FEATURES`. Still one run per cell
+with no repeated-trial variance estimate, so differences at the 0.01 scale
+remain uninterpretable.
