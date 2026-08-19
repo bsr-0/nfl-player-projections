@@ -7230,3 +7230,85 @@ unchanged at predict time. `ComponentPredictor` already has
 fitted inside `.fit()` from the training rows and serialised with the
 model. Computing medians at inference from whatever data is to hand would
 reintroduce exactly the leakage the backtest was careful to avoid.
+
+## TRACE: where learned feature transformations belong (2026-08-19)
+
+Requested before productionising variant B. **No code changed.**
+
+### The canonical mechanism already exists
+
+Learned, train-only, persisted feature transformations use the
+**percentile-bounds artifact pattern**:
+
+    src/features/utilization_score.py
+        fit_percentile_bounds()          fit on train rows
+        save_percentile_bounds(path, metadata={"train_seasons": [...]})
+        load_percentile_bounds(path, return_meta=True)
+        validate_percentile_bounds_meta(meta, expected_train_seasons)
+
+Orchestrated in `feature_preparation._prepare_training_data`, which fits on
+`train_data`, writes `MODELS_DIR/utilization_percentile_bounds.json`,
+reloads, and **raises** if the metadata's train seasons don't match the
+current ones ("refusing to use bounds not fit on the current training
+seasons"). Test rows are then transformed with the LOADED bounds. Consumers
+re-load the same artifact: `features/utilization.py` (with autoload),
+`evaluation/backtester.py`, `scripts/realtime_integration.py`,
+`scripts/audit_2025_backtest.py`.
+
+That is precisely the fit -> persist -> reuse contract required here, with
+leakage validation already built in.
+
+### ComponentPredictor is a different layer
+
+Its `scalers` are per-component `StandardScaler`s, base64-joblib'd into the
+model artifact by `to_dict`. That is **model preprocessing**, not feature
+semantics. Putting snap imputation there would make the estimator aware of
+one specific feature's data-generating story -- an architectural exception,
+and one that inference paths not going through ComponentPredictor would
+silently miss.
+
+**Conclusion: snap imputation is a feature-level learned transformation and
+belongs with the percentile-bounds pattern, not in ComponentPredictor.**
+
+### The complication: there are TWO feature pipelines
+
+    production   train.py -> feature_preparation._prepare_training_data
+                 (fits + persists + validates percentile bounds)
+
+    backtest     ts_backtester.leakage_safe_features
+                 (re-implements the two-pass pattern; does NOT do the
+                  bounds fit/persist step)
+
+They have diverged before, with consequences: a code comment at
+`ts_backtester.py:164` records a rookie-feature ablation whose arms came
+back bit-identical because the columns were absent from BOTH, not because
+the feature had no effect.
+
+Variant B currently lives only in the backtest path
+(`apply_snap_imputation`), which is why flipping a default cannot
+productionise it. Verified that the four snap features
+(`snap_share_pct`, `_roll3_mean`, `_roll3_known`, `_accel`) DO exist in the
+backtest frame, so experiment B did measure the intended thing.
+
+### Smallest architecture-consistent implementation
+
+1. `utilization_score.py`: `fit_snap_imputation(train_df) -> {(pos, era):
+   median}` plus save/load/validate mirroring the percentile-bounds trio,
+   persisted to `MODELS_DIR/snap_imputation.json` with the SAME
+   `train_seasons` metadata contract. (A sibling file rather than a new
+   section inside the bounds JSON: same contract, cleaner semantics. Either
+   is defensible.)
+2. `feature_preparation._prepare_training_data`: fit on `train_data`, save,
+   reload, validate, apply to both train and test -- immediately after the
+   existing percentile-bounds block, which it mirrors exactly.
+3. `ts_backtester`: retire the fold-local `apply_snap_imputation` in favour
+   of the shared fit/apply functions, so the validated behaviour and
+   production run ONE implementation. This is the step that prevents the
+   divergence above from recurring.
+4. Inference: the autoload path in `features/utilization.py` picks up the
+   artifact the same way it picks up bounds.
+5. Flip `SNAP_MISSINGNESS_MODE` to "preserve"; keep "zero" as the baseline
+   mode for A/B reruns.
+
+Parameters live in `MODELS_DIR/snap_imputation.json`, versioned by the
+`train_seasons` metadata, and are never recomputed at inference.
