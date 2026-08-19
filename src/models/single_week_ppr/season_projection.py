@@ -52,8 +52,15 @@ _TEAM_PERSONNEL_ROLL_COLS = {
 def possible_weeks_for_team(db, team: str, season: int) -> List[int]:
     """Regular-season weeks (1-18) this team appears in the schedule —
     correctly excludes bye weeks (team absent that week) and playoffs
-    (week > 18)."""
-    sched = db.get_schedule(season=season, team=team)
+    (week > 18).
+
+    `season` is coerced to a plain int: sqlite3 does not bind numpy integers,
+    so a numpy season silently matches no rows and returns [] — which reads
+    downstream as "this team never played", producing zero synthetic weeks
+    with no error. A caller iterating `groupby(["player_id", "season"])` gets
+    numpy scalars without realising it.
+    """
+    sched = db.get_schedule(season=int(season), team=str(team))
     if sched is None or sched.empty:
         return []
     weeks = sorted(int(w) for w in sched["week"].unique() if int(w) <= REGULAR_SEASON_MAX_WEEK)
@@ -74,7 +81,7 @@ def _season_has_roster_data(season: int) -> bool:
         try:
             n = conn.execute(
                 "SELECT COUNT(*) FROM weekly_rosters WHERE season = ? AND game_type = 'REG'",
-                [season]).fetchone()[0]
+                [int(season)]).fetchone()[0]
         finally:
             conn.close()
         _ROSTER_SEASON_COVERED[season] = n > 0
@@ -93,9 +100,10 @@ def active_roster_weeks(player_id: str, season: int) -> Optional[set]:
     player could not have taken the field, so "what would he have scored"
     is not a question the data can answer.
     """
+    season = int(season)
     if not _season_has_roster_data(season):
         return None
-    key = (player_id, season)
+    key = (str(player_id), season)
     if key not in _ACTIVE_ROSTER_CACHE:
         import sqlite3
         from config.settings import DB_PATH
@@ -104,7 +112,7 @@ def active_roster_weeks(player_id: str, season: int) -> Optional[set]:
             rows = conn.execute(
                 """SELECT DISTINCT week FROM weekly_rosters
                    WHERE player_id = ? AND season = ? AND game_type = 'REG'
-                     AND status = 'ACT'""", [player_id, season]).fetchall()
+                     AND status = 'ACT'""", [str(player_id), int(season)]).fetchall()
         finally:
             conn.close()
         _ACTIVE_ROSTER_CACHE[key] = {int(r[0]) for r in rows}

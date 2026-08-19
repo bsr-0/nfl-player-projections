@@ -6654,3 +6654,73 @@ and `build_complete_player_game_panel.py` each define their own
 `REGULAR_SEASON_MAX_WEEK = 18` rather than importing the canonical one. Same
 value today, so nothing is wrong now, but they would drift if the regular
 season ever changes length. Out of scope for this branch.
+
+
+## Cross-position validation: the roster bug is far WORSE outside QB (2026-08-18)
+
+A validation checkpoint, deliberately not a repeat of the QB investigation:
+one audit, no refitting
+(`scripts/audit_roster_eligibility_by_position.py`). It calls the production
+filter with `require_active_roster` True and False and diffs, so what is
+measured is exactly what ships.
+
+| position | candidate synthetic weeks | removed | % weeks | % points (est) | players |
+|---|---|---|---|---|---|
+| QB | 1,988 | 871 | 43.8 | 57.8 | 88 |
+| RB | 2,570 | 1,960 | **76.3** | 87.5 | 178 |
+| WR | 3,956 | 3,519 | **89.0** | 94.8 | 308 |
+| TE | 1,887 | 1,736 | **92.0** | 95.6 | 162 |
+
+Reason mix (% of that position's removed weeks):
+
+| position | inactive | practice squad | IR/reserve | not rostered | pre-acq | waived |
+|---|---|---|---|---|---|---|
+| QB | 51.5 | 16.8 | 23.8 | 2.6 | 3.9 | 1.4 |
+| RB | 32.3 | 28.2 | 29.6 | 5.6 | 1.5 | 2.7 |
+| WR | 29.7 | **37.9** | 23.5 | 5.0 | 1.3 | 2.4 |
+| TE | 32.8 | 32.6 | 25.7 | 5.5 | 1.7 | 1.6 |
+
+Practice-squad churn dominates at WR/TE, which is exactly the population QB
+does not have. The training population includes anyone with a stat line, so
+a WR who played two games and spent the rest of the season on a practice
+squad previously generated ~15 synthetic weeks, all of them invalid.
+
+**Points are ESTIMATED, not measured** -- pricing them exactly would require
+constructing every synthetic row and running the model, i.e. the refit this
+checkpoint exists to avoid. The proxy is the player's realised PPG that
+season. Calibrated against QB, where the true value IS known from the actual
+re-run (12,659 -> 6,166 manufactured points = 51.3% removed), the proxy says
+57.8% -- overstating by 6.5pp. Applying that correction: RB ~81%, WR ~88%,
+TE ~89%.
+
+**Consequence.** The synthetic population was materially broken across the
+whole model, not just QB, and worse everywhere else. Any Phase 7 / Phase 9
+season-projection output produced for RB/WR/TE before this fix should be
+treated as VOID rather than merely noisy -- roughly nine in ten manufactured
+points at WR/TE came from players who could not have taken the field.
+
+**Decision.** Per the pre-agreed budget this does NOT trigger a
+position-specific Track B. The QB investigation already answered the
+mechanism question, and nothing here suggests a different mechanism -- only
+a much larger dose of the same data defect, which the shipped filter already
+corrects. What it does change: re-running the skill positions is now a
+prerequisite for using their season-level output, not an optional refresh.
+
+## `possible_weeks_for_team` silently returned [] for a numpy season (fixed 2026-08-18)
+
+Found while writing the cross-position audit. sqlite3 does not bind numpy
+integers, so `db.get_schedule(season=np.int64(2025))` matched no rows and
+`possible_weeks_for_team` returned `[]` -- which reads downstream as "this
+team never played", so `possible_weeks_for_player` produced ZERO synthetic
+candidates and raised nothing. The audit's first run reported 0 candidates
+across all 238 QB player-seasons and looked plausible.
+
+Production callers pass python ints (season loop variables), so this never
+fired in a real run -- but any caller iterating
+`groupby(["player_id", "season"])` gets numpy scalars without realising it,
+which is precisely how the audit hit it.
+
+**Fix**: coerce at the boundary -- `int(season)` / `str(team)` /
+`str(player_id)` in `possible_weeks_for_team`, `_season_has_roster_data` and
+`active_roster_weeks`. 2 tests in `tests/test_traded_player_schedule.py`
+pin numpy/python equivalence.

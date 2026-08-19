@@ -121,3 +121,39 @@ class TestWeekAccountingIdentity:
         weeks, _ = possible_weeks_for_player(_db(schedules), real, 2023)
         assert len(real) <= len(weeks)
         assert set(real).issubset(set(weeks))
+
+
+class TestNumpyScalarSeason:
+    """A numpy season must behave exactly like a python int.
+
+    sqlite3 does not bind numpy integers, so `possible_weeks_for_team` used
+    to match no rows and return [] -- which reads downstream as "this team
+    never played" and yields zero synthetic weeks with no error raised. Any
+    caller iterating `groupby(["player_id", "season"])` hands over numpy
+    scalars without realising it.
+    """
+
+    def test_possible_weeks_for_team_accepts_numpy_season(self):
+        import numpy as np
+        from src.models.single_week_ppr.season_projection import possible_weeks_for_team
+        captured = {}
+
+        class _DB:
+            def get_schedule(self, season=None, team=None):
+                captured["season_type"] = type(season)
+                captured["team_type"] = type(team)
+                return pd.DataFrame({"week": [1, 2, 3]})
+
+        out = possible_weeks_for_team(_DB(), np.str_("KC"), np.int64(2023))
+        assert out == [1, 2, 3]
+        assert captured["season_type"] is int
+        assert captured["team_type"] is str
+
+    def test_possible_weeks_for_player_matches_across_scalar_types(self):
+        import numpy as np
+        db = _db({"KC": _minus(10)})
+        real = {5: "KC"}
+        a, _ = possible_weeks_for_player(db, real, 2023, require_active_roster=False)
+        b, _ = possible_weeks_for_player(db, real, np.int64(2023),
+                                         require_active_roster=False)
+        assert a == b and len(a) > 1
