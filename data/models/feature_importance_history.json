@@ -1,46 +1,5 @@
 [
   {
-    "date": "2026-08-04T22:26:34.258295",
-    "feature_version": "27",
-    "train_seasons": [
-      2018,
-      2019,
-      2020,
-      2021,
-      2022,
-      2023,
-      2024,
-      2025
-    ],
-    "top10": {},
-    "stability": {
-      "QB": {
-        "overlap_pct": null,
-        "stable": true,
-        "new_features": [],
-        "dropped_features": []
-      },
-      "RB": {
-        "overlap_pct": null,
-        "stable": true,
-        "new_features": [],
-        "dropped_features": []
-      },
-      "WR": {
-        "overlap_pct": null,
-        "stable": true,
-        "new_features": [],
-        "dropped_features": []
-      },
-      "TE": {
-        "overlap_pct": null,
-        "stable": true,
-        "new_features": [],
-        "dropped_features": []
-      }
-    }
-  },
-  {
     "date": "2026-08-04T23:06:05.437154",
     "feature_version": "28",
     "train_seasons": [
@@ -370,6 +329,47 @@
   },
   {
     "date": "2026-08-19T13:43:07.841881",
+    "feature_version": "33",
+    "train_seasons": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "top10": {},
+    "stability": {
+      "QB": {
+        "overlap_pct": null,
+        "stable": true,
+        "new_features": [],
+        "dropped_features": []
+      },
+      "RB": {
+        "overlap_pct": null,
+        "stable": true,
+        "new_features": [],
+        "dropped_features": []
+      },
+      "WR": {
+        "overlap_pct": null,
+        "stable": true,
+        "new_features": [],
+        "dropped_features": []
+      },
+      "TE": {
+        "overlap_pct": null,
+        "stable": true,
+        "new_features": [],
+        "dropped_features": []
+      }
+    }
+  },
+  {
+    "date": "2026-08-19T13:49:32.867728",
     "feature_version": "33",
     "train_seasons": [
       2018,

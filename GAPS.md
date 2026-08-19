@@ -7312,3 +7312,53 @@ backtest frame, so experiment B did measure the intended thing.
 
 Parameters live in `MODELS_DIR/snap_imputation.json`, versioned by the
 `train_seasons` metadata, and are never recomputed at inference.
+
+## CORRECTION: the A/B measured a different mechanism than reported (2026-08-19)
+
+The production gate passed, but running it proved the earlier A/B result was
+**misattributed**. Recorded prominently because the number was quoted in
+several commit messages.
+
+### What the A/B actually compared
+
+At A/B time three fillers were still live, and one of them —
+`_create_base_features` — **recomputed `snap_share_pct` through
+`safe_divide` inside `create_features`**, i.e. after any
+`calculate_all_scores`. In the backtest path that recomputation is where
+`snap_share_pct` comes from at all. So `SNAP_MISSINGNESS_MODE = "preserve"`
+never reached the rolling feature: variant B's `snap_share_pct` was
+byte-identical to variant A's.
+
+The only remaining difference between the arms was that B added
+`snap_share_pct_roll3_known` to the feature list — and with no NaN upstream,
+that column could only ever take two values: 0.0 for a player with no prior
+games, 1.0 for everyone else.
+
+**Evidence.** The pre-fix gate run recorded
+`known distribution {0.0: 108, 1.0: 5679}` — strictly binary. After the
+three fixes the same frame yields `[0.0, 0.333, 0.667, 1.0]`. The graded
+values only exist when `snap_share_pct` carries NaN, so their absence during
+the A/B is proof the snap missingness was already gone.
+
+### What that means
+
+The measured effect is real and was correctly computed — B improved the
+1,518 incomplete-history rows by 0.163 MAE with p=2.4e-15 and no regression
+elsewhere. But the mechanism is **"tell the model whether this player has
+prior history"**, not "tell the model the snap share is unknown". Those
+overlap heavily (a debut has neither) which is why the result looked so
+clean, but they are not the same feature.
+
+**The snap-missingness representation is therefore NOT yet validated.** It
+is now correctly implemented end to end for the first time; nothing has
+measured it.
+
+### Consequence
+
+- Do not cite -0.163 MAE as evidence for the snap-imputation change.
+- The A/B is worth re-running now that the pipeline preserves missingness,
+  since only now do the arms differ in the intended way. Same design, same
+  seasons, same pre-registered cuts.
+- Adopting variant B remains defensible on correctness grounds (a fabricated
+  zero is a false claim regardless of measured lift) but not on the measured
+  lift, which belongs to a different feature.

@@ -1,5 +1,5 @@
 {
-  "training_date": "2026-08-19T13:43:08.202273",
+  "training_date": "2026-08-19T13:49:33.201155",
   "feature_version": "33",
   "train_seasons": [
     2018,
@@ -24,7 +24,7 @@
     "WR": 67,
     "TE": 65
   },
-  "previous_training_date": "2026-08-19T13:25:48.502570",
+  "previous_training_date": "2026-08-19T13:43:08.202273",
   "previous_feature_version": "33",
   "rollback_available": true,
   "n_rollback_versions": 5,
