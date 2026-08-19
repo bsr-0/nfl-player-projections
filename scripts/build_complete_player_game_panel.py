@@ -50,7 +50,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import DB_PATH, POSITIONS
 
-SNAP_COUNT_MIN_SEASON = 2018
+# Earliest season with PFR game-level snap data. Was 2018 because that was
+# our snap_counts coverage; nflverse carries the same PFR feed back to 2013,
+# loaded 2026-08-19 (scripts/backfill_snap_counts_history.py). The 2012
+# release file exists but is empty, so 2013 is the real floor -- nflreadr's
+# docs say "starting with the 2012 season", overstating it by a year.
+# Lowering this promotes 2013-2017 from the weaker PBP-participation tier to
+# the precise snap-verified one.
+SNAP_COUNT_MIN_SEASON = 2013
 REGULAR_SEASON_MAX_WEEK = 18
 
 # weekly_rosters uses era-specific team abbreviations; `schedule` normalizes

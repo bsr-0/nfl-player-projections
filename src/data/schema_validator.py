@@ -296,6 +296,8 @@ def validate_weekly_data(
             if dup_count > 0:
                 issues.append(f"CRITICAL: {dup_count} duplicate {tuple(subset)} rows")
 
+    issues.extend(_check_snap_invariants(df))
+
     # Log issues
     for issue in issues:
         if issue.startswith("CRITICAL"):
@@ -305,6 +307,61 @@ def validate_weekly_data(
 
     _raise_if_strict_critical(issues, strict)
 
+    return issues
+
+
+# A team runs roughly 40-90 offensive plays; the widest band observed across
+# 2018-2025 is 34-100. Anything outside 20-120 is not a play count.
+TEAM_SNAPS_MIN, TEAM_SNAPS_MAX = 20, 120
+
+
+def _check_snap_invariants(df: pd.DataFrame) -> List[str]:
+    """Catch the two ways snap data has actually gone wrong in this repo.
+
+    Both shipped silently into a validation season and were found only by
+    hand months later (GAPS.md 2026-08-19):
+
+    1. `team_snaps` summed over players instead of counting team plays --
+       ~11 offensive players each credited with the same ~60 snaps inflated
+       it ~12x (2025 held avg 646, max 2112). snap_share came out ~12x too
+       SMALL, so no ratio bound catches it; only a plausibility band on the
+       play count does.
+    2. `snap_count` doubled for players appearing in the passing frame plus
+       another (QBs who also rush), because snap_count was present before a
+       duplicate-collapse that sums numeric columns. That one shows up as
+       snap_count > team_snaps.
+
+    Checked here rather than in the aggregator so every write path is
+    covered, not just the PBP one that happened to break.
+    """
+    issues: List[str] = []
+    if not {"snap_count", "team_snaps"}.issubset(df.columns):
+        return issues
+
+    snap_count = pd.to_numeric(df["snap_count"], errors="coerce")
+    team_snaps = pd.to_numeric(df["team_snaps"], errors="coerce")
+    known = team_snaps > 0
+
+    over = int((known & (snap_count > team_snaps)).sum())
+    if over:
+        worst = float((snap_count[known] / team_snaps[known]).max())
+        issues.append(
+            f"CRITICAL: {over} row(s) have snap_count > team_snaps "
+            f"(max ratio {worst:.2f}) -- a player cannot take more snaps than "
+            f"his team ran. Usually snap_count double-counted before a "
+            f"duplicate-collapse."
+        )
+
+    outside = known & ((team_snaps < TEAM_SNAPS_MIN) | (team_snaps > TEAM_SNAPS_MAX))
+    n_outside = int(outside.sum())
+    if n_outside:
+        issues.append(
+            f"CRITICAL: {n_outside} row(s) have team_snaps outside "
+            f"[{TEAM_SNAPS_MIN},{TEAM_SNAPS_MAX}] "
+            f"(min {int(team_snaps[outside].min())}, max {int(team_snaps[outside].max())}) "
+            f"-- not a plausible offensive play count. Usually team_snaps "
+            f"summed over players instead of counting team plays."
+        )
     return issues
 
 
