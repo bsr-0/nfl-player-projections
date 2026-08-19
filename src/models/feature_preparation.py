@@ -18,6 +18,12 @@ from src.features.utilization_score import (
     save_percentile_bounds,
     load_percentile_bounds,
     validate_percentile_bounds_meta,
+    SNAP_IMPUTATION_FILENAME,
+    fit_snap_imputation,
+    save_snap_imputation,
+    load_snap_imputation,
+    validate_snap_imputation_meta,
+    apply_snap_imputation,
 )
 from src.features.utilization_weight_optimizer import fit_utilization_weights, UTIL_COMPONENTS
 from src.models.ensemble import ModelTrainer
@@ -392,6 +398,24 @@ def _prepare_training_data(
         lambda d: add_advanced_features(add_engineered_features(d)),
         "feature engineering",
     )
+
+    # Snap-share imputation. Placed here because feature engineering is where
+    # snap_share_pct_roll3_mean is created, and deliberately shaped like the
+    # percentile-bounds block above: fit on train rows, persist with the same
+    # train_seasons metadata, reload, validate, then apply the LOADED values
+    # to both halves. Recomputing at apply time would make the transformation
+    # depend on the population it is applied to -- the exact defect this
+    # replaces, where an unknown snap share silently became 0.0.
+    snap_path = MODELS_DIR / SNAP_IMPUTATION_FILENAME
+    save_snap_imputation(fit_snap_imputation(train_data), snap_path, metadata=bounds_meta)
+    loaded_snap, loaded_snap_meta = load_snap_imputation(snap_path, return_meta=True)
+    if not validate_snap_imputation_meta(loaded_snap_meta, train_seasons_list):
+        raise ValueError(
+            "Snap imputation metadata mismatch; refusing to use values not "
+            "fit on the current training seasons."
+        )
+    train_data = apply_snap_imputation(train_data, loaded_snap)
+    test_data = apply_snap_imputation(test_data, loaded_snap)
 
     parent_silver_ids = [i for i in [get_artifact_id(train_data), get_artifact_id(test_data)] if i]
     silver_train_meta = persist_dataframe_artifact(

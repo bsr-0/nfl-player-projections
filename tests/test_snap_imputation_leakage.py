@@ -89,8 +89,11 @@ def test_era_median_is_used_when_the_era_exists_in_train():
 
 
 def test_era_boundary_is_2018():
-    assert bt._era(pd.Series([2017]))[0] == "pre2018"
-    assert bt._era(pd.Series([2018]))[0] == "post2018"
+    """Now owned by the shared implementation, not a backtester-local copy."""
+    from src.features.utilization_score import snap_era
+
+    assert snap_era(pd.Series([2017])).iloc[0] == "pre2018"
+    assert snap_era(pd.Series([2018])).iloc[0] == "post2018"
 
 
 def test_missing_era_falls_back_to_overall_train_median():

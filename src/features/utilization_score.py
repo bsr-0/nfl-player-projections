@@ -73,6 +73,157 @@ def _bounds_str_to_key(s: str) -> Tuple[str, str]:
     return (a, b)
 
 
+# --------------------------------------------------------------------------
+# Snap-share imputation: a learned, train-only feature transformation.
+#
+# Deliberately mirrors the percentile-bounds lifecycle below (fit on train ->
+# persist with train_seasons -> validate on load -> apply unchanged) rather
+# than living inside ComponentPredictor. It is feature semantics, not model
+# preprocessing: an inference path that bypasses the estimator must still get
+# the same transformation.
+#
+# Kept as a SIBLING artifact (snap_imputation.json) rather than a section of
+# the bounds file -- same contract, unrelated transformation, and it cannot
+# invalidate the bounds artifact's own metadata check.
+# --------------------------------------------------------------------------
+
+SNAP_ROLL3_COL = "snap_share_pct_roll3_mean"
+SNAP_KNOWN_COL = "snap_share_pct_roll3_known"
+SNAP_IMPUTATION_FILENAME = "snap_imputation.json"
+
+# Fallback keys, used when a fold's training data has no rows for a given
+# position/era combination.
+_ALL_ERAS = "all"
+_GLOBAL = "__global__"
+
+
+def snap_era(seasons) -> "pd.Series":
+    """The snap-data regime boundary, not arbitrary year buckets.
+
+    Pre-2018 is the era whose snap coverage was reconstructed from the PFR
+    feed and therefore carries most of the residual missingness.
+    """
+    return pd.Series(
+        np.where(pd.to_numeric(seasons, errors="coerce") < 2018, "pre2018", "post2018"),
+        index=getattr(seasons, "index", None),
+    )
+
+
+def fit_snap_imputation(train_df: pd.DataFrame) -> Dict[Tuple[str, str], float]:
+    """Position x era medians of the rolling snap feature, from TRAIN rows only.
+
+    Also stores per-position and global fallbacks so a fold whose training
+    data lacks an era still resolves to a real number rather than silently
+    reintroducing a zero.
+    """
+    values: Dict[Tuple[str, str], float] = {}
+    if train_df.empty or SNAP_ROLL3_COL not in train_df.columns:
+        return values
+
+    df = train_df[[c for c in ("position", "season", SNAP_ROLL3_COL)
+                   if c in train_df.columns]].copy()
+    df["_v"] = pd.to_numeric(df[SNAP_ROLL3_COL], errors="coerce")
+    df = df.dropna(subset=["_v"])
+    if df.empty:
+        return values
+
+    if "season" in df.columns:
+        df["_era"] = snap_era(df["season"]).values
+    else:
+        df["_era"] = _ALL_ERAS
+
+    if "position" in df.columns:
+        for (pos, era), grp in df.groupby(["position", "_era"]):
+            values[(str(pos), str(era))] = float(grp["_v"].median())
+        for pos, grp in df.groupby("position"):
+            values[(str(pos), _ALL_ERAS)] = float(grp["_v"].median())
+
+    # Global-per-era as well as global-overall, so era granularity survives
+    # even on a frame carrying no position column.
+    for era, grp in df.groupby("_era"):
+        values[(_GLOBAL, str(era))] = float(grp["_v"].median())
+    values[(_GLOBAL, _ALL_ERAS)] = float(df["_v"].median())
+    return values
+
+
+def save_snap_imputation(values: Dict[Tuple[str, str], float], path: Path,
+                         metadata: Optional[Dict] = None) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out = {_bounds_key_to_str(k): float(v) for k, v in values.items()}
+    if metadata:
+        out["__meta__"] = metadata
+    with open(path, "w") as f:
+        json.dump(out, f, indent=2)
+
+
+def load_snap_imputation(path: Path, return_meta: bool = False):
+    path = Path(path)
+    if not path.exists():
+        return ({}, {}) if return_meta else {}
+    with open(path) as f:
+        raw = json.load(f)
+    meta = raw.get("__meta__", {}) if isinstance(raw, dict) else {}
+    values = {_bounds_str_to_key(k): float(v)
+              for k, v in raw.items() if k != "__meta__"}
+    return (values, meta) if return_meta else values
+
+
+def validate_snap_imputation_meta(metadata: Dict,
+                                  expected_train_seasons: Optional[list]) -> bool:
+    """Same contract as validate_percentile_bounds_meta: an artifact fitted on
+    different seasons than the current training set must be refused."""
+    if not expected_train_seasons:
+        return True
+    if not metadata:
+        return False
+    seasons = metadata.get("train_seasons")
+    if not isinstance(seasons, list) or not seasons:
+        return False
+    return set(seasons) == set(expected_train_seasons)
+
+
+def apply_snap_imputation(df: pd.DataFrame,
+                          values: Dict[Tuple[str, str], float]) -> pd.DataFrame:
+    """Fill unknown rolling snap shares from PERSISTED values.
+
+    Never computes a statistic from `df` -- that is the whole point. Passing
+    an empty mapping leaves the frame untouched, so a missing artifact fails
+    visibly upstream instead of quietly imputing from the inference
+    population.
+    """
+    if df.empty or not values or SNAP_ROLL3_COL not in df.columns:
+        return df
+
+    df = df.copy()
+    current = pd.to_numeric(df[SNAP_ROLL3_COL], errors="coerce")
+    if current.notna().all():
+        return df
+
+    era = (snap_era(df["season"]) if "season" in df.columns
+           else pd.Series(_ALL_ERAS, index=df.index))
+    era.index = df.index
+    position = (df["position"].astype(str) if "position" in df.columns
+                else pd.Series(_GLOBAL, index=df.index))
+
+    # Fallback chain, most specific first: position+era -> position -> era ->
+    # global. Each step widens the population rather than jumping straight to
+    # a single number.
+    global_default = values.get((_GLOBAL, _ALL_ERAS))
+    fill = [
+        values.get(
+            (p, e),
+            values.get(
+                (p, _ALL_ERAS),
+                values.get((_GLOBAL, e), global_default),
+            ),
+        )
+        for p, e in zip(position, era)
+    ]
+    df[SNAP_ROLL3_COL] = current.fillna(pd.Series(fill, index=df.index))
+    return df
+
+
 def save_percentile_bounds(
     position_percentiles: Dict[Tuple[str, str], Tuple[float, float]],
     path: Path,

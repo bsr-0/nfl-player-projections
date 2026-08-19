@@ -204,49 +204,41 @@ def leakage_safe_features(
 # TimeSeriesBacktester
 # ---------------------------------------------------------------------------
 
-SNAP_ROLL3_COL = "snap_share_pct_roll3_mean"
-SNAP_KNOWN_COL = "snap_share_pct_roll3_known"
+from src.features.utilization_score import (
+    SNAP_ROLL3_COL,
+    SNAP_KNOWN_COL,
+    apply_snap_imputation as _apply_persisted_snap_imputation,
+    fit_snap_imputation,
+)
 
-# Experiment switch for the pre-registered snap-missingness A/B (GAPS.md
-# 2026-08-19). "zero" is variant A and reproduces production exactly: NaN
-# reaches the blanket fillna(0) below and the model is told the player took
-# 0% of snaps. "median" is variant B.
+# Experiment switch for the snap-missingness A/B (GAPS.md 2026-08-19).
+# "zero" is variant A: the rolling feature keeps its NaN, which the blanket
+# fillna(0) below turns into "this player took 0% of snaps". "median" is
+# variant B, now shipped.
 SNAP_IMPUTATION_MODE = "zero"
 
 
-def _era(seasons: pd.Series) -> pd.Series:
-    """The snap-data regime boundary, not arbitrary year buckets."""
-    return np.where(pd.to_numeric(seasons, errors="coerce") < 2018, "pre2018", "post2018")
-
-
 def apply_snap_imputation(pos_train, pos_test, feature_cols):
-    """Variant B: era-median imputation of the rolling snap feature, fitted
-    on the TRAINING FOLD ONLY, plus the missingness indicator.
+    """Fold-safe snap imputation for the backtester.
 
-    Leakage safety is the whole point: the median comes from `pos_train`,
-    never from `pos_test` and never from a full-history precompute. A fold
-    testing 2016 therefore imputes with a statistic derived only from
-    seasons before 2016. `position` needs no grouping here -- pos_train is
-    already a single position at this call site.
+    Delegates the statistics to the SAME functions production uses
+    (utilization_score.fit_snap_imputation / apply_snap_imputation) rather
+    than carrying a second implementation. The backtester previously had its
+    own copy; a divergence of exactly that kind already produced a bogus
+    rookie-feature ablation here (see leakage_safe_features' note), so the
+    transformation now has one definition and only its *scope* differs: the
+    values are fitted per fold from `pos_train`, never from `pos_test`.
 
-    Returns frames unchanged under mode "zero" (variant A), so the baseline
-    is the untouched production path rather than a re-derivation of it.
+    Production fits the same way on its own training split and persists the
+    result to MODELS_DIR/snap_imputation.json; a backtest fold is
+    short-lived, so it fits in memory instead of writing an artifact.
     """
     if SNAP_IMPUTATION_MODE == "zero" or SNAP_ROLL3_COL not in pos_train.columns:
         return pos_train, pos_test, feature_cols
 
-    pos_train = pos_train.copy()
-    pos_test = pos_test.copy()
-
-    train_vals = pd.to_numeric(pos_train[SNAP_ROLL3_COL], errors="coerce")
-    train_era = _era(pos_train["season"])
-    by_era = pd.Series(train_vals.values).groupby(train_era).median()
-    overall = float(train_vals.median()) if train_vals.notna().any() else 0.0
-
-    for frame in (pos_train, pos_test):
-        vals = pd.to_numeric(frame[SNAP_ROLL3_COL], errors="coerce")
-        fill = pd.Series(_era(frame["season"]), index=frame.index).map(by_era)
-        frame[SNAP_ROLL3_COL] = vals.fillna(fill).fillna(overall)
+    values = fit_snap_imputation(pos_train)
+    pos_train = _apply_persisted_snap_imputation(pos_train, values)
+    pos_test = _apply_persisted_snap_imputation(pos_test, values)
 
     if SNAP_KNOWN_COL in pos_train.columns and SNAP_KNOWN_COL in pos_test.columns:
         if SNAP_KNOWN_COL not in feature_cols:
