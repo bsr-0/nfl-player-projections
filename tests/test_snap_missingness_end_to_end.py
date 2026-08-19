@@ -147,3 +147,70 @@ def test_the_old_behaviour_would_have_produced_zero():
     unknown = df[(df.player_id == UNKNOWN) & (df.week > 1)]
     assert (unknown[SNAP_ROLL3_COL] == 0.0).all()
     assert (unknown[SNAP_KNOWN_COL] == 1.0).all()   # indistinguishable from real
+
+
+# --- the real pipeline, not composed stages -----------------------------
+
+def test_real_create_features_preserves_snap_missingness():
+    """Runs the ACTUAL FeatureEngineer.create_features.
+
+    The composed-stage tests above pass A -> B -> C -> D. Production runs
+    A -> B -> C -> X -> D, and twice now an X silently destroyed the
+    missingness while every component test stayed green:
+    _create_base_features recomputed snap_share_pct through safe_divide, and
+    _impute_missing filled the rolling column with a frame-wide median. Only
+    exercising the real path catches that class of bug.
+    """
+    from src.features.utilization_score import UtilizationScoreCalculator
+
+    raw = _raw_frame()
+    # widen to enough history for rolling windows
+    extra = []
+    for wk in range(5, 9):
+        for pid, snaps, team in ((KNOWN, 45.0, 60.0), (UNKNOWN, np.nan, np.nan)):
+            extra.append({
+                "player_id": pid, "season": 2016, "week": wk, "position": "WR",
+                "snap_count": snaps, "team_snaps": team,
+                "targets": 5, "receptions": 3, "receiving_yards": 40,
+                "receiving_tds": 0, "rushing_attempts": 0, "rushing_yards": 0,
+                "rushing_tds": 0,
+            })
+    raw = pd.concat([raw, pd.DataFrame(extra)], ignore_index=True)
+
+    scored = UtilizationScoreCalculator().calculate_all_scores(raw, pd.DataFrame())
+    assert scored["snap_share_pct"].isna().any(), (
+        "utilization stage already destroyed the missingness"
+    )
+
+    built = FeatureEngineer().create_features(scored, include_target=False)
+
+    unknown = built[built.player_id == UNKNOWN]
+    assert built[SNAP_ROLL3_COL].isna().any(), (
+        "create_features filled the rolling snap column; the persisted "
+        "imputation step no longer owns it"
+    )
+    assert (unknown[SNAP_KNOWN_COL] < 1.0).all(), (
+        "an unmeasured player reads as fully known after the real pipeline"
+    )
+
+
+def test_real_pipeline_then_artifact_yields_the_persisted_value(tmp_path):
+    """End of the chain: real feature construction, then the artifact."""
+    from src.features.utilization_score import UtilizationScoreCalculator
+
+    raw = _raw_frame()
+    scored = UtilizationScoreCalculator().calculate_all_scores(raw, pd.DataFrame())
+    built = FeatureEngineer().create_features(scored, include_target=False)
+
+    known_rows = built[built[SNAP_ROLL3_COL].notna()]
+    path = tmp_path / "snap_imputation.json"
+    save_snap_imputation(fit_snap_imputation(known_rows), path,
+                         metadata={"train_seasons": [2016]})
+    values = load_snap_imputation(path)
+    final = apply_snap_imputation(built, values)
+
+    was_missing = built[SNAP_ROLL3_COL].isna()
+    if was_missing.any():
+        filled = final.loc[was_missing, SNAP_ROLL3_COL]
+        assert filled.notna().all()
+        assert (filled != 0.0).all(), "fell back to the fabricated zero"

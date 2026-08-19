@@ -59,6 +59,15 @@ _depth_chart_asof_cache: Dict[Any, pd.DataFrame] = {}
 # treated as unknown. 1 = "last season's chart is acceptable, older is not".
 DEPTH_CHART_MAX_STALENESS_SEASONS = 1
 
+# Columns whose NaN belongs to the persisted snap-imputation step rather than
+# to _impute_missing's generic median fill. Kept as a literal set (not an
+# import) to avoid a circular import with utilization_score, which imports
+# nothing from this module but is imported by it lazily elsewhere.
+_SNAP_IMPUTATION_OWNED = frozenset({
+    "snap_count", "team_snaps", "snap_share", "snap_share_pct",
+    "snap_share_pct_roll3_mean",
+})
+
 
 def _load_depth_chart_asof_table() -> pd.DataFrame:
     """Loads `depth_charts` into an as-of lookup table: one row per
@@ -1773,9 +1782,16 @@ class FeatureEngineer:
                     .transform("max")
                 )
         if "snap_count" in df.columns and "team_snaps" in df.columns:
-            new_cols["snap_share_pct"] = safe_divide(
+            # Recomputed here even though UtilizationScoreCalculator already
+            # produced it -- and it OVERWRITES that value, so it must honour
+            # the same missingness mode. Via safe_divide it returned 0.0 for
+            # an unknown snap share, discarding the NaN the calculator had
+            # just preserved and leaving snap_share_pct_roll3_mean to be
+            # averaged from fabricated zeros.
+            from src.features.utilization_score import snap_share_pct as _snap_share_pct
+            new_cols["snap_share_pct"] = _snap_share_pct(
                 df["snap_count"], df["team_snaps"]
-            ) * 100
+            )
 
         df = df.assign(**new_cols)
         return df
@@ -4308,8 +4324,17 @@ class FeatureEngineer:
             "td_rate", "int_rate", "qb_", "sack_rate", "air_yards_per",
         )
         has_position = "position" in df.columns
+        # Snap features are owned by the persisted snap-imputation step
+        # (utilization_score.apply_snap_imputation), which fills them from
+        # train-fitted position x era medians. Filling them here would use a
+        # median of whatever frame is in hand -- including test rows at
+        # backtest time -- and would consume the missingness before the
+        # owning step ever sees it. The `_missing` indicators above are still
+        # emitted for them; only the fill is deferred.
         for col in numeric_cols:
             if col not in df.columns or not df[col].isna().any():
+                continue
+            if col in _SNAP_IMPUTATION_OWNED:
                 continue
             is_qb_col = any(tok in col.lower() for tok in qb_specific_tokens)
             if is_qb_col and has_position:
