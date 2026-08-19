@@ -7732,3 +7732,74 @@ is the diagnosis.
 **Also unaddressed**: the full-season under-projection of -22.8 to -35.0,
 which is present at every position and is the larger effect for the
 population most users care about.
+
+## Phase 7A: the full-season under-projection is weekly-model bias, not aggregation (2026-08-19)
+
+Diagnosis only, per the pre-agreed scope. No feature change, no refit, no
+re-run: `phase4_v33.csv` already carries per-week predictions at exactly the
+FINAL_CONFIG architecture/window/weighting for all four positions, at the
+current feature version.
+
+**Population control.** Only zero-synthetic-week player-seasons (n=403), and
+`actual_season_total` from Phase 7 reconciles to the summed weekly
+`actual_ppr` with a gap of **exactly 0.0** at every position — same players,
+same weeks, no selection creeping in.
+
+### The decomposition (positive = under-projection)
+
+| position | n | weeks | weekly-model bias | aggregation bias | total | per-week |
+|---|---|---|---|---|---|---|
+| QB | 39 | 15.3 | **28.79** | -0.66 | 28.14 | 1.887 |
+| RB | 86 | 16.2 | **36.18** | -1.21 | 34.97 | 2.229 |
+| TE | 128 | 16.5 | **21.17** | +1.65 | 22.82 | 1.285 |
+| WR | 150 | 16.7 | **30.68** | +2.62 | 33.30 | 1.838 |
+
+The identity holds exactly (max residual 0.0). **Aggregation contributes
+2-7% and its sign is not even consistent.** The 18-week machinery is not the
+problem; the weekly model is, compounded over ~16 weeks.
+
+### Why the weekly model under-predicts: it is optimising the median
+
+Bias by the player's own season-total decile is strongly monotonic —
+**-0.51 in the bottom decile rising to +3.51 in the top**. The model
+over-predicts weak players and under-predicts strong ones. That is
+shrinkage, and it is *correct* behaviour for a point prediction under MAE
+loss: MAE is minimised by the conditional **median**.
+
+Weekly PPR is heavily right-skewed, so median < mean:
+
+| position | skew | mean | median | mean-median | per-week bias |
+|---|---|---|---|---|---|
+| QB | 0.29 | 13.11 | 13.0 | **0.11** | **0.664** |
+| RB | 1.34 | 8.07 | 5.7 | **2.37** | **1.524** |
+| TE | 1.90 | 4.14 | 1.8 | **2.34** | **1.221** |
+| WR | 1.53 | 6.65 | 4.0 | **2.65** | **1.616** |
+
+The ordering matches: QB's weekly PPR is nearly symmetric (skew 0.29, gap
+0.11) and QB has by far the smallest bias. RB/TE/WR are strongly skewed and
+carry 2-4x the per-week bias. FINAL_CONFIG selected `C_gbm_mae` for RB/WR
+(pure median objective), `B_gbm_huber` for TE and
+`F_yeojohnson_huber` for QB (both between mean and median), which is why the
+observed bias sits below the full mean-median gap rather than at it.
+
+### The consequence, stated plainly
+
+**Summing ~16 conditional medians of a right-skewed variable systematically
+under-estimates the conditional mean of the sum.** Phases 2-5 selected
+architectures by weekly MAE, which is the right criterion for a weekly point
+prediction and the wrong one for a summed season total. The two use cases
+want different estimators, and the season projection inherited the weekly
+one.
+
+This also gives the absent-player gradient a shared component: heavy-absence
+players sit in the low deciles, where the same shrinkage **over**-predicts
+(-0.51/week), pushing season totals up. It is not the whole story there —
+the synthetic-week `availability_rate` path contributes separately — but it
+is the same underlying mechanism acting in the opposite direction.
+
+### Not done here
+
+No fix applied. The obvious candidate — predict conditional means for the
+season-total use case, or calibrate the summed total — is a modelling
+decision, and this project's last "obviously correct" adjustment failed its
+experiment. It wants a pre-registered test with the same discipline.
