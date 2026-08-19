@@ -91,3 +91,17 @@ config/__pycache__/
 
 # Walk-forward validation artifact (generated, uploaded as workflow artifact)
 walk-forward-validation.md
+
+# Experiment outputs — regenerable from scripts/ and src/models/single_week_ppr/.
+# These are large (60MB+ of row-level prediction dumps) and churn on every run,
+# so they are kept on disk but out of the repo.
+data/experiments/*.csv
+data/experiments/*.weekskips.json
+
+# EXCEPT the two Phase 4 row-level dumps: season_simulation.py reads them as
+# its residual donor pool (residual_csv_paths default), so they are INPUTS to
+# Phase 9, not outputs. Untracking them would break a fresh clone.
+!data/experiments/phase4_row_level_predictions_v2_corrected.csv
+!data/experiments/phase4_row_level_predictions_v2_corrected_2020_2022.csv
+
+# experiment_log.jsonl is a small provenance log, not a CSV output — keep it.
