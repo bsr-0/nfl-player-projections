@@ -34,10 +34,17 @@ from src.utils.helpers import safe_divide
 # through safe_divide, which collapses unknown to 0.0 -- telling the model
 # the player took 0% of snaps.
 #
-# Validated by a pre-registered A/B (GAPS.md): -0.163 MAE on the 1,518 rows
-# with incomplete snap history, +0.004 on the 20,279 complete ones. Flip via
-# set_snap_missingness_mode(), not by editing.
-SNAP_MISSINGNESS_MODE = "preserve"
+# DEFAULT IS "zero" because the pre-registered A/B REJECTED the alternative.
+# With "preserve" plus position x era median imputation, the 1,518 rows with
+# incomplete snap history got WORSE (+0.036 MAE, p=6.9e-04) while the 20,279
+# complete rows improved -- the inverse of a genuine mechanism fix. Unknown-
+# snap players are 55-65% of a known player's usage, so a median overstates
+# them; the fabricated zero is wrong in principle but a closer predictive
+# proxy for this particular missingness. See GAPS.md 2026-08-19.
+#
+# "preserve" is retained as working, tested infrastructure, not as a
+# deprecated branch. Flip via set_snap_missingness_mode().
+SNAP_MISSINGNESS_MODE = "zero"
 
 
 def set_snap_missingness_mode(mode: str) -> None:

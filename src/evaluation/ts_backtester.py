@@ -215,7 +215,7 @@ from src.features.utilization_score import (
 # "zero" is variant A: the rolling feature keeps its NaN, which the blanket
 # fillna(0) below turns into "this player took 0% of snaps". "median" is
 # variant B, now shipped.
-SNAP_IMPUTATION_MODE = "median"
+SNAP_IMPUTATION_MODE = "zero"
 
 
 def apply_snap_imputation(pos_train, pos_test, feature_cols):

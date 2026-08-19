@@ -406,16 +406,23 @@ def _prepare_training_data(
     # to both halves. Recomputing at apply time would make the transformation
     # depend on the population it is applied to -- the exact defect this
     # replaces, where an unknown snap share silently became 0.0.
-    snap_path = MODELS_DIR / SNAP_IMPUTATION_FILENAME
-    save_snap_imputation(fit_snap_imputation(train_data), snap_path, metadata=bounds_meta)
-    loaded_snap, loaded_snap_meta = load_snap_imputation(snap_path, return_meta=True)
-    if not validate_snap_imputation_meta(loaded_snap_meta, train_seasons_list):
-        raise ValueError(
-            "Snap imputation metadata mismatch; refusing to use values not "
-            "fit on the current training seasons."
-        )
-    train_data = apply_snap_imputation(train_data, loaded_snap)
-    test_data = apply_snap_imputation(test_data, loaded_snap)
+    # Inert under the default mode: the A/B rejected median imputation, so
+    # snap_share_pct carries no NaN and there would be nothing to fill. Gated
+    # rather than left running so no artifact is written that implies a
+    # production behaviour we do not have.
+    from src.features.utilization_score import SNAP_MISSINGNESS_MODE
+    if SNAP_MISSINGNESS_MODE != "zero":
+        snap_path = MODELS_DIR / SNAP_IMPUTATION_FILENAME
+        save_snap_imputation(fit_snap_imputation(train_data), snap_path,
+                             metadata=bounds_meta)
+        loaded_snap, loaded_snap_meta = load_snap_imputation(snap_path, return_meta=True)
+        if not validate_snap_imputation_meta(loaded_snap_meta, train_seasons_list):
+            raise ValueError(
+                "Snap imputation metadata mismatch; refusing to use values not "
+                "fit on the current training seasons."
+            )
+        train_data = apply_snap_imputation(train_data, loaded_snap)
+        test_data = apply_snap_imputation(test_data, loaded_snap)
 
     parent_silver_ids = [i for i in [get_artifact_id(train_data), get_artifact_id(test_data)] if i]
     silver_train_meta = persist_dataframe_artifact(

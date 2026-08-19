@@ -7423,3 +7423,60 @@ harming the only population with a mechanistic story.
 
 Deliberately NOT done: tuning the imputation constant in response to this.
 That is a new experiment, not a fix to this one.
+
+## Attribution: why B helped the control and hurt the target (2026-08-19)
+
+Diagnostic on the completed v2 experiment. No refit, no new treatment.
+
+### What actually differs between the arms
+
+| frame | roll3 differs | known differs | A mean on those rows | B mean |
+|---|---|---|---|---|
+| train | 1,258 / 33,361 (3.77%) | 156 | 33.36 | **47.98** |
+| test | 125 / 5,787 (2.16%) | 17 | 24.05 | **47.12** |
+
+**B roughly doubles the rolling snap share on every row it touches.**
+
+### The mechanism, in full
+
+Only **0.3%** of the changed train rows were exactly 0.0 under A. These are
+not "fabricated zero -> median" swaps. Under A an unknown week enters the
+3-week mean as a 0 and drags it DOWN; under B unknown weeks are skipped, so
+the mean is taken over known weeks only -- and where every week is unknown,
+the median is substituted. Either way the value rises sharply.
+
+The rows this happens to are **low-usage players**: fantasy_points 4.32 vs
+6.51 for all training rows, targets 2.10 vs 3.11 (~67% of average).
+
+So B tells the model that a set of demonstrably below-average players had
+near-average snap share. It overpredicts them, and MAE on exactly that
+population rises (+0.036 overall, +0.106 in 2018+). Meanwhile A's
+zero-averaging accidentally encoded something true: these players' rolling
+snap share *should* read low, because they are low-usage.
+
+The fabricated zero was a correct answer for the wrong reason.
+
+### Attribution of the 0.9% control-population gain
+
+It comes from the **altered training distribution**, not from the indicator.
+`snap_share_pct_roll3_known` differs on only 156 of 33,361 train rows, while
+`snap_share_pct_roll3_mean` differs on 1,258 -- and by ~15 points each. That
+is enough to move the Ridge coefficients for every prediction, including the
+20,279 control rows that have no missingness at all. An aggregate gain
+produced by perturbing 3.77% of training values, with no account of why the
+new fit generalises better, is not something to ship.
+
+### Disposition
+
+- **Shipped**: NULL storage semantics, snap coverage to 2013, the corrected
+  38,178 rows.
+- **Rejected**: median imputation + missingness indicator. Both modes back
+  to "zero"; the production call sites are gated so nothing runs and no
+  artifact is written.
+- **Kept**: the fit/persist/validate/apply architecture, as reusable
+  infrastructure for train-only transformations. Its tests pin the mode
+  explicitly so they assert capability, not policy.
+- **Quarantined**: the v1 "has prior history" signal — a separate
+  hypothesis needing its own experiment and name.
+- **Not done**: tuning the imputation constant. This result is precisely
+  what a post-hoc tune would have manufactured a story around.

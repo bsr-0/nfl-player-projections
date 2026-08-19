@@ -30,6 +30,21 @@ from src.features.feature_engineering import FeatureEngineer
 KNOWN, UNKNOWN = "known_player", "unknown_player"
 
 
+@pytest.fixture(autouse=True)
+def preserve_mode():
+    """These exercise the missingness INFRASTRUCTURE, which is retained even
+    though the pre-registered A/B rejected median imputation as production
+    behaviour (GAPS.md). Production defaults to "zero"; pinning the mode here
+    keeps these tests a statement about capability, not about that policy
+    choice -- so re-enabling later does not require rewriting them."""
+    from src.features import utilization_score as us
+
+    original = us.SNAP_MISSINGNESS_MODE
+    us.set_snap_missingness_mode("preserve")
+    yield
+    us.set_snap_missingness_mode(original)
+
+
 def _raw_frame():
     """Two WRs over four weeks. One always measured; one never measured."""
     rows = []
