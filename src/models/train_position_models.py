@@ -32,14 +32,12 @@ POSITION_FEATURES = {
             "opportunities", "weighted_opportunities",
         ],
         "rolling": [
-            "fantasy_points_roll3", "fantasy_points_roll5",
-            "rushing_yards_roll3", "total_touches_roll3",
-            "snap_share_roll3",
+            "rushing_yards_roll3_mean",
+            "snap_share_pct_roll3_mean",
         ],
         "team_context": [
             "team_a_rushing_yards", "team_a_rush_attempts", "team_a_pass_rate",
             "team_b_rushing_yards", "matchup_rush_diff",
-            "team_sos", "matchup_difficulty",
         ],
     },
     "WR": {
@@ -52,14 +50,12 @@ POSITION_FEATURES = {
             "total_yards", "total_tds",
         ],
         "rolling": [
-            "fantasy_points_roll3", "fantasy_points_roll5",
-            "receiving_yards_roll3", "targets_roll3",
-            "snap_share_roll3",
+            "targets_roll3_mean",
+            "snap_share_pct_roll3_mean",
         ],
         "team_context": [
             "team_a_passing_yards", "team_a_pass_attempts", "team_a_pass_rate",
             "team_b_passing_yards", "matchup_pass_diff",
-            "team_sos", "matchup_difficulty",
         ],
     },
     "TE": {
@@ -72,24 +68,34 @@ POSITION_FEATURES = {
             "total_yards", "total_tds",
         ],
         "rolling": [
-            "fantasy_points_roll3", "fantasy_points_roll5",
-            "receiving_yards_roll3", "targets_roll3",
-            "snap_share_roll3",
+            "targets_roll3_mean",
+            "snap_share_pct_roll3_mean",
         ],
         "team_context": [
             "team_a_passing_yards", "team_a_pass_attempts",
             "team_b_passing_yards", "matchup_pass_diff",
-            "team_sos", "matchup_difficulty",
         ],
     },
 }
 
 
 def get_position_features(position: str, available_cols: List[str]) -> List[str]:
-    """Get features for a position that exist in the data."""
+    """Get features for a position that exist in the data.
+
+    Warns about declared-but-absent features rather than dropping them
+    silently. That silence is how this list came to declare seven features
+    per position that no builder produces -- including `snap_share_roll3`,
+    which never existed under that name -- so every run here trained on
+    fewer features than the config implied, with nothing in the output
+    saying so (GAPS.md 2026-08-19).
+
+    NOTE: `config.settings.CAUSAL_FEATURES` is the authoritative production
+    feature list. This one is used only by
+    scripts/walk_forward_multiweek.py.
+    """
     if position not in POSITION_FEATURES:
         return available_cols
-    
+
     pos_features = POSITION_FEATURES[position]
     all_features = (
         pos_features.get("primary", []) +
@@ -97,9 +103,18 @@ def get_position_features(position: str, available_cols: List[str]) -> List[str]
         pos_features.get("rolling", []) +
         pos_features.get("team_context", [])
     )
-    
-    # Return only features that exist in data
-    return [f for f in all_features if f in available_cols]
+
+    resolved = [f for f in all_features if f in available_cols]
+    missing = [f for f in all_features if f not in available_cols]
+    if missing:
+        import warnings
+        warnings.warn(
+            f"{position}: {len(missing)} declared feature(s) absent from the "
+            f"data and dropped: {missing}. Either the builder no longer emits "
+            f"them or the name is stale.",
+            RuntimeWarning, stacklevel=2,
+        )
+    return resolved
 
 
 def load_position_data(position: str, min_games: int = 4) -> Tuple[pd.DataFrame, pd.DataFrame]:
