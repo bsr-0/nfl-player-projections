@@ -204,6 +204,57 @@ def leakage_safe_features(
 # TimeSeriesBacktester
 # ---------------------------------------------------------------------------
 
+SNAP_ROLL3_COL = "snap_share_pct_roll3_mean"
+SNAP_KNOWN_COL = "snap_share_pct_roll3_known"
+
+# Experiment switch for the pre-registered snap-missingness A/B (GAPS.md
+# 2026-08-19). "zero" is variant A and reproduces production exactly: NaN
+# reaches the blanket fillna(0) below and the model is told the player took
+# 0% of snaps. "median" is variant B.
+SNAP_IMPUTATION_MODE = "zero"
+
+
+def _era(seasons: pd.Series) -> pd.Series:
+    """The snap-data regime boundary, not arbitrary year buckets."""
+    return np.where(pd.to_numeric(seasons, errors="coerce") < 2018, "pre2018", "post2018")
+
+
+def apply_snap_imputation(pos_train, pos_test, feature_cols):
+    """Variant B: era-median imputation of the rolling snap feature, fitted
+    on the TRAINING FOLD ONLY, plus the missingness indicator.
+
+    Leakage safety is the whole point: the median comes from `pos_train`,
+    never from `pos_test` and never from a full-history precompute. A fold
+    testing 2016 therefore imputes with a statistic derived only from
+    seasons before 2016. `position` needs no grouping here -- pos_train is
+    already a single position at this call site.
+
+    Returns frames unchanged under mode "zero" (variant A), so the baseline
+    is the untouched production path rather than a re-derivation of it.
+    """
+    if SNAP_IMPUTATION_MODE == "zero" or SNAP_ROLL3_COL not in pos_train.columns:
+        return pos_train, pos_test, feature_cols
+
+    pos_train = pos_train.copy()
+    pos_test = pos_test.copy()
+
+    train_vals = pd.to_numeric(pos_train[SNAP_ROLL3_COL], errors="coerce")
+    train_era = _era(pos_train["season"])
+    by_era = pd.Series(train_vals.values).groupby(train_era).median()
+    overall = float(train_vals.median()) if train_vals.notna().any() else 0.0
+
+    for frame in (pos_train, pos_test):
+        vals = pd.to_numeric(frame[SNAP_ROLL3_COL], errors="coerce")
+        fill = pd.Series(_era(frame["season"]), index=frame.index).map(by_era)
+        frame[SNAP_ROLL3_COL] = vals.fillna(fill).fillna(overall)
+
+    if SNAP_KNOWN_COL in pos_train.columns and SNAP_KNOWN_COL in pos_test.columns:
+        if SNAP_KNOWN_COL not in feature_cols:
+            feature_cols = list(feature_cols) + [SNAP_KNOWN_COL]
+
+    return pos_train, pos_test, feature_cols
+
+
 class TimeSeriesBacktester:
     """
     Expanding-window backtester that simulates production predictions for a
@@ -417,6 +468,10 @@ class TimeSeriesBacktester:
 
                         # Align feature columns between train and test
                         feature_cols = [c for c in feature_cols if c in pos_test.columns]
+
+                    pos_train, pos_test, feature_cols = apply_snap_imputation(
+                        pos_train, pos_test, feature_cols
+                    )
 
                     X_train = pos_train[feature_cols].fillna(0)
                     X_test = pos_test[feature_cols].fillna(0)
