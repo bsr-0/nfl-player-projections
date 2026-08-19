@@ -69,6 +69,54 @@ _SNAP_IMPUTATION_OWNED = frozenset({
 })
 
 
+# The NFL abolished the "Probable" designation after the 2015 season. It
+# appears 2,772 / 2,607 / 2,702 times in 2013-2015 and exactly 0 from 2016.
+PROBABLE_ABOLISHED_AFTER_SEASON = 2015
+
+
+def _warn_on_probable_era_span(injuries: pd.DataFrame) -> None:
+    """Warn when a training window straddles the "Probable" rule change.
+
+    `Probable` scores 0.85, so `injury_score` reads as mildly unavailable for
+    ~2,700 player-weeks a season before 2016 and for none after. That is a
+    reporting-rule artifact, not players becoming healthier: `pct_injured`
+    runs 14-16% pre-2016 against 4-6% after.
+
+    NOT silently remapped to 1.0. That is a modelling decision, and this
+    project has already seen one such "obviously correct" re-encoding fail
+    its experiment -- unknown snap shares, where the semantically wrong value
+    turned out to be the better predictor because the missingness was
+    informative (GAPS.md 2026-08-19). The same question is open here: the
+    ~2,700 vanished Probables were NOT absorbed by Questionable, which stayed
+    near 1,300, so in the modern regime those players are simply unlisted at
+    1.0 -- which argues for the remap but does not establish it.
+
+    `TRAINING_START_YEAR_DEFAULT = 2018` keeps the default window clear of
+    this. The warning exists so the "full" 2006+ preset cannot cross the
+    boundary without saying so.
+    """
+    if "season" not in injuries.columns or "report_status" not in injuries.columns:
+        return
+    seasons = pd.to_numeric(injuries["season"], errors="coerce").dropna()
+    if seasons.empty:
+        return
+    if seasons.min() > PROBABLE_ABOLISHED_AFTER_SEASON or seasons.max() <= PROBABLE_ABOLISHED_AFTER_SEASON:
+        return  # entirely one side of the boundary
+
+    n_probable = int((injuries["report_status"] == "Probable").sum())
+    if not n_probable:
+        return
+    import warnings
+    warnings.warn(
+        f"injury_score spans the {PROBABLE_ABOLISHED_AFTER_SEASON}/"
+        f"{PROBABLE_ABOLISHED_AFTER_SEASON + 1} 'Probable' rule change: "
+        f"{n_probable:,} Probable rows score 0.85 in the earlier seasons and "
+        f"the status does not exist later, so injury_score is not comparable "
+        f"across the boundary. See GAPS.md.",
+        RuntimeWarning, stacklevel=2,
+    )
+
+
 def _load_depth_chart_asof_table() -> pd.DataFrame:
     """Loads `depth_charts` into an as-of lookup table: one row per
     (gsis_id, season*100+week) with the deduped depth_team rank, sorted for
@@ -4048,6 +4096,7 @@ class FeatureEngineer:
 
         cached["_injury_score"] = cached["report_status"].map(_score)
         cached["_is_injured"] = (cached["_injury_score"] < 1.0).astype(int)
+        _warn_on_probable_era_span(cached)
 
         merged = df.merge(
             cached[["player_id", "season", "week", "_injury_score", "_is_injured"]],

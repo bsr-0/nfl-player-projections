@@ -7533,3 +7533,55 @@ serious attempt would model the missingness mechanism itself, or use the
 
 Do not resume: availability formulations, additional snap sources, QB snap
 reconstruction, Track B forensics, or imputation-constant tuning.
+
+## Cleanup: phantom feature declarations + the "Probable" era guard (2026-08-19)
+
+Two loose ends from the snap investigation, both closed as guardrails rather
+than as silent semantic changes.
+
+### Phantom declarations in POSITION_FEATURES
+
+Seven features per position were declared but produced by no builder, and
+`get_position_features` dropped them silently -- so
+`scripts/walk_forward_multiweek.py`, its only consumer, trained on fewer
+features than its config implied with nothing saying so. Checked each
+against a real built frame:
+
+| declared | disposition |
+|---|---|
+| `rushing_yards_roll3` | renamed -> `rushing_yards_roll3_mean` |
+| `targets_roll3` | renamed -> `targets_roll3_mean` |
+| `snap_share_roll3` | renamed -> `snap_share_pct_roll3_mean` |
+| `fantasy_points_roll3` / `_roll5` | no equivalent — removed |
+| `receiving_yards_roll3` | no equivalent — removed |
+| `total_touches_roll3` | no equivalent — removed |
+| `team_sos`, `matchup_difficulty` | no equivalent — removed |
+
+`snap_share_roll3` never existed under that name; the roll loop emits
+`{col}_roll3_mean`. The three renames are a **behaviour change** for
+walk_forward_multiweek, which now actually receives them.
+`get_position_features` warns on any future drop, and all declarations now
+resolve against a real frame with zero warnings.
+
+`config.settings.CAUSAL_FEATURES` remains the authoritative production list;
+a test pins the distinction.
+
+### The "Probable" era discontinuity: guarded, NOT remapped
+
+`Probable` scores 0.85 and was abolished after 2015 (2,772 / 2,607 / 2,702
+uses in 2013-2015, then exactly 0), so `pct_injured` runs 14-16% before 2016
+and 4-6% after — a reporting-rule artifact, not players getting healthier.
+
+**Deliberately not remapped to 1.0.** The argument for remapping is real: the
+~2,700 vanished Probables were NOT absorbed by Questionable, which stayed
+near 1,300, so in the modern regime those players are simply unlisted at 1.0.
+But this project has already had one "obviously correct" re-encoding fail its
+experiment — unknown snap shares, where the semantically wrong value was the
+better predictor because the missingness was informative. Remapping is a
+modelling decision and deserves the same evidence.
+
+`_warn_on_probable_era_span` warns when a window straddles the boundary,
+naming the exposure. Verified on real data: silent on the default 2018-2025
+window, and on the "full" 2006-2025 preset it reports 8,081 Probable rows.
+`TRAINING_START_YEAR_DEFAULT = 2018` is why this is a warning and not an
+error, and a test pins that relationship.
