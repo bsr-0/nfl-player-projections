@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -22,6 +22,11 @@ class FeatureGroupPolicy:
     fallback_value: float = 0.0
     warn_threshold: float = 0.05
     fail_threshold: float = 1.1
+    # Exact column names this group matches but does NOT own. Their NaN is
+    # filled by a dedicated step instead, and filling it here would consume
+    # the missingness before that step ever sees it -- while also imputing
+    # from the frame in hand rather than from train-fitted values.
+    exclude: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -78,6 +83,8 @@ class FeaturePolicyRegistry:
             if not group:
                 continue
             policy = self.policies[group]
+            if col in policy.exclude:
+                continue
             missing_mask = df[col].isna()
             if not missing_mask.any():
                 continue

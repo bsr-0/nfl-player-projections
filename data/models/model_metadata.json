@@ -1,5 +1,5 @@
 {
-  "training_date": "2026-08-19T13:25:48.502570",
+  "training_date": "2026-08-19T13:43:08.202273",
   "feature_version": "33",
   "train_seasons": [
     2018,
@@ -24,8 +24,8 @@
     "WR": 67,
     "TE": 65
   },
-  "previous_training_date": "2026-08-08T06:46:47.264793",
-  "previous_feature_version": "30",
+  "previous_training_date": "2026-08-19T13:25:48.502570",
+  "previous_feature_version": "33",
   "rollback_available": true,
   "n_rollback_versions": 5,
   "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",

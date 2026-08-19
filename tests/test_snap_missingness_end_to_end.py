@@ -214,3 +214,31 @@ def test_real_pipeline_then_artifact_yields_the_persisted_value(tmp_path):
         filled = final.loc[was_missing, SNAP_ROLL3_COL]
         assert filled.notna().all()
         assert (filled != 0.0).all(), "fell back to the fabricated zero"
+
+
+def test_policy_registry_does_not_own_the_snap_columns():
+    """FeaturePolicyRegistry's `utilization` group matches on 'snap_share',
+    which caught snap_share_pct_roll3_mean and median-filled it from the
+    frame in hand. It is a legitimate imputation layer -- it just does not
+    own these columns."""
+    from src.features.feature_policy_registry import FeaturePolicyRegistry
+
+    registry = FeaturePolicyRegistry.from_config()
+    group = registry.resolve_group_for_feature(SNAP_ROLL3_COL)
+
+    assert group == "utilization", "matcher changed; this guard may be stale"
+    assert SNAP_ROLL3_COL in registry.policies[group].exclude
+
+
+def test_registry_apply_leaves_snap_columns_missing():
+    from src.features.feature_policy_registry import FeaturePolicyRegistry
+
+    df = pd.DataFrame({
+        SNAP_ROLL3_COL: [10.0, np.nan, 30.0],
+        "target_share_pct": [1.0, np.nan, 3.0],   # same group, still owned
+    })
+    FeaturePolicyRegistry.from_config().apply(df, context="test",
+                                              fail_on_threshold=False)
+
+    assert df[SNAP_ROLL3_COL].isna().any(), "registry filled a column it does not own"
+    assert df["target_share_pct"].notna().all(), "registry stopped doing its job"
