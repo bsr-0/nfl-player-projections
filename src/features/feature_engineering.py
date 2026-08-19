@@ -63,11 +63,14 @@ DEPTH_CHART_MAX_STALENESS_SEASONS = 1
 def _load_depth_chart_asof_table() -> pd.DataFrame:
     """Loads `depth_charts` into an as-of lookup table: one row per
     (gsis_id, season*100+week) with the deduped depth_team rank, sorted for
-    `pd.merge_asof`. Excludes `season IS NULL` junk rows (a known DB
-    artifact -- 554K rows with no other real data either). Deduplicates
-    2024's ~3x-inflated row count per (season, week, gsis_id) via a
-    deterministic MIN so a rare conflicting-duplicate doesn't produce a
-    nondeterministic result.
+    `pd.merge_asof`. Excludes `season IS NULL` rows: those were 2025's feed
+    written in nflverse's newer daily ESPN-style schema, which has no
+    season/week/depth_team column at all, so a straight insert left them
+    unmapped. They are now loaded properly by
+    scripts/backfill_depth_charts_2025.py; the filter stays as a guard.
+    Deduplicates 2024's ~3x-inflated row count per (season, week, gsis_id)
+    via a deterministic MIN so a rare conflicting-duplicate doesn't produce
+    a nondeterministic result.
     """
     cache_key = "depth_chart_asof_table"
     if cache_key in _depth_chart_asof_cache:
@@ -855,14 +858,17 @@ class FeatureEngineer:
         # Bound how far back a snapshot may be carried. Without this the
         # as-of match is unbounded: a season with no depth-chart coverage
         # silently inherits the newest prior season's ranks, however old.
-        # depth_charts covers 2020-2024 only -- 2025 (a live validation
-        # season) has none and is NOT backfillable (import_depth_charts([2025])
-        # fails upstream), so 2025 rows carry 2024 ranks. That is acceptable
-        # at one season of staleness (a prior-season depth chart is real, if
-        # noisy, information -- and it is exactly what a preseason projection
-        # would legitimately have), but carrying a rank forward several
-        # seasons is not. Beyond the bound we fall back to the neutral
-        # default rather than pretend to know.
+        # depth_charts covers 2020-2025. 2025 was previously believed
+        # unbackfillable and carried stale 2024 ranks; in fact
+        # import_depth_charts([2025]) succeeds and simply returns a different
+        # (daily, ESPN-style) schema, loaded by
+        # scripts/backfill_depth_charts_2025.py on 2026-08-19. The bound
+        # still matters for 2018/2019 and for players absent from a given
+        # season's charts: one season of staleness is acceptable (a
+        # prior-season depth chart is real, if noisy, information -- exactly
+        # what a preseason projection would legitimately have), but carrying
+        # a rank forward several seasons is not. Beyond the bound we fall
+        # back to the neutral default rather than pretend to know.
         stale_seasons = (merged["_key"] // 100) - (merged["_snap_key"] // 100)
         too_stale = stale_seasons > DEPTH_CHART_MAX_STALENESS_SEASONS
         ranks = merged["depth_chart_rank"].where(~too_stale)

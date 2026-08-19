@@ -6298,6 +6298,29 @@ backfillable** — `nfl.import_depth_charts([2025])` fails upstream
 any measured effect of the fix in Phases 7/9 and must be kept in view when
 reading those results.
 
+> **CORRECTED 2026-08-19 — 2025 *is* backfillable; it is now loaded.**
+> The `KeyError: 'week'` was not upstream absence. nflverse switched 2025
+> to a different feed: a **daily league-wide ESPN-style snapshot** keyed on
+> `dt`/`pos_rank`/`pos_slot`, with no `week`/`depth_team`/`season` column —
+> hence the KeyError, and hence the **554,215 `season IS NULL` rows deleted
+> as "junk" below, which were in fact 2025's real data in an unrecognised
+> schema.** `scripts/backfill_depth_charts_2025.py` bridges the schemas
+> (last snapshot strictly before each week's first kickoff → that week;
+> `pos_rank` clipped to 3 to match the old feed's 1/2/3 vocabulary;
+> postseason narrowed to clubs actually playing, as the old per-game feed
+> did naturally). Loaded 42,496 rows across 22 weeks, 2,267 players.
+> **Effect: 44.7% of 2025 skill-position rows change depth rank, and 925
+> rows — rookies and others with no 2024 chart — get a real rank where they
+> were previously forced to the neutral default 3.** The depth-chart fix is
+> therefore no longer inert for 2025, and Phase 7/9 results read under the
+> "effectively inert" assumption should be re-examined.
+>
+> Lesson: an upstream `KeyError` on a column means *the schema changed*,
+> not *the data is missing*. Worth checking the raw frame's columns before
+> concluding a season is unavailable — and worth being suspicious of any
+> bulk "junk rows with NULL keys" deletion, which is the same event seen
+> from the other end.
+
 **Fix**: `DEPTH_CHART_MAX_STALENESS_SEASONS = 1`, shared by both the
 real-row (`_add_depth_chart_rank`) and synthetic-row
 (`_lookup_depth_chart_rank_asof`) paths so they can never disagree about
