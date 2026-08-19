@@ -6323,3 +6323,173 @@ NULL-safe recheck). `player_weekly_stats` untouched at 118,962.
   format change (full roster vs. a narrow subset), not duplication. So
   `depth_chart_rank` coverage is season-dependent: a player can get a real
   rank in 2024 and the neutral default in 2023.
+
+## `get_opponent_matchup_features` is not idempotent (found 2026-08-18)
+
+**Symptom**: every synthetic week in the Phase 7 / availability-comparison
+path logs `Error adding defense rankings: Columns must be same length as
+key`, immediately after a nonsensical `Calculated rankings for 1 teams`.
+
+**Cause**: `build_synthetic_week_row` (season_projection.py:195) carries
+forward the player's last real row, which `run_fold` has *already* passed
+through `add_external_features`. Line 214 then re-runs the same enrichment.
+`get_opponent_matchup_features` merges and renames to `opp_defense_rank` /
+`opp_matchup_score` / `opp_pts_allowed` — names the frame already has — so
+the labels duplicate. `avail_mask` (external_data.py:338) becomes a 2-column
+DataFrame instead of a Series, and the assignment at line 343 raises from
+pandas `_set_item_frame_value` (frame.py:4209). Reproduced exactly.
+
+**Impact on models: none.** No position's `CAUSAL_FEATURES` contains any of
+the four defense columns. Of the 18 features `add_external_features`
+produces, only `injury_score`, `is_dome`, `implied_team_total` and `spread`
+are consumed; `injury_score` is overwritten to 1.0 by design at
+season_projection.py:224, and the weather/Vegas merges both succeed on the
+1-row frame (`Merged Vegas lines for 1 player-game rows` is 1-of-1, not a
+failure). Availability-experiment gradients are therefore uncontaminated.
+
+**Impact on cost: large.** One `add_external_features` call on a single row
+takes 8.2s and runs once per synthetic week per player. The loaders are
+uncached and re-read a whole season each time: vegas 1.49s, weather 1.09s,
+injuries 0.39s. Plus the defense block computes rankings from a one-row
+frame and throws the result away.
+
+**Secondary bug**: the `except` at external_data.py:908 backfills the three
+`opp_*` defaults but leaves `defense_data_available` at its carried-forward
+value, so the flag asserts real data while the values are constants. Any
+future model that adopts that flag would be misled.
+
+**Fixed 2026-08-18.**
+
+1. `get_opponent_matchup_features` now drops any pre-existing `opp_*` /
+   `defense_data_available` columns before the merge, so a second pass
+   recomputes rather than colliding. Verified idempotent over three
+   consecutive passes.
+2. Memoized the `nfl_data_py` fetches (`_cached_import`, keyed by kind +
+   sorted season tuple, handing out copies since callers mutate).
+   `add_external_features` on a 1-row frame: **8.2s → 0.08s warm**. The
+   three `import_schedules` calls per invocation now share one fetch.
+   `clear_season_import_cache()` evicts.
+3. The `except` branch at external_data.py:938 now sets
+   `defense_data_available = 0` alongside the constant fallbacks.
+
+Verified the model-consumed features (`injury_score`, `is_dome`,
+`implied_team_total`, `spread`) are byte-identical to pre-fix output on
+clean frames across QB/WR/RB rows — the change is inert except on
+already-enriched frames. 7 new tests in
+`tests/test_external_data_idempotency.py`; full suite 197 passed.
+
+**Caveat**: the new `test_availability_flag_is_not_inherited` passes
+against the old code too for its input (the old code only mis-set the flag
+when the exception fired). The except-branch fix itself is now unreachable
+from this cause and is untested — kept as defensive correctness.
+
+## Silently-dropped player-weeks (fixed 2026-08-18)
+
+`FoldFailureTracker` made skipped FOLDS auditable. The same failure mode
+existed one level down and was still silent: `compute_player_week_predictions`
+skips a week when `build_synthetic_week_row` returns None (no prior history)
+or when `predict()` raises. The first logged **nothing at all**; the second
+logged a `logger.warning` that vanishes under `tail` -- the exact reason
+FoldFailureTracker was written.
+
+**Impact measured on the v33 QB availability run**: 129 player-weeks skipped
+across 20 player-seasons, all `no_prior_history`. Concentrated in the LOW
+synthetic-share buckets, which is the damaging place for them to land:
+`weeks_synthetic == 0` silently conflated "played every week" (34 QBs) with
+"we failed to project the weeks they missed" (5 QBs). That moved the
+reference bucket's bias from **-30.6 to -28.8** -- a corrupted anchor for
+every gradient measured against it.
+
+**Fix**: `WeekSkipTracker` in season_projection.py, mirroring
+FoldFailureTracker: records (player, season, week, reason), prints a loud
+end-of-run summary, and writes a `<output>.weekskips.json` sidecar. Wired
+into Phase 7, Phase 9, and both availability experiment scripts. The
+parameter is optional, so existing callers are unaffected. 10 tests, incl.
+the accounting identity real + synthetic + skipped == possible.
+
+## Defense rankings computed on frames too small to rank (fixed 2026-08-18)
+
+`calculate_defense_rankings` was called on single-row synthetic frames,
+printing `Calculated rankings for 1 teams` and ranking one defense against
+itself before the result silently resolved to neutral defaults. After the
+idempotency fix removed the exception it had been throwing, this became
+*fully* silent -- a loud wrong signal traded for no signal.
+
+**Fix**: `MIN_DEFENSES_FOR_RANKING = 8`. Below that many distinct opponents
+the function says so once and returns empty, so the caller takes its
+existing defaults path with `defense_data_available = 0`. Verified
+byte-identical output on a full 32-team frame; the 290 bogus
+"rankings for 1 teams" lines in a QB run became 0.
+
+## Mid-season trades projected against the wrong schedule (NOT fixed)
+
+Found while reconciling the WeekSkipTracker count (129) against the CSV
+week-count identity (127). Two player-seasons had 13 real + 5 synthetic = 18
+weeks against a 17-week schedule.
+
+**Cause**: `possible_weeks_for_team(db, team, season)` is called with
+`team = g.sort_values("week")["team"].iloc[0]` -- the player's FIRST team of
+the season. After a mid-season trade the player is projected against their
+old team's schedule: wrong bye week, wrong opponents. Confirmed on
+00-0033949/2023 (ARI->MIN; played ARI's week-14 bye for MIN) and
+00-0026158/2025 (CLE->CIN; played CLE's week-9 bye for CIN).
+
+**Scope (QB, 2023-2025)**: 3 of 238 player-seasons changed teams mid-season;
+all 3 are projected against a partly wrong schedule, but only the 2 above
+are detectable via the week-count identity. Small for QB; likely larger for
+RB/WR where in-season movement is more common -- unmeasured.
+
+**Fixed 2026-08-18.** New `possible_weeks_for_player(db, real_team_by_week,
+season)` resolves the team PER WEEK -- the player's own row's team on weeks
+they played, the last known team carried forward otherwise, their first team
+for weeks before they ever appeared -- and returns both the playable weeks
+and the week->team map. A week the player demonstrably played is always
+playable, regardless of what the schedule lookup says.
+
+`compute_player_week_predictions` now takes `team_by_week: Dict[int, str]`
+instead of `team: str`, so no caller can silently pin a season to one team
+again. All four call sites updated (Phase 7, Phase 9, both experiment
+scripts); the now-dead `possible_weeks_for_team` imports were removed from
+two of them. Schedules are cached per team inside the loop, so the per-week
+resolution costs one DB read per team, not one per week.
+
+Verified against both real cases with the live DB. 00-0033949/2023 traded
+ARI->MIN at week 9; 00-0026158/2025 traded CLE->CIN at week 6. Both had one
+real week falling outside their first team's schedule (their old team's bye);
+after the fix, zero real weeks fall outside, and 13 real + 4 synthetic = 17
+satisfies the identity in both cases. Single-team players are unaffected --
+a test asserts `possible_weeks_for_player` equals `possible_weeks_for_team`
+for them. 15 tests across `tests/test_traded_player_schedule.py` and the
+updated `tests/test_week_skip_tracker.py`.
+
+**Still unmeasured**: RB/WR/TE in-season movement is more common than QB's
+3-of-238, so the pre-fix error was probably larger there. Nothing has been
+re-run for those positions.
+
+
+## `effective_rate` is undefined when weekly predictions cancel (guarded 2026-08-18)
+
+Found by an integrity sweep on the post-fix availability outputs: one row of
+995 had `effective_rate = -0.251`, outside [0, 1].
+
+**Not an estimator bug.** Weekly QB PPR predictions can be negative (INTs,
+fumbles, sacks) -- 3.5% of 3,322 player-weeks are, min -1.73. For
+00-0034401/2024, 10 of 16 synthetic weeks were negative, so
+`synth_pred_sum` came out at 0.344: a near-zero residue of cancelling terms.
+`effective_rate = (total - known) / synth_pred_sum` is a weighted mean of
+the per-week rates only when the weights share a sign; otherwise it is
+unstable. Every underlying availability rate was valid.
+
+**Guard**: the script now also records `synth_pred_abs_sum` and emits
+`effective_rate` only when `synth_pred_sum > 0 and synth_pred_sum >= 0.5 *
+synth_pred_abs_sum`, else NaN. Reporting-only column; no conclusion in the
+availability investigation depended on it.
+
+**Note**: `data/experiments/availability_comparison.csv` on disk predates
+this guard, so it still carries that one out-of-range value and lacks the
+`synth_pred_abs_sum` column. Not worth a 10-minute re-run for a diagnostic
+column; the next run picks it up.
+
+Also confirmed NOT a bug during the same sweep: negative `actual_season_total`
+(11 player-seasons, min -2.1). Legitimate PPR scoring for QBs with very few
+games played.

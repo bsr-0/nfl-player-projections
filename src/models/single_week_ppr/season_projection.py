@@ -21,7 +21,8 @@ _refresh_team_rolling_context.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Sequence
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -57,6 +58,52 @@ def possible_weeks_for_team(db, team: str, season: int) -> List[int]:
         return []
     weeks = sorted(int(w) for w in sched["week"].unique() if int(w) <= REGULAR_SEASON_MAX_WEEK)
     return weeks
+
+
+def possible_weeks_for_player(
+    db, real_team_by_week: Dict[int, str], season: int,
+) -> Tuple[List[int], Dict[int, str]]:
+    """Weeks the player could have played, resolving their team PER WEEK.
+
+    Callers used to pin the whole season to `g.sort_values("week")["team"]
+    .iloc[0]` -- the player's first team. After a mid-season trade that
+    projects them against their old team's schedule: wrong bye week, wrong
+    opponents. Two 2023/2025 QBs came out with 18 weeks against a 17-week
+    schedule because they played their FORMER team's bye week for their new
+    one (GAPS.md).
+
+    A player's team on a week they played is simply their own row's team.
+    For a week they missed, the honest answer is the last team they were
+    known to be on -- carried forward, or their first team for weeks before
+    they ever appeared.
+
+    Returns (playable weeks, week -> team) where a week is playable if the
+    team the player was on THAT week has a game.
+    """
+    if not real_team_by_week:
+        return [], {}
+
+    known_weeks = sorted(real_team_by_week)
+    first_team = real_team_by_week[known_weeks[0]]
+
+    schedule_cache: Dict[str, List[int]] = {}
+
+    def team_weeks(team: str) -> List[int]:
+        if team not in schedule_cache:
+            schedule_cache[team] = possible_weeks_for_team(db, team, season)
+        return schedule_cache[team]
+
+    weeks: List[int] = []
+    team_by_week: Dict[int, str] = {}
+    for week in range(1, REGULAR_SEASON_MAX_WEEK + 1):
+        prior = [w for w in known_weeks if w <= week]
+        team = real_team_by_week[prior[-1]] if prior else first_team
+        team_by_week[week] = team
+        # A week the player actually played is playable by definition, even
+        # if the schedule lookup disagrees -- the game demonstrably happened.
+        if week in real_team_by_week or week in team_weeks(team):
+            weeks.append(week)
+    return weeks, team_by_week
 
 
 def estimate_availability_rate(player_id: str, position: str, season: int, db,
@@ -289,11 +336,74 @@ def resolve_week_source(
     return True
 
 
+class WeekSkipTracker:
+    """Player-weeks dropped from a season projection, made auditable.
+
+    `FoldFailureTracker` does this one level up, for folds. The same failure
+    mode exists per week: `compute_player_week_predictions` skips a week when
+    the synthetic row can't be built (no prior history) or when predict()
+    raises, and until this existed the first case logged nothing at all and
+    the second logged a `logger.warning` that vanishes under `tail`.
+
+    That silence is not cosmetic. A skipped week leaves the player looking
+    like they had FEWER possible weeks than the schedule says, so
+    `weeks_synthetic == 0` stops meaning "played every week" and starts
+    quietly meaning "or we failed to project the ones they missed". In the
+    v33 availability experiment that put 5 such players into the 39-player
+    reference bucket and moved its bias from -30.6 to -28.8 -- a corrupted
+    anchor for every gradient measured against it.
+    """
+
+    NO_PRIOR_HISTORY = "no_prior_history"
+    PREDICT_FAILED = "predict_failed"
+
+    def __init__(self, phase: str):
+        self.phase = phase
+        self.skips: List[dict] = []
+
+    def record(self, player_id: str, season: int, week: int, reason: str,
+               error: Optional[Exception] = None, **extra) -> None:
+        self.skips.append({
+            "phase": self.phase, "player_id": str(player_id), "season": int(season),
+            "week": int(week), "reason": reason,
+            "error": f"{type(error).__name__}: {error}" if error is not None else None,
+            **extra,
+        })
+
+    def report(self, output_path: Optional[Path] = None) -> None:
+        if not self.skips:
+            print(f"\n[{self.phase}] All player-weeks projected — no silently-dropped weeks.")
+            return
+        by_reason: Dict[str, int] = {}
+        for s in self.skips:
+            by_reason[s["reason"]] = by_reason.get(s["reason"], 0) + 1
+        players = {s["player_id"] for s in self.skips}
+        bar = "!" * 74
+        print(f"\n{bar}")
+        print(f"!! {self.phase}: {len(self.skips)} PLAYER-WEEK(S) SKIPPED "
+              f"across {len(players)} player(s)")
+        print(f"!! These weeks are absent from every season total below, so a player's")
+        print(f"!! real+synthetic week count will NOT sum to their schedule. Do not read")
+        print(f"!! 'zero synthetic weeks' as 'played every week' without checking here.")
+        for reason, n in sorted(by_reason.items(), key=lambda kv: -kv[1]):
+            print(f"!!   {reason}: {n}")
+        print(bar)
+        if output_path is not None:
+            import json
+            sidecar = Path(str(output_path) + ".weekskips.json")
+            try:
+                sidecar.parent.mkdir(parents=True, exist_ok=True)
+                sidecar.write_text(json.dumps(self.skips, indent=2))
+                print(f"!! Recorded to {sidecar}")
+            except Exception as e:  # never let reporting break a completed run
+                logger.warning("Could not write week-skip sidecar: %s", e)
+
+
 def compute_player_week_predictions(
     player_id: str,
     g_by_week: Dict[int, pd.DataFrame],
     real_weeks: set,
-    team: str,
+    team_by_week: Dict[int, str],
     possible_weeks: List[int],
     model,
     feature_cols: List[str],
@@ -302,6 +412,8 @@ def compute_player_week_predictions(
     feature_engineer,
     season: int,
     exclude_pbp_confirmed_zeros: bool = False,
+    capture_rows: bool = False,
+    skip_tracker: Optional["WeekSkipTracker"] = None,
 ) -> List[dict]:
     """Per-week prediction list for one player's season -- the shared core
     reused by both `run_season_projection` (Phase 7, deterministic point
@@ -312,6 +424,14 @@ def compute_player_week_predictions(
     One dict per week actually predicted (weeks where prediction fails are
     silently skipped, matching the prior inline behavior): {week, is_real,
     data_source, actual_value (only set when is_real), point_prediction}.
+
+    `capture_rows` additionally attaches the exact feature row the model was
+    handed under "feature_row" -- for diagnostics that need to compare real
+    against synthetic feature construction without re-deriving this logic.
+
+    `team_by_week` is per week rather than one team for the season, so a
+    player traded mid-season is projected against the schedule they were
+    actually on -- build it with `possible_weeks_for_player`.
     """
     has_data_source = "data_source" in next(iter(g_by_week.values())).columns if g_by_week else False
     out: List[dict] = []
@@ -328,9 +448,13 @@ def compute_player_week_predictions(
             actual_value = float(g_by_week[week]["fantasy_points"].iloc[0])
         else:
             synth = build_synthetic_week_row(
-                full_history, player_id, season, week, team, db, feature_engineer,
+                full_history, player_id, season, week, team_by_week[week],
+                db, feature_engineer,
             )
             if synth is None:
+                if skip_tracker is not None:
+                    skip_tracker.record(player_id, season, week,
+                                        WeekSkipTracker.NO_PRIOR_HISTORY)
                 continue
             missing = [c for c in feature_cols if c not in synth.columns]
             for c in missing:
@@ -341,14 +465,20 @@ def compute_player_week_predictions(
             pred = float(model.predict(row)[0])
         except Exception as e:
             logger.warning("Predict failed for %s week %s: %s", player_id, week, e)
+            if skip_tracker is not None:
+                skip_tracker.record(player_id, season, week,
+                                    WeekSkipTracker.PREDICT_FAILED, error=e)
             continue
-        out.append({
+        record = {
             "week": week,
             "is_real": treat_as_real,
             "data_source": data_source if treat_as_real else None,
             "actual_value": actual_value,
             "point_prediction": pred,
-        })
+        }
+        if capture_rows:
+            record["feature_row"] = row.iloc[0].copy()
+        out.append(record)
     return out
 
 
@@ -386,8 +516,6 @@ def run_season_projection(
     those weeks instead. Off by default; mirrors the Population B-vs-C
     comparison used when the panel itself was validated.
     """
-    from pathlib import Path
-
     from config.settings import CAUSAL_FEATURES, POSITIONS
     from src.features.feature_engineering import PositionFeatureEngineer
     from src.models.single_week_ppr.evaluate import (
@@ -406,6 +534,7 @@ def run_season_projection(
     db = DatabaseManager()
 
     tracker = FoldFailureTracker("Phase 7 (season projection)")
+    week_skips = WeekSkipTracker("Phase 7 (season projection)")
     for position in positions:
         cfg = FINAL_CONFIG[position]
         feature_engineer = PositionFeatureEngineer(position)
@@ -462,17 +591,18 @@ def run_season_projection(
                     continue
                 g_by_week = {int(w): sub for w, sub in g.groupby(g["week"].astype(int))}
                 real_weeks = set(g_by_week.keys())
-                team = g.sort_values("week")["team"].iloc[0]  # first real game's team this season
-                possible_weeks = possible_weeks_for_team(db, team, season)
+                real_team_by_week = {int(w): sub["team"].iloc[0] for w, sub in g_by_week.items()}
+                possible_weeks, team_by_week = possible_weeks_for_player(
+                    db, real_team_by_week, season)
                 if not possible_weeks:
                     continue
 
                 availability_rate = estimate_availability_rate(player_id, position, season, db)
 
                 week_predictions = compute_player_week_predictions(
-                    player_id, g_by_week, real_weeks, team, possible_weeks, model,
+                    player_id, g_by_week, real_weeks, team_by_week, possible_weeks, model,
                     feature_cols, full_history, db, feature_engineer, season,
-                    exclude_pbp_confirmed_zeros,
+                    exclude_pbp_confirmed_zeros, skip_tracker=week_skips,
                 )
 
                 predicted_total = 0.0
@@ -517,4 +647,5 @@ def run_season_projection(
     result = pd.DataFrame(all_rows)
     print(f"\n{len(result)} rows appended to {output_path}")
     tracker.report(output_path)
+    week_skips.report(output_path)
     return result

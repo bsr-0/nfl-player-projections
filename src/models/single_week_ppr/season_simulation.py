@@ -186,8 +186,8 @@ def run_season_simulation(
     )
     from src.models.single_week_ppr.final_config import FINAL_CONFIG
     from src.models.single_week_ppr.season_projection import (
-        possible_weeks_for_team, estimate_availability_rate, compute_player_week_predictions,
-        REGULAR_SEASON_MAX_WEEK,
+        possible_weeks_for_player, estimate_availability_rate, compute_player_week_predictions,
+        REGULAR_SEASON_MAX_WEEK, WeekSkipTracker,
     )
     from src.models.single_week_ppr.windows import window_to_season_list
     from src.utils.database import DatabaseManager
@@ -205,6 +205,7 @@ def run_season_simulation(
     rng = np.random.default_rng(seed)
 
     tracker = FoldFailureTracker("Phase 9 (season simulation)")
+    week_skips = WeekSkipTracker("Phase 9 (season simulation)")
     for position in positions:
         cfg = FINAL_CONFIG[position]
         feature_engineer = PositionFeatureEngineer(position)
@@ -260,16 +261,18 @@ def run_season_simulation(
                     continue
                 g_by_week = {int(w): sub for w, sub in g.groupby(g["week"].astype(int))}
                 real_weeks = set(g_by_week.keys())
-                team = g.sort_values("week")["team"].iloc[0]
-                possible_weeks = possible_weeks_for_team(db, team, season)
+                real_team_by_week = {int(w): sub["team"].iloc[0] for w, sub in g_by_week.items()}
+                possible_weeks, team_by_week = possible_weeks_for_player(
+                    db, real_team_by_week, season)
                 if not possible_weeks:
                     continue
 
                 availability_rate = estimate_availability_rate(player_id, position, season, db)
 
                 week_predictions = compute_player_week_predictions(
-                    player_id, g_by_week, real_weeks, team, possible_weeks, model,
+                    player_id, g_by_week, real_weeks, team_by_week, possible_weeks, model,
                     feature_cols, full_history, db, feature_engineer, season,
+                    skip_tracker=week_skips,
                 )
                 if not week_predictions:
                     continue
@@ -300,4 +303,5 @@ def run_season_simulation(
     result = pd.DataFrame(all_rows)
     print(f"\n{len(result)} rows appended to {output_path}")
     tracker.report(output_path)
+    week_skips.report(output_path)
     return result

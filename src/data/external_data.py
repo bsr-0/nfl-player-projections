@@ -45,6 +45,28 @@ from src.utils.database import DatabaseManager
 from src.data.entity_resolver import resolver
 
 
+# Season data is immutable within a process, but the synthetic-week path
+# calls add_external_features once per player-week on a single-row frame --
+# which re-downloaded the same schedules three times and the same injury
+# report once, ~3s of the 8.2s per call. Memoize at the nfl_data_py boundary
+# so every loader shares one fetch per season set.
+_SEASON_IMPORT_CACHE: Dict[Tuple[str, Tuple[int, ...]], pd.DataFrame] = {}
+
+
+def _cached_import(kind: str, seasons: List[int], fetch) -> pd.DataFrame:
+    key = (kind, tuple(sorted(seasons)))
+    if key not in _SEASON_IMPORT_CACHE:
+        _SEASON_IMPORT_CACHE[key] = fetch()
+    # Callers mutate what they get back, so hand out copies.
+    return _SEASON_IMPORT_CACHE[key].copy()
+
+
+def clear_season_import_cache() -> None:
+    """Drop memoized nfl_data_py fetches (tests, or a long-lived process
+    that needs to pick up revised data mid-run)."""
+    _SEASON_IMPORT_CACHE.clear()
+
+
 # =============================================================================
 # INJURY STATUS INTEGRATION
 # =============================================================================
@@ -74,9 +96,6 @@ class InjuryDataLoader:
         '': 1.0,
     }
     
-    def __init__(self):
-        self.cache = {}
-
     def load_injuries(self, seasons: List[int]) -> pd.DataFrame:
         """Load injury data for specified seasons."""
         print(f"Loading injury data for seasons: {seasons}")
@@ -84,7 +103,8 @@ class InjuryDataLoader:
         all_injuries = []
         for season in seasons:
             try:
-                season_injuries = nfl.import_injuries([season])
+                season_injuries = _cached_import(
+                    "injuries", [season], lambda s=season: nfl.import_injuries([s]))
                 if not season_injuries.empty:
                     all_injuries.append(season_injuries)
             except Exception as e:
@@ -109,7 +129,7 @@ class InjuryDataLoader:
         scheduling timezone), converted to UTC to match date_modified.
         """
         try:
-            schedules = nfl.import_schedules(seasons)
+            schedules = _cached_import("schedules", seasons, lambda: nfl.import_schedules(seasons))
         except Exception as e:
             print(f"  Warning: could not load schedules for kickoff-time check: {e}")
             return pd.DataFrame(columns=['season', 'week', 'team', 'kickoff'])
@@ -208,6 +228,12 @@ class InjuryDataLoader:
 # DEFENSE RANKINGS INTEGRATION
 # =============================================================================
 
+# A cross-sectional rank needs a league to rank against. Below this many
+# distinct opponents in the frame, ranking is meaningless and we fall back
+# to neutral defaults (flagged via defense_data_available=0).
+MIN_DEFENSES_FOR_RANKING = 8
+
+
 class DefenseRankingsLoader:
     """
     Calculate and load defense-vs-position rankings.
@@ -230,9 +256,22 @@ class DefenseRankingsLoader:
         """
         if df.empty:
             return pd.DataFrame()
-        
+
+        # Rankings are a cross-sectional statistic: they rank each defense
+        # against the rest of the league in the same week. A frame covering
+        # one or two teams cannot support that -- the synthetic-week path
+        # calls this on a SINGLE row, which used to print "Calculated
+        # rankings for 1 teams" and then quietly resolve to defaults anyway.
+        # Say so once and skip the work rather than computing a ranking of
+        # one team against itself.
+        n_defenses = df['opponent'].nunique() if 'opponent' in df.columns else 0
+        if n_defenses < MIN_DEFENSES_FOR_RANKING:
+            print(f"  Skipping defense rankings: {n_defenses} opponent(s) in frame, "
+                  f"need >= {MIN_DEFENSES_FOR_RANKING} for a cross-sectional rank")
+            return pd.DataFrame()
+
         print("Calculating defense-vs-position rankings...")
-        
+
         # Calculate points allowed by each defense to each position
         defense_allowed = df.groupby(
             ['opponent', 'season', 'week', 'position']
@@ -304,9 +343,18 @@ class DefenseRankingsLoader:
             return df
         result = df.copy()
 
+        # The synthetic-week path carries forward an already-enriched row and
+        # re-runs this, so the rename below would collide with the previous
+        # pass's columns and leave duplicate labels behind. Recomputing from
+        # scratch is the intent -- drop the stale ones first.
+        result = result.drop(
+            columns=[c for c in ('opp_defense_rank', 'opp_matchup_score',
+                                 'opp_pts_allowed', 'defense_data_available')
+                     if c in result.columns])
+
         # Calculate defense rankings
         defense_rankings = self.calculate_defense_rankings(df)
-        
+
         if defense_rankings.empty:
             result['defense_data_available'] = 0
             result['opp_defense_rank'] = 16  # Average
@@ -391,7 +439,7 @@ class WeatherDataLoader:
         print(f"Loading weather data for seasons: {seasons}")
         
         try:
-            schedules = nfl.import_schedules(seasons)
+            schedules = _cached_import("schedules", seasons, lambda: nfl.import_schedules(seasons))
             try:
                 from src.utils.leakage import sanitize_schedule_df
                 schedules = sanitize_schedule_df(schedules)
@@ -599,7 +647,7 @@ class VegasLinesLoader:
 
         # Schedules have spread_line + total_line with full season coverage
         try:
-            schedules = nfl.import_schedules(seasons)
+            schedules = _cached_import("schedules", seasons, lambda: nfl.import_schedules(seasons))
             try:
                 from src.utils.leakage import sanitize_schedule_df
                 schedules = sanitize_schedule_df(schedules)
@@ -617,7 +665,7 @@ class VegasLinesLoader:
 
         # Fallback: sc_lines (spread only, no totals, limited seasons)
         try:
-            lines = nfl.import_sc_lines(seasons)
+            lines = _cached_import("sc_lines", seasons, lambda: nfl.import_sc_lines(seasons))
             if not lines.empty:
                 print(f"  Loaded {len(lines)} sc_line records (spread only)")
                 return lines
@@ -911,6 +959,9 @@ class ExternalDataIntegrator:
             result['opp_matchup_score'] = 0.5
             pos_defaults = {'QB': 18.0, 'RB': 12.0, 'WR': 12.0, 'TE': 10.0}
             result['opp_pts_allowed'] = result['position'].map(pos_defaults).fillna(12.0)
+            # These are constants, not looked-up values -- say so, or a
+            # carried-forward flag keeps claiming real data.
+            result['defense_data_available'] = 0
         
         # 3. Add weather features
         print("\n3. Weather Data...")
