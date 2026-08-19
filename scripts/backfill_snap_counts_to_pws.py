@@ -1,17 +1,41 @@
 #!/usr/bin/env python3
-"""
-Backfill snap_count and team_snaps into player_weekly_stats from the
-snap_counts table.  The two tables use different player ID systems
-(GSIS vs PFR), so we match on name + team + season + week.
+"""Align player_weekly_stats' snap columns with the authoritative snap_counts.
+
+`snap_counts` is the source of truth for participation; the snap columns on
+`player_weekly_stats` are a derived convenience copy. They had drifted badly
+(GAPS.md 2026-08-19 audit): 38,178 rows asserted zero snaps for players the
+source shows on the field, and 2006-2017 read 100% zero because this
+propagation had never run below 2018.
+
+Two defects in the previous version, both fixed here:
+
+1. It matched on normalised NAME. 6,435 pre-2018 rows have a blank
+   `players.name`, and `_normalize_name` read the last token as the surname
+   ("Odell Beckham Jr." -> "O.Jr."), so the join failed silently and the row
+   kept its placeholder 0. Now matched on player_id via the PFR->GSIS map,
+   which lifts the pre-2018 match rate from 74.5% to 92.8%.
+2. It built its lookup with `WHERE offense_snaps > 0`, excluding zero-snap
+   rows, so a failed match and a real zero were indistinguishable. Zero rows
+   are now loaded, which is what makes the three-way rule below possible.
+
+THE THREE-WAY RULE -- the point of this script:
+
+    source has a value        -> overwrite (it is authoritative)
+    source silent, pws is 0   -> write NULL (0 was never a measurement)
+    source silent, pws is > 0 -> LEAVE ALONE
+
+That last case matters: 1,831 rows (all 2018+) hold a positive snap count
+with no id-match, because the PFR->GSIS map covers ~81% of ids. Blindly
+NULLing "absent" would destroy real data this script cannot regenerate.
 
 Usage:
-    python scripts/backfill_snap_counts_to_pws.py
     python scripts/backfill_snap_counts_to_pws.py --dry-run
-    python scripts/backfill_snap_counts_to_pws.py --min-season 2013
+    python scripts/backfill_snap_counts_to_pws.py
+    python scripts/backfill_snap_counts_to_pws.py --seasons 2013 2025
 """
-
 from __future__ import annotations
 
+import argparse
 import sqlite3
 import sys
 from pathlib import Path
@@ -19,148 +43,130 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-DB_PATH = PROJECT_ROOT / "data" / "nfl_data.db"
+import pandas as pd
 
-# Positions we care about in player_weekly_stats
-SKILL_POSITIONS = {"QB", "RB", "WR", "TE", "FB"}
-
-
-def _normalize_name(full_name: str) -> str:
-    """Convert 'Josh Allen' -> 'J.Allen' to match pws format."""
-    parts = full_name.strip().split()
-    if len(parts) < 2:
-        return full_name
-    first_initial = parts[0][0]
-    last = parts[-1]
-    return f"{first_initial}.{last}"
+TEAM_ALIASES = {"OAK": "LV", "SD": "LAC", "STL": "LA", "LAR": "LA", "JAC": "JAX"}
 
 
-def _team_alias(team: str) -> str:
-    """Normalize team codes to match pws conventions."""
-    aliases = {
-        "OAK": "LV", "SD": "LAC", "STL": "LA", "LAR": "LA",
-        "JAC": "JAX",
-    }
-    return aliases.get(team, team)
+def _team_alias(s: pd.Series) -> pd.Series:
+    return s.replace(TEAM_ALIASES)
 
 
-# Floor for rows this script will touch. NOT simply SNAP_COUNT_MIN_SEASON:
-# snap_counts now reaches 2013, but player_weekly_stats stores snap_count as
-# a hard 0 (not NULL) for 2006-2017, so lowering this would flip 2013-2017
-# from "asserted zero" to "real value" and make the feature mean different
-# things either side of the boundary. GAPS.md records that NaN-vs-0
-# representation as an open decision -- resolve it before lowering the
-# default. Overridable meanwhile: --min-season 2013.
-MIN_SEASON_DEFAULT = 2018
+def load_authoritative(conn, lo: int, hi: int):
+    """(per-player snaps, per-team play counts) from snap_counts.
+
+    Regular season only: player_weekly_stats is a REG-season table, and a
+    postseason row would otherwise collide on (player_id, season, week).
+    """
+    from src.data.nfl_data_loader import get_pfr_to_gsis_map
+    from src.data.pbp_stats_aggregator import compute_team_snaps
+
+    snaps = pd.read_sql(
+        "SELECT season, week, team, pfr_player_id, offense_snaps, offense_pct "
+        "FROM snap_counts WHERE game_type = 'REG' AND season BETWEEN ? AND ?",
+        conn, params=(lo, hi),
+    )
+    snaps["team"] = _team_alias(snaps["team"])
+
+    # Team play counts come from the FULL roster (linemen included), so they
+    # are computed before narrowing to skill positions -- via the same
+    # offense_pct-implied median the PBP ingest path uses, so both writers
+    # agree on what team_snaps means.
+    team_snaps = compute_team_snaps(snaps).rename(
+        columns={"team_snaps": "auth_team_snaps"})
+
+    skill = snaps[snaps["pfr_player_id"].notna()].copy()
+    skill["player_id"] = skill["pfr_player_id"].map(get_pfr_to_gsis_map())
+    skill = skill.dropna(subset=["player_id"])
+    per_player = (
+        skill.groupby(["player_id", "season", "week"], as_index=False)["offense_snaps"]
+        .max()
+        .rename(columns={"offense_snaps": "auth_snaps"})
+    )
+    return per_player, team_snaps
+
+
+def resolve(current: pd.Series, authoritative: pd.Series) -> pd.Series:
+    """The three-way rule. Returns a nullable Int64 column."""
+    current = pd.to_numeric(current, errors="coerce").astype("Int64")
+    authoritative = pd.to_numeric(authoritative, errors="coerce").astype("Int64")
+
+    resolved = authoritative.copy()
+    keep_existing = authoritative.isna() & current.notna() & (current > 0)
+    resolved[keep_existing] = current[keep_existing]
+    # Source silent and current is 0 (or already NULL) -> stays NA, i.e. the
+    # honest "we don't know" rather than a fabricated zero.
+    return resolved
 
 
 def main() -> int:
-    dry_run = "--dry-run" in sys.argv
-    min_season = MIN_SEASON_DEFAULT
-    if "--min-season" in sys.argv:
-        min_season = int(sys.argv[sys.argv.index("--min-season") + 1])
-    print(f"Updating player_weekly_stats rows from season {min_season} onward")
+    from config.settings import CURRENT_NFL_SEASON, DB_PATH
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--seasons", nargs=2, type=int, metavar=("LO", "HI"),
+                    default=[2013, CURRENT_NFL_SEASON])
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+    lo, hi = sorted(args.seasons)
 
     conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
 
-    # Step 1: Compute team total offense snaps per game from snap_counts
-    print("Computing team total snaps per game...")
-    cur.execute("""
-        SELECT season, week, team, MAX(offense_snaps) as team_snaps
-        FROM snap_counts
-        WHERE offense_snaps > 0 AND position IN ('QB','RB','WR','TE','FB','T','G','C','OL')
-        GROUP BY season, week, team
-    """)
-    team_snaps_map = {}
-    for row in cur.fetchall():
-        team = _team_alias(row["team"])
-        key = (row["season"], row["week"], team)
-        team_snaps_map[key] = max(team_snaps_map.get(key, 0), row["team_snaps"])
+    per_player, team_snaps = load_authoritative(conn, lo, hi)
+    print(f"authoritative: {len(per_player):,} player-weeks, "
+          f"{len(team_snaps):,} team-weeks")
 
-    print(f"  {len(team_snaps_map)} team-game entries")
+    pws = pd.read_sql(
+        "SELECT rowid AS _rowid, player_id, season, week, team, snap_count, "
+        "team_snaps FROM player_weekly_stats WHERE season BETWEEN ? AND ?",
+        conn, params=(lo, hi),
+    )
+    pws["team"] = _team_alias(pws["team"])
+    print(f"player_weekly_stats rows in range: {len(pws):,}")
 
-    # Step 2: Get player snap counts (skill positions only)
-    print("Loading player snap counts...")
-    cur.execute("""
-        SELECT season, week, player, team, position, offense_snaps
-        FROM snap_counts
-        WHERE offense_snaps > 0 AND position IN ('QB','RB','WR','TE','FB')
-    """)
-    snap_rows = cur.fetchall()
-    print(f"  {len(snap_rows)} skill-position snap entries")
+    merged = (
+        pws.merge(per_player, on=["player_id", "season", "week"], how="left")
+           .merge(team_snaps, on=["season", "week", "team"], how="left")
+    )
+    new_snaps = resolve(merged["snap_count"], merged["auth_snaps"])
+    new_team = resolve(merged["team_snaps"], merged["auth_team_snaps"])
+    # A share is only meaningful when both sides are known.
+    new_share = (new_snaps / new_team).where(new_team > 0)
 
-    # Step 3: Build lookup from normalized name + team + season + week
-    snap_lookup = {}
-    for row in snap_rows:
-        norm = _normalize_name(row["player"])
-        team = _team_alias(row["team"])
-        key = (norm, team, row["season"], row["week"])
-        # Keep the higher snap count if duplicates
-        if key not in snap_lookup or row["offense_snaps"] > snap_lookup[key]:
-            snap_lookup[key] = row["offense_snaps"]
+    old = pd.to_numeric(merged["snap_count"], errors="coerce").astype("Int64")
+    changed = new_snaps.fillna(-1) != old.fillna(-1)
+    print(f"\nsnap_count changes: {int(changed.sum()):,}")
+    print(f"  0 -> real value : {int((changed & (old == 0) & new_snaps.notna()).sum()):,}")
+    print(f"  0 -> NULL       : {int((changed & (old == 0) & new_snaps.isna()).sum()):,}")
+    print(f"  corrected >0    : {int((changed & (old > 0) & new_snaps.notna()).sum()):,}")
+    print(f"  preserved >0 (no source match): "
+          f"{int(((old > 0) & merged['auth_snaps'].isna()).sum()):,}")
+    print(f"team_snaps unknown after: {int(new_team.isna().sum()):,}")
 
-    print(f"  {len(snap_lookup)} unique player-game snap entries")
-
-    # Step 4: Load pws rows that need updating (snap_count = 0)
-    print("Loading player_weekly_stats rows to update...")
-    cur.execute("""
-        SELECT p.name, pws.player_id, pws.team, pws.season, pws.week
-        FROM player_weekly_stats pws
-        JOIN players p ON pws.player_id = p.player_id
-        WHERE pws.season >= ? AND pws.snap_count = 0
-    """, (min_season,))
-    pws_rows = cur.fetchall()
-    print(f"  {len(pws_rows)} pws rows to check")
-
-    # Step 5: Match and update
-    matched = 0
-    updates = []
-    for row in pws_rows:
-        name = row["name"]
-        team = _team_alias(row["team"])
-        season = row["season"]
-        week = row["week"]
-        key = (name, team, season, week)
-
-        if key in snap_lookup:
-            offense_snaps = snap_lookup[key]
-            ts_key = (season, week, team)
-            team_total = team_snaps_map.get(ts_key, 0)
-            updates.append((offense_snaps, team_total, row["player_id"], season, week))
-            matched += 1
-
-    print(f"  Matched {matched} of {len(pws_rows)} rows ({matched/max(len(pws_rows),1)*100:.1f}%)")
-
-    if dry_run:
+    if args.dry_run:
         print("\n--dry-run: no writes.")
         return 0
 
-    # Batch update
-    print("Writing updates...")
-    cur.executemany("""
-        UPDATE player_weekly_stats
-        SET snap_count = ?, team_snaps = ?
-        WHERE player_id = ? AND season = ? AND week = ?
-    """, updates)
+    payload = [
+        (None if pd.isna(s) else int(s),
+         None if pd.isna(t) else int(t),
+         None if pd.isna(sh) else float(sh),
+         int(r))
+        for s, t, sh, r in zip(new_snaps, new_team, new_share, merged["_rowid"])
+    ]
+    conn.executemany(
+        "UPDATE player_weekly_stats SET snap_count = ?, team_snaps = ?, "
+        "snap_share = ? WHERE rowid = ?", payload)
     conn.commit()
-    print(f"  Updated {cur.rowcount} rows")
+    print(f"\nwrote {len(payload):,} rows")
 
-    # Verification
-    cur.execute("""
-        SELECT season,
-               SUM(CASE WHEN snap_count > 0 THEN 1 ELSE 0 END) as nonzero,
-               COUNT(*) as total
-        FROM player_weekly_stats
-        WHERE season >= ?
-        GROUP BY season ORDER BY season
-    """, (min_season,))
-    print("\nVerification:")
-    for row in cur.fetchall():
-        pct = row["nonzero"] / row["total"] * 100
-        print(f"  {row['season']}: {row['nonzero']}/{row['total']} ({pct:.0f}%) have snap counts")
-
+    print(pd.read_sql(
+        """SELECT season, COUNT(*) rows,
+                  SUM(snap_count IS NULL) unknown,
+                  SUM(snap_count = 0) confirmed_zero,
+                  SUM(snap_count > 0) positive
+           FROM player_weekly_stats WHERE season BETWEEN ? AND ?
+           GROUP BY season ORDER BY season""",
+        conn, params=(lo, hi)).to_string(index=False))
     conn.close()
     return 0
 

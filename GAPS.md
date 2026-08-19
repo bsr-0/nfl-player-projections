@@ -6997,3 +6997,67 @@ collapses unknown into 0:
 carry it** -- the aggregator would erase it on the next write. Schema and
 feature logic must change before any backfill, per the checklist. Not
 started; awaiting the representation decision.
+
+## RESOLVED: snap columns aligned to snap_counts, 0-vs-NULL made explicit (2026-08-19)
+
+Acts on the audit above. Two changes, in this order, because the write path
+had to stop erasing NULLs before any of them could survive a rebuild.
+
+### 1. `fillna(0)` removed from the write path
+
+`pbp_stats_aggregator` fillna(0)'d `snap_count` and `team_snaps` on every
+write, so "no snap record" and "took zero snaps" became the same stored
+value. Both are now the nullable `Int64` dtype and keep NA through to
+SQLite. `snap_share` is NULL when either side is unknown and 0.0 only when a
+known-zero player has a known team total. `compute_team_snaps` no longer
+floors a team-week to 0, a value that cannot occur.
+
+### 2. `player_weekly_stats` aligned to the authoritative table
+
+`backfill_snap_counts_to_pws.py` rewritten. It had matched on normalised
+NAME -- failing on 6,435 blank-name rows and mangling suffixes -- and built
+its lookup with `WHERE offense_snaps > 0`, which made a failed match
+indistinguishable from a real zero. Now keyed on player_id via PFR->GSIS
+(74.5% -> 92.8% pre-2018 match) with zero-snap rows loaded, under an
+explicit three-way rule:
+
+| source | pws | result |
+|---|---|---|
+| has a value | anything | overwrite (authoritative) |
+| silent | 0 | **NULL** -- 0 was never a measurement |
+| silent | > 0 | **leave alone** |
+
+The third case is load-bearing: 1,831 rows (all 2018+) hold a positive count
+with no id-match, because the PFR->GSIS map covers ~81% of ids. Blindly
+NULLing "absent" would have destroyed real data this script cannot
+regenerate.
+
+**Result across 82,508 rows (2013-2025):** 38,265 placeholder zeros replaced
+with real counts, 1,783 zeros correctly became NULL, 29 wrong positives
+corrected, 1,831 preserved.
+
+`snap_share` is now continuous across the old boundary -- mean 0.525 / 0.520
+/ 0.524 / 0.518 / 0.515 for 2013-2017 against 0.516 / 0.521 / 0.499 ... for
+2018+, where every pre-2018 season previously read exactly 0. Zero snap
+invariant violations, no `snap_count > team_snaps`, and no row where one of
+`snap_count`/`snap_share` is NULL while the other is not. The quality gate
+"snap_count is zero for every row -- snap data ingestion has failed", which
+2015 would have tripped, now passes.
+
+### Observed in passing, not chased
+
+2013 holds ~880 more `nflverse_stats` rows than 2014-2018 (5,981 vs ~5,100),
+which is why it shows 777 unknown / 517 confirmed-zero snap rows against
+~230 / <10 elsewhere. Pre-existing ingestion difference, untouched by this
+work.
+
+### Still 0-imputed on the READ side (deliberately not changed)
+
+These do not destroy stored data, but they do hand a model a fabricated 0
+where the DB now correctly says NULL. `snap_count`/`snap_share`/
+`snap_share_roll3` are trained features, so changing them alters model
+inputs and wants its own decision:
+
+- `preseason_features.py:58` -- `COALESCE(us.snap_share, 0)`
+- `utilization.py:465` -- `snap_share = snaps / team_snaps if team_snaps > 0 else 0`
+- `feature_engineering.py:1514` -- `snap_share_accel ... .fillna(0)`
