@@ -6493,3 +6493,77 @@ column; the next run picks it up.
 Also confirmed NOT a bug during the same sweep: negative `actual_season_total`
 (11 player-seasons, min -2.1). Legitimate PPR scoring for QBs with very few
 games played.
+
+
+## Synthetic weeks were generated for players who could not have played (fixed 2026-08-18)
+
+`before_first_real` synthetic weeks -- those falling before a player's first
+appearance -- were 46.5% of synthetic weeks and 51% of manufactured points
+in the 75-100%-synthetic bucket. A roster audit
+(`scripts/audit_before_first_real.py`) classified all 644 of them against
+`weekly_rosters`, `depth_charts` and `snap_counts`:
+
+| category | weeks | % pts |
+|---|---|---|
+| on roster, listed backup | 209 | 39.9 |
+| on roster, declared inactive | 124 | 19.0 |
+| on roster, role unknown (2025, no depth chart) | 123 | 14.1 |
+| not yet in league / pre-acquisition | 34 | 9.1 |
+| practice squad | 101 | 8.9 |
+| reserve / waived / retired | 39 | 7.7 |
+| not on a roster that week | 13 | 1.1 |
+| **on roster, listed starter** | **1** | **0.3** |
+
+45.7% of manufactured points came from players not on an active roster at
+all. Marcus Mariota was projected at ~15/wk for 12 weeks as QB2 behind a
+healthy starter; Kyler Murray at ~15/wk while rehabbing an ACL; a retired
+Philip Rivers got 13 weeks before his week-15 2025 comeback. All 8
+no-roster-row players were verified genuinely absent (appearing on rosters
+only in later weeks) -- not join failures. Zero synthetic weeks had
+offensive snaps, so the week definition itself was sound.
+
+**Fix**: `possible_weeks_for_player` now filters synthetic candidate weeks
+to weeks the player was on an ACTIVE roster (`weekly_rosters.status='ACT'`;
+INA/DEV/RES/CUT/RET all mean he could not take the field). Gated on
+eligibility, NOT on being the starter -- a rostered backup stays in the
+forecast population, since filtering to known starters would leak the
+outcome into the population definition. Weeks he actually played are always
+retained regardless of roster status. Seasons with no roster coverage fall
+back to permitting rather than silently dropping everything
+(`active_roster_weeks` returns None).
+
+**Observability**: `WeekSkipTracker` gained a funnel --
+candidate_weeks -> roster_eligible -> row_constructed -> predicted -- so no
+stage can vanish into a `continue`. QB 2023-25: 1988 -> 1117 -> 1086 -> 1086.
+
+**Effect on the pre-registered experiment** (same folds, estimators,
+buckets, metrics; only the population changed). 42% of synthetic weeks and
+51% of manufactured points removed:
+
+| estimator | span old->new | MAE old->new | bias old->new |
+|---|---|---|---|
+| prior_season_only | 80.9 -> 45.7 | 42.5 -> 29.4 | +26.2 -> +7.6 |
+| shrinkage_blend | 69.9 -> 36.1 | 35.9 -> 26.6 | +19.2 -> +4.3 |
+| current_season_only | 62.3 -> 31.6 | 32.4 -> 25.1 | +14.3 -> +1.9 |
+
+**Conclusions unchanged**: the MAE ranking of the five estimators is
+identical (current_season_only < shrinkage < simple < recency <
+prior_season_only), the gradient survives, and the best constant rate
+(r=0, MAE 20.8) still beats the best adaptive estimator (25.1) -- so the
+availability-weighting hypothesis is retired on a clean population, not a
+contaminated one. One real change: the max bucket-to-bucket step now varies
+14.2-21.2 across estimators (spread 7.0) where it was 40.0-41.7 (spread
+1.4), so the formulation does matter more than it appeared -- just not
+enough to be the mechanism.
+
+**Caveat**: bucket membership is not comparable across the two runs. The
+filter shrinks `possible_weeks`, so the 0%-synthetic bucket grew from 39 to
+94 player-seasons (players whose synthetic weeks were ALL ineligible). Any
+old-vs-new bucket comparison is partly recomposition. Likewise
+"truly ever-present" (games == possible) now means "played every week he was
+active", not "played all 17".
+
+15 tests in `tests/test_roster_eligibility.py` pin the contract: IR /
+practice squad / pre-acquisition produce no synthetic row, rostered backup
+and starter both do, played weeks always survive, uncovered seasons fall
+back to permitting, and the funnel counts every stage.

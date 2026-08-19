@@ -126,7 +126,8 @@ def main():
                 real_weeks = set(g_by_week.keys())
                 real_team_by_week = {int(w): sub["team"].iloc[0] for w, sub in g_by_week.items()}
                 possible, team_by_week = possible_weeks_for_player(
-                    db, real_team_by_week, season)
+                    db, real_team_by_week, season, player_id=player_id,
+                    skip_tracker=week_skips)
                 if not possible:
                     continue
 

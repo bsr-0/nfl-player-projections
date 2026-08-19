@@ -60,10 +60,80 @@ def possible_weeks_for_team(db, team: str, season: int) -> List[int]:
     return weeks
 
 
+_ACTIVE_ROSTER_CACHE: Dict[Tuple[str, int], set] = {}
+_ROSTER_SEASON_COVERED: Dict[int, bool] = {}
+
+
+def _season_has_roster_data(season: int) -> bool:
+    """Does weekly_rosters cover this season at all? Distinguishes 'this
+    player wasn't rostered' from 'we have no roster data to check'."""
+    if season not in _ROSTER_SEASON_COVERED:
+        import sqlite3
+        from config.settings import DB_PATH
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM weekly_rosters WHERE season = ? AND game_type = 'REG'",
+                [season]).fetchone()[0]
+        finally:
+            conn.close()
+        _ROSTER_SEASON_COVERED[season] = n > 0
+    return _ROSTER_SEASON_COVERED[season]
+
+
+def active_roster_weeks(player_id: str, season: int) -> Optional[set]:
+    """Regular-season weeks this player was on an ACTIVE roster.
+
+    Returns None when the season has no roster coverage at all -- callers
+    must then fall back to permitting the week rather than silently
+    dropping every synthetic row.
+
+    Only status 'ACT' counts. 'INA' (declared inactive for that game), 'DEV'
+    (practice squad), 'RES' (IR/PUP/NFI), 'CUT' and 'RET' all mean the
+    player could not have taken the field, so "what would he have scored"
+    is not a question the data can answer.
+    """
+    if not _season_has_roster_data(season):
+        return None
+    key = (player_id, season)
+    if key not in _ACTIVE_ROSTER_CACHE:
+        import sqlite3
+        from config.settings import DB_PATH
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            rows = conn.execute(
+                """SELECT DISTINCT week FROM weekly_rosters
+                   WHERE player_id = ? AND season = ? AND game_type = 'REG'
+                     AND status = 'ACT'""", [player_id, season]).fetchall()
+        finally:
+            conn.close()
+        _ACTIVE_ROSTER_CACHE[key] = {int(r[0]) for r in rows}
+    return _ACTIVE_ROSTER_CACHE[key]
+
+
 def possible_weeks_for_player(
     db, real_team_by_week: Dict[int, str], season: int,
+    player_id: Optional[str] = None,
+    skip_tracker: Optional["WeekSkipTracker"] = None,
+    require_active_roster: bool = True,
 ) -> Tuple[List[int], Dict[int, str]]:
     """Weeks the player could have played, resolving their team PER WEEK.
+
+    Synthetic candidate weeks are additionally filtered to weeks the player
+    was on an ACTIVE roster. A roster audit of 644 pre-debut synthetic QB
+    weeks found exactly ONE where the player was a listed starter; 45.7% of
+    the manufactured fantasy points came from players who were on IR, on the
+    practice squad, declared inactive, or not in the league at all --
+    Marcus Mariota projected at ~15/wk for 12 weeks as QB2 behind a healthy
+    starter, Kyler Murray at ~15/wk while rehabbing an ACL, and a retired
+    Philip Rivers given 13 weeks before his week-15 2025 comeback
+    (GAPS.md).
+
+    Deliberately gated on ACTIVE ROSTER, not on being the starter. A
+    rostered backup is a legitimate member of the forecast population --
+    that he is a backup is for the model's features to express, not for the
+    population definition to assume. Filtering to known starters would leak
+    the outcome into the population.
 
     Callers used to pin the whole season to `g.sort_values("week")["team"]
     .iloc[0]` -- the player's first team. After a mid-season trade that
@@ -78,7 +148,8 @@ def possible_weeks_for_player(
     they ever appeared.
 
     Returns (playable weeks, week -> team) where a week is playable if the
-    team the player was on THAT week has a game.
+    team the player was on THAT week has a game and -- for weeks he did not
+    play -- he was on that team's active roster.
     """
     if not real_team_by_week:
         return [], {}
@@ -93,16 +164,35 @@ def possible_weeks_for_player(
             schedule_cache[team] = possible_weeks_for_team(db, team, season)
         return schedule_cache[team]
 
+    active = (active_roster_weeks(player_id, season)
+              if require_active_roster and player_id is not None else None)
+
     weeks: List[int] = []
     team_by_week: Dict[int, str] = {}
     for week in range(1, REGULAR_SEASON_MAX_WEEK + 1):
         prior = [w for w in known_weeks if w <= week]
         team = real_team_by_week[prior[-1]] if prior else first_team
         team_by_week[week] = team
+
         # A week the player actually played is playable by definition, even
         # if the schedule lookup disagrees -- the game demonstrably happened.
-        if week in real_team_by_week or week in team_weeks(team):
+        if week in real_team_by_week:
             weeks.append(week)
+            continue
+        if week not in team_weeks(team):
+            continue  # bye or no game: never a candidate
+
+        # Synthetic candidate: the team played and he didn't.
+        if skip_tracker is not None:
+            skip_tracker.count("candidate_weeks")
+        if active is not None and week not in active:
+            if skip_tracker is not None:
+                skip_tracker.record(player_id, season, week,
+                                    WeekSkipTracker.ROSTER_INELIGIBLE)
+            continue
+        if skip_tracker is not None:
+            skip_tracker.count("roster_eligible")
+        weeks.append(week)
     return weeks, team_by_week
 
 
@@ -356,10 +446,23 @@ class WeekSkipTracker:
 
     NO_PRIOR_HISTORY = "no_prior_history"
     PREDICT_FAILED = "predict_failed"
+    ROSTER_INELIGIBLE = "roster_ineligible"
+
+    # The synthetic-week funnel, so every stage is countable rather than
+    # disappearing into a `continue`:
+    #   candidate_weeks  team played, player didn't -- a week we COULD synthesize
+    #   roster_eligible  ...and he was on the active roster that week
+    #   row_constructed  ...and a synthetic feature row could be built
+    #   predicted        ...and the model returned a prediction
+    FUNNEL_STAGES = ("candidate_weeks", "roster_eligible", "row_constructed", "predicted")
 
     def __init__(self, phase: str):
         self.phase = phase
         self.skips: List[dict] = []
+        self.funnel: Dict[str, int] = {k: 0 for k in self.FUNNEL_STAGES}
+
+    def count(self, stage: str, n: int = 1) -> None:
+        self.funnel[stage] = self.funnel.get(stage, 0) + n
 
     def record(self, player_id: str, season: int, week: int, reason: str,
                error: Optional[Exception] = None, **extra) -> None:
@@ -370,7 +473,20 @@ class WeekSkipTracker:
             **extra,
         })
 
+    def report_funnel(self) -> None:
+        """Every synthetic-week stage, so a drop can never be invisible."""
+        if not any(self.funnel.values()):
+            return
+        print(f"\n[{self.phase}] synthetic-week funnel:")
+        prev = None
+        for stage in self.FUNNEL_STAGES:
+            n = self.funnel.get(stage, 0)
+            lost = "" if prev is None else f"   (-{prev - n})"
+            print(f"    {stage:16s} {n:6d}{lost}")
+            prev = n
+
     def report(self, output_path: Optional[Path] = None) -> None:
+        self.report_funnel()
         if not self.skips:
             print(f"\n[{self.phase}] All player-weeks projected — no silently-dropped weeks.")
             return
@@ -456,6 +572,8 @@ def compute_player_week_predictions(
                     skip_tracker.record(player_id, season, week,
                                         WeekSkipTracker.NO_PRIOR_HISTORY)
                 continue
+            if skip_tracker is not None:
+                skip_tracker.count("row_constructed")
             missing = [c for c in feature_cols if c not in synth.columns]
             for c in missing:
                 synth[c] = np.nan
@@ -478,6 +596,8 @@ def compute_player_week_predictions(
         }
         if capture_rows:
             record["feature_row"] = row.iloc[0].copy()
+        if skip_tracker is not None and not treat_as_real:
+            skip_tracker.count("predicted")
         out.append(record)
     return out
 
@@ -593,7 +713,8 @@ def run_season_projection(
                 real_weeks = set(g_by_week.keys())
                 real_team_by_week = {int(w): sub["team"].iloc[0] for w, sub in g_by_week.items()}
                 possible_weeks, team_by_week = possible_weeks_for_player(
-                    db, real_team_by_week, season)
+                    db, real_team_by_week, season, player_id=player_id,
+                    skip_tracker=week_skips)
                 if not possible_weeks:
                     continue
 
