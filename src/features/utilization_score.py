@@ -28,15 +28,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import UTILIZATION_WEIGHTS
 from src.utils.helpers import safe_divide
 
-# Experiment hook for the snap-missingness comparison (GAPS.md 2026-08-19).
-# DEFAULT REPRODUCES PRODUCTION EXACTLY -- "zero" routes through safe_divide,
-# which collapses an unknown snap share to 0.0, i.e. tells the model the
-# player took 0% of snaps. "preserve" keeps it NaN so the imputation variants
-# downstream can distinguish unknown from a measured zero.
+# "preserve" keeps an unknown snap share as NaN so the persisted imputation
+# below can fill it and snap_share_pct_roll3_known can flag it. "zero" is the
+# pre-2026-08-19 behaviour, retained for A/B and ablation reruns: it routes
+# through safe_divide, which collapses unknown to 0.0 -- telling the model
+# the player took 0% of snaps.
 #
-# Only ~1,079 rows differ (983 pre-2018, 96 after), but they are not random:
-# 77% sit in 2013-17. Flip via set_snap_missingness_mode(), not by editing.
-SNAP_MISSINGNESS_MODE = "zero"
+# Validated by a pre-registered A/B (GAPS.md): -0.163 MAE on the 1,518 rows
+# with incomplete snap history, +0.004 on the 20,279 complete ones. Flip via
+# set_snap_missingness_mode(), not by editing.
+SNAP_MISSINGNESS_MODE = "preserve"
 
 
 def set_snap_missingness_mode(mode: str) -> None:
@@ -90,6 +91,14 @@ def _bounds_str_to_key(s: str) -> Tuple[str, str]:
 SNAP_ROLL3_COL = "snap_share_pct_roll3_mean"
 SNAP_KNOWN_COL = "snap_share_pct_roll3_known"
 SNAP_IMPUTATION_FILENAME = "snap_imputation.json"
+
+# Columns whose NaN means "unknown" rather than "zero", and which must
+# therefore survive blanket fills. A zero here is a factual claim -- that the
+# player took no snaps, or that his team ran no plays -- and both are
+# distinguishable from missing data in the source table.
+MISSINGNESS_PRESERVED_COLS = frozenset({
+    "snap_count", "team_snaps", "snap_share", "snap_share_pct",
+})
 
 # Fallback keys, used when a fold's training data has no rows for a given
 # position/era combination.
@@ -344,8 +353,16 @@ class UtilizationScoreCalculator:
         for col in rolling_lag_cols:
             result[f'{col}_missing'] = result[col].isna().astype(np.int8)
 
-        # Fill any remaining NaN values in numeric columns
-        numeric_cols = result.select_dtypes(include=[np.number]).columns
+        # Fill any remaining NaN values in numeric columns, EXCEPT those whose
+        # NaN carries meaning. This method runs before feature engineering
+        # builds snap_share_pct_roll3_mean, so zeroing snap_share_pct here
+        # would erase the missingness before the rolling feature and its
+        # `known` indicator are derived from it -- the imputation artifact
+        # would then have nothing to fill and `known` would read 1.0
+        # everywhere. Caught by the end-to-end trace test; see
+        # tests/test_snap_missingness_end_to_end.py.
+        numeric_cols = [c for c in result.select_dtypes(include=[np.number]).columns
+                        if c not in MISSINGNESS_PRESERVED_COLS]
         result[numeric_cols] = result[numeric_cols].fillna(0)
         
         return result

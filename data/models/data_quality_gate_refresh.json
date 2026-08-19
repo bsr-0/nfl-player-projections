@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-10T15:32:27.270091+00:00",
+  "generated_at": "2026-08-19T18:21:12.822402+00:00",
   "status": "fail",
   "checks": {
     "freshness": {
@@ -72,6 +72,6 @@
   "latest_observed": {
     "season": 2025,
     "week": 22,
-    "rows": 110283
+    "rows": 123254
   }
 }
