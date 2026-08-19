@@ -74,7 +74,10 @@ def compute_team_snaps(snaps: pd.DataFrame) -> pd.DataFrame:
     team_snaps = max_snaps.merge(team_snaps, on=['season', 'week', 'team'], how='left')
     team_snaps['team_snaps'] = team_snaps['team_snaps'].fillna(team_snaps['team_snaps_max'])
     team_snaps = team_snaps.drop(columns=['team_snaps_max'])
-    team_snaps['team_snaps'] = team_snaps['team_snaps'].round().fillna(0).astype(int)
+    # Nullable: a team-week with no usable snap rows has an UNKNOWN play
+    # count, and 0 is never a true one -- every team runs plays. The old
+    # fillna(0) made that impossible value look measured.
+    team_snaps['team_snaps'] = team_snaps['team_snaps'].round().astype('Int64')
     return team_snaps
 
 
@@ -411,7 +414,9 @@ class PBPStatsAggregator:
             snap_pos['player_id'] = np.nan
 
         snap_pos['name'] = snap_pos['player']
-        snap_pos['snap_count'] = snap_pos['offense_snaps'].fillna(0).astype(int)
+        # A missing offense_snaps means the feed didn't record this player's
+        # participation, not that he took zero snaps -- keep it nullable.
+        snap_pos['snap_count'] = snap_pos['offense_snaps'].astype('Int64')
 
         # team_snaps = the team's actual offensive play count for that game.
         # Previously computed via groupby(...)['offense_snaps'].sum() --
@@ -430,7 +435,7 @@ class PBPStatsAggregator:
         # proxy for total team plays -- when offense_pct is unavailable.
         team_snaps = compute_team_snaps(snap_pos)
         snap_pos = snap_pos.merge(team_snaps, on=['season', 'week', 'team'], how='left')
-        snap_pos['team_snaps'] = snap_pos['team_snaps'].fillna(0).astype(int)
+        snap_pos['team_snaps'] = snap_pos['team_snaps'].astype('Int64')
 
         # Build merge-ready snap frame
         snap_merge_cols = ['snap_count', 'team_snaps']
@@ -456,16 +461,25 @@ class PBPStatsAggregator:
                 merged[col] = merged[snap_col].fillna(merged[col])
                 merged = merged.drop(columns=[snap_col])
 
+        # NULL, not 0, when a row found no snap record. These used to be
+        # fillna(0), which asserted "this player took zero snaps" for every
+        # unmatched row -- indistinguishable from a real zero, and the reason
+        # player_weekly_stats carried 100% zeros for 2006-2017 (GAPS.md
+        # 2026-08-19 audit). Int64 is the nullable integer dtype, so the
+        # missingness survives to SQLite as NULL instead of collapsing.
         if 'snap_count' not in merged.columns:
-            merged['snap_count'] = 0
+            merged['snap_count'] = pd.NA
         if 'team_snaps' not in merged.columns:
-            merged['team_snaps'] = 0
-        merged['snap_count'] = merged['snap_count'].fillna(0).astype(int)
-        merged['team_snaps'] = merged['team_snaps'].fillna(0).astype(int)
-        merged['snap_share'] = np.where(
-            merged['team_snaps'] > 0,
-            merged['snap_count'] / merged['team_snaps'],
-            0.0
+            merged['team_snaps'] = pd.NA
+        merged['snap_count'] = merged['snap_count'].astype('Int64')
+        merged['team_snaps'] = merged['team_snaps'].astype('Int64')
+        # snap_share is unknown when either side is unknown; it is a genuine
+        # 0.0 only when the player is known to have taken 0 of a known team
+        # total. Division alone propagates NA; `.where` handles team_snaps==0,
+        # which would otherwise be an infinity.
+        merged['snap_share'] = (
+            (merged['snap_count'] / merged['team_snaps'])
+            .where(merged['team_snaps'] > 0)
         )
         return merged
     
@@ -1061,12 +1075,14 @@ def _ensure_store_weekly_schema(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = default
         else:
             df[col] = df[col].fillna(default)
-    # Snap columns (set by merge_with_snaps; default to 0 when unavailable)
+    # Snap columns (set by merge_with_snaps). Absent means the snap merge
+    # never ran for this frame -- unknown, not zero. Defaulting these to 0
+    # is what made "no snap data" indistinguishable from "took no snaps".
     for col in ["snap_count", "team_snaps"]:
         if col not in df.columns:
-            df[col] = 0
+            df[col] = pd.Series(pd.NA, index=df.index, dtype="Int64")
     if "snap_share" not in df.columns:
-        df["snap_share"] = 0.0
+        df["snap_share"] = np.nan
     # Fumbles and two-point conversions
     if "fumbles" not in df.columns:
         df["fumbles"] = df.get("fumbles_lost", pd.Series(0, index=df.index)).fillna(0)
