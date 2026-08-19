@@ -34,6 +34,50 @@ from config.settings import (
 )
 
 
+def compute_team_snaps(snaps: pd.DataFrame) -> pd.DataFrame:
+    """Team offensive play count per (season, week, team) from per-player snaps.
+
+    NOT a sum over players: ~11 offensive players are each credited with most
+    of the same ~55-75 plays, so summing inflates the total roughly 11x and
+    crushes every derived snap_share feature (GAPS.md 2026-08-07, "team_snaps
+    inflation"). Prefer the total implied by each player's own share --
+    offense_snaps / offense_pct, nflverse's own verified per-player fraction --
+    taking the median across the team-week to shrug off rounding noise. Fall
+    back to max(offense_snaps), the every-down player, when offense_pct is
+    absent.
+
+    Extracted so the ingest path and any backfill share one implementation;
+    a re-derived copy is how a fixed formula and a stale table drift apart.
+    """
+    if 'offense_pct' in snaps.columns:
+        implied = np.where(
+            snaps['offense_pct'] > 0,
+            snaps['offense_snaps'] / snaps['offense_pct'],
+            np.nan,
+        )
+        team_snaps = (
+            pd.DataFrame({
+                'season': snaps['season'], 'week': snaps['week'],
+                'team': snaps['team'], '_implied': implied,
+            })
+            .groupby(['season', 'week', 'team'], as_index=False)['_implied']
+            .median()
+            .rename(columns={'_implied': 'team_snaps'})
+        )
+    else:
+        team_snaps = pd.DataFrame(columns=['season', 'week', 'team', 'team_snaps'])
+    max_snaps = (
+        snaps.groupby(['season', 'week', 'team'], as_index=False)['offense_snaps']
+        .max()
+        .rename(columns={'offense_snaps': 'team_snaps_max'})
+    )
+    team_snaps = max_snaps.merge(team_snaps, on=['season', 'week', 'team'], how='left')
+    team_snaps['team_snaps'] = team_snaps['team_snaps'].fillna(team_snaps['team_snaps_max'])
+    team_snaps = team_snaps.drop(columns=['team_snaps_max'])
+    team_snaps['team_snaps'] = team_snaps['team_snaps'].round().fillna(0).astype(int)
+    return team_snaps
+
+
 class PBPStatsAggregator:
     """Aggregate play-by-play data into weekly player stats."""
     
@@ -384,32 +428,7 @@ class PBPStatsAggregator:
         # team/week is robust to individual rounding noise. Fall back to
         # max(offense_snaps) -- the single most-used player, a reasonable
         # proxy for total team plays -- when offense_pct is unavailable.
-        if 'offense_pct' in snap_pos.columns:
-            implied = np.where(
-                snap_pos['offense_pct'] > 0,
-                snap_pos['offense_snaps'] / snap_pos['offense_pct'],
-                np.nan,
-            )
-            team_snaps = (
-                pd.DataFrame({
-                    'season': snap_pos['season'], 'week': snap_pos['week'],
-                    'team': snap_pos['team'], '_implied': implied,
-                })
-                .groupby(['season', 'week', 'team'], as_index=False)['_implied']
-                .median()
-                .rename(columns={'_implied': 'team_snaps'})
-            )
-        else:
-            team_snaps = pd.DataFrame(columns=['season', 'week', 'team', 'team_snaps'])
-        max_snaps = (
-            snap_pos.groupby(['season', 'week', 'team'], as_index=False)['offense_snaps']
-            .max()
-            .rename(columns={'offense_snaps': 'team_snaps_max'})
-        )
-        team_snaps = max_snaps.merge(team_snaps, on=['season', 'week', 'team'], how='left')
-        team_snaps['team_snaps'] = team_snaps['team_snaps'].fillna(team_snaps['team_snaps_max'])
-        team_snaps = team_snaps.drop(columns=['team_snaps_max'])
-        team_snaps['team_snaps'] = team_snaps['team_snaps'].round().fillna(0).astype(int)
+        team_snaps = compute_team_snaps(snap_pos)
         snap_pos = snap_pos.merge(team_snaps, on=['season', 'week', 'team'], how='left')
         snap_pos['team_snaps'] = snap_pos['team_snaps'].fillna(0).astype(int)
 

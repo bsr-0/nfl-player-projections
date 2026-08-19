@@ -6724,3 +6724,69 @@ which is precisely how the audit hit it.
 `str(player_id)` in `possible_weeks_for_team`, `_season_has_roster_data` and
 `active_roster_weeks`. 2 tests in `tests/test_traded_player_schedule.py`
 pin numpy/python equivalence.
+
+
+## 2025 snap data was doubly corrupt; re-ingested (2026-08-19)
+
+Found while checking whether nflreadr's game-level snap data (2013+, PFR
+feed) could extend our coverage. Two independent defects in
+`player_weekly_stats` for 2025 ONLY:
+
+1. **team_snaps inflated ~12x** -- avg 646.5 / max 2112, against 51.5-52.5 /
+   90-100 for every other season. KC wk3 held 1584, which is the sum of BOTH
+   teams' player snaps (792+792) rather than the team's ~72 offensive plays.
+   The 2026-08-07 "team_snaps inflation" fix was already in the code; these
+   rows simply predated it and were never re-ingested.
+2. **snap_count doubled** on 563 rows -- exactly 2x the source
+   `offense_snaps` (Josh Allen wk13: source 74, stored 148). No duplicates
+   exist in `snap_counts`, so the double-count happened during ingest.
+
+Defect 2 is why a surgical denominator fix was NOT applied: recomputing
+team_snaps alone would have produced `snap_share = 2.0` on 511 rows --
+replacing a visibly-broken number with a plausible-looking wrong one.
+`scripts/backfill_team_snaps.py` refuses to write when any recomputed
+snap_share exceeds 1.0, and refuses when team_snaps falls outside a 20-120
+play band.
+
+**Fix**: full re-ingest of 2025 via `NFLDataLoader.load_weekly_data([2025])`,
+which uses the pfr_player_id -> GSIS mapping rather than a name join. DB
+backed up first (`nfl_data.db.bak-2025-reingest-20260819-062059`).
+
+Verified row-by-row against the backup: 6,764 rows before and after (none
+added or dropped); 5,593 team_snaps changed and ALL were previously inflated
+>150; 1,171 unchanged and ALL were already 0 (players with no snap data);
+563 snap_count corrected and ALL exactly halved, zero other changes;
+`fantasy_points` identical on every row. Post-state: avg team_snaps 53.4,
+max 96, avg snap_share 0.4650, zero rows above 1.0 -- inside the band of
+every other season.
+
+`compute_team_snaps` was extracted to module level in
+`pbp_stats_aggregator.py` so the ingest path and any backfill share one
+implementation. Validated by reproducing 2024 exactly (avg snap_share
+0.4523 -> 0.4523, max 1.0, zero rows over 1).
+
+**Still open**: `snap_count`/`snap_share` are a stored ZERO (not null) for
+all of 2006-2017, so RB (window `all`) has 60.3% of its training rows
+asserting every back took zero snaps. nflreadr has real data back to 2013
+(the documented "2012" file exists but is empty), but backfilling would make
+the feature mean different things across eras unless the NaN-vs-0
+representation is decided first. See the snap-representation note above.
+
+## run_season_projection/simulation broke on the per-week team change (fixed 2026-08-19)
+
+The mid-season-trade fix replaced the season-level `team` variable with
+`team_by_week`, but both `run_season_projection` and `run_season_simulation`
+still referenced bare `team` when building their season-level result row --
+`NameError: name 'team' is not defined`, killing Phase 7 on its first fold.
+
+The 231-test suite did not catch it: nothing exercises those two functions
+end-to-end, since they need the real DB and fitted folds. Caught only by
+actually running Phase 7 for RB/WR/TE.
+
+**Fix**: report `real_team_by_week[max(real_team_by_week)]` -- the team he
+last actually played for, which is what a season-level row means. Verified
+with a real Phase 7 run (TE/2023, 129 rows, correct team values).
+
+**Still uncovered**: there is no regression test for this. A cheap
+single-position smoke test over `run_season_projection` would have caught it
+and would catch the next one; not yet written.

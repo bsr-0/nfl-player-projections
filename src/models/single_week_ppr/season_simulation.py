@@ -284,7 +284,10 @@ def run_season_simulation(
 
                 actual_total = float(g["fantasy_points"].sum())
                 result_row = {
-                    "player": player_id, "position": position, "season": season, "team": team,
+                    "player": player_id, "position": position, "season": season,
+                    # Team is per-week now; report the one he last actually
+                    # played for, which is what a season-level row means.
+                    "team": real_team_by_week[max(real_team_by_week)],
                     "possible_weeks": len(possible_weeks),
                     "weeks_predicted": len(week_predictions),
                     "games_actually_played": len(real_weeks),
