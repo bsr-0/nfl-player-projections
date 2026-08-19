@@ -28,6 +28,37 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import UTILIZATION_WEIGHTS
 from src.utils.helpers import safe_divide
 
+# Experiment hook for the snap-missingness comparison (GAPS.md 2026-08-19).
+# DEFAULT REPRODUCES PRODUCTION EXACTLY -- "zero" routes through safe_divide,
+# which collapses an unknown snap share to 0.0, i.e. tells the model the
+# player took 0% of snaps. "preserve" keeps it NaN so the imputation variants
+# downstream can distinguish unknown from a measured zero.
+#
+# Only ~1,079 rows differ (983 pre-2018, 96 after), but they are not random:
+# 77% sit in 2013-17. Flip via set_snap_missingness_mode(), not by editing.
+SNAP_MISSINGNESS_MODE = "zero"
+
+
+def set_snap_missingness_mode(mode: str) -> None:
+    global SNAP_MISSINGNESS_MODE
+    if mode not in ("zero", "preserve"):
+        raise ValueError(f"mode must be 'zero' or 'preserve', got {mode!r}")
+    SNAP_MISSINGNESS_MODE = mode
+
+
+def snap_share_pct(snap_count, team_snaps):
+    """Percentage of team snaps, honouring SNAP_MISSINGNESS_MODE.
+
+    `safe_divide` returns its default (0.0) when either operand is NaN, which
+    is the single upstream source of every fabricated zero in
+    snap_share_pct_roll3_mean and snap_share_accel.
+    """
+    if SNAP_MISSINGNESS_MODE == "zero":
+        return safe_divide(snap_count, team_snaps) * 100
+    numerator = pd.to_numeric(snap_count, errors="coerce")
+    denominator = pd.to_numeric(team_snaps, errors="coerce")
+    return (numerator / denominator * 100).where(denominator > 0)
+
 logger = logging.getLogger(__name__)
 
 
@@ -328,7 +359,7 @@ class UtilizationScoreCalculator:
         team_targets = df.get("team_targets", targets)
         team_receptions = df.get("team_receptions", receptions)
         
-        df["snap_share_pct"] = safe_divide(snap_count, team_snaps) * 100
+        df["snap_share_pct"] = snap_share_pct(snap_count, team_snaps)
         df["rush_share_pct"] = safe_divide(rushing_attempts, team_rush) * 100
         df["target_share_pct"] = safe_divide(targets, team_targets) * 100
         
@@ -400,9 +431,9 @@ class UtilizationScoreCalculator:
             yards_per_target = safe_divide(df["receiving_yards"], df["targets"])
             df["air_yards_share_pct"] = df["target_share_pct"] * (yards_per_target / 10)
         
-        df["snap_share_pct"] = safe_divide(
+        df["snap_share_pct"] = snap_share_pct(
             df["snap_count"], df.get("team_snaps", df["snap_count"])
-        ) * 100
+        )
         
         # Red zone targets: use PBP-derived data when available, else TD-based proxy
         if "redzone_targets" in df.columns and "team_redzone_targets" in df.columns:
@@ -479,9 +510,9 @@ class UtilizationScoreCalculator:
             df["targets"], df.get("team_targets", df["targets"])
         ) * 100
         
-        df["snap_share_pct"] = safe_divide(
+        df["snap_share_pct"] = snap_share_pct(
             df["snap_count"], df.get("team_snaps", df["snap_count"])
-        ) * 100
+        )
         
         # Red zone targets: use PBP-derived data when available, else TD-based proxy
         if "redzone_targets" in df.columns and "team_redzone_targets" in df.columns:

@@ -821,6 +821,48 @@ class FeatureEngineer:
             df["scheme_fit_score"] = prior_scheme_fit
         return df
 
+    def _add_snap_roll3_known(self, df: pd.DataFrame, window: int) -> pd.DataFrame:
+        """How much of `snap_share_pct_roll3_mean`'s window was actually known.
+
+        The rolling mean skips NaN, so a window with one known observation and
+        two unknowns produces a confident-looking number from a single game.
+        Without this column the model cannot tell that apart from three known
+        observations.
+
+        Defined as  n_known / n_available  over the same shift(1).rolling(3)
+        window the mean uses:
+
+            n_available = prior rows that exist for this player (1-3; fewer
+                          early in his history)
+            n_known     = those whose snap_share_pct is not NaN
+
+        Deliberately divided by n_available, NOT by the window size 3. A rookie
+        in week 2 has one prior game; if it is known, his history is as
+        complete as it can be. Dividing by 3 would score him 0.33 and conflate
+        "new player" with "missing data" -- the exact conflation this whole
+        exercise exists to remove.
+
+        1.0 when every available prior game was measured, 0.0 when none were
+        (in which case the mean itself is NaN). Never NaN itself, so it
+        survives the blanket fillna(0) in
+        UtilizationScoreCalculator.calculate_all_scores and reaches the model.
+        """
+        if "snap_share_pct" not in df.columns or "player_id" not in df.columns:
+            return df
+
+        def _count(series: pd.Series) -> pd.Series:
+            return series.shift(1).rolling(window, min_periods=1).count()
+
+        n_known = df.groupby("player_id")["snap_share_pct"].transform(_count)
+        n_available = (
+            pd.Series(1.0, index=df.index)
+            .groupby(df["player_id"])
+            .transform(_count)
+        )
+        known = (n_known / n_available).where(n_available > 0)
+        df["snap_share_pct_roll3_known"] = known.fillna(0.0)
+        return df
+
     def _add_depth_chart_rank(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add official depth chart rank (1=starter, 2=backup, etc.), as of
         each row's OWN week -- not just the week-1 preseason designation.
@@ -1474,6 +1516,8 @@ class FeatureEngineer:
                 df.groupby("player_id")[col]
                 .transform(lambda x: x.shift(1).rolling(window, min_periods=1).mean())
             )
+
+        df = self._add_snap_roll3_known(df, window)
 
         # WOPR (Weighted Opportunity Rating), built from the already-rolled,
         # leakage-safe shares rather than this-week raw shares.
