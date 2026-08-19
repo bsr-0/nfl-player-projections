@@ -7181,3 +7181,52 @@ differs from B only on the same 1,518 rows, and B's era split is already the
 more informative statistic.
 
 Reproduce: `scripts/analyze_snap_missingness_ab.py`.
+
+## Pre-production sanity check + the productionisation gap (2026-08-19)
+
+### Imputation values are sensible
+
+Observed `snap_share_pct_roll3_mean` on known rows vs the median variant B
+imputes (position x era -- `apply_snap_imputation` is called inside the
+per-position loop, so the era grouping is already per position):
+
+| pos | era | p25 | median (imputed) | p75 |
+|---|---|---|---|---|
+| RB | pre/post | 18.3 / 18.1 | **34.9 / 34.3** | 53.8 / 53.5 |
+| WR | pre/post | 28.1 / 27.0 | **61.7 / 56.5** | 81.8 / 78.6 |
+| TE | pre/post | 24.6 / 25.1 | **45.5 / 42.8** | 70.5 / 63.6 |
+
+Nothing pathological -- every value sits mid-distribution.
+
+### But unknown rows are a lower-usage population
+
+| pos | fantasy_points known -> unknown | targets known -> unknown |
+|---|---|---|
+| RB | 8.09 -> 5.07 | 2.27 -> 1.15 |
+| WR | 7.24 -> 3.95 | 4.22 -> 2.42 |
+| TE | 4.42 -> 2.54 | 2.55 -> 1.42 |
+
+Players whose snap history is unknown are roughly 55-65% of a known
+player's usage, so the median **overstates** their likely snap share. Not a
+blocker, and deliberately NOT optimised (that is variant-C territory): it
+explains why the `known` indicator earns its keep, since Ridge can fit a
+compensating offset for those rows, which is consistent with B beating A on
+exactly that population.
+
+### Blocker: B is not productionisable by flipping a default
+
+`apply_snap_imputation` is wired into `ts_backtester.py` alone. Production
+training (`train.py`) and inference (`ensemble.py` /
+`component_predictor.py`) never call it. Setting
+`SNAP_MISSINGNESS_MODE = "preserve"` today would give production
+`NaN -> blanket fillna(0) -> 0.0` with no imputation and no indicator --
+the same fabricated zero as variant A, while the config claims otherwise.
+That is strictly worse than leaving it alone.
+
+**Correct design** (not implemented): the imputation constants must be FIT
+at training time and PERSISTED in the model artifact, then applied
+unchanged at predict time. `ComponentPredictor` already has
+`to_dict`/`from_dict`, so the natural home is a `snap_impute_` mapping
+fitted inside `.fit()` from the training rows and serialised with the
+model. Computing medians at inference from whatever data is to hand would
+reintroduce exactly the leakage the backtest was careful to avoid.
