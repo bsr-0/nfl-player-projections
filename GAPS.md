@@ -7131,3 +7131,53 @@ explicit missingness indicator plus an imputed value -- Ridge can then fit a
 separate offset for unknown rows instead of being told they took zero snaps.
 That is a model change on 2.9% of rows and wants its own decision; not
 started.
+
+## RESULT: snap-missingness A/B (2026-08-19)
+
+Pre-registered A vs B, 8 runs (2 variants x 2016/2017/2018/2024 x RB/WR/TE),
+21,797 paired predictions. **No production change made.**
+
+    A  unknown snap share -> 0, no indicator (production, untouched)
+    B  unknown -> era median fitted inside each training fold,
+       plus snap_share_pct_roll3_known
+
+### The effect is real and lands exactly where predicted
+
+Paired change in absolute error (B - A); negative favours B:
+
+| population | n | mean delta | 95% CI | p |
+|---|---|---|---|---|
+| uncertain (known<1), all | 1,518 | **-0.1630** | [-0.190, -0.138] | 2.4e-15 |
+| uncertain, 2016-17 | 992 | -0.1294 | [-0.160, -0.100] | 3.9e-06 |
+| uncertain, 2018+ | 526 | -0.2263 | [-0.277, -0.177] | 6.2e-12 |
+| **fully known (regression check)** | **20,279** | **+0.0041** | -- | -- |
+
+This is the pattern that was pre-registered as compelling: B improves the
+rows whose snap history is incomplete and leaves the other 93% alone. It is
+evidence the intended mechanism was fixed, not that the model was perturbed
+into a better fit.
+
+### But the headline effect is small
+
+Uncertain rows are ~7% of the frame, so overall MAE moves only 4.377 ->
+4.371 (2016-17) and 4.196 -> 4.187 (2018+): about **0.2%**. Both eras
+improve, so there is no net regression.
+
+By position, on uncertain rows: **TE -0.2640, WR -0.2096, RB -0.0089**. RB
+is not a wiring failure -- it has 447 uncertain rows and 5,662 of its
+predictions changed; the snap feature simply does not carry RB signal the
+way it does for pass-catchers, which is consistent with RB usage being
+better captured by carries.
+
+### Verdict
+
+B is a correctness fix that pays off precisely where the data was wrong, at
+no inference cost and with no regression on known rows. The case for it is
+"stop telling the model something false", not "it raises the headline
+metric" -- it does not, materially.
+
+**Variant C (global median) NOT tested**, per the pre-registered rule: C
+differs from B only on the same 1,518 rows, and B's era split is already the
+more informative statistic.
+
+Reproduce: `scripts/analyze_snap_missingness_ab.py`.
