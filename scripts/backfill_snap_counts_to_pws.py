@@ -7,6 +7,7 @@ snap_counts table.  The two tables use different player ID systems
 Usage:
     python scripts/backfill_snap_counts_to_pws.py
     python scripts/backfill_snap_counts_to_pws.py --dry-run
+    python scripts/backfill_snap_counts_to_pws.py --min-season 2013
 """
 
 from __future__ import annotations
@@ -43,8 +44,22 @@ def _team_alias(team: str) -> str:
     return aliases.get(team, team)
 
 
+# Floor for rows this script will touch. NOT simply SNAP_COUNT_MIN_SEASON:
+# snap_counts now reaches 2013, but player_weekly_stats stores snap_count as
+# a hard 0 (not NULL) for 2006-2017, so lowering this would flip 2013-2017
+# from "asserted zero" to "real value" and make the feature mean different
+# things either side of the boundary. GAPS.md records that NaN-vs-0
+# representation as an open decision -- resolve it before lowering the
+# default. Overridable meanwhile: --min-season 2013.
+MIN_SEASON_DEFAULT = 2018
+
+
 def main() -> int:
     dry_run = "--dry-run" in sys.argv
+    min_season = MIN_SEASON_DEFAULT
+    if "--min-season" in sys.argv:
+        min_season = int(sys.argv[sys.argv.index("--min-season") + 1])
+    print(f"Updating player_weekly_stats rows from season {min_season} onward")
 
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -88,14 +103,14 @@ def main() -> int:
 
     print(f"  {len(snap_lookup)} unique player-game snap entries")
 
-    # Step 4: Load pws rows that need updating (2018-2025, snap_count = 0)
+    # Step 4: Load pws rows that need updating (snap_count = 0)
     print("Loading player_weekly_stats rows to update...")
     cur.execute("""
         SELECT p.name, pws.player_id, pws.team, pws.season, pws.week
         FROM player_weekly_stats pws
         JOIN players p ON pws.player_id = p.player_id
-        WHERE pws.season >= 2018 AND pws.snap_count = 0
-    """)
+        WHERE pws.season >= ? AND pws.snap_count = 0
+    """, (min_season,))
     pws_rows = cur.fetchall()
     print(f"  {len(pws_rows)} pws rows to check")
 
@@ -138,9 +153,9 @@ def main() -> int:
                SUM(CASE WHEN snap_count > 0 THEN 1 ELSE 0 END) as nonzero,
                COUNT(*) as total
         FROM player_weekly_stats
-        WHERE season >= 2018
+        WHERE season >= ?
         GROUP BY season ORDER BY season
-    """)
+    """, (min_season,))
     print("\nVerification:")
     for row in cur.fetchall():
         pct = row["nonzero"] / row["total"] * 100

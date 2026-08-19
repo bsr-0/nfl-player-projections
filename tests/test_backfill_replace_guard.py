@@ -84,3 +84,40 @@ def test_save_df_still_writes_when_nothing_is_lost(mod, conn):
     mod._save_df(pd.DataFrame({"season": [2018, 2019], "v": [1, 2]}), "t", conn)
 
     assert conn.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 2
+
+
+def test_seasons_start_at_the_shared_floor(mod):
+    assert mod.MIN_SEASON == 2013
+    assert mod.SEASONS[0] == 2013
+
+
+def test_upper_bound_is_the_nfl_season_not_the_calendar_year(mod):
+    """datetime.now().year names an unplayed season for most of the year."""
+    from config.settings import CURRENT_NFL_SEASON
+
+    assert mod.SEASONS[-1] == CURRENT_NFL_SEASON
+
+
+def test_dataset_without_its_own_floor_uses_the_global_one(mod):
+    assert mod.seasons_for("qbr")[0] == mod.MIN_SEASON
+
+
+def test_dataset_with_a_later_upstream_floor_is_clamped(mod):
+    """NGS genuinely begins in 2016; asking for 2013 returns nothing."""
+    assert mod.seasons_for("ngs")[0] == 2016
+    assert mod.seasons_for("ngs")[-1] == mod.SEASONS[-1]
+
+
+def test_every_declared_floor_is_within_the_global_range(mod):
+    """A floor above the current season would yield an empty pull."""
+    for dataset, floor in mod.DATASET_MIN_SEASON.items():
+        assert mod.seasons_for(dataset), f"{dataset} resolves to no seasons"
+        assert floor >= mod.MIN_SEASON, f"{dataset} floor is below MIN_SEASON"
+
+
+def test_classic_depth_chart_range_stops_before_the_schema_change(mod):
+    seasons = [s for s in mod.seasons_for("depth_charts")
+               if s < mod.DEPTH_CHART_NEW_SCHEMA_SEASON]
+
+    assert seasons[-1] == 2024
+    assert mod.DEPTH_CHART_NEW_SCHEMA_SEASON not in seasons

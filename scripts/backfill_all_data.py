@@ -19,20 +19,50 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 DB_PATH = PROJECT_ROOT / "data" / "nfl_data.db"
-from datetime import datetime
-SEASONS = list(range(2018, datetime.now().year + 1))
+
+from config.settings import CURRENT_NFL_SEASON
+
+# Floor for every season-ranged pull here. Was 2018, which was never an
+# upstream limit -- just where this script happened to start -- and it
+# silently truncated tables that other scripts had backfilled earlier.
+MIN_SEASON = 2013
+
+# Upper bound is the current NFL season, NOT datetime.now().year: for most of
+# the calendar year the latter names a season that has not been played, so
+# every pull requested a nonexistent year (in Aug 2026 it asked for 2026
+# while CURRENT_NFL_SEASON was 2025).
+SEASONS = list(range(MIN_SEASON, CURRENT_NFL_SEASON + 1))
+
+# Where upstream genuinely starts later than MIN_SEASON. Asking below these
+# returns an empty frame or raises, so each dataset is clamped to its own
+# floor rather than the global one. Verified against nflverse 2026-08-19;
+# datasets absent from this map use MIN_SEASON.
+DATASET_MIN_SEASON = {
+    "ngs": 2016,          # Next Gen Stats begin 2016
+    "snap_counts": 2013,  # PFR feed; the 2012 release file exists but is empty
+}
+
+# depth_charts changed schema for 2025: a daily ESPN-style feed with no
+# season/week/depth_team column. Anything at or beyond this needs
+# scripts/backfill_depth_charts_2025.py, not a straight append.
+DEPTH_CHART_NEW_SCHEMA_SEASON = 2025
+
+
+def seasons_for(dataset: str) -> list:
+    """SEASONS clamped to a dataset's real upstream floor."""
+    floor = DATASET_MIN_SEASON.get(dataset, MIN_SEASON)
+    return [s for s in SEASONS if s >= floor]
 
 
 def _assert_no_history_lost(df: pd.DataFrame, table: str, conn: sqlite3.Connection):
     """Refuse a `replace` that would drop seasons the incoming frame lacks.
 
     Every loader here writes with `if_exists="replace"` -- it drops the table
-    and recreates it -- while pulling only `SEASONS` (2018+). Any season
-    backfilled by another script therefore gets silently deleted on the next
-    run. That is not hypothetical: depth_charts (2013+),
-    ngs_* (2016+) and snap_counts (2013+) all now extend earlier than
-    `SEASONS`, via backfill_historical_coverage.py and
-    backfill_snap_counts_history.py.
+    and recreates it -- so any season the incoming frame doesn't cover is
+    silently deleted. `SEASONS` now starts at MIN_SEASON (2013) rather than
+    2018, which removes the original cause, but the guard stays: per-dataset
+    floors mean a pull can still be narrower than what's stored (NGS starts
+    2016), and depth_charts holds a 2025 season this script cannot fetch.
 
     Raising here rather than switching to `append` is deliberate: append
     would duplicate every existing row instead. The caller in main() catches
@@ -125,8 +155,9 @@ def backfill_combine(conn):
 def backfill_snap_counts(conn):
     """Weekly snap counts per player (offensive/defensive/ST)."""
     import nfl_data_py as nfl
-    print("  Loading snap counts (2018-2025)...")
-    df = nfl.import_snap_counts(SEASONS)
+    seasons = seasons_for("snap_counts")
+    print(f"  Loading snap counts ({seasons[0]}-{seasons[-1]})...")
+    df = nfl.import_snap_counts(seasons)
     _save_df(df, "snap_counts", conn)
 
 
@@ -136,7 +167,7 @@ def backfill_ngs(conn):
     for stat_type in ["passing", "rushing", "receiving"]:
         print(f"  Loading NGS {stat_type}...")
         try:
-            df = nfl.import_ngs_data(stat_type=stat_type, years=SEASONS)
+            df = nfl.import_ngs_data(stat_type=stat_type, years=seasons_for("ngs"))
             _save_df(df, f"ngs_{stat_type}", conn)
         except Exception as e:
             print(f"    FAILED: {e}")
@@ -147,7 +178,7 @@ def backfill_qbr(conn):
     import nfl_data_py as nfl
     print("  Loading QBR...")
     try:
-        df = nfl.import_qbr(SEASONS)
+        df = nfl.import_qbr(seasons_for("qbr"))
         _save_df(df, "qbr", conn)
     except Exception as e:
         print(f"    FAILED: {e}")
@@ -157,7 +188,7 @@ def backfill_injuries_nflpy(conn):
     """Injury reports from nfl-data-py (complements our existing backfill)."""
     import nfl_data_py as nfl
     print("  Loading injuries (nfl-data-py)...")
-    df = nfl.import_injuries(SEASONS)
+    df = nfl.import_injuries(seasons_for("injuries"))
     _save_df(df, "injuries_nflpy", conn)
 
 
@@ -176,9 +207,11 @@ def backfill_depth_charts(conn):
             "last_name", "first_name", "football_name",
             "position", "jersey_number", "gsis_id",
             "depth_position", "full_name"]
-    print("  Loading depth charts (2013-2024)...")
+    seasons = [s for s in seasons_for("depth_charts")
+               if s < DEPTH_CHART_NEW_SCHEMA_SEASON]
+    print(f"  Loading depth charts ({seasons[0]}-{seasons[-1]})...")
     try:
-        df = nfl.import_depth_charts(range(2013, 2025))
+        df = nfl.import_depth_charts(seasons)
         missing = [c for c in cols if c not in df.columns]
         if missing:
             raise RuntimeError(
@@ -203,9 +236,9 @@ def backfill_contracts(conn):
 def backfill_weekly_rosters(conn):
     """Weekly 53-man roster snapshots."""
     import nfl_data_py as nfl
-    print("  Loading weekly rosters (2024-2025)...")
+    print("  Loading weekly rosters...")
     try:
-        df = nfl.import_weekly_rosters(range(2024, 2026))
+        df = nfl.import_weekly_rosters(seasons_for("weekly_rosters"))
         cols = ["season", "team", "position", "depth_chart_position",
                 "status", "player_name", "player_id", "gsis_it_id",
                 "week", "game_type", "headshot_url"]

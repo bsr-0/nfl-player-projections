@@ -9,9 +9,9 @@ play at all" -- a real problem for any model, and specifically breaks a
 two-stage/hurdle architecture's ability to learn P(PPR > 0).
 
 Two-tier eligibility rule (see GAPS.md for full reasoning):
-  - 2018-2025: snap_counts (PFR->GSIS mapped) confirms offense_snaps > 0.
+  - 2013-2025: snap_counts (PFR->GSIS mapped) confirms offense_snaps > 0.
     Precise "took the field" signal. Tag: inferred_snap_verified_zero.
-  - 2006-2017: no snap-level data exists this far back, but active roster
+  - 2006-2012: no snap-level data exists this far back, but active roster
     status ALONE is not "played" -- a player can be active every week and
     never touch the field (coach's decision). Using PBP-derived
     participation instead: weekly_rosters status='ACT' AND the player
@@ -91,7 +91,8 @@ def _team_opponent_home_away_map(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 def load_snap_verified_candidates(conn: sqlite3.Connection, seasons: tuple) -> pd.DataFrame:
-    """2018+: players with offense_snaps > 0 in snap_counts, PFR->GSIS mapped, no existing stats row."""
+    """SNAP_COUNT_MIN_SEASON+: players with offense_snaps > 0 in snap_counts,
+    PFR->GSIS mapped, no existing stats row."""
     from src.data.nfl_data_loader import get_pfr_to_gsis_map
 
     lo, hi = max(seasons[0], SNAP_COUNT_MIN_SEASON), seasons[1]

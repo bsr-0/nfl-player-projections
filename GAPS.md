@@ -6875,3 +6875,49 @@ which this table stores, so they arrive identical. The 610 groups with
 genuinely *conflicting* `depth_team` were preserved -- MIN resolves those at
 load time, and collapsing them here would move that policy away from where
 it is documented.
+
+## Season-floor hardcoding removed from backfill_all_data.py (2026-08-19)
+
+`SEASONS = list(range(2018, datetime.now().year + 1))` -> `range(MIN_SEASON,
+CURRENT_NFL_SEASON + 1)` with `MIN_SEASON = 2013`. Two separate defects in
+that one line:
+
+**Floor.** 2018 was never an upstream limit, just where this script started;
+it was the reason `depth_charts`, `ngs_*` and `snap_counts` all began later
+than nflverse carries them.
+
+**Ceiling.** `datetime.now().year + 1` names the *calendar* year, so for most
+of the year it requested a season that has not been played -- in Aug 2026 it
+asked for 2026 while `CURRENT_NFL_SEASON` was 2025. Now bounded by the config
+constant, which is the single source of truth.
+
+**Per-dataset floors, not one global.** Setting everything to 2013 would
+break NGS, which genuinely begins in 2016. `DATASET_MIN_SEASON` records the
+real upstream floor per dataset and `seasons_for()` clamps; datasets not
+listed use `MIN_SEASON`. Verified floors against nflverse: qbr and
+weekly_rosters reach back to at least 2006, injuries 2009, snap_counts 2013
+(2012's file exists but is empty), NGS 2016. Two other hardcoded ranges in
+the same file were removed: `weekly_rosters` (`range(2024, 2026)`) and the
+classic depth-chart pull, now derived and bounded by
+`DEPTH_CHART_NEW_SCHEMA_SEASON`.
+
+`SNAP_COUNT_MIN_SEASON` was already 2013. Both of its consumers in
+`build_complete_player_game_panel.py` guard with `if lo > hi`, so the lower
+floor can't produce an inverted range; only stale "2018-2025" docstrings
+needed correcting.
+
+### Still gated at 2018 on purpose: snap_count into player_weekly_stats
+
+`backfill_snap_counts_to_pws.py` hardcoded `season >= 2018` in both its
+update and verification queries. `snap_counts` now reaches 2013, so that
+gate is the reason 2013-2017 snaps still never arrive in
+`player_weekly_stats`. It is now `MIN_SEASON_DEFAULT` with a `--min-season`
+override, but the **default is deliberately left at 2018**: pws stores
+`snap_count` as a hard 0 (not NULL) for 2006-2017, so lowering it flips
+those seasons from "asserted zero" to "real value" and makes the feature
+mean different things either side of the boundary. That NaN-vs-0
+representation is the open decision recorded above -- resolve it first.
+
+Scale of the pending change, measured by dry-run: **9,912 rows at the 2018
+default vs 40,618 at 2013**, i.e. ~30,700 rows in 2013-2017 currently
+asserting a zero the snap data could correct.
