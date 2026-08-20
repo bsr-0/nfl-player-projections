@@ -341,6 +341,49 @@ def validate_training_cache_integrity(
     return DataQualityGateResult(passed=passed, report=report)
 
 
+# A handful of players legitimately have no weekly roster row (very old
+# seasons, cup-of-coffee careers), so require a rate rather than zero.
+POSITION_MISMATCH_THRESHOLD = 0.005
+
+
+def check_position_integrity(db_path: Optional[Path] = None) -> Dict[str, Any]:
+    """`players.position` must agree with the weekly roster snapshots.
+
+    Exists because it did not, silently, for a long time: the PBP
+    aggregator stamps position='QB' on anyone with a pass attempt, and that
+    reached `players` and stayed there -- 11.4% of the QB training
+    population were not quarterbacks (Henry, Kupp, McCaffrey, DJ Moore).
+    Nothing downstream of ingestion noticed, because the only correction
+    lived in the draft-board output scripts (GAPS.md 2026-08-20).
+    """
+    from src.utils.database import DatabaseManager
+
+    db = DatabaseManager(db_path) if db_path else DatabaseManager()
+    authoritative = {k: {"FB": "RB", "HB": "RB"}.get(v, v)
+                     for k, v in db.get_authoritative_player_positions().items()}
+    with db._get_connection() as conn:
+        rows = conn.execute(
+            "SELECT player_id, position FROM players WHERE position IN "
+            "('QB','RB','WR','TE')"
+        ).fetchall()
+
+    checked = [(pid, pos) for pid, pos in rows if pid in authoritative]
+    mismatched = [
+        {"player_id": pid, "stored": pos, "authoritative": authoritative[pid]}
+        for pid, pos in checked if authoritative[pid] != pos
+    ]
+    rate = len(mismatched) / len(checked) if checked else 0.0
+    return {
+        "passed": rate <= POSITION_MISMATCH_THRESHOLD,
+        "checked": len(checked),
+        "mismatched": len(mismatched),
+        "rate": rate,
+        "threshold": POSITION_MISMATCH_THRESHOLD,
+        "examples": mismatched[:10],
+        "remedy": "python scripts/repair_player_positions.py --write",
+    }
+
+
 def run_db_quality_gates(
     *,
     db_path: Optional[Path] = None,
@@ -351,9 +394,18 @@ def run_db_quality_gates(
     """Run quality gates against the project DB."""
     df = load_player_weekly_stats(db_path=db_path)
     final_report_path = report_path or (MODELS_DIR / "data_quality_gate_report.json")
-    return run_quality_gates(
+    result = run_quality_gates(
         df,
         expected_season=expected_season,
         expected_week=expected_week,
         report_path=final_report_path,
     )
+    try:
+        position_check = check_position_integrity(db_path=db_path)
+    except Exception as e:  # a broken lookup must not mask the other gates
+        position_check = {"passed": True, "skipped": f"{type(e).__name__}: {e}"}
+    result.report.setdefault("checks", {})["position_integrity"] = position_check
+    if not position_check["passed"]:
+        result.report["status"] = "fail"
+        return DataQualityGateResult(passed=False, report=result.report)
+    return result

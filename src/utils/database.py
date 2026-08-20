@@ -746,20 +746,47 @@ class DatabaseManager:
             cursor.execute("SELECT DISTINCT season FROM player_weekly_stats ORDER BY season")
             return [row[0] for row in cursor.fetchall()]
     
-    def insert_player(self, player_data: Dict[str, Any]) -> bool:
-        """Insert or update player info."""
+    def insert_player(self, player_data: Dict[str, Any],
+                      trust_position: bool = True) -> bool:
+        """Insert or update player info, touching only supplied fields.
+
+        This was INSERT OR REPLACE, which rewrites the ENTIRE row. Callers
+        like `_store_weekly_data` supply only player_id/name/position, so
+        every weekly ingest silently NULLed birth_date, college, height and
+        weight, and reset created_at. `college` was NULL for all 2,985
+        players as a direct result (GAPS.md 2026-08-20).
+
+        `trust_position=False` for callers whose position is DERIVED rather
+        than reported. The PBP aggregator hardcodes position='QB' for
+        anyone with a pass attempt, so one trick-play pass by McCaffrey,
+        Henry or Kupp used to overwrite their real position permanently --
+        and `_infer_position` then read that back out of this table, making
+        the corruption self-sustaining.
+        """
+        # An untrusted position may fill a blank, never overwrite a value.
+        position_expr = (
+            "COALESCE(NULLIF(excluded.position, ''), players.position)"
+            if trust_position else
+            "COALESCE(players.position, NULLIF(excluded.position, ''))"
+        )
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO players 
+            cursor.execute(f"""
+                INSERT INTO players
                 (player_id, name, position, birth_date, college, updated_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), CURRENT_TIMESTAMP)
+                ON CONFLICT(player_id) DO UPDATE SET
+                    name       = COALESCE(NULLIF(excluded.name, ''), players.name),
+                    position   = {position_expr},
+                    birth_date = COALESCE(excluded.birth_date, players.birth_date),
+                    college    = COALESCE(excluded.college, players.college),
+                    updated_at = CURRENT_TIMESTAMP
             """, (
                 player_data.get("player_id"),
-                player_data.get("name"),
-                player_data.get("position"),
-                player_data.get("birth_date"),
-                player_data.get("college"),
+                player_data.get("name") or "",
+                player_data.get("position") or "",
+                player_data.get("birth_date") or "",
+                player_data.get("college") or "",
             ))
             conn.commit()
             return True

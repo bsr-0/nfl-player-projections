@@ -728,9 +728,25 @@ class PBPStatsAggregator:
 
     @classmethod
     def _players_position_lookup(cls) -> dict:
-        """Cached {player_id: position} lookup from the players table.
-        Returns {} if DB or table is missing (preserves heuristic-only
-        behavior for first-ever loads)."""
+        """Cached {player_id: position}, ROSTERS FIRST, players table second.
+
+        This used to read `players` only, which made the corruption
+        self-sustaining: `aggregate_passing_stats` stamps position='QB' on
+        anyone with a pass attempt, that lands in `players` via
+        INSERT OR REPLACE, and then this lookup hands the same wrong value
+        back to `_infer_position` on every subsequent ingest. Nulling
+        `position` during the duplicate-row collapse (the 2026-08-08
+        mitigation) could not help, because the fallback it deferred to was
+        reading the poisoned value.
+
+        Weekly roster snapshots are reported, not derived, so they break the
+        loop. Verified: `weekly_rosters` has McCaffrey/Henry as RB and Kupp
+        as WR for every week they played, while `players` said QB for all
+        three (GAPS.md 2026-08-20).
+
+        Returns {} if DB or tables are missing (preserves heuristic-only
+        behavior for first-ever loads).
+        """
         if cls._PLAYERS_POSITION_CACHE is not None:
             return cls._PLAYERS_POSITION_CACHE
         cls._PLAYERS_POSITION_CACHE = {}
@@ -740,12 +756,16 @@ class PBPStatsAggregator:
             db = Path(__file__).resolve().parents[2] / "data" / "nfl_data.db"
             if not db.exists():
                 return cls._PLAYERS_POSITION_CACHE
+            from src.utils.database import DatabaseManager
+            lookup = dict(DatabaseManager(str(db)).get_authoritative_player_positions())
             with sqlite3.connect(str(db)) as conn:
                 rows = conn.execute(
                     "SELECT player_id, position FROM players "
                     "WHERE position IN ('QB','RB','WR','TE')"
                 ).fetchall()
-            cls._PLAYERS_POSITION_CACHE = {pid: pos for pid, pos in rows}
+            for pid, pos in rows:
+                lookup.setdefault(pid, pos)
+            cls._PLAYERS_POSITION_CACHE = lookup
         except Exception:
             cls._PLAYERS_POSITION_CACHE = {}
         return cls._PLAYERS_POSITION_CACHE

@@ -8344,3 +8344,111 @@ The value of this fix is prospective. `age_expected_games`,
 `decline_rate` and `injury_age_risk` feed durability/availability
 reasoning — precisely the layer the architecture split calls for next —
 and every one of them was reading a constant.
+
+### ROOT-CAUSED AND FIXED 2026-08-20
+
+The chain, in order. Every link was necessary; fixing any one alone would
+not have held.
+
+**1. The origin.** `PBPStatsAggregator.aggregate_passing_stats` (line ~225)
+hardcodes `position = 'QB'` on every row it produces — i.e. on anyone with
+a pass attempt, including a single trick-play pass by a real RB or WR.
+
+**2. The write.** `DatabaseManager.insert_player` used
+`INSERT OR REPLACE`, so that derived 'QB' overwrote the correct position
+from the weekly feed. The weekly feed itself was never wrong: checked
+2017-2025, `nfl_data_py.import_weekly_data()` reports RB for McCaffrey and
+Henry, WR for Kupp and Moore, in 100% of rows.
+
+**3. The self-perpetuation.** A 2026-08-08 mitigation already nulls
+`position` when a player appears in both the passing and skill groups, so
+that `_infer_position` decides from summed stats instead of row order. But
+`_infer_position`'s lookup order is `row['position']` -> POSITION_OVERRIDES
+-> **the players table** -> heuristic, and the players table was by then
+corrupt. Demonstrated directly: with the real lookup, `_infer_position`
+returned QB for McCaffrey; with an empty lookup, the heuristic returned RB.
+The mitigation was defeated by its own fallback.
+
+**4. The correction lived downstream of the models.**
+`reconcile_player_positions_from_rosters()` exists and works — but its only
+callers are `generate_draft_data.py` and `generate_app_data.py`, the
+output/presentation scripts. So `data/players_RB.json` had McCaffrey
+correctly listed as an RB the whole time, while every model trained on a
+population that called him a quarterback.
+
+#### Fixes
+
+* `insert_player` is now a real upsert (`ON CONFLICT DO UPDATE`) that
+  touches only supplied fields, with a `trust_position` flag. Untrusted
+  positions may fill a blank, never overwrite.
+* `nfl_data_loader.store_weekly_dataframe` (the PBP path) passes
+  `trust_position=False`. The weekly-feed path keeps `True`.
+* `_players_position_lookup` reads **roster snapshots first**, players
+  table second, breaking the loop at its fallback.
+* `check_position_integrity` added to `src/data/quality_gates.py` and wired
+  into `run_db_quality_gates`, failing above a 0.5% mismatch rate.
+* `scripts/repair_player_positions.py` repairs and audits; `--audit-only`
+  exits non-zero so it can gate CI.
+* 12 regression tests in `tests/test_position_integrity.py`.
+
+#### Data repaired
+
+38 players, 2,062 player-weeks. QB fell from 14,622 rows to 13,113, and
+"QB" rows with zero passing attempts from **15.0% to 5.5%** (the remainder
+are legitimate — kneel-downs, wildcat, backups who only handed off).
+
+| stored -> correct | players |
+|---|---|
+| QB -> WR | 11 |
+| QB -> RB | 7 |
+| TE -> RB | 4 |
+| WR -> RB | 4 |
+| WR -> TE | 3 |
+| QB -> TE, TE -> QB | 2 each |
+| K -> WR (Wes Welker, 156 rows) | 1 |
+| RB -> TE, RB -> WR, TE -> WR | 1 each |
+
+Not repaired: 34 players / 159 player-weeks whose authoritative position is
+non-skill (OT, G, P, LB — linemen who caught a touchdown, punters on fake
+snaps). Left in place deliberately; they did produce those points, and
+relabeling them to OT would just drop the rows.
+32 players / 4,272 player-weeks have no authoritative source at all and
+were left untouched.
+
+---
+
+## Collateral: INSERT OR REPLACE was erasing every static bio field
+## (2026-08-20)
+
+Same root cause, separate damage. `insert_player`'s `INSERT OR REPLACE`
+rewrites the whole row, and `_store_weekly_data` supplies only
+player_id/name/position — so every weekly ingest NULLed everything else.
+
+Measured before the fix: `college` NULL for **all 2,985 players**,
+`height`/`weight` NULL for 757, and `created_at` reset on every ingest
+(which is why the corrupted rows all appeared to have been "created"
+2026-08-19 11:21 — they were replaced, not created; that misdirected the
+first pass of this investigation).
+
+It would also have silently destroyed the birth-date backfill committed
+hours earlier. The upsert fixes this going forward.
+
+`scripts/backfill_player_birth_dates.py` generalised to
+`scripts/backfill_player_bio.py`, covering birth_date/college/height/weight.
+Restored 2,951 colleges and 725 height/weight. Coverage is now ~2,953/2,985
+on all four. Height and weight are stored as bare integer strings but the
+feed supplies floats, so they are coerced before write — otherwise the
+column would have ended up in two formats at once.
+
+`college` currently has no downstream consumer
+(`college_production_score` in `advanced_rookie_injury` derives from draft
+value, not the string), so this is a data-integrity repair, not a feature
+change.
+
+#### Consequence for prior results
+
+Every model result in this file that involves QB was trained on a
+population 11.4% of which were not quarterbacks. That includes the
+population-regime experiment two commits ago. QB conclusions from it should
+be treated as void pending a re-run; RB/WR/TE moved by 2% or less and are
+substantially less affected.

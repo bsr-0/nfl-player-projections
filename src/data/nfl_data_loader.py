@@ -658,8 +658,13 @@ class NFLDataLoader:
         
         return round(points, 1)
     
-    def _store_weekly_data(self, df: pd.DataFrame):
-        """Store weekly data in the database."""
+    def _store_weekly_data(self, df: pd.DataFrame, trust_position: bool = True):
+        """Store weekly data in the database.
+
+        `trust_position=False` when the frame's positions were DERIVED from
+        play-by-play roles rather than reported by the feed -- see
+        `store_weekly_dataframe` and GAPS.md 2026-08-20.
+        """
         print("  Storing in database...")
         validate_weekly_data(df, strict=True)
         # Avoid duplicate column names (e.g. from merge/concat) so row values are scalars
@@ -676,7 +681,7 @@ class NFLDataLoader:
                 'name': _to_scalar_str(row['name'], ''),
                 'position': _to_scalar_str(row['position'], ''),
             }
-            self.db.insert_player(player_data)
+            self.db.insert_player(player_data, trust_position=trust_position)
             players_inserted += 1
 
             # Insert weekly stats (coerce to scalar; duplicate columns can make row values Series)
@@ -806,7 +811,10 @@ class NFLDataLoader:
         if "fantasy_points" not in df.columns or df["fantasy_points"].isna().any():
             df["fantasy_points"] = df.apply(self._calculate_fantasy_points, axis=1)
         validate_weekly_data(df, strict=True)
-        self._store_weekly_data(df)
+        # Positions here are derived from PBP roles, not reported:
+        # `aggregate_passing_stats` stamps 'QB' on anyone with a pass
+        # attempt. They may fill a blank, never overwrite a known position.
+        self._store_weekly_data(df, trust_position=False)
 
     def load_snap_counts(self, seasons: List[int], 
                          store_in_db: bool = True) -> pd.DataFrame:
