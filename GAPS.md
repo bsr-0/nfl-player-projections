@@ -8964,3 +8964,119 @@ looked like the "arms that don't actually differ" failure this project hit
 before. Checked directly: the two arms' predictions differ by a mean of
 1.065 PPR, only 0.1% of rows are identical, correlation 0.968. A genuine
 coincidence, not collapsed arms.
+
+## Triage: both remaining defects are immaterial (2026-08-20)
+
+Bounded check, not a reopened investigation. The test for each was: does
+removing it change predictions?
+
+### `rb_broken_tackles_prior` — immaterial, conclusively
+
+| | |
+|---|---|
+| training values | **1 unique value** (0.0000), sd 0.000000 |
+| test values (2025) | 61 unique, 4.3-85.0 |
+| LightGBM importance | **0** (rank 54/64) |
+| mean prediction change if dropped | **0.0000 PPR** |
+
+Constant across every training row, so no split is ever learned on it and
+the 2025 values are ignored. Left in place per the directive's instruction
+not to change model behaviour merely because a defect exists.
+
+Recorded but not acted on: `seasonal_pfr.broken_tackles_per_att` is NULL
+for 2018-2023 and populated only in 2024, and the column is **misnamed** —
+it holds raw counts (avg 15.7, max 85), not a per-attempt rate. So the
+feature is unusable rather than merely discontinuous.
+
+**Trigger condition:** if anyone backfills it (the per-week source,
+`weekly_pfr.rushing_broken_tackles`, does cover 2018-2025), the feature
+becomes live and non-constant and this triage no longer applies. Re-check
+then.
+
+### Coaching left-censoring — real, but within noise
+
+`weeks_since_coaching_change` is a `cumcount()`, so the panel's first
+season asserts every team just changed coaches. The feature does vary in
+training (339 unique values, sd 0.086), unlike the RB case, so the model
+can and does split on it.
+
+| fold | all features | drop coaching feats | drop 2006 rows |
+|---|---|---|---|
+| QB 2024 | 5.9689 | 5.9522 (**-0.017**) | 5.9523 (-0.017) |
+| QB 2025 | 6.0005 | 6.0353 (**+0.035**) | 6.0422 (+0.042) |
+
+Individual predictions move ~0.5 PPR, but the net accuracy effect is
+**sign-inconsistent across folds** and never exceeds 0.042 — inside the
+±0.046 noise band the clean-data re-run established. Dropping 2006 rows
+outright gives the same inconsistent answer.
+
+Not an opportunity feature, and no consistent effect on the production
+baseline. Documented, not fixed.
+
+---
+
+## PRE-REGISTRATION: opportunity-layer experiment (2026-08-20)
+
+Written and committed **before** the experiment runs.
+
+### Motivation
+
+The snap-bucket diagnostic is the only remaining large, unexplained
+structure in weekly error: the model retains 51-68% of true dynamic range
+across realized-snap buckets, over-predicting low-snap games and
+under-predicting high-snap ones. Realized snaps are not knowable at
+forecast time, so this measures opportunity uncertainty rather than
+production error.
+
+### Arms
+
+All arms share folds, evaluation population, target definition, metrics and
+configuration. Only the estimator structure differs.
+
+* **A — baseline.** Current production model: FINAL_CONFIG architecture,
+  window and weighting; population `apply_regime(..., "B_extended")`;
+  predicts `fantasy_points` directly. Frozen.
+* **B — multiplicative opportunity.**
+  `E[PPR] = E[snaps] x E[PPR per snap]`, the two estimated by separate
+  models on the same features.
+* **C — opportunity as a feature.** Baseline model plus predicted snaps as
+  one extra input. Secondary; it separates "the opportunity signal helps"
+  from "the multiplicative structure helps."
+
+### Stated assumptions
+
+The multiplicative form assumes snaps and per-snap efficiency are
+conditionally independent given features. They may not be. This is an
+assumption being tested, not a derivation.
+
+Both component models use MSE (mean-oriented) objectives, because a product
+of medians does not approximate a mean. The per-snap model is fitted with
+`sample_weight = snap_count x recency`, so it estimates the snap-weighted
+mean rate — the quantity that reconstructs totals — rather than letting
+1-snap rows dominate.
+
+### Decision criteria, fixed in advance
+
+Call the opportunity architecture successful only if ALL hold:
+
+1. Mean weekly MAE improvement (B vs A) **>= 0.05** at a position. The
+   established noise band is +/-0.046 per fold, so anything smaller is not
+   distinguishable from noise.
+2. Improvement at **>= 3 of 4 positions**.
+3. Improvement **not driven by a single fold** — the sign must hold in at
+   least 2 of 3 folds wherever a position improves.
+4. Snap-bucket compression **contracts**: the predicted-vs-actual slope
+   across buckets moves toward 1.0 relative to baseline.
+5. The opportunity model actually predicts opportunity (report its MAE and
+   correlation; a model no better than a positional mean fails).
+
+If 1-3 pass but 4 fails, report that MAE improved for reasons unrelated to
+the identified mechanism, and do not adopt.
+
+If the criteria are not met, the result is reported as a negative and the
+architecture is not adopted. No tuning until something passes.
+
+### Metrics reported regardless of outcome
+
+Weekly MAE / RMSE / bias; season MAE / bias; snap-bucket bias table;
+opportunity-prediction error. Broken out by QB / RB / WR / TE and by fold.
