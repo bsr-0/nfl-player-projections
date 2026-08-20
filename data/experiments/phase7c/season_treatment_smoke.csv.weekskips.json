@@ -1,0 +1,4458 @@
+[
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0030506",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031299",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031585",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031585",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031585",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031585",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031585",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0031690",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032134",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0032141",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033090",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033110",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033288",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033288",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033439",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033439",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033455",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033757",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033881",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033885",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033885",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033885",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033885",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033885",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0033885",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034159",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034159",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034270",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034351",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034351",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034351",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034351",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034351",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034351",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034351",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034365",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034613",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034613",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034613",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034613",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034613",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034830",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0034970",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035229",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035229",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035229",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035229",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035229",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035229",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035229",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035249",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035249",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035547",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035572",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035644",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035644",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035644",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0035771",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036059",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036232",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036232",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036232",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036232",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036332",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036332",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036429",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036438",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036510",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036534",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036534",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036534",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036534",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036534",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036556",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036590",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036640",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036741",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036741",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036741",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036741",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036741",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036741",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0036825",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037005",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037005",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037005",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037005",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037005",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037112",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037252",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037277",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037282",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037306",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037306",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037306",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037306",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037306",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037306",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037306",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037317",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037348",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037475",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037475",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037539",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037539",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037539",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037539",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037569",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037654",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037744",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0037838",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038041",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038041",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038041",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038046",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038046",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038046",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038046",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038129",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038129",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038129",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038394",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038394",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038394",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038394",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038394",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038394",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038394",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038456",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038498",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038590",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038590",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038590",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038590",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038590",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038590",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038590",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038643",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038643",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038643",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038643",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038643",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038643",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038643",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038710",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038710",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038710",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038710",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038710",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038710",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038720",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038735",
+    "season": 2024,
+    "week": 2,
+    "reason": "no_prior_history",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038933",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038933",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0038933",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039050",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039065",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039066",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039066",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039066",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039066",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039066",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039066",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039074",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039074",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039144",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039356",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039359",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039359",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039420",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039420",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039420",
+    "season": 2024,
+    "week": 1,
+    "reason": "no_prior_history",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039458",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039613",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039613",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039613",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039613",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039613",
+    "season": 2024,
+    "week": 3,
+    "reason": "no_prior_history",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039631",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 7,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 8,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039648",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 1,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 2,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 3,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 4,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 5,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 6,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039754",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039814",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 9,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 10,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 11,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 12,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 13,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039824",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039847",
+    "season": 2024,
+    "week": 14,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039847",
+    "season": 2024,
+    "week": 15,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039847",
+    "season": 2024,
+    "week": 16,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039847",
+    "season": 2024,
+    "week": 17,
+    "reason": "roster_ineligible",
+    "error": null
+  },
+  {
+    "phase": "Phase 7 (season projection)",
+    "player_id": "00-0039847",
+    "season": 2024,
+    "week": 18,
+    "reason": "roster_ineligible",
+    "error": null
+  }
+]

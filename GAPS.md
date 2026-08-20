@@ -7879,3 +7879,77 @@ because it attacks the median-vs-mean mismatch at source and needs no
 knowledge of who will stay healthy. The 7A decomposition says the bias is
 inherited from the weekly estimator, and this diagnostic says it cannot be
 recovered downstream from information available at projection time.
+
+## Phase 7C RESULT: mean objective fixes season bias, at a cost (2026-08-19)
+
+Pre-registered single-lever test. `data/experiments/phase7c/`. Both arms:
+1,744 season rows, 21,465 week rows, symmetric difference **0** — identical
+player-seasons. Baseline weekly MAE agrees with the Phase 4 harness within
+~1% at every position (QB 6.061 vs 6.087, RB 4.334 vs 4.397, TE 2.770 vs
+2.806, WR 4.031 vs 4.090), so the two runners measure the same thing.
+
+### Weekly (real weeks only; + bias = over-predict)
+
+| position | MAE A | MAE B | delta | bias A | bias B |
+|---|---|---|---|---|---|
+| QB | 6.061 | 6.188 | +0.127 | -0.813 | **-0.866** |
+| RB | 4.334 | 4.400 | +0.067 | -1.590 | **-0.313** |
+| TE | 2.770 | 2.876 | +0.107 | -1.324 | **-0.105** |
+| WR | 4.031 | 4.254 | +0.224 | -1.464 | **-0.022** |
+
+Weekly MAE degrades slightly everywhere (+0.07 to +0.22), exactly as
+predicted: MAE is minimised by the median, so a mean objective must lose
+weekly MAE. Weekly bias collapses toward zero for RB/TE/WR.
+
+### The mechanism is confirmed by the control
+
+QB's weekly bias **does not move** (-0.813 -> -0.866) while RB/TE/WR's
+collapses. That is what the Jensen caveat predicted: `G_yeojohnson_mse`
+minimises MSE in transformed space, which is not the conditional mean in
+PPR space, so QB was never truly switched to a mean objective. Combined
+with QB's near-symmetric target (skew 0.29, mean-median gap 0.11), it is a
+genuine control arm — and it shows no benefit. The bias reduction tracks
+skew across the other three.
+
+### Season
+
+| position | n | MAE A | MAE B | delta | bias A | bias B |
+|---|---|---|---|---|---|---|
+| QB | 285 | 27.56 | 29.10 | **+1.54** | +1.50 | +1.12 |
+| RB | 392 | 21.06 | 18.82 | **-2.24** | -15.43 | -1.32 |
+| TE | 393 | 18.14 | 13.77 | **-4.37** | -15.94 | -0.94 |
+| WR | 674 | 20.61 | 18.79 | **-1.82** | -16.03 | +0.64 |
+
+Overall season MAE **21.29 -> 19.35** (-9%); overall season bias
+**-13.01 -> -0.08**.
+
+### But the pre-registered reject condition also fires
+
+| position | group | n | MAE A | MAE B | bias A | bias B |
+|---|---|---|---|---|---|---|
+| RB | zero-synthetic | 230 | 28.32 | **21.80** | -24.60 | -7.88 |
+| RB | has synthetic | 162 | 10.76 | **14.58** | -2.42 | +8.00 |
+| TE | zero-synthetic | 324 | 20.26 | **14.98** | -18.21 | -1.95 |
+| TE | has synthetic | 69 | 8.16 | 8.09 | -5.29 | +3.79 |
+| WR | zero-synthetic | 512 | 23.89 | **20.16** | -19.66 | -1.67 |
+| WR | has synthetic | 162 | 10.24 | **14.47** | -4.56 | +7.93 |
+
+RB's and WR's synthetic-week populations get **materially worse** (+35% and
++41% MAE). Those players were near-calibrated under the baseline (bias -2.4
+and -4.6); a uniform upward shift pushes them from slightly-under to clearly
+-over (+8.0, +7.9). TE's synthetic group is unaffected (n=69).
+
+So two rows of the decision table fire simultaneously: "weekly slightly
+worse + season materially better + bias substantially reduced -> strong
+candidate" for the zero-synthetic population, and "season improves only for
+zero-synthetic but synthetic worsens materially -> reject/investigate" for
+RB and WR.
+
+**QB is a clean reject** on its own terms: weekly worse, season worse, bias
+essentially unchanged.
+
+### Not decided here
+
+The result is real and the mechanism is confirmed, but it is not the clean
+win the decision rule was written to accept. Adoption is a judgement about
+which population the season projection is FOR.
