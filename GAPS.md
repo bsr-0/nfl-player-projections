@@ -8016,3 +8016,175 @@ The honest options are a conditional-projection estimand
 (E[points | available], which 7C improves) or an unconditional season
 estimand (which needs the availability term), and they are different
 products rather than better and worse versions of one.
+
+---
+
+## Population regime experiment: the participation contract (2026-08-19)
+
+Refactors the production target from "a stats row happened to exist" to
+"we observed the player participate," per the directive to separate
+conditional production from availability. New code:
+`src/models/single_week_ppr/population.py`,
+`scripts/run_population_regime_experiment.py`,
+`tests/test_population_regimes.py` (13 tests).
+
+### The contract
+
+| era | evidence | `participation_quality` |
+|---|---|---|
+| 2013+ | `offense_snaps > 0` | 2 (snap-confirmed) |
+| 2006-2012 | `PPR > 0`, or `inferred_pbp_confirmed_zero` | 1 (inferred) |
+| either | neither | 0 (excluded) |
+
+2013 is not "where modern football starts" — it is the first season with
+PFR snap coverage, i.e. the start of the high-confidence participation-label
+regime. The quality-1 proxy errs toward false exclusion: it costs
+legitimate zero-point 2006-2012 games rather than admitting inactive/IR/
+practice-squad weeks.
+
+Snap-era rows with NULL `snap_count` (~1.7K of 119K, unmatched by the snap
+feed) are quality 0, not 1 — letting them fall back to the PPR proxy would
+leak the weak label into the regime whose whole claim is snap-confirmed
+labels.
+
+### First finding: the filter is nearly a no-op on the existing population
+
+`player_weekly_stats` is box-score-triggered, so it already contains almost
+only participation rows, plus the 12,959 `inferred_snap_verified_zero` rows
+(snaps > 0, PPR = 0) the panel build added. Rows that are *confirmed* `snap_count = 0` in 2013+ at QB/RB/WR/TE:
+**63** out of 119K (62 of them carrying a real `nflverse_stats` line).
+
+So directive steps 2-4 were a contract-and-guard job, not a data-deletion
+job. Population A ≈ population B in the directive's A/B/C sense. The real
+lever turned out to be the 2006-2012 era rule, not the snap filter.
+
+Corollary worth keeping: a literal `offensive_snaps > 0` filter would have
+silently deleted all 33,188 pre-2013 rows, because the column defaults to 0
+and no snap data exists before 2013. Pre-2013 `snap_count = 0` means
+UNKNOWN, not "did not play."
+
+### The experiment
+
+Four arms, one shared fold load per (position, season), FINAL_CONFIG
+architecture + weighting held fixed, all arms scored on an IDENTICAL
+held-out population (snap-confirmed rows only). Features are engineered
+over the full panel BEFORE the population filter, so 2006-2012 feeds career
+history and rolling windows to every arm regardless.
+
+    P0_current          FINAL_CONFIG window, no participation filter (reference)
+    A_clean_modern      2013+, snaps > 0
+    B_extended          + 2006-2012 via the PPR > 0 proxy
+    C_extended_flagged  B, with participation_quality as a model feature
+
+A/B/C run at window="all" so the era rule is the only moving part; WR's 3y
+and TE's 10y FINAL_CONFIG windows never reach 2012 and would have made A
+and B identical there. This means A_clean_modern is NOT the same thing as
+current production, which is why P0_current is carried separately.
+
+### Result: the era rule is a null except at TE
+
+Weekly MAE, B minus A, per fold (negative = keeping 2006-2012 helps):
+
+| position | 2023 | 2024 | 2025 | sign-consistent |
+|---|---|---|---|---|
+| QB | -0.053 | -0.000 | **+0.215** | no |
+| RB | -0.010 | +0.012 | -0.061 | no |
+| TE | +0.016 | +0.013 | +0.013 | **yes** |
+| WR | -0.007 | -0.012 | **-0.267** | no |
+
+In 2023 and 2024 every |B-A| is <= 0.053 and mostly <= 0.016 — no effect at
+any position. All the separation is in 2025, and there QB and WR point in
+**opposite directions**. The pooled means are one fold wearing a disguise.
+
+Note 2025 was already flagged as anomalous for an unrelated reason (p50
+quantile coverage below nominal across all 4 positions, never root-caused).
+It is now also the only fold where the population arms separate. Do not
+resolve the era question on this evidence.
+
+TE is the only position with a sign-consistent effect, and it is the
+item-13 pattern exactly — B trades a tiny MAE loss for a real gain on the
+quantities that matter:
+
+| TE metric | direction | magnitude, all 3 folds |
+|---|---|---|
+| weekly MAE | A better | +0.013 to +0.016 |
+| weekly bias | B better | 0.128 to 0.173 less under-prediction |
+| weekly RMSE | B better | 0.014 to 0.041 |
+| season-conditional MAE | B better | **1.37 to 1.49** |
+
+### Result: flagging the era buys nothing
+
+C minus B on weekly MAE: QB +0.002, RB -0.009, TE -0.000, WR +0.000. A
+decisive null. The extra rows help or hurt as raw data; handing the model
+an explicit regime label does not let it exploit them better. Record
+`participation_quality` in the pipeline for auditing, but there is no case
+for feeding it as a feature.
+
+### Result: the model has learned participation -> production directionally,
+### and compressed it by half
+
+Predicted vs actual mean PPR by REALIZED offensive-snap bucket (arm B,
+pooled). Ordering is monotonic at every position — the relationship is
+learned — but the slope is roughly 0.5-0.7 instead of 1.0:
+
+| pos | 0-5 | 5-15 | 15-30 | 30-50 | 50+ | slope | range retained |
+|---|---|---|---|---|---|---|---|
+| QB | +4.11 | +3.91 | +2.05 | +0.24 | **-2.48** | 0.603 | 60% |
+| RB | +1.20 | +0.37 | -1.48 | -3.43 | **-6.33** | 0.590 | 57% |
+| TE | +0.43 | +0.17 | -0.37 | -1.67 | **-4.85** | 0.516 | 51% |
+| WR | +0.37 | +0.02 | -0.66 | -1.95 | **-3.50** | 0.687 | 68% |
+
+(cells are predicted minus actual)
+
+The model over-predicts low-snap games and under-predicts high-snap games
+at every position, retaining only 51-68% of the true dynamic range.
+
+**This is not a defect the production model can fix, and that is the
+point.** Realized snaps are not known at forecast time, so the compression
+is what a median-optimising estimator correctly does when opportunity is
+uncertain. The table therefore measures how much weekly error is
+*opportunity uncertainty* rather than production error — direct empirical
+support for the split architecture. The bucket-level bias pattern is
+near-identical across all four arms, confirming the population question and
+the compression question are independent.
+
+### Disposition
+
+The contract and its tests are the durable deliverable. The era-inclusion
+choice is NOT resolvable at n=3 folds with the effect concentrated in one
+anomalous season; B remains the default (nothing throws away seven seasons
+on this evidence, and TE consistently prefers it at season level).
+
+Not established here: anything about the availability half. Every number
+above is conditional on observed participation.
+
+---
+
+## Live bug: `age` is a per-position constant, so the whole age-curve
+## feature family is dead (2026-08-19)
+
+Found while bucketing the population-regime results by age — every position
+collapsed into a single age bucket, which is impossible for real ages.
+
+`src/features/season_long_features.py:200-204` falls back to
+`avg_ages = {'QB': 28, 'RB': 25, 'WR': 26, 'TE': 27}` when neither `age`
+nor `years_exp` is in the frame. Neither ever is: `age` is not a column in
+`get_all_players_for_training()`'s output, and nothing computes
+`years_exp`. So **every training row gets its position's constant.**
+
+Consequence: `age_curve` — a declared CAUSAL_FEATURE at all four positions —
+is a zero-variance constant (QB 1.0000, RB 1.0000, WR 0.9950, TE 0.9960).
+So are `age_factor`, `age_expected_games`, `decline_rate`,
+`years_from_peak`, `is_in_prime`, and `injury_age_risk`.
+
+`feature_engineering.py:_add_age_curve_feature` has a *correct* birth-date
+fallback (lines 619-645) that joins `players.birth_date`, but it is guarded
+by `if "age" in df.columns` — and season_long_features has already
+populated the constant by then. The working path is dead-coded behind the
+broken one.
+
+`players.birth_date` is populated for 2,016/2,985 players (68%), so real
+age is derivable. Not fixed here: fixing it changes model inputs and would
+have invalidated the regime comparison running at the time. It also means
+every age/aging-curve result this project has ever reported was computed on
+a constant.
