@@ -614,40 +614,16 @@ class FeatureEngineer:
         from config.settings import AGE_CURVE_PARAMS
         default_peak, default_coeff = 27, 0.005
 
-        if "age" in df.columns:
-            age = df["age"].fillna(26)
-        elif "season" in df.columns and "birth_year" in df.columns:
-            age = df["season"] - df["birth_year"]
-        elif "season" in df.columns and "player_id" in df.columns:
-            # Join birth_date from players table
-            try:
-                import sqlite3
-                from config.settings import DB_PATH
-                c = sqlite3.connect(str(DB_PATH))
-                bd_rows = c.execute(
-                    "SELECT player_id, birth_date FROM players "
-                    "WHERE birth_date IS NOT NULL AND birth_date != ''"
-                ).fetchall()
-                c.close()
-                bd_map = {}
-                for pid, bd in bd_rows:
-                    try:
-                        bd_map[pid] = int(bd[:4])  # YYYY from YYYY-MM-DD
-                    except Exception:
-                        pass
-                if bd_map:
-                    df["_birth_year"] = df["player_id"].map(bd_map)
-                    age = df["season"] - df["_birth_year"]
-                    df.drop(columns=["_birth_year"], inplace=True, errors="ignore")
-                else:
-                    df["age_curve"] = 1.0
-                    return df
-            except Exception:
-                df["age_curve"] = 1.0
-                return df
-        else:
+        # This branch used to carry its own birth_date join, dead-coded
+        # behind `if "age" in df.columns` -- season_long_features had already
+        # populated `age` with a position constant by the time it ran, so the
+        # working path never executed (GAPS.md 2026-08-19). One derivation
+        # now, shared with season_long_features.
+        if "season" not in df.columns:
             df["age_curve"] = 1.0
             return df
+        from src.features.player_age import derive_age
+        age = derive_age(df)
 
         if "position" in df.columns:
             peak = df["position"].map(

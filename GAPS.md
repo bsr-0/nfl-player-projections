@@ -8188,3 +8188,106 @@ age is derivable. Not fixed here: fixing it changes model inputs and would
 have invalidated the regime comparison running at the time. It also means
 every age/aging-curve result this project has ever reported was computed on
 a constant.
+
+### FIXED 2026-08-20
+
+Three changes, one commit:
+
+1. `scripts/backfill_player_birth_dates.py` — `players.birth_date` covered
+   only 68% of players and 50-71% of player-weeks (QB worst). Backfilled
+   937 birth dates from `nfl_data_py.import_players()` (24,998 available,
+   keyed by gsis_id). Row-weighted coverage is now ~100% at every position.
+   Fill-only; never overwrites. Of the 2,016 players where both sources had
+   a value, exactly 2 disagreed, so there was no case for an overwrite.
+   The `rosters` table also has a `birth_date` column and looks like a
+   second source — it is empty (0 rows), so it is not one.
+
+2. `src/features/player_age.py` — one age derivation, used by both
+   callers. Age is taken at Sept 1 of the season (matching
+   `preseason_projector._season_start`), so a player has one age per season.
+   Fallback order: `age` column, `birth_date` column, `players.birth_date`
+   via player_id, `22 + years_exp`, position constant.
+
+3. The position constant now **warns above a 10% fallback rate**. That
+   guardrail is the actual fix for this class of bug — the original defect
+   was not that a fallback existed, but that it was silent. The codebase
+   already used this pattern for `opp_fpts_allowed_*` and Vegas features;
+   age simply never had it.
+
+`feature_engineering._add_age_curve_feature`'s dead-coded birth-date join
+was deleted rather than repaired, since it now duplicates the shared helper.
+
+Verified on real data, all four positions at 0.000% on the position
+constant:
+
+| pos | n | mean age | sd | min | max | unique ages | age_curve sd | age_curve unique |
+|---|---|---|---|---|---|---|---|---|
+| QB | 14,514 | 28.38 | 4.59 | 21.2 | 45.1 | 1,342 | 0.0970 | 1,224 |
+| RB | 27,805 | 25.86 | 2.78 | 20.6 | 37.3 | 1,851 | 0.1095 | 1,838 |
+| WR | 44,986 | 26.27 | 3.11 | 20.8 | 38.8 | 2,537 | 0.0661 | 2,537 |
+| TE | 26,464 | 26.79 | 3.10 | 20.8 | 41.3 | 1,797 | 0.0559 | 1,518 |
+
+`age_curve` went from 1 unique value per position to 1,224-2,537.
+
+Spot-checked against biography, not just against distribution shape:
+Brady 1977-08-03 (45.1 in 2022, his last season), Testaverde 1963-11-13
+(43.8 in 2007), Marcedes Lewis 1984-05-19 (41.3 in 2025), Benjamin Watson
+1980-12-18 (38.7 in 2019). All correct.
+
+No leakage: birth date is static and known years ahead. Pinned by
+`test_age_uses_no_future_information` (a 2018 row must not move when 2020
+rows join the frame). 13 tests in `tests/test_player_age.py`; full suite
+376 passed.
+
+---
+
+## Live bug: 11.4% of the QB training population are not quarterbacks
+## (2026-08-20)
+
+Found while spot-checking ages — Christian McCaffrey surfaced in a
+`position='QB'` query. He is labeled QB in the `players` table. So are
+Derrick Henry, DJ Moore, Cooper Kupp, Devin Singletary and Courtland
+Sutton.
+
+Comparing `players.position` against `nfl_data_py.import_players()`:
+99 of 2,884 labeled players disagree (3.4%), which is 2,501 player-weeks
+overall (2.18%) — but it is wildly concentrated:
+
+| labeled | rows | mislabeled | share | mean FP (correct) | mean FP (mislabeled) |
+|---|---|---|---|---|---|
+| **QB** | 14,622 | **1,666** | **11.39%** | 13.08 | 11.62 |
+| RB | 28,037 | 546 | 1.95% | 8.39 | 2.51 |
+| TE | 26,604 | 222 | 0.83% | 4.88 | 5.22 |
+| WR | 45,333 | 67 | 0.15% | 7.67 | 2.60 |
+
+The QB contamination is 822 WR rows, 601 RB rows and 237 TE rows. A
+corroborating symptom that needs no external feed: **15.0% of "QB"
+player-weeks have zero passing attempts**, and 1,541 of those 2,187 rows
+are flagged mislabeled.
+
+### Why this matters more than the row count suggests
+
+Every long-standing unexplained QB anomaly in this file is of the form "QB
+behaves unlike the other three positions":
+
+* QB early-season R² = 0.166, the worst of any position
+* Phase 7: QB over-projects (+22.5) while RB/WR/TE all under-project
+* Phase 7: players needing synthetic weeks have ~2x error *except* QB,
+  where the pattern inverts
+* Phase 7C: QB is the near-control arm that behaves unlike the others
+* The population regime experiment (2026-08-19): QB is the one position
+  whose 2025 fold moves opposite to WR
+
+An 11% admixture of players drawn from an entirely different scoring
+distribution is a candidate common cause for that whole family. Not
+established — but it should be ruled in or out before any of those
+findings is treated as a modeling result.
+
+### Not fixed here
+
+Relabeling changes the training population at every position at once,
+which would invalidate any comparison running against the current
+populations. It also needs a decision on what the authoritative position
+source is (the feed's single `position`, a per-season position, or usage-
+derived), since a player's position can legitimately change across a
+career and `players` has one row per player with no season dimension.

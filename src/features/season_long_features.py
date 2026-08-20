@@ -193,15 +193,13 @@ class AgeCurveModel:
         
         print("Adding age/decline curve features...")
         
-        # Calculate player age (approximate from season)
-        if 'age' not in result.columns:
-            # Try to estimate age from years in league
-            if 'years_exp' in result.columns:
-                result['age'] = 22 + result['years_exp']
-            else:
-                # Use position-based average age
-                avg_ages = {'QB': 28, 'RB': 25, 'WR': 26, 'TE': 27}
-                result['age'] = result['position'].map(avg_ages).fillna(26)
+        # Real age from birth date, falling back through years_exp to the
+        # position constant. This used to BE the position constant for every
+        # row -- neither 'age' nor 'years_exp' is ever present in the
+        # training frame -- which made every feature below zero-variance
+        # (GAPS.md 2026-08-19).
+        from src.features.player_age import derive_age
+        result['age'] = derive_age(result)
         
         # age_factor/age_expected_games/decline_rate are pure functions of
         # (age, position) drawn from small static lookup tables, but were
