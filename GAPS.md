@@ -8536,3 +8536,105 @@ weekly error is not currently limited by the defects being found in it.
 The snap-bucket diagnostic said the same thing from a different direction —
 the dominant term is opportunity uncertainty, which no amount of
 feature-correctness work touches.
+
+## ROOT CAUSE: the 2025 fold anomaly is broken features, not football (2026-08-20)
+
+Every experiment in this file that separates, separates only in 2025, in
+directions that are not stable across positions or across data fixes.
+Root-caused today. It is a train/test feature discontinuity.
+
+### The actuals are normal; the predictions collapse
+
+Arm B, held-out rows, by test season:
+
+| position | mean pred 2023 | 2024 | 2025 | mean actual 2025 |
+|---|---|---|---|---|
+| QB | 12.79 | 13.07 | **11.13** | 13.45 (flat) |
+| RB | 7.04 | 7.05 | **5.37** (-24%) | 8.13 (flat) |
+| WR | 5.58 | 5.70 | **3.89** (-32%) | 6.44 (flat) |
+| TE | 3.17 | 3.11 | **2.74** | 4.43 (flat) |
+
+Actual scoring in 2025 is ordinary. The model's output level drops by up to
+a third. That rules out "2025 football was different" and points at features.
+
+### Three features are broken in training and correct in 2025
+
+**`is_dome`** — derived from `home_away` + `DOME_STADIUMS`, not from the
+weather table. `home_away` is populated on **100% of
+`inferred_snap_verified_zero` rows and 0% of `nflverse_stats` rows** in
+every season — except 2025, where the re-ingest
+(`nfl_data.db.bak-2025-reingest-20260819`) filled it completely:
+
+| season | data_source | home_away populated |
+|---|---|---|
+| 2024 | inferred_snap_verified_zero | 1,215 / 1,215 |
+| 2024 | nflverse_stats | **0 / 5,480** |
+| 2025 | inferred_snap_verified_zero | 1,152 / 1,152 |
+| 2025 | nflverse_stats | **5,612 / 5,612** |
+
+So `is_dome` reads ~3% across all training seasons and **35.7%** in 2025.
+`game_weather` says 32-35% every season, so nothing is missing at source —
+the weekly ingest simply never wrote `home_away`. `is_dome` ranks **4th of
+RB's 64 features** by LightGBM importance.
+
+**`team_plays_roll3_mean`** — ~52 through 2019, collapses to 11.4 (2020)
+and ~3 (2021-2024), returns to 46.2 in 2025. Cause: `team_stats.total_plays`
+is NULL for ~558 of ~600 rows in each of 2020-2024, populated in 2018-19
+and 2025. The break lands exactly on the most recent and most heavily
+recency-weighted training seasons.
+
+**`team_motion_rate` / `team_play_action_rate`** — frozen at 0.716 / 0.323
+for 2006-2022, real values only from 2023. Almost certainly a genuine
+source limit (FTN charting starts ~2022), so the defect is the silent
+default-fill, not the absence.
+
+### Causal test: remove them and the anomaly disappears
+
+Refit each position for 2024 (control) and 2025 with the five columns
+dropped:
+
+| position | 2025 gap vs 2024, before | after | 2025 bias before | after | 2024 control cost |
+|---|---|---|---|---|---|
+| QB | +0.406 | **-0.005** | -2.328 | -0.617 | +0.047 |
+| RB | +0.487 | **-0.047** | -2.755 | -1.303 | +0.050 |
+| WR | +0.510 | **-0.120** | -2.556 | -1.089 | +0.110 |
+| TE | +0.333 | **+0.076** | -1.694 | -1.253 | +0.109 |
+| **mean** | **+0.434** | **-0.024** | -2.333 | -1.066 | +0.079 |
+
+The 2025 penalty averages +0.434 MAE and goes to **-0.024** — gone, at all
+four positions. Prediction level recovers (RB 5.37 -> 6.82, WR 3.89 ->
+5.35, QB 11.13 -> 12.84). The 2024 control pays only +0.079, confirming
+these columns carry almost no real signal even where they are populated.
+
+### This also explains the 2025 quantile-coverage anomaly
+
+Recorded in Phase 4 and never root-caused: p50 coverage runs below nominal
+specifically for 2025, across all four positions. A uniformly depressed
+prediction level produces exactly that — actuals exceed p50 more often than
+they should. Same cause, now closed.
+
+### Consequences
+
+Every result using 2025 as a test season is affected: Phases 4, 5, 6c,
+7/7A/7B/7C, and the population-regime experiment. This is the reason the
+era-rule contrast was unstable — the arms were being separated by a feature
+discontinuity, not by the era rule.
+
+It also reframes the last two days. The age fix and the position fix each
+produced correct data and no accuracy change. This one is a *feature-value*
+defect rather than a label defect, and it moves MAE by 8-12% on the
+affected fold. The lesson is not "data fixes don't pay" — it is that
+train/test distribution breaks are the expensive class, and neither
+previous fix was one.
+
+### Fix, not yet applied
+
+1. Backfill `player_weekly_stats.home_away` for all seasons from
+   `schedule` (data is present), and make the weekly ingest write it.
+2. Backfill `team_stats.total_plays` for 2020-2024 from PBP.
+3. Mark `team_motion_rate`/`team_play_action_rate` unknown before 2023
+   rather than default-filling — the zero-vs-unknown rule the snap columns
+   already follow.
+4. Add a coverage gate that fails when a declared CAUSAL_FEATURE's mean
+   shifts by more than a few sd between adjacent seasons. All three of
+   these would have tripped it.
