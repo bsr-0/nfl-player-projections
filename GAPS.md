@@ -9080,3 +9080,95 @@ architecture is not adopted. No tuning until something passes.
 
 Weekly MAE / RMSE / bias; season MAE / bias; snap-bucket bias table;
 opportunity-prediction error. Broken out by QB / RB / WR / TE and by fold.
+
+## RESULT: the opportunity layer FAILS its pre-registered test (2026-08-20)
+
+Criteria were fixed and committed (`ed55927`) before the run. Judged
+against them as written.
+
+### Criterion 5 — does the opportunity model predict opportunity? **PASS**
+
+| position | snaps MAE | positional-mean baseline | improvement | Spearman |
+|---|---|---|---|---|
+| QB | 12.48 | 17.54 | 29% | 0.48 |
+| RB | 7.90 | 13.98 | **44%** | 0.79 |
+| TE | 8.28 | 15.14 | **45%** | 0.80 |
+| WR | 10.54 | 17.94 | 41% | 0.77 |
+
+Snaps are genuinely predictable from pre-game information. The premise of
+the architecture is sound.
+
+### Criteria 1-3 — weekly MAE. **FAIL, unambiguously**
+
+B minus A, mean over folds (positive = worse than baseline):
+
+| position | B | C |
+|---|---|---|
+| QB | +0.144 | +0.009 |
+| RB | +0.181 | +0.055 |
+| TE | +0.122 | -0.002 |
+| WR | +0.318 | +0.106 |
+
+**B is worse in 12 of 12 folds.** Zero positions improve by the required
+0.05; zero improve at all. C (opportunity as a plain feature) is worse in
+8 of 12 and never meaningfully better.
+
+There is no subgroup rescue here and none was looked for. The result is
+perfectly consistent in the wrong direction.
+
+### Criterion 4 — snap-bucket compression. **MIXED, and only TE**
+
+Mean slope change (toward 1.0 is the goal):
+
+| position | baseline slope | B slope | change |
+|---|---|---|---|
+| TE | 0.52-0.55 | **0.74-0.76** | **+0.217** |
+| WR | 0.66-0.69 | 0.66-0.78 | +0.027 |
+| RB | 0.63-0.67 | 0.61-0.65 | -0.013 |
+| QB | 0.61 | 0.58-0.59 | -0.025 |
+
+TE's improvement is large and consistent across all three folds. Nowhere
+else does the mechanism move. So the compression is not a single
+phenomenon with a single cause — at TE it is opportunity uncertainty, and
+at QB/RB it is something else.
+
+### Verdict: do not adopt
+
+Three of five criteria fail. The architecture does not improve weekly
+fantasy projection, which is what it was built to do.
+
+### The one result that is genuinely interesting — and its confound
+
+Season-level, summed over participated weeks:
+
+| position | season bias A | season bias B | season MAE A | season MAE B |
+|---|---|---|---|---|
+| QB | -4.06 | **+1.27** | 18.95 | 19.69 |
+| RB | -12.65 | **-0.36** | 18.43 | 18.45 |
+| TE | -15.89 | **+2.34** | 17.99 | **12.80** |
+| WR | -14.92 | **+3.40** | 19.81 | 20.41 |
+
+Season bias collapses from -4 to -16 (severe under-projection, the
+long-standing Phase 7A finding) to roughly zero at every position. TE's
+season MAE improves 29%.
+
+**Do not read this as vindication of the opportunity split.** B is
+mean-oriented by construction (both components use MSE, per the
+pre-registration), while the baseline architectures are median/Huber.
+Summing many median-oriented under-predictions compounds into exactly the
+season under-projection seen in column A. So the season-bias gain is
+plausibly attributable to *mean-orientation alone*, with no opportunity
+decomposition required — and Phase 7C already showed a mean-objective
+target transform produces a similar season-level effect.
+
+That is a testable confound, not a conclusion: the clean test is a
+mean-objective baseline WITHOUT the opportunity split. Until that is run,
+the season numbers above establish nothing about opportunity modelling.
+
+### What this closes
+
+The snap-bucket compression was the stated motivation for this entire
+direction. It is now clear that explicitly modelling opportunity does not
+fix it except at TE, and does not improve weekly projection anywhere. Per
+the directive, no additional availability/injury/role machinery should be
+built on this foundation.
