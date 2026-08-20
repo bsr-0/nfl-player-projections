@@ -39,6 +39,23 @@ import pandas as pd
 # scripts/build_complete_player_game_panel.py:SNAP_COUNT_MIN_SEASON.
 SNAP_LABEL_MIN_SEASON = 2013
 
+# First season nflverse charts the intended receiver on INCOMPLETE passes.
+# Before 2009 it charts essentially only completions -- 2008 play-by-play
+# names a receiver on 69 incompletions, 2009 on 6,731 -- so `targets`
+# degenerates into a count of receptions and everything built on it is
+# wrong at source, not in this pipeline (GAPS.md 2026-08-20):
+#
+#     catch rate       2006-2008 reads 99.7%, vs ~61% from 2009
+#     recv_success_rate 0.847 vs 0.578 (+46%)
+#     recv_epa          ~4x inflated, because incompletions carry the
+#                       negative EPA and were never recorded
+#
+# Same shape as SNAP_LABEL_MIN_SEASON: not "old football is different" but
+# "this is where the measurement regime starts". QB is exempt -- its
+# features depend on passing and NGS, not on target charting.
+RECEIVING_CHARTING_MIN_SEASON = 2009
+RECEIVING_DEPENDENT_POSITIONS = frozenset({"RB", "WR", "TE"})
+
 QUALITY_UNOBSERVED = 0
 QUALITY_INFERRED = 1
 QUALITY_SNAP_CONFIRMED = 2
@@ -86,17 +103,39 @@ def with_participation_quality(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def apply_regime(df: pd.DataFrame, regime: str) -> pd.DataFrame:
+def receiving_floor_mask(df: pd.DataFrame) -> pd.Series:
+    """False for receiving-dependent rows below the target-charting floor.
+
+    A pre-2009 WR row still has a valid PPR target (receptions, yards and
+    touchdowns all come from the box score and are correct). What is broken
+    is its usage features. Keeping the row with plausible-looking but wrong
+    target counts is the exact failure this project spent 2026-08-20
+    removing, so the row goes.
+
+    QB rows are unaffected and stay.
+    """
+    season = pd.to_numeric(df["season"], errors="coerce")
+    position = df["position"] if "position" in df.columns else pd.Series(index=df.index, dtype=object)
+    receiving_dependent = position.isin(RECEIVING_DEPENDENT_POSITIONS)
+    return ~(receiving_dependent & (season < RECEIVING_CHARTING_MIN_SEASON))
+
+
+def apply_regime(df: pd.DataFrame, regime: str, apply_receiving_floor: bool = True) -> pd.DataFrame:
     """Filters `df` to the training population for `regime`.
 
     Adds `participation_quality` if absent. C returns the same rows as B --
     the arms differ only in whether the column is handed to the model, which
     is `regime_feature_columns`' job.
+
+    `apply_receiving_floor` drops RB/WR/TE rows before 2009, where target
+    charting does not exist. Off only for measuring what the floor costs.
     """
     if regime not in REGIMES:
         raise ValueError(f"Unknown regime: {regime!r} (expected one of {REGIMES})")
     if QUALITY_COLUMN not in df.columns:
         df = with_participation_quality(df)
+    if apply_receiving_floor:
+        df = df[receiving_floor_mask(df)]
     if regime == "A_clean_modern":
         return df[df[QUALITY_COLUMN] == QUALITY_SNAP_CONFIRMED]
     return df[df[QUALITY_COLUMN] >= QUALITY_INFERRED]

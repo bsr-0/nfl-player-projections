@@ -8824,3 +8824,38 @@ guarded by `prev_coach.notna()`; the weeks-since counter is not.
 The honest value for a team with no observed change is unknown, not zero.
 Confined mostly to 2006, but it hands the model something close to a "this
 is 2006" indicator.
+
+## The 2009 receiving-charting floor (2026-08-20)
+
+`RECEIVING_CHARTING_MIN_SEASON = 2009` in
+`src/models/single_week_ppr/population.py`, applied to RB/WR/TE. QB is
+exempt — its features come from passing and NGS, not target charting.
+
+Framed the same way as the 2013 snap floor, and for the same reason: not
+"old football is different" but "this is where the measurement regime
+starts."
+
+Contamination measured before deciding:
+
+| | 2006-2008 | 2009+ | |
+|---|---|---|---|
+| catch rate | 99.7-99.9% | ~61% | targets == receptions |
+| `recv_success_rate` | 0.847 | 0.578 | +46% |
+| `recv_epa` (season sum) | ~8,900 | ~2,350 | **~4x** |
+
+The EPA figure is the clearest tell: incompletions carry the negative EPA,
+and before 2009 they were never charted, so the surviving plays are a
+success-biased subset. No amount of backfilling fixes that — the plays do
+not exist in the source.
+
+Cost: 11,586 rows (WR 5,204, RB 3,850, TE 2,532). Those rows have valid PPR
+targets — receptions, yards and touchdowns are box-score derived and
+correct — but their usage features are wrong. Keeping a row with
+plausible-looking but false target counts is exactly the failure mode this
+whole day was spent removing, so the row goes. `apply_receiving_floor=False`
+exists to measure what the floor costs, not for production use.
+
+Affected share of each position's declared CAUSAL_FEATURES: WR 15/67, TE
+14/65, RB 8/64, QB 2/57 (and QB's two are NGS/team-level, not target-based).
+
+5 tests in `tests/test_population_regimes.py`; suite at 402.

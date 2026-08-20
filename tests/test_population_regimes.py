@@ -125,3 +125,53 @@ def test_tenure_bucket_without_first_season_is_unclassified_not_rookie():
     out = tenure_bucket(df)
     assert pd.isna(out.iloc[0])
     assert out.iloc[1] == "rookie"
+
+
+# ---------------------------------------------------------------------------
+# The 2009 receiving-charting floor
+# ---------------------------------------------------------------------------
+
+def _recv_rows():
+    return _rows([
+        {"season": 2008, "position": "WR", "snap_count": 0, "fantasy_points": 12.0,
+         "data_source": "nflverse_stats"},
+        {"season": 2008, "position": "QB", "snap_count": 0, "fantasy_points": 18.0,
+         "data_source": "nflverse_stats"},
+        {"season": 2009, "position": "WR", "snap_count": 0, "fantasy_points": 12.0,
+         "data_source": "nflverse_stats"},
+    ])
+
+
+def test_receiving_floor_drops_pre_2009_receivers():
+    """Before 2009 nflverse charts a receiver on completions only, so
+    `targets` degenerates into receptions and every usage feature built on
+    it is wrong at source."""
+    from src.models.single_week_ppr.population import receiving_floor_mask
+    out = receiving_floor_mask(_recv_rows())
+    assert out.tolist() == [False, True, True]
+
+
+def test_receiving_floor_keeps_quarterbacks():
+    """QB features come from passing and NGS, not target charting."""
+    from src.models.single_week_ppr.population import receiving_floor_mask
+    df = _rows([{"season": 2006, "position": "QB", "snap_count": 0,
+                 "fantasy_points": 20.0, "data_source": "nflverse_stats"}])
+    assert receiving_floor_mask(df).all()
+
+
+def test_regime_b_applies_the_receiving_floor():
+    kept = apply_regime(_recv_rows(), "B_extended")
+    assert kept["position"].tolist() == ["QB", "WR"]
+    assert kept["season"].tolist() == [2008, 2009]
+
+
+def test_receiving_floor_can_be_disabled_for_measurement():
+    kept = apply_regime(_recv_rows(), "B_extended", apply_receiving_floor=False)
+    assert len(kept) == 3
+
+
+def test_receiving_floor_is_a_noop_for_regime_a():
+    """A already starts at 2013, so the floor must not change it."""
+    df = _rows([{"season": 2020, "position": "WR", "snap_count": 30,
+                 "fantasy_points": 9.0, "data_source": "nflverse_stats"}])
+    assert len(apply_regime(df, "A_clean_modern")) == 1
