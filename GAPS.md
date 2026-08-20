@@ -7953,3 +7953,66 @@ essentially unchanged.
 The result is real and the mechanism is confirmed, but it is not the clean
 win the decision rule was written to accept. Adoption is a judgement about
 which population the season projection is FOR.
+
+## Phase 7C follow-up: the mixture is SMOOTH (2026-08-19)
+
+Continuous decomposition by synthetic share, on the existing 7C predictions.
+No refit.
+
+### RB/WR/TE combined (the positions the objective actually changed)
+
+| synthetic share | N | baseline bias | treated bias | d bias | baseline MAE | treated MAE | d MAE |
+|---|---|---|---|---|---|---|---|
+| 0% | 1,066 | **-20.29** | -3.10 | +17.19 | 23.74 | **18.94** | -4.81 |
+| 0-25% | 234 | -7.93 | +6.11 | +14.04 | 13.19 | 15.35 | +2.15 |
+| 25-50% | 103 | **+1.59** | +8.92 | +7.33 | 5.53 | 10.73 | +5.20 |
+| 50-75% | 42 | +2.85 | +8.43 | +5.58 | 5.54 | 10.18 | +4.64 |
+| 75-100% | 14 | +5.36 | +9.96 | +4.61 | 5.42 | 10.07 | +4.65 |
+
+Monotonic and smooth in every column. There is **no breakpoint**. Baseline
+bias climbs steadily from -20.29 to +5.36 and crosses zero at roughly a 25%
+synthetic share; the treatment shifts the whole curve up by an amount that
+itself declines smoothly (+17.19 -> +4.61), crossing zero near 0-10%.
+
+This is the "smooth mixture" case: **the correction wants to be conditioned
+on expected availability, not selected as a different global estimator per
+position.** The baseline is already well calibrated for players missing
+25-50% of the season; the objective change is right for the durable end of
+the same continuum and wrong for the absent end.
+
+### The control separates the two effects
+
+QB, whose objective did not truly change (Jensen — see 7C entry):
+
+| synthetic share | N | baseline bias | treated bias | d bias |
+|---|---|---|---|---|
+| 0% | 137 | -13.11 | -14.33 | -1.22 |
+| 0-25% | 29 | +0.57 | -2.46 | -3.03 |
+| 25-50% | 33 | +13.26 | +12.80 | -0.46 |
+| 50-75% | 52 | +17.69 | +19.59 | +1.90 |
+| 75-100% | 34 | +24.96 | +26.82 | +1.86 |
+
+QB shows **the same monotonic availability gradient** (-13.11 -> +24.96)
+with **essentially no treatment effect** (d bias -3.03 to +1.90). So the
+availability gradient is a pre-existing structure independent of the
+objective, and the objective change is a separate, roughly level shift on
+top of it.
+
+That is the decomposition made visible:
+
+    E[season] = E[points | available] x E[availability]
+
+7C improves the first term for skewed positions. The second term is
+untouched, and the gradient above is what it looks like when it is wrong.
+Nothing here establishes that the availability term has been solved — 7B
+already showed the pre-season information to estimate it is not available.
+
+### Consequence
+
+Do not adopt 7C as a per-position global estimator. The evidence says the
+target transformation should be conditioned on expected availability, and
+that conditioning is exactly what this project cannot currently do well.
+The honest options are a conditional-projection estimand
+(E[points | available], which 7C improves) or an unconditional season
+estimand (which needs the availability term), and they are different
+products rather than better and worse versions of one.
