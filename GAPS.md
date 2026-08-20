@@ -8291,3 +8291,56 @@ populations. It also needs a decision on what the authoritative position
 source is (the feed's single `position`, a per-season position, or usage-
 derived), since a player's position can legitimately change across a
 career and `players` has one row per player with no season dimension.
+
+### The age fix changes nothing measurable in the weekly model (2026-08-20)
+
+Re-ran the identical 12 folds x 4 arms with the fix in place
+(`data/experiments/population_regime_*_preagefix.csv` vs
+`population_regime_*.csv`). Training-row counts and eval-row counts are
+byte-identical across the two runs, so the age feature family is the only
+thing that moved.
+
+Weekly, mean over arms x seasons (positive = worse after the fix):
+
+| position | d MAE | d bias | d RMSE | d R² |
+|---|---|---|---|---|
+| QB | +0.0090 | -0.0841 | +0.0164 | -0.0032 |
+| RB | +0.0096 | -0.0069 | +0.0112 | -0.0025 |
+| WR | +0.0019 | -0.0134 | +0.0053 | -0.0011 |
+| TE | +0.0003 | -0.0010 | +0.0014 | -0.0004 |
+
+Season-conditional: QB +0.483 MAE, RB +0.158, WR +0.140, TE -0.001.
+
+So correcting a feature that had been a frozen constant since it was
+written produced **no improvement, and a very slight degradation**. Worth
+stating plainly rather than burying.
+
+Three things this does and does not mean:
+
+* It does not make the fix wrong. A zero-variance column declared as a
+  CAUSAL_FEATURE is a defect independent of its effect on any metric, and
+  it would have silently poisoned any future work that leaned on it.
+* The weekly model already encodes aging implicitly, through
+  `prev_season_ppg`, rolling production and career-trajectory features.
+  `age_curve` now ranks 28/64 by LightGBM importance for RB (51 vs 288 for
+  the top feature) with 1,755 distinct values — used, but weakly. Adding a
+  real-but-weak feature to a GBM costs splits that stronger features were
+  using, which is the likely mechanism for the small negative.
+* By tenure bucket there is no differential: 6y+ players do not improve
+  relative to rookies at any position, which is where a genuine age signal
+  should have shown up first if there were one to find.
+
+TE moved least (d MAE +0.0003) because TE's `age_curve` has the flattest
+coefficient/peak combination of the four positions — its sd is 0.0559 even
+with real ages.
+
+QB moved most at season level (+0.483). Do not read that as an age result:
+QB's population is 11.4% non-quarterbacks (see the position-mislabeling
+entry above), and handing a real age feature to a contaminated population
+is a plausible way to make things slightly worse. Untangling the two needs
+the position fix first.
+
+The value of this fix is prospective. `age_expected_games`,
+`decline_rate` and `injury_age_risk` feed durability/availability
+reasoning — precisely the layer the architecture split calls for next —
+and every one of them was reading a constant.
