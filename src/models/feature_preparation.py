@@ -255,11 +255,26 @@ def _apply_bounded_scaling(
             train_df[col] = train_df[col].astype(float)
         if not test_df.empty and pd.api.types.is_integer_dtype(test_df[col]):
             test_df[col] = test_df[col].astype(float)
-    train_vals = train_df[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
-    train_df.loc[:, cols] = scaler.fit_transform(train_vals)
+    # NaN must survive scaling. This used to fillna(0.0) first, which turned
+    # "unknown" into a real value at the bottom of the column's range -- the
+    # same filler bug already fixed for the snap columns, and the reason
+    # marking a feature unknown upstream had no effect (GAPS.md 2026-08-20).
+    # MinMaxScaler cannot consume NaN, so scale the observed rows and write
+    # the missing ones back as NaN; LightGBM splits on missing natively.
+    # MinMaxScaler is a per-column affine map fixed by that column's min and
+    # max, so the placeholder used for NaN must not sit outside the observed
+    # range. 0.0 could, and would drag the fitted min down; the column median
+    # cannot, by construction. Masked entries are discarded either way.
+    def _scale(frame: pd.DataFrame, fit: bool) -> None:
+        vals = frame[cols].replace([np.inf, -np.inf], np.nan)
+        mask = vals.notna().values
+        filled = vals.fillna(vals.median()).fillna(0.0).values
+        scaled = scaler.fit_transform(filled) if fit else scaler.transform(filled)
+        frame.loc[:, cols] = np.where(mask, scaled, np.nan)
+
+    _scale(train_df, fit=True)
     if not test_df.empty:
-        test_vals = test_df[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
-        test_df.loc[:, cols] = scaler.transform(test_vals)
+        _scale(test_df, fit=False)
     artifact["scaler"] = scaler
     try:
         import joblib

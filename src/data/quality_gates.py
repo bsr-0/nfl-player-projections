@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -381,6 +381,69 @@ def check_position_integrity(db_path: Optional[Path] = None) -> Dict[str, Any]:
         "threshold": POSITION_MISMATCH_THRESHOLD,
         "examples": mismatched[:10],
         "remedy": "python scripts/repair_player_positions.py --write",
+    }
+
+
+# A declared CAUSAL_FEATURE whose mean jumps this many train-season sd
+# between adjacent seasons is a data break, not a football trend.
+SEASON_SHIFT_SD_THRESHOLD = 1.0
+
+
+def check_feature_season_continuity(
+    df: pd.DataFrame,
+    feature_cols: Sequence[str],
+    season_col: str = "season",
+    threshold: float = SEASON_SHIFT_SD_THRESHOLD,
+) -> Dict[str, Any]:
+    """No declared feature should lurch between adjacent seasons.
+
+    Every expensive defect found on 2026-08-20 was this shape, and none of
+    them was visible in any existing gate:
+
+      is_dome                ~0.03 for 2006-2024, 0.357 in 2025
+                             (home_away never written by the weekly ingest)
+      team_plays_roll3_mean  ~52 to 2019, ~3 for 2021-2024, 46.2 in 2025
+                             (team_stats.total_plays NULL for 2020-2024)
+      team_motion_rate       constant to 2022, real from 2023
+                             (FTN charting starts 2022, default-filled before)
+
+    Each produced a train/test discontinuity worth ~0.43 MAE on the
+    affected fold -- far more than any modelling change tried to date. The
+    check is deliberately on *adjacent* seasons: a genuine league trend
+    moves gradually, an ingestion break moves in one step.
+
+    Missingness is checked as well as level, so a column that goes from
+    fully populated to fully NaN is caught even though its mean never moves.
+    """
+    findings = []
+    seasons = sorted(pd.to_numeric(df[season_col], errors="coerce").dropna().unique())
+    for col in feature_cols:
+        if col not in df.columns or not pd.api.types.is_numeric_dtype(df[col]):
+            continue
+        vals = pd.to_numeric(df[col], errors="coerce")
+        sd = vals.std()
+        by_season = vals.groupby(df[season_col])
+        means, miss = by_season.mean(), by_season.apply(lambda s: s.isna().mean())
+        for prev, cur in zip(seasons, seasons[1:]):
+            if prev not in means.index or cur not in means.index:
+                continue
+            shift = abs(means[cur] - means[prev]) / sd if sd and np.isfinite(sd) and sd > 0 else 0.0
+            d_miss = abs(miss.get(cur, 0.0) - miss.get(prev, 0.0))
+            if shift > threshold or d_miss > 0.5:
+                findings.append({
+                    "feature": col, "from_season": int(prev), "to_season": int(cur),
+                    "mean_from": float(means[prev]), "mean_to": float(means[cur]),
+                    "sd_shift": float(shift), "missingness_jump": float(d_miss),
+                })
+    findings.sort(key=lambda f: max(f["sd_shift"], f["missingness_jump"]), reverse=True)
+    return {
+        "passed": not findings,
+        "checked_features": len([c for c in feature_cols if c in df.columns]),
+        "violations": len(findings),
+        "threshold_sd": threshold,
+        "examples": findings[:10],
+        "remedy": "a step change between adjacent seasons is an ingestion gap; "
+                  "backfill the source rather than letting the model train on it",
     }
 
 

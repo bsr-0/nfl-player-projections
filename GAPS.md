@@ -8638,3 +8638,102 @@ previous fix was one.
 4. Add a coverage gate that fails when a declared CAUSAL_FEATURE's mean
    shifts by more than a few sd between adjacent seasons. All three of
    these would have tripped it.
+
+### Fixes applied 2026-08-20 (partial — see the open items below)
+
+**1. `home_away` backfilled.** `scripts/backfill_home_away.py` resolved
+96,097 rows for 2006-2024 from `schedule` on (season, week, team,
+opponent). **Zero conflicts** against the 27,086 rows that already had a
+value, which validates the derivation. Coverage is now ~100% every season;
+71 rows unresolvable and left alone. Verified in a real fold: `is_dome` now
+reads 0.357-0.405 in every season from 2006 to 2025, against ~0.03 before.
+
+**2. `team_stats` play volume backfilled.**
+`scripts/backfill_team_play_volume.py` filled 2,613 rows across 2020-2024.
+Not an estimate: summing player `passing_attempts + rushing_attempts` per
+(season, week, team) reproduces all 8,249 surviving rows with correlation
+1.0000 and zero error in all 20 seasons, because that is how the originals
+were computed. The script aborts if that agreement ever breaks. Verified:
+`team_plays_roll3_mean` now reads 49.9-53.9 in every season, against ~3 for
+2021-2024.
+
+**3. Unknown scheme tendencies are now NaN — after removing FOUR fillers.**
+This one took four passes, which is the point worth recording:
+
+  1. `_add_scheme_tendencies` returned a literal `(0.5, 0.1, 0.5)` default.
+  2. Inside the same function, `round(motion or 0.5, 3)` replaced both NULL
+     *and* a genuine 0.0 rate with 0.5.
+  3. `_apply_bounded_scaling` did `.fillna(0.0)` before MinMax scaling, so
+     marking anything unknown upstream was pointless.
+  4. `_impute_missing` median-fills every numeric column, exempting only
+     `_SNAP_IMPUTATION_OWNED`. This is the same filler the snap columns
+     already needed an exemption from (see "Third filler", 2026-08-19).
+
+Only after all four did the column stay NaN. Fixes 1 and 2 alone changed the
+constant from 0.716/0.323 to 0.371/0.379 — still a constant, which is how
+the incompleteness was caught. Added `_STRUCTURALLY_MISSING` alongside
+`_SNAP_IMPUTATION_OWNED`, and made the bounded scaler NaN-preserving (it
+fills with the column median rather than 0.0 for the fit, since 0.0 can sit
+outside the observed range and drag the fitted minimum down).
+
+**4. `check_feature_season_continuity`** added to `quality_gates.py`: flags
+any declared CAUSAL_FEATURE whose mean shifts more than 1 train-sd between
+ADJACENT seasons, plus missingness jumps so a fully-populated -> fully-NaN
+column is caught even though its mean never moves. Adjacency is deliberate:
+a league trend moves gradually, an ingestion break moves once.
+7 tests in `tests/test_feature_continuity.py`; suite at 395.
+
+---
+
+## The gate immediately found that the fix was incomplete (2026-08-20)
+
+Run against RB's 64 declared CAUSAL_FEATURES on a real fold:
+**23 violations of 64 features.** The two repaired columns are gone from
+the list. What remains splits into two groups.
+
+### More columns populated ONLY in 2025
+
+| feature | 2024 | 2025 | sd shift |
+|---|---|---|---|
+| `team_pace_sec_per_play_roll3_mean` | 0.000 | 22.923 | 3.91 |
+| `rb_broken_tackles_prior` | 0.000 | 16.654 | 3.78 |
+| `redzone_target_share_pct_roll3_mean` | 0.000 | 15.179 | 2.38 |
+
+Traced to `player_weekly_stats` itself. Six columns are populated in 2025
+and **nowhere else**:
+
+    redzone_targets, neutral_targets, third_down_targets,
+    goal_line_touches, two_minute_targets, high_leverage_touches
+
+(`redzone_targets`: 0 for every season 2018-2024, 2,489 in 2025.) Four more
+(`rush_inside_10`, `rush_inside_5`, `targets_15_plus`, `air_yards`) start in
+2020, so 2006-2019 is zero-filled for those.
+
+This is the **same root cause as `home_away`, and it is the general form of
+it**: the 2025 re-ingest went through `store_weekly_dataframe` (the PBP
+path), which derives a much wider set of columns than the historical
+`import_weekly_data` path ever wrote. Every column in that difference is a
+train/test discontinuity. `home_away` was simply the first one found.
+
+These feed `utilization_score` (via `redzone_targets_pct`), which falls back
+to crude proxies like `receiving_tds * 15` when the real column is absent —
+so pre-2025 seasons get the proxy and 2025 gets the measurement.
+
+### Boundary artifacts at the start of history
+
+`coaching_adaptation_score`, `coaching_change_impact`, `coaching_stability`,
+`rookie_draft_value`, `rookie_ceiling_ppg` all break at 2006->2007. 2006 is
+the first loaded season, so prior-season-dependent features are degenerate
+there. Probably benign, but unverified.
+
+### Status
+
+The 2025 anomaly is **not** fully fixed. Two of at least five instances are
+repaired. The remaining fix is a PBP backfill of the missing
+`player_weekly_stats` columns for 2006-2024, which needs play-by-play
+downloads for ~19 seasons and is a materially larger job than the two
+backfills above.
+
+Do not re-run the regime experiment expecting a clean answer until that
+lands — the era-rule contrast will still be contaminated by whatever
+remains.

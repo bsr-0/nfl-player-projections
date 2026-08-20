@@ -68,6 +68,17 @@ _SNAP_IMPUTATION_OWNED = frozenset({
     "snap_share_pct_roll3_mean",
 })
 
+# Columns whose missingness is STRUCTURAL -- the source does not exist for
+# those seasons at all -- rather than random. Median-filling these invents a
+# league-average value for an era that has no measurement, which is how
+# team_motion_rate/team_play_action_rate became literal constants for
+# 2006-2022 and real values from 2023: a train/test discontinuity, not a
+# feature (GAPS.md 2026-08-20). FTN charting begins in 2022. LightGBM splits
+# on NaN natively, so leaving them missing is both honest and usable.
+_STRUCTURALLY_MISSING = frozenset({
+    "team_motion_rate", "team_play_action_rate", "team_shotgun_rate",
+})
+
 
 # The NFL abolished the "Probable" designation after the 2015 season. It
 # appears 2,772 / 2,607 / 2,702 times in 2013-2015 and exactly 0 from 2016.
@@ -768,10 +779,20 @@ class FeatureEngineer:
         return df
 
     def _add_scheme_tendencies(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add team scheme tendency features from FTN charting data."""
+        """Add team scheme tendency features from FTN charting data.
+
+        `team_scheme_tendencies` only covers 2022+ (FTN charting does not
+        exist earlier), and the lookup is shifted a season, so every
+        team-week through 2022 is unknown. These used to be filled with a
+        constant 0.5/0.1/0.5, which made the columns literal constants for
+        2006-2022 and real values from 2023 -- a train/test discontinuity
+        that showed up as part of the 2025 fold anomaly (GAPS.md
+        2026-08-20). Unknown is now NaN, which LightGBM splits on natively,
+        the same rule the snap columns already follow.
+        """
         if "team" not in df.columns or "season" not in df.columns:
             for col in ["team_motion_rate", "team_play_action_rate", "team_shotgun_rate"]:
-                df[col] = 0.5
+                df[col] = np.nan
             return df
 
         try:
@@ -788,22 +809,23 @@ class FeatureEngineer:
             c.close()
         except Exception:
             for col in ["team_motion_rate", "team_play_action_rate", "team_shotgun_rate"]:
-                df[col] = 0.5
+                df[col] = np.nan
             return df
 
         # Build lookup shifted by 1 season (use prior year's scheme for prediction)
         scheme_map = {}
         for team, season, motion, pa, sg in rows:
-            scheme_map[(team, int(season) + 1)] = (
-                round(motion or 0.5, 3),
-                round(pa or 0.1, 3),
-                round(sg or 0.5, 3),
+            # A NULL from the table is unknown, not a league-average guess.
+            # `x or default` also swallowed a genuine 0.0 rate.
+            scheme_map[(team, int(season) + 1)] = tuple(
+                np.nan if v is None else round(float(v), 3) for v in (motion, pa, sg)
             )
 
+        unknown = (np.nan, np.nan, np.nan)
         motion_vals, pa_vals, sg_vals = [], [], []
         for _, row in df.iterrows():
             key = (row.get("team"), row.get("season"))
-            vals = scheme_map.get(key, (0.5, 0.1, 0.5))
+            vals = scheme_map.get(key, unknown)
             motion_vals.append(vals[0])
             pa_vals.append(vals[1])
             sg_vals.append(vals[2])
@@ -4359,7 +4381,7 @@ class FeatureEngineer:
         for col in numeric_cols:
             if col not in df.columns or not df[col].isna().any():
                 continue
-            if col in _SNAP_IMPUTATION_OWNED:
+            if col in _SNAP_IMPUTATION_OWNED or col in _STRUCTURALLY_MISSING:
                 continue
             is_qb_col = any(tok in col.lower() for tok in qb_specific_tokens)
             if is_qb_col and has_position:
