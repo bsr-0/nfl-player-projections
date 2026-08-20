@@ -8452,3 +8452,87 @@ population 11.4% of which were not quarterbacks. That includes the
 population-regime experiment two commits ago. QB conclusions from it should
 be treated as void pending a re-run; RB/WR/TE moved by 2% or less and are
 substantially less affected.
+
+## Position fix re-run: the QB hypothesis is falsified (2026-08-20)
+
+Re-ran the 12-fold x 4-arm regime experiment after the position repair.
+Three comparable result sets now exist:
+
+| suffix | age | position |
+|---|---|---|
+| `_preagefix` | broken | broken |
+| `_prepositionfix` | fixed | broken |
+| *(none)* | fixed | fixed |
+
+### The raw numbers say the fix worked. They are wrong.
+
+Arm B weekly MAE, QB: 5.826 -> 5.714 (2023), 5.993 -> 5.955 (2024). Season-
+conditional QB MAE: 23.74 -> 21.42. Ten times the size of anything the age
+fix moved, in the predicted direction.
+
+**All of it is the evaluation population changing.** The repair removed
+1,509 rows from QB, so the QB eval set fell from 2,844 rows to 2,145
+(-25%) — and the rows removed were exactly the RB/WR-like high scorers.
+Deleting high-variance rows lowers MAE mechanically, model quality
+unchanged. GAPS.md already records this trap for the panel fix; it applies
+verbatim here.
+
+### On identical rows, nothing happened
+
+Restricting to the 77,060 rows present in BOTH runs (actuals verified
+identical to 0.000000), arm B:
+
+| position | n | MAE before | MAE after | d MAE | d bias | d RMSE |
+|---|---|---|---|---|---|---|
+| QB | 2,145 | 5.9988 | 6.0082 | **+0.009** | +0.084 | -0.047 |
+| RB | 4,284 | 4.3432 | 4.3139 | -0.029 | +0.034 | -0.056 |
+| TE | 4,930 | 2.8324 | 2.8309 | -0.002 | +0.010 | -0.005 |
+| WR | 7,906 | 4.0067 | 4.0826 | **+0.076** | -0.103 | +0.148 |
+
+QB: +0.009. Removing 11.4% contamination from the QB training population
+changed its accuracy on comparable rows by nothing. WR got worse, entirely
+from its 2025 fold (+0.233).
+
+### The specific prediction failed
+
+Pre-registered before the run: *QB's 2025 fold should stop being the odd
+one out; if it survives intact, something else is going on.* Era-rule
+contrast (B minus A), before and after:
+
+| position | 2023 | 2024 | 2025 (before) | 2025 (after) |
+|---|---|---|---|---|
+| QB | -0.028 | -0.025 | +0.191 | **+0.278** |
+| WR | +0.013 | -0.007 | -0.258 | -0.051 |
+| RB | -0.021 | +0.006 | +0.006 | -0.045 |
+| TE | +0.019 | +0.020 | +0.018 | **-0.017** |
+
+QB's 2025 anomaly did not shrink — it grew. WR's collapsed. And TE, the
+only position with a sign-consistent era effect in the original
+experiment, **lost that consistency**: +0.013/+0.014/+0.018 became
++0.019/+0.020/-0.017.
+
+### What this means
+
+1. The position bug does **not** explain the QB anomaly family (early-season
+   R² 0.166, the +22.5 Phase 7 season over-projection, the inverted
+   synthetic-week pattern). Those remain open, and the obvious candidate
+   cause is now eliminated rather than confirmed.
+2. The position fix stands on correctness alone. An 11.4% contaminated
+   training population is wrong whether or not fixing it moves MAE, and
+   the season-conditional QB numbers are now computed over quarterbacks.
+   There is no accuracy dividend.
+3. The era rule is *less* resolvable than before, not more. Its one
+   sign-consistent effect did not survive a data correction that should
+   have been nearly irrelevant to TE (59 eval rows changed).
+4. 2025 is now anomalous in a fourth independent way. It was already
+   flagged for below-nominal p50 quantile coverage across all four
+   positions. Every experiment that separates does so only in 2025, and
+   the direction is not stable across positions or across data fixes.
+   This is the thing to investigate, not the era rule.
+
+Two fixes in a row have now produced correct data and no measurable
+accuracy change. That is worth stating as a pattern: this pipeline's
+weekly error is not currently limited by the defects being found in it.
+The snap-bucket diagnostic said the same thing from a different direction —
+the dominant term is opportunity uncertainty, which no amount of
+feature-correctness work touches.
