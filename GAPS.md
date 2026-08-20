@@ -8859,3 +8859,108 @@ Affected share of each position's declared CAUSAL_FEATURES: WR 15/67, TE
 14/65, RB 8/64, QB 2/57 (and QB's two are NGS/team-level, not target-based).
 
 5 tests in `tests/test_population_regimes.py`; suite at 402.
+
+## RESOLVED: the 2025 anomaly and the era-rule question (2026-08-20)
+
+Re-ran the 12-fold x 4-arm regime experiment on data with no known
+discontinuity. Four result sets now exist, isolating each change:
+
+| suffix | age | positions | features | receiving floor |
+|---|---|---|---|---|
+| `_preagefix` | broken | broken | broken | no |
+| `_prepositionfix` | fixed | broken | broken | no |
+| `_prefeaturefix` | fixed | fixed | broken | no |
+| *(none)* | fixed | fixed | fixed | yes |
+
+### The measurement that makes this readable
+
+Arm A (2013+, snaps > 0) has a **byte-identical training and evaluation
+population** in the last two runs -- `d_n_train = 0` and `d_n = 0` in all
+12 folds. So every change in its numbers is attributable to feature values
+alone, with no population confound. That is the comparison used below.
+
+### 1. The 2025 penalty is gone
+
+Arm A, MAE in 2025 minus the mean of 2023-2024:
+
+| position | before | after |
+|---|---|---|
+| QB | +0.222 | +0.114 |
+| RB | +0.640 | +0.073 |
+| TE | +0.390 | +0.088 |
+| WR | +0.566 | **-0.117** |
+| **mean** | **+0.454** | **+0.040** |
+
+For WR, 2025 is now the *best* fold of the three. It was the worst at every
+position before.
+
+The per-fold shape confirms the mechanism rather than just the outcome:
+
+| position | d MAE 2023 | 2024 | 2025 |
+|---|---|---|---|
+| QB | +0.030 | +0.014 | **-0.086** |
+| RB | +0.047 | +0.059 | **-0.514** |
+| WR | +0.090 | +0.120 | **-0.577** |
+
+Repairing the features costs a little on 2023-2024 and pays enormously on
+2025. That is exactly right: on the earlier folds the broken columns were
+*consistently* broken across train and test -- useless constants, harmless
+-- so making them real only adds a weak noisy feature (+0.01 to +0.12,
+matching the ablation's +0.079 control cost in sign and magnitude). On 2025
+they were discontinuous, and that was worth -0.09 to -0.58.
+
+### 2. The era rule is a clean null, and now stably so
+
+B minus A, per fold:
+
+| position | 2023 | 2024 | 2025 (before) | 2025 (after) |
+|---|---|---|---|---|
+| QB | -0.027 | -0.024 | +0.278 | **+0.003** |
+| RB | -0.046 | -0.007 | -0.045 | **-0.000** |
+| TE | -0.000 | -0.001 | -0.017 | **-0.001** |
+| WR | +0.020 | -0.010 | -0.051 | **+0.006** |
+
+Every cell is now within +/-0.046, and most within +/-0.027. Nothing is
+driven by one fold, and no position contradicts another.
+
+The original experiment's headline finding -- "QB and WR disagree in sign
+on 2025, so the era rule is not resolvable" -- was **an artifact of the
+feature discontinuity**, not a property of the era rule. QB's half of that
+disagreement (+0.278) collapses to +0.003.
+
+TE's was the only sign-consistent effect in the original run (B costing
+0.013-0.016 MAE for a bias gain). With the 2006-2008 rows removed by the
+receiving floor, TE's MAE cost vanishes entirely (-0.000/-0.001/-0.001)
+while the bias advantage remains. The trade-off TE appeared to face was the
+broken seasons, not the era rule.
+
+### 3. Pooled result: keep 2009-2012
+
+| position | arm | MAE | bias | RMSE |
+|---|---|---|---|---|
+| QB | A / B / C | 5.921 / 5.905 / 5.895 | -0.440 / -0.450 / -0.433 | 7.471 / 7.463 / 7.463 |
+| RB | A / B / C | 4.341 / 4.324 / 4.316 | -1.178 / -1.132 / -1.152 | 6.271 / 6.242 / 6.236 |
+| TE | A / B / C | 2.887 / 2.887 / 2.885 | -1.247 / **-1.143** / -1.146 | 4.661 / **4.628** / 4.628 |
+| WR | A / B / C | 4.047 / 4.052 / 4.047 | -1.270 / -1.234 / -1.263 | 6.072 / 6.065 / 6.068 |
+
+B is never worse than A on MAE beyond 0.005, is slightly better at QB and
+RB, and is clearly better on bias and RMSE at TE. **Keep the extended
+population.** C remains indistinguishable from B, so `participation_quality`
+stays a provenance column and not a feature -- unchanged from the original
+finding, now on clean data.
+
+### Caveat on what "B" means now
+
+B admits 2009-2012 for RB/WR/TE, not 2006-2012, because the receiving floor
+removed three seasons. So this null is a **weaker** claim than the original
+experiment intended: fewer added seasons, less to detect. It does not say
+2006-2008 would have been harmless -- it says the seasons we can still
+trust are free to include.
+
+### Arms verified distinct
+
+QB/2023 returned identical MAE (5.772) and RMSE (7.201) for P0 and A, which
+looked like the "arms that don't actually differ" failure this project hit
+before. Checked directly: the two arms' predictions differ by a mean of
+1.065 PPR, only 0.1% of rows are identical, correlation 0.968. A genuine
+coincidence, not collapsed arms.
