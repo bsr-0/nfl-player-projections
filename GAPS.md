@@ -9172,3 +9172,104 @@ direction. It is now clear that explicitly modelling opportunity does not
 fix it except at TE, and does not improve weekly projection anywhere. Per
 the directive, no additional availability/injury/role machinery should be
 built on this foundation.
+
+## Step 8, season half: availability BEATS constant on its own task,
+## but only helps season PPR at QB/RB (2026-08-20)
+
+The weekly half is already closed negatively (opportunity layer failed
+12/12 folds). This is the separate, untested season question: the weekly
+experiment never had to estimate games played.
+
+    E[season PPR] = E[games played] x E[PPR per game | played]
+
+The production term is held IDENTICAL across arms, so any difference is
+attributable to the availability term alone. Arms:
+`const_position` (position mean rate, training seasons only),
+`hist_player` (player's own prior rate), `hist_shrunk` (shrunk toward the
+position mean by prior games observed, K=16).
+
+All inputs are strictly pre-season: prior-season rates and the published
+schedule. No current-season data, no realized snaps, no future roster.
+
+### The constant baseline is fairly specified
+
+Checked before trusting any comparison. Historical mean rate tracks the
+target-season mean closely (QB 0.497 vs 0.493/0.507/0.498 across the three
+folds; same at other positions). It is not a strawman.
+
+Its large *PPR* bias has a real mechanism rather than a specification
+error: the constant is nearly unbiased in **games** but badly biased in
+**PPR**, because games played and PPR-per-game are strongly positively
+correlated. Predicting 8.4 games for every QB under-projects the starters
+who play 17 and over-projects fringe players who play 2.
+
+### Result 1 — availability is predictable. **12/12 folds.**
+
+Games-played MAE, `hist_shrunk` minus `const_position`, every fold
+negative (better), range -0.49 to -1.07 games:
+
+| position | 2023 | 2024 | 2025 |
+|---|---|---|---|
+| QB | -0.62 | -0.77 | -1.07 |
+| RB | -0.91 | -0.85 | -0.49 |
+| TE | -0.97 | -0.97 | -0.84 |
+| WR | -0.59 | -0.68 | -0.64 |
+
+Unambiguous, and it survives restricting to players who actually have prior
+history (QB 4.92 -> 3.69, TE 4.80 -> 3.45).
+
+### Result 2 — season PPR bias improves at all four positions
+
+Mean |season bias| with a realistic production term:
+
+| arm | QB | RB | TE | WR | mean |
+|---|---|---|---|---|---|
+| const | 21.90 | 18.64 | 10.33 | 9.20 | 15.02 |
+| hist_player | 12.53 | 3.60 | 2.60 | 12.36 | 7.77 |
+| **hist_shrunk** | **8.68** | **1.10** | **0.04** | **7.85** | **4.42** |
+
+Shrinkage cuts season bias by ~70% and is the best arm at three of four
+positions. This matters because season under-projection is the standing
+Phase 7A defect.
+
+### Result 3 — season PPR MAE improves only at QB and RB
+
+`hist_shrunk` minus `const_position`, per fold (negative = better):
+
+| position | 2023 | 2024 | 2025 | verdict |
+|---|---|---|---|---|
+| QB | -7.20 | -8.80 | -11.64 | **3/3 better** |
+| RB | -0.85 | -6.36 | -2.21 | **3/3 better** |
+| TE | +0.67 | -0.69 | +1.85 | 1/3 |
+| WR | -3.41 | +2.12 | +2.59 | 1/3 |
+
+8/12 folds overall. The split is not noise: QB and RB are the positions
+where the constant's bias was largest (-21.9, -18.6). At TE and WR the
+constant was already closer (-10.3, -9.2) and the *production* term's error
+dominates — multiplying a noisy prior-season PPR/game by a per-player
+availability compounds it rather than correcting it.
+
+### Verdict
+
+Neither the directive's clean A nor clean B.
+
+* The availability estimator is **validated on its own task** and should be
+  used for the games/opportunity component of season projections.
+* It **materially reduces season bias at every position**.
+* It does **not** generally improve season MAE — only where the constant
+  was badly wrong. Do not claim otherwise.
+* `hist_shrunk` is the arm to use, not `hist_player`: shrinkage is better
+  on bias at 3/4 positions and better on MAE at 8/12 folds, because the raw
+  per-player rate over-corrects (WR bias +12.36 vs +7.85).
+
+No new machinery is warranted beyond this. Shrunk historical availability
+is a two-parameter estimator over data already in the panel.
+
+### Population caveat, stated because it limits the claim
+
+The evaluation population is players with >= 1 participated game in the
+target season, because a player with zero games has no rows to evaluate
+against. A real pre-season projection must also cover players who end up
+playing nothing at all, and this experiment cannot measure that case. The
+result therefore applies to "how many games will a player who plays get",
+not "will this player play".
