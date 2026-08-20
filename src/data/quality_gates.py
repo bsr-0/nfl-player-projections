@@ -389,11 +389,22 @@ def check_position_integrity(db_path: Optional[Path] = None) -> Dict[str, Any]:
 SEASON_SHIFT_SD_THRESHOLD = 1.0
 
 
+# Columns whose data genuinely begins partway through the panel. Their
+# missingness boundary is a documented source limit, not a defect, so the
+# gate must not cry wolf about it forever -- a gate that always fails is a
+# gate nobody reads. Level shifts among the OBSERVED seasons are still
+# checked; only the NaN boundary itself is exempt.
+KNOWN_MISSINGNESS_BOUNDARIES = frozenset({
+    "team_motion_rate", "team_play_action_rate", "team_shotgun_rate",
+})
+
+
 def check_feature_season_continuity(
     df: pd.DataFrame,
     feature_cols: Sequence[str],
     season_col: str = "season",
     threshold: float = SEASON_SHIFT_SD_THRESHOLD,
+    known_boundaries: Sequence[str] = (),
 ) -> Dict[str, Any]:
     """No declared feature should lurch between adjacent seasons.
 
@@ -429,7 +440,8 @@ def check_feature_season_continuity(
                 continue
             shift = abs(means[cur] - means[prev]) / sd if sd and np.isfinite(sd) and sd > 0 else 0.0
             d_miss = abs(miss.get(cur, 0.0) - miss.get(prev, 0.0))
-            if shift > threshold or d_miss > 0.5:
+            exempt_missingness = col in KNOWN_MISSINGNESS_BOUNDARIES or col in known_boundaries
+            if shift > threshold or (d_miss > 0.5 and not exempt_missingness):
                 findings.append({
                     "feature": col, "from_season": int(prev), "to_season": int(cur),
                     "mean_from": float(means[prev]), "mean_to": float(means[cur]),

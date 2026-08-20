@@ -8737,3 +8737,90 @@ backfills above.
 Do not re-run the regime experiment expecting a clean answer until that
 lands — the era-rule contrast will still be contaminated by whatever
 remains.
+
+## PBP situational columns backfilled; two discontinuities remain (2026-08-20)
+
+`scripts/backfill_pbp_situational_columns.py` filled 116,490 player-week
+rows across 2006-2024. Definitions are not re-implemented: it calls
+`PBPStatsAggregator.aggregate_all_stats`, the exact code that produced the
+2025 values.
+
+Validated against 2025 before writing — 99.9-100% exact agreement,
+correlation 0.9988-1.0000 on all 12 columns (the sub-0.1% residual is
+nflverse revisions since the original ingest, not a definitional
+difference). A column is filled for a season only when that season's stored
+total is zero, so the already-populated 2020-2024 values for
+`rush_inside_10/5`, `targets_15_plus` and `air_yards` were left untouched.
+
+### Verified fixed, all four positions
+
+| feature | 2008 | 2012 | 2024 | 2025 |
+|---|---|---|---|---|
+| `is_dome` | 0.38 | 0.37 | 0.38 | 0.36 |
+| `team_plays_roll3_mean` | 51.4 | 53.0 | 52.1 | 53.0 |
+| `team_motion_rate` | nan | nan | 0.43 | 0.49 |
+
+`redzone_target_share_pct_roll3_mean` and
+`team_pace_sec_per_play_roll3_mean` also cleared. Gate counts: RB 21/64,
+WR 24/67, QB 23/57, TE 21/65.
+
+Also added `KNOWN_MISSINGNESS_BOUNDARIES` to the continuity gate. The
+scheme-tendency NaN boundary is a documented source limit (FTN charting
+starts 2022), and a gate that fails forever on a known limit is a gate
+nobody reads. Level shifts among observed seasons are still checked; only
+the NaN boundary is exempt.
+
+---
+
+## STILL OPEN after the backfill
+
+### 1. 2006-2008 has no incomplete-pass charting (pre-existing, source-level)
+
+| season | targets | receptions | catch rate |
+|---|---|---|---|
+| 2006 | 9,963 | 9,938 | **99.7%** |
+| 2007 | 10,655 | 10,642 | **99.9%** |
+| 2008 | 10,292 | 10,277 | **99.9%** |
+| 2009 | 17,091 | 10,552 | 61.7% |
+
+A 99.7% catch rate is impossible. `targets` in 2006-2008 is counting
+receptions. Confirmed at source, not an ingest bug: 2008 play-by-play
+charts a receiver on **69** incomplete passes; 2009 charts **6,731**.
+nflverse does not record the intended receiver on incompletions before 2009.
+
+So `targets`, `target_share`, catch rate, `air_yards`, `redzone_targets`,
+`targets_15_plus` and the whole receiving-usage family rest on a
+completions-only denominator for those three seasons. The backfill made
+those columns internally consistent with the broken denominator; it could
+not fix the denominator.
+
+This predates all of today's work and argues for a **2009 floor on
+receiving-dependent features**, exactly analogous to the existing 2013 snap
+floor. It also partially re-opens the era-rule question: regime B admitted
+2006-2012, and three of those seven seasons have structurally broken
+receiving usage.
+
+NOT changed unilaterally: `targets` is consumed across the entire feature
+layer, so nulling it for three seasons is a much wider blast radius than
+the scheme-tendency fix and needs an explicit decision.
+
+### 2. `rb_broken_tackles_prior` — 0.000 (2024) -> 16.654 (2025)
+
+Untouched by the backfill because it comes from PFR advanced stats, not
+play-by-play. `weekly_pfr` holds 7,127-7,572 rows for every season
+2018-2025, so the source data is present and something downstream is
+dropping it. Same shape as the fixed defects, different pipeline.
+
+### 3. `coaching_*` break at 2006->2007 (left-censoring)
+
+`coaching_adaptation_score` falls 0.28 -> 0.006 (3.2-4.0 sd depending on
+position), with `coaching_change_impact` and `coaching_stability` moving
+with it. Root cause found: `weeks_since_coaching_change` is a `cumcount()`
+within (team, cumulative-changes), so in the panel's first season every
+team starts at 0 — asserting "a coaching change just happened" when the
+prior coach is simply unobserved. `coaching_change` itself is correctly
+guarded by `prev_coach.notna()`; the weeks-since counter is not.
+
+The honest value for a team with no observed change is unknown, not zero.
+Confined mostly to 2006, but it hands the model something close to a "this
+is 2006" indicator.

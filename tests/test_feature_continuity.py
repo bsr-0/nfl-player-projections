@@ -86,3 +86,30 @@ def test_bounded_scaler_preserves_nan():
     observed = train["team_motion_rate"].dropna()
     assert observed.min() == pytest.approx(0.0) and observed.max() == pytest.approx(1.0), \
         "observed values must still span the scaled range"
+
+
+def test_known_missingness_boundary_is_exempt():
+    """A documented source limit must not fail the gate forever -- a gate
+    that always fails is a gate nobody reads."""
+    rng = np.random.RandomState(0)
+    df = pd.DataFrame({
+        "season": np.repeat([2021, 2022, 2023, 2024], 100),
+        "team_motion_rate": np.concatenate([[np.nan] * 200, rng.normal(0.36, 0.02, 200)]),
+        "undocumented": np.concatenate([[np.nan] * 200, rng.normal(0.36, 0.02, 200)]),
+    })
+    out = check_feature_season_continuity(df, ["team_motion_rate", "undocumented"])
+    assert [e["feature"] for e in out["examples"]] == ["undocumented"]
+
+
+def test_exempt_column_still_checked_for_level_shifts():
+    """Exemption covers the NaN boundary only, not a jump between observed
+    seasons."""
+    rng = np.random.RandomState(1)
+    df = pd.DataFrame({
+        "season": np.repeat([2023, 2024, 2025], 200),
+        "team_motion_rate": np.concatenate([
+            rng.normal(0.36, 0.01, 400), rng.normal(0.90, 0.01, 200)]),
+    })
+    out = check_feature_season_continuity(df, ["team_motion_rate"])
+    assert out["passed"] is False
+    assert out["examples"][0]["from_season"] == 2024
