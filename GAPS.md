@@ -9425,3 +9425,84 @@ distribution: 18,213 rows, 23.2% of the population, 39% at TE. They feed
 the residual/bootstrap machinery and must not be touched. A missing week is
 exposure, not a zero-point observation. These belong entirely on the
 PPR-per-game side of any season decomposition.
+
+---
+
+# DECISION: Step 8 is the intended replacement; migration is a separate project (2026-08-20)
+
+Resolving the fork recorded in the correction above.
+
+**Decision language, fixed:**
+
+> We will evaluate Step 8 against Phase 7 **before** migrating production,
+> with Step 8 as the intended replacement architecture **if** it matches or
+> improves the validated Phase 7 performance.
+
+Not "Step 8 has retired Phase 7." Retirement is the destination; the
+migration is a measured project with a gate.
+
+### State, as documented
+
+| | Phase 7 | Step 8 |
+|---|---|---|
+| Exists | yes | yes |
+| Production consumer | **yes (15 importers)** | **no (2: own script + tests)** |
+| Validated | yes | partially |
+| Synthetic weeks | yes | no |
+| Played-zero rows | yes | yes |
+| Availability separate from production | **no** | **yes** |
+| Phase 9 compatible | old architecture | **intended architecture** |
+| Disposition | **legacy benchmark** | **candidate replacement** |
+
+Phase 7 stays intact. Its measured result is real and must not be
+discarded for architectural preference: summed-weekly beat both direct
+season models by 26-40% at every position even under matched,
+established-veteran-only populations.
+
+### Why retirement is nonetheless the destination
+
+Phase 7 represents two different things -- exposure and conditional
+production -- by manufacturing weekly rows and then applying an
+availability discount. That conflation is the documented source of the
+synthetic-week problems. The zero-point finding is what makes it decisive:
+
+    snap_count > 0, PPR = 0   ->  a real production observation
+    player inactive           ->  an exposure observation
+
+Phase 7 has no way to keep those apart. The Step 8 decomposition does, by
+construction.
+
+### HARD INVARIANT
+
+    snap_count > 0 AND PPR = 0
+        -> real observed game
+        -> belongs in the conditional production distribution
+        -> NEVER convert to missing
+        -> NEVER treat as an availability failure
+        -> NEVER manufacture another zero
+
+18,213 rows; 23.2% of the population; 39% at TE. Phase 9's residual
+machinery already builds sequences from real observed rows, so these
+contribute naturally to simulated outcomes -- that ingredient is correct
+and stays.
+
+### Next work: Step 8A — make the new architecture independently evaluable
+
+Step 8 is currently an estimator with no consumer. Step 8A must establish:
+
+1. `E[games]` / the games-played distribution
+2. `E[PPR per game | played]`
+3. strictly causal construction of both
+4. the exact relationship `season PPR = games x PPR/game`
+5. a proper walk-forward evaluation **against the Phase 7 benchmark**
+
+Only after that comparison does the production consumer move.
+
+### Phase 9 is BLOCKED until the Step 8 interface is final
+
+Deliberately. The right Phase 9 depends on what Step 8 exposes, and the
+target is that Phase 9 needs to know nothing about active-roster
+filtering, synthetic rows, `possible_weeks_for_player`,
+`estimate_availability_rate`, carried-forward features, synthetic depth
+charts, or synthetic Vegas lines. Those are Phase 7 implementation
+concerns, not season-simulation concerns.
