@@ -9339,7 +9339,9 @@ Status, for the record:
   its pre-registered test in 12/12 folds and was not adopted. The
   snap-bucket compression is opportunity uncertainty the weekly model
   cannot observe, and is not a defect to be forced out of it.
-* **No synthetic zero weeks.** Not reintroduced anywhere; enforced by test.
+* **No synthetic zero weeks IN THE NEW WORK.** Corrected 2026-08-20 --
+  the original wording ("not reintroduced anywhere; enforced by test") was
+  wrong. See the correction entry below.
 * **No separate bias correction.** The bias gain comes from the product
   itself; a post-hoc correction would double-count it. Enforced by test.
 * **No position-specific availability estimators.** One estimator, two
@@ -9360,3 +9362,66 @@ Status, for the record:
 
 Do not reopen the availability question absent a concrete failure surfaced
 by later work.
+
+---
+
+# CORRECTION to the Step 8 status entry (2026-08-20)
+
+The entry above overstated the repository state in three ways. Recorded
+here rather than silently edited, because the overstatement is the kind of
+error that compounds.
+
+**1. "No synthetic zero weeks. Not reintroduced anywhere; enforced by
+test."** False twice. `season_projection.py` still contains
+`possible_weeks_for_player`, `estimate_availability_rate`,
+`build_synthetic_week_row` and `resolve_week_source`, all live. The cited
+test reads exactly one file (`season_availability.py`) and has no
+visibility into Phase 7. The defensible claim was "no synthetic weeks were
+reintroduced *by the new work*."
+
+**2. "Availability: hist_shrunk, season layer only."** Describes the new
+module; reads as repo-wide. `estimate_availability_rate` still runs
+per-week inside Phase 7.
+
+**3. "hist_shrunk adopted for season games."** Nothing consumes it.
+`season_availability` is imported by two files -- its own experiment script
+and its own tests. `season_projection` is imported by fifteen, including
+Phase 9. The estimator is *validated*, not *adopted*.
+
+### Actual state: two parallel season architectures
+
+| | mechanism | consumers |
+|---|---|---|
+| Phase 7 `season_projection.py` | synthetic weeks x per-week P(plays) | 15 |
+| Step 8 `season_availability.py` | E[games] x E[PPR per game] | 2 (own script + tests) |
+
+Step 8 built a new layer **alongside** the old one. It did not migrate
+Phase 7, and no directive asked it to -- "do not reintroduce synthetic zero
+weeks" is a constraint on new work, not a mandate to remove the existing
+mechanism.
+
+### The open decision (NOT resolved here)
+
+Does Step 8 retire the synthetic-week architecture, or does Phase 7 remain
+the production season path with Step 8 as an alternative?
+
+This must be answered before Phase 9 is written, because Phase 9 sits
+directly on the old architecture and the two designs differ in their unit
+of simulation:
+
+    Phase 7 / current Phase 9:  simulate the status of each possible week
+    Step 8 architecture:        simulate games played, then simulate the
+                                PPR outcomes for those games
+
+Swapping `estimate_availability_rate` for `hist_shrunk` inside the existing
+simulation would NOT reconcile them -- it preserves the old unit of
+simulation while appearing to adopt the new architecture. That was
+proposed and is withdrawn.
+
+### Not in question
+
+The `snap_count > 0, PPR = 0` rows stay in the conditional production
+distribution: 18,213 rows, 23.2% of the population, 39% at TE. They feed
+the residual/bootstrap machinery and must not be touched. A missing week is
+exposure, not a zero-point observation. These belong entirely on the
+PPR-per-game side of any season decomposition.
