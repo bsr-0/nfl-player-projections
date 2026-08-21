@@ -9506,3 +9506,66 @@ filtering, synthetic rows, `possible_weeks_for_player`,
 `estimate_availability_rate`, carried-forward features, synthetic depth
 charts, or synthetic Vegas lines. Those are Phase 7 implementation
 concerns, not season-simulation concerns.
+
+## PRE-REGISTRATION: Step 8A — season architecture head-to-head (2026-08-20)
+
+Committed **before** the experiment runs.
+
+### Success is NOT "Step 8 beats Phase 7"
+
+Fixed in advance:
+
+> Does Step 8 achieve sufficiently competitive season accuracy **while**
+> eliminating the synthetic-week architecture and preserving the
+> causal/interpretability guarantees established this session?
+
+Outcome conditions, all of which are useful results:
+
+| | condition | action |
+|---|---|---|
+| **A** | Step 8 ~= Phase 7 | strong case for migration |
+| **B** | Step 8 materially beats Phase 7 | stronger case; **investigate why before migrating** |
+| **C** | Step 8 materially loses | Phase 7 remains production; investigate where the lost information comes from, **do not tune until it wins** |
+| **D** | loses overall, wins for some positions/populations | evidence toward a hybrid, but **do not build one yet** -- understand the mechanism first |
+
+### The matched-population result is PRIMARY
+
+`--intersect-populations` is the migration comparison. Unmatched is a
+secondary diagnostic. Otherwise differences in *who gets projected*
+masquerade as model quality -- Phase 7's edge already shrank 8-21% under
+matching. Step 8 will not be tuned against whichever population flatters it.
+
+### Required output: the decomposition, not just the season total
+
+    E[season PPR] = E[games] x E[PPR per game | played]
+
+Per fold and position, both components reported separately: prediction
+error for games, for PPR/game, and for the resulting season total; MAE /
+bias / R^2 / correlation for each; and the error interaction between the
+two terms.
+
+This is required, not optional, because a season total alone is
+uninformative about cause:
+
+    games 16.2 vs 16.1 actual, PPR/game 7.3 vs 8.9   -> conditional production is the problem
+    games 10.1 vs 15.8 actual, PPR/game 11.2 vs 10.9 -> the exposure model is the problem
+
+### Target-definition guardrail (a real hazard, checked)
+
+The `ppr_per_game` denominator must be **actual qualifying played games**
+under the participation contract -- not roster weeks, not rows from the
+synthetic-week machinery.
+
+`preseason_features._load_full_history` reads `player_weekly_stats` raw:
+no quality label, no receiving floor. Its `games_played` is a bare row
+count (`("fantasy_points", "size")`). Using it as the denominator would
+reintroduce the selection problem this architecture exists to remove.
+
+So Step 8A takes **features** from `build_multiyear_season_pairs` (causal,
+player-season level, real destination-team context) and the **target** from
+`season_availability.load_player_seasons()`, which applies the contract.
+
+### Held fixed
+
+Phase 7 is not modified. Phase 9 is not touched. No hybrid is built
+regardless of outcome.
