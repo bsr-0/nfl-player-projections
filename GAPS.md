@@ -9622,3 +9622,59 @@ Three permanent regression tests:
 
 This is the leak a future feature-selection refactor is most likely to
 reopen, which is why the guard is behavioural.
+
+### AMENDMENT 2 to Step 8A: extend the BENCHMARK's span (2026-08-20, before results)
+
+Discovered while the regeneration was running: Phase 7 defaults to
+`DEFAULT_VALIDATION_SEASONS = (2023, 2024, 2025)`. The harness walks 17
+folds, but the Phase 7 arm exists for only three of them — so the migration
+comparison, as pre-registered, would rest on **3 folds**.
+
+That is too fragile a basis for retiring a production architecture,
+particularly in a project where the era-rule contrast looked decisive at
+n=3 and turned out to be a feature discontinuity, and where QB's 2025
+anomaly dominated three separate experiments.
+
+**What changes: the benchmark's evaluation coverage. What does NOT change:
+Step 8A's model, features, target, weighting, selection criterion, or
+outcome conditions.** This is not post-hoc optimisation of the candidate —
+it is discovering that the incumbent's own validation span does not support
+the decision being asked of it.
+
+#### Reporting structure, fixed
+
+**Pre-registered Step 8A validation — untouched:**
+
+| | window |
+|---|---|
+| Primary | 2009-2025 |
+| Secondary | 2013-2025 |
+| Diagnostic | 2009-2012 |
+
+**Migration comparison — Phase 7 vs Step 8A:**
+
+| | window | role |
+|---|---|---|
+| Primary | **2013-2025 (13 folds)** | the migration evidence |
+| Sensitivity | 2023-2025 (3 folds) | compatibility check against Phase 7's original validation span |
+
+Both arms through identical folds and population intersection.
+
+    2013 ------------------------------------------- 2025
+           Step 8A  ---------------------------------
+           Phase 7  ---------------------------------
+                                        ^ 2023-25
+                                          original P7 span
+
+#### Sequence, fixed in advance
+
+1. finish the current Step 8A run
+2. finish the current 2023-2025 Phase 7 regeneration
+3. run the extended 2013-2022 Phase 7 benchmark (the script appends, so
+   the two runs merge into one 2013-2025 file)
+4. compare **without changing either model**
+5. 13-fold comparison is the primary migration evidence
+6. 2023-2025 is the narrower sensitivity check
+
+**Rule:** the additional 2013-2022 Phase 7 results must not retroactively
+change the Step 8A model or the pre-registered outcome conditions (A-D).
