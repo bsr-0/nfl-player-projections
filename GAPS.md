@@ -9678,3 +9678,111 @@ Both arms through identical folds and population intersection.
 
 **Rule:** the additional 2013-2022 Phase 7 results must not retroactively
 change the Step 8A model or the pre-registered outcome conditions (A-D).
+
+---
+
+# STEP 8A RESULT: outcome C — DO NOT MIGRATE (2026-08-21)
+
+Judged against the criteria committed in `abb6cb9` before the run.
+
+### 1. Matched population, 2013-2025 (primary migration evidence)
+
+Populations verified identical in **52/52** shared position-folds.
+
+| Position | P7 MAE | S8A MAE | d | P7 RMSE | S8A RMSE | d | P7 R2 | S8A R2 | d |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| QB | 34.21 | 70.41 | +36.20 | 44.52 | 86.59 | +42.08 | 0.819 | 0.323 | -0.496 |
+| RB | 23.16 | 54.85 | +31.69 | 31.79 | 70.82 | +39.04 | 0.870 | 0.346 | -0.524 |
+| WR | 22.99 | 46.57 | +23.58 | 32.76 | 59.93 | +27.17 | 0.856 | 0.512 | -0.344 |
+| TE | 19.96 | 31.71 | +11.75 | 31.76 | 43.57 | +11.81 | 0.750 | 0.523 | -0.227 |
+| **Overall** | **25.08** | **50.89** | **+25.81 (+103%)** | 35.21 | 65.23 | +30.02 | 0.824 | 0.426 | -0.398 |
+
+### 2. Coverage (unmatched, not a migration criterion)
+
+Phase 7 projects more players (QB 968 vs 649, WR 2,860 vs 2,194) -- it
+covers backups and rookies that the season-pair builder's history
+requirement excludes.
+
+### 3. Trajectory: Step 8A loses **0 of 52** position-folds
+
+Mean gap by season, 2013-2025: 26.6, 23.8, 30.0, 24.8, 22.4, 26.6, 24.3,
+25.7, 27.9, 27.7, 24.5, 26.8, 24.5. Flat across the entire span. Not one
+season, not one position, not a data-regime artifact.
+
+### 4. Decomposition: the loss is GAMES-dominated
+
+| Position | games | rate | interaction | = season bias |
+|---|---:|---:|---:|---:|
+| QB | -17.95 | -4.53 | +6.25 | -16.23 |
+| RB | -11.45 | -3.75 | +4.03 | -11.18 |
+| TE | -6.84 | +2.22 | +0.52 | -4.09 |
+| WR | -8.24 | +1.58 | +2.72 | -3.94 |
+
+Games accounts for **60-71%** of the bias magnitude at every position.
+
+Component quality explains why:
+
+* **rate** is respectable -- R2 0.26-0.58, means track closely
+  (RB 8.67 predicted vs 8.60 actual, WR 8.19 vs 7.79). It cannot explain a
+  103% season-level loss on its own.
+* **games** R2 is **-0.05 / -0.32 / -0.04** at RB/TE/WR -- worse than
+  predicting the mean.
+
+### 5. 2023-2025 subset (Phase 7's original span)
+
+P7 23.64 vs S8A 48.88 (+107%). Same shape as the 13-fold result, so the
+narrow and wide spans reconcile.
+
+### The apparent contradiction, resolved
+
+`hist_shrunk` was validated at 12/12 folds against a constant with games
+MAE ~4.0-4.5; here it posts games MAE ~3.2-3.4 (better) yet R2 ~= 0. Both
+hold. The earlier test was against a constant on a broad population; R2
+here is measured on the intersected population -- established veterans,
+whose games-played variance is small. A predictor can beat a constant
+overall and still explain none of the cross-sectional variation among
+veterans. That may be the fundamental limitation of a single season-level
+exposure number.
+
+### What is established, and what is NOT
+
+**Established:** the failure is located in the exposure component.
+**Not established:** why. Two competing hypotheses remain, and this
+experiment does not distinguish them:
+
+1. season-level exposure can be improved enough to explain veteran
+   cross-sectional games-played variation; or
+2. Phase 7's advantage comes from its week-by-week conditional assessment,
+   which is collapsed and lost when exposure becomes one season number.
+
+These are different experiments and should be run separately.
+
+**Do NOT tune `hist_shrunk` because its R2 is poor.** That jumps from "we
+located the failure" to "we know the solution."
+
+### Disposition (updates the state table above)
+
+| | Phase 7 | Step 8A |
+|---|---|---|
+| Disposition | **REMAINS PRODUCTION** | **candidate; migration REJECTED on this evidence** |
+
+The architecture is not migrated. Nothing in either model was changed.
+Step 8A's machinery (`season_availability.py`,
+`season_conditional_production.py`, the harness arm) stays in the tree as a
+measured candidate with a documented failure mode.
+
+### SUPERSEDED: the historical Phase 8 benchmark
+
+The "Phase 7 beats direct models by 26-40% under matched populations"
+figure (2026-08-12) is **superseded**. It was computed before the position
+fix, the feature-discontinuity fixes and the receiving floor.
+
+The current corrected benchmark is **25.08 vs 50.89 MAE, matched
+population, 2013-2025**, and it is that figure -- not the historical one --
+that should inform future architectural decisions.
+
+### Worth stating
+
+Step 8A failed, and the experiment was worth running: it stopped the repo
+migrating to a substantially worse architecture on the strength of a
+cleaner conceptual design.

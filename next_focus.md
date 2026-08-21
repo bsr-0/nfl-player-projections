@@ -610,6 +610,12 @@ handling easier backups/rookies) but it still beats both direct models
 by 26-40% at every position even then -- the headline result holds up,
 not an artifact of unequal test populations.
 
+[SUPERSEDED — 2026-08-21] These figures predate the position fix, the
+feature-discontinuity fixes and the 2009 receiving floor. Regenerated on
+corrected data over 2013-2025: Phase 7 MAE 25.08 vs Step 8A 50.89 on the
+matched population (GAPS.md, search "STEP 8A RESULT"). Use the corrected
+benchmark, not the 26-40% figure, for architectural decisions.
+
 ⸻
 
 Phase 9 — 18-Week Quantiles / Simulation

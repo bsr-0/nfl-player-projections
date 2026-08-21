@@ -71,8 +71,12 @@ def attach_conditional_target(pairs: pd.DataFrame, panel: pd.DataFrame) -> pd.Da
     """
     if pairs.empty or panel.empty:
         return pairs.assign(**{TARGET: np.nan})
-    target = panel[["player_id", "season", "games_played", "ppr", "ppr_per_game"]].rename(
-        columns={"season": "target_season"})
+    # `possible_games` comes along because the exposure model needs it to
+    # turn a rate into games. It is the published schedule length, known
+    # pre-season, and it stays out of the feature set via
+    # TARGET_SEASON_COLUMNS.
+    target = panel[["player_id", "season", "games_played", "ppr", "ppr_per_game",
+                    "possible_games"]].rename(columns={"season": "target_season"})
     out = pairs.merge(target, on=["player_id", "target_season"], how="inner")
     return out
 
