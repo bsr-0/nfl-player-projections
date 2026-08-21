@@ -511,9 +511,22 @@ def run_window_comparison(
     weightings: Optional[Sequence[str]] = None,
     tune_hyperparameters: bool = False,
     output_path: Path = WINDOW_OUTPUT_PATH,
+    apply_receiving_floor: bool = True,
 ) -> pd.DataFrame:
     """Phase 3 (next_focus.md): position x architecture x training-window x
     recency-weighting, using only rolling (walk-forward) validation.
+
+    `apply_receiving_floor` (default True, added 2026-08-21) enforces the
+    production data contract during selection: RB/WR/TE rows before 2009 are
+    excluded because nflverse does not chart the intended receiver on
+    incomplete passes there, so `targets` degenerates into receptions
+    (GAPS.md, RECEIVING_CHARTING_MIN_SEASON). Only the "all" window reaches
+    those seasons, and QB is exempt.
+
+    This is a data-validity constraint, not a tuning change: without it,
+    config selection would run on a population every downstream consumer
+    excludes. Set False for the pre-registered sensitivity arm that measures
+    whether the floor actually changes the selected window.
 
     Deliberately bypasses the codebase's 2018+ training floor via
     run_fold(train_seasons_override=...) so "10y"/"all" windows are actually
@@ -560,6 +573,9 @@ def run_window_comparison(
 
                 pos_train = train_df[train_df["position"] == position]
                 pos_test = test_df[test_df["position"] == position]
+                if apply_receiving_floor:
+                    from src.models.single_week_ppr.population import receiving_floor_mask
+                    pos_train = pos_train[receiving_floor_mask(pos_train)]
                 if len(pos_test) < 20:
                     logger.warning("Skipping %s/%s/%s: only %d test rows", position, season, window, len(pos_test))
                     continue
@@ -574,6 +590,7 @@ def run_window_comparison(
                 base_row = {
                     "position": position, "season": season, "window": window,
                     "actual_years": len(train_seasons), "n_train_rows": len(pos_train),
+                    "receiving_floor": apply_receiving_floor,
                 }
 
                 existing_row = {**base_row, "weighting": "n/a", "model": "existing_methodology",

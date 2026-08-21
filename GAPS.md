@@ -9852,3 +9852,29 @@ not conditional on it**. Phase 3 (window/weighting) still pending before
 that is stated firmly.
 
 `FINAL_CONFIG` is NOT changed. No edits until Phase 3 is in.
+
+### PRE-REGISTERED interpretation rules: RB receiving-floor sensitivity (2026-08-21)
+
+Fixed before running. Phase 3's `all` window spans 2006-2024, so it is the
+only place config selection reaches into the seasons the receiving floor
+excludes. RB is the position whose incumbent window is `all`; QB is exempt
+from the floor; WR (3y) and TE (10y) do not reach those seasons.
+
+Primary = **floor applied** (production data contract).
+Sensitivity = floor disabled (the previous behaviour).
+
+| RB result | interpretation |
+|---|---|
+| both select the same window | floor treatment does not affect selection |
+| different window, floored version wins | floor materially affects selection; use the floored version |
+| different window, unfloored version wins | investigate whether structurally invalid history is exerting spurious signal; **production still uses the floored population** |
+| same / broadly equivalent performance | prefer the floored version on validity grounds |
+
+The selected config is NOT to be chosen by whichever version yields better
+downstream Phase 7 performance. Phase 3 selects against its own predefined
+objective.
+
+**Reporting requirement:** report the margin to the runner-up, not only the
+winner. Phase 2 showed why — QB's winner "changed" at 0.025 MAE (a tie
+broken differently) while TE's changed at 0.106 (substantive). A winner
+name alone cannot distinguish those.
