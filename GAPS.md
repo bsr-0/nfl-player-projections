@@ -9878,3 +9878,60 @@ objective.
 winner. Phase 2 showed why — QB's winner "changed" at 0.025 MAE (a tie
 broken differently) while TE's changed at 0.106 (substantive). A winner
 name alone cannot distinguish those.
+
+## FINAL_CONFIG re-validation COMPLETE — one change adopted (2026-08-21)
+
+Phases 2 and 3 re-run on the corrected panel with methodology unchanged and
+the original selection rule preserved.
+
+### Phase 3 primary (receiving floor applied): margins to runner-up
+
+| position | winner | margin over runner-up | incumbent | incumbent gap |
+|---|---|---:|---|---:|
+| QB | 10y / linear | 0.022 | all / none | 0.022 |
+| RB | 10y / linear | 0.005 | all / linear | 0.007 |
+| WR | 7y / none | **0.000** | 3y / none | 0.018 |
+| TE | 10y / linear | 0.002 | 10y / none | 0.002 |
+
+Every gap is 0.002-0.022 MAE against a +/-0.046 noise band. WR's winner
+beats its own runner-up by 0.000 — the sort order selected between
+identical values. **No window/weighting change is real.**
+
+### RB receiving-floor sensitivity
+
+Only the `all` window differs; every other window is identical to 4dp, as
+it must be. Winners differ by label (floored `10y/linear` 4.4685 vs
+unfloored `all/exponential` 4.4683) but are **0.0002 MAE apart**, and the
+unfloored `all` is better on exponential yet worse on linear and none —
+mixed signs consistent with noise from 758 extra rows, not signal.
+
+Lands in the pre-registered fourth row: broadly equivalent performance ->
+**prefer the floored version on validity grounds.** Population decided on
+validity, not performance, exactly as pre-registered.
+
+### Adopted
+
+| | change |
+|---|---|
+| Architecture | **TE only**: `B_gbm_huber` -> `C_gbm_mae` (2.900 -> 2.794, margin 0.106 ~ 4x noise) |
+| QB / RB / WR architecture | unchanged (QB/RB swapped within noise at 0.025/0.022; WR identical) |
+| Window / weighting, all positions | **unchanged** |
+| RB population | floored (production data contract) |
+
+Verified: the `final_config.py` diff is exactly one line. Suite 441 passing.
+
+### Consequence for Step 8A
+
+Total available movement from re-selecting BOTH architecture and
+window/weighting is ~0.1 MAE. Step 8A's deficit is **+25.81 MAE**. Config
+staleness cannot explain it. Step 8A's rejection is therefore **robust, not
+conditional** — the qualification raised when the dependency was flagged is
+now discharged.
+
+### LINEAGE
+
+The Phase 7 2013-2025 benchmark (25.08 MAE matched) was generated with
+**TE = B_gbm_huber**, the pre-edit config. It remains the valid benchmark
+for the old production config. Anything consuming the new TE architecture
+is not directly comparable to that artifact without a re-run. Recorded in
+`final_config.py` as well so the artifact/config lineage cannot be lost.
