@@ -9317,3 +9317,46 @@ wired into projections.
 The experiment script now imports the panel loader and estimator from this
 module rather than keeping its own copies, so there is one definition and
 the reported numbers reproduce through the production code path.
+
+---
+
+# STEP 8 COMPLETE — architectural boundaries, fixed (2026-08-20)
+
+The decomposition, which subsequent work must not blur:
+
+| layer | question it answers | estimator |
+|---|---|---|
+| **Weekly** | what does this player produce when he participates? | existing conditional-production model, unchanged |
+| **Season** | E[games played] x E[PPR per game] | product only |
+| **Availability** | how many games does a player who plays get? | `hist_shrunk`, **season layer only** |
+
+Status, for the record:
+
+* **Step 8 complete.**
+* **`hist_shrunk` adopted for season games.** Validated 12/12 position-folds
+  on games played; mean |season bias| 15.02 -> 4.42.
+* **No weekly opportunity adjustment.** The weekly opportunity layer failed
+  its pre-registered test in 12/12 folds and was not adopted. The
+  snap-bucket compression is opportunity uncertainty the weekly model
+  cannot observe, and is not a defect to be forced out of it.
+* **No synthetic zero weeks.** Not reintroduced anywhere; enforced by test.
+* **No separate bias correction.** The bias gain comes from the product
+  itself; a post-hoc correction would double-count it. Enforced by test.
+* **No position-specific availability estimators.** One estimator, two
+  parameters, all four positions.
+* **The evaluation does NOT establish probability of playing at all.** The
+  population is players with >= 1 observed game, because a player with zero
+  games has no rows. `hist_shrunk` has not been shown to identify players
+  who miss a roster, begin the season injured, retire, are cut, or are
+  rookies without NFL history.
+* **Unknown / no-history players** use the position-mean fallback and are
+  marked `has_history=False`.
+* **`availability.py` remains legacy only.** The per-week P(plays)
+  estimators belong to the abandoned synthetic-week architecture. Not part
+  of production; referenced only by `run_availability_comparison.py` and
+  `run_availability_calibration.py`. **Logged for a later cleanup pass —
+  deliberately not deleted here**, since cleanup at this point risks
+  becoming another investigation.
+
+Do not reopen the availability question absent a concrete failure surfaced
+by later work.
