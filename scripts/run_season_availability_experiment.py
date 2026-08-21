@@ -41,53 +41,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import DB_PATH, MIN_HISTORICAL_YEAR, POSITIONS
 from src.models.single_week_ppr.population import (
-    RECEIVING_CHARTING_MIN_SEASON, RECEIVING_DEPENDENT_POSITIONS,
-    SNAP_LABEL_MIN_SEASON, label_participation,
+    RECEIVING_CHARTING_MIN_SEASON, RECEIVING_DEPENDENT_POSITIONS, SNAP_LABEL_MIN_SEASON,
+)
+# One definition of the panel and the estimator, shared with production.
+from src.models.single_week_ppr.season_availability import (
+    SHRINKAGE_K, SeasonAvailabilityEstimator, load_player_seasons,
 )
 
-REGULAR_SEASON_MAX_WEEK = 18
-# Shrinkage strength: weight on the player's own history is
-# n_prior_games / (n_prior_games + K).
-SHRINKAGE_K = 16.0
 OUT_PATH = Path("data/experiments/season_availability.csv")
-
-
-def load_player_seasons() -> pd.DataFrame:
-    """Participated games and PPR per player-season, participation contract applied."""
-    import sqlite3
-    conn = sqlite3.connect(str(DB_PATH))
-    df = pd.read_sql(f"""
-        SELECT pws.player_id, p.position, pws.season, pws.week, pws.team,
-               pws.snap_count, pws.fantasy_points, pws.data_source
-        FROM player_weekly_stats pws
-        JOIN players p ON pws.player_id = p.player_id
-        WHERE p.position IN ({','.join('?' * len(POSITIONS))})
-          AND pws.week <= {REGULAR_SEASON_MAX_WEEK}
-          AND pws.season >= {MIN_HISTORICAL_YEAR}
-    """, conn, params=list(POSITIONS))
-    sched = pd.read_sql(
-        f"SELECT season, week, home_team AS team FROM schedule WHERE week <= {REGULAR_SEASON_MAX_WEEK} "
-        f"UNION ALL SELECT season, week, away_team AS team FROM schedule "
-        f"WHERE week <= {REGULAR_SEASON_MAX_WEEK}", conn)
-    conn.close()
-
-    df["participation_quality"] = label_participation(df)
-    df = df[df["participation_quality"] >= 1]
-    # Same receiving floor the production population uses.
-    recv = df["position"].isin(RECEIVING_DEPENDENT_POSITIONS)
-    df = df[~(recv & (df["season"] < RECEIVING_CHARTING_MIN_SEASON))]
-
-    played = df.groupby(["player_id", "position", "season"]).agg(
-        games_played=("week", "nunique"),
-        ppr=("fantasy_points", "sum"),
-        team=("team", lambda s: s.mode().iloc[0] if len(s.mode()) else ""),
-    ).reset_index()
-    possible = sched.groupby(["season", "team"])["week"].nunique().rename("possible_games").reset_index()
-    played = played.merge(possible, on=["season", "team"], how="left")
-    played["possible_games"] = played["possible_games"].fillna(REGULAR_SEASON_MAX_WEEK - 1)
-    played["rate"] = played["games_played"] / played["possible_games"]
-    played["ppr_per_game"] = played["ppr"] / played["games_played"]
-    return played
 
 
 def build_arms(hist: pd.DataFrame, target: pd.DataFrame, season: int) -> pd.DataFrame:

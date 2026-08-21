@@ -9273,3 +9273,47 @@ against. A real pre-season projection must also cover players who end up
 playing nothing at all, and this experiment cannot measure that case. The
 result therefore applies to "how many games will a player who plays get",
 not "will this player play".
+
+## Season availability layer: implemented and integration-tested (2026-08-20)
+
+`src/models/single_week_ppr/season_availability.py`. Adopted narrowly, on
+the strength of the games-played result (12/12 folds) and the season-bias
+result (mean |bias| 15.02 -> 4.42), **not** on a general season-MAE claim —
+it improves MAE at QB/RB and not at TE/WR.
+
+    season PPR = E[games played] x E[PPR per game | played]
+
+The weekly model supplies the second factor and is untouched. `hist_shrunk`
+supplies the first. Nothing else was added: no weekly availability
+adjustment, no depth-chart decay, no synthetic zero weeks, and deliberately
+**no separate bias-correction layer** — the bias gain comes from the
+product itself, and a second correction on top would double-count it.
+A test asserts no such term exists.
+
+Causality is structural rather than conventional: `fit(panel,
+before_season=S)` drops everything at or after S, so a caller cannot
+accidentally train on the season being projected, and it raises rather than
+silently returning nothing when no prior seasons exist.
+
+Not to be confused with `availability.py`, which holds the per-week
+P(plays) estimators from the abandoned synthetic-week architecture. Those
+remain referenced only by two experiment scripts; this module is the one
+wired into projections.
+
+### The seven integration requirements, one or more tests each
+
+| # | requirement | how it is enforced |
+|---|---|---|
+| 1 | weekly predictions unchanged | source-level assertion that no weekly module imports this one, plus a signature check that nothing in the public surface takes a `week` |
+| 2 | season games use hist_shrunk | durable pulled down and fragile pulled up toward the position mean; shrinkage strength scales with games observed |
+| 3 | season PPR = games x PPR/game | exact-product test, plus the no-bias-correction assertion |
+| 4 | strictly causal | target season and later dropped by `fit`; raises with no prior seasons; rejects missing columns |
+| 5 | documented no-history fallback | unknown player resolves to the position mean; `has_history` flags the row; a test asserts the docstring still states the "will this player play at all" boundary |
+| 6 | reproduces the experiment | production estimator beats the constant on real 2024 and 2025 data |
+| 7 | no synthetic zero weeks | every panel row has `games_played > 0`; module source contains no row-fabrication |
+
+18 tests in `tests/test_season_availability_integration.py`; suite at 428.
+
+The experiment script now imports the panel loader and estimator from this
+module rather than keeping its own copies, so there is one definition and
+the reported numbers reproduce through the production code path.
