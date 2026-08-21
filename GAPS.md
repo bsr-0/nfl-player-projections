@@ -9569,3 +9569,56 @@ player-season level, real destination-team context) and the **target** from
 
 Phase 7 is not modified. Phase 9 is not touched. No hybrid is built
 regardless of outcome.
+
+### AMENDMENT to the Step 8A pre-registration (2026-08-20, before results)
+
+Recorded before any Step 8A result exists, so the reporting窗口 cannot be
+chosen to flatter an outcome.
+
+**Reporting windows, fixed in advance:**
+
+| | window | status |
+|---|---|---|
+| Primary | **all 17 folds (2009-2025)** | the pre-defined harness span |
+| Secondary | **2013-2025** | explicitly labelled the better-supported data regime |
+| Diagnostic | **2009-2012** | reported separately |
+
+An earlier draft of this plan said 2013+ would be "weighted more heavily"
+when reading the result. That is withdrawn: choosing a weighting after
+seeing which window favours Step 8 is outcome-dependent reasoning. No
+statistical weighting is applied to any window unless pre-registered.
+
+The rationale for showing 2013-2025 separately stands on facts known
+already, not on results: snap data begins in 2013
+(`SNAP_LABEL_MIN_SEASON`) and the receiving floor removes RB/WR/TE before
+2009 (`RECEIVING_CHARTING_MIN_SEASON`), so those spans are genuinely
+different data regimes. The same rule applies to any other cutoff
+discovered later.
+
+### THE EXPOSURE-LEAKAGE CONTRACT (permanent, not Step-8A-specific)
+
+    Target-season exposure MAY determine training weights and the target.
+    It may NEVER be an input feature.
+    Prior-season exposure IS legitimate signal and must survive.
+
+Stronger and clearer than "`games_played` is excluded", and it cuts both
+ways: a filter broad enough to catch `games_played` by name would also
+destroy `games_played_y1`, which is exactly the durability signal the
+exposure model depends on.
+
+Made **structural** rather than a maintained list: `feature_columns`
+derives its exclusions from the panel schema
+(`TARGET_SEASON_COLUMNS`), so adding a column to
+`load_player_seasons()` cannot silently open a leak.
+
+Three permanent regression tests:
+
+* no target-season exposure column appears in the feature set
+* `games_played_y1` / `_y2` **do** survive the filter
+* predictions are byte-identical when **every** target-season exposure
+  column is tampered with -- the behavioural form, which proves the model
+  cannot use them at prediction time rather than merely that a list
+  excludes them
+
+This is the leak a future feature-selection refactor is most likely to
+reopen, which is why the guard is behavioural.
