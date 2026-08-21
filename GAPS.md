@@ -9786,3 +9786,69 @@ that should inform future architectural decisions.
 Step 8A failed, and the experiment was worth running: it stopped the repo
 migrating to a substantially worse architecture on the strength of a
 cleaner conceptual design.
+
+## FINAL_CONFIG re-validation, Phase 2 (architecture) — 2026-08-21
+
+`FINAL_CONFIG` was selected 2026-08-18, before the 2026-08-20 data
+corrections (position corruption, `home_away`/`is_dome`, `team_plays`, the
+PBP situational backfill, the receiving floor, age). Since the original
+selection margins were only 0.086-0.176 MAE and one broken-feature ablation
+moved a fold by ~0.43 MAE, the config was effectively an unverified
+model-selection result. Re-run with methodology unchanged.
+
+Phase 2 trains on 2018+ (`load_training_data` floor), so the receiving
+floor and the 2006-2008 contamination are out of scope here — this half of
+the re-validation is unambiguous.
+
+### Mean MAE by architecture, corrected data (point estimators only)
+
+| model | QB | RB | TE | WR |
+|---|---|---|---|---|
+| A_gbm_mse | 6.062 | 4.506 | 3.061 | 4.298 |
+| B_gbm_huber | 6.474 | 4.606 | 2.900 | 4.296 |
+| **C_gbm_mae** | **5.960** | 4.356 | **2.794** | **4.071** |
+| D_hurdle | 6.130 | 4.531 | 3.074 | 4.349 |
+| D_hurdle_t5 | 6.166 | 4.407 | 2.916 | 4.161 |
+| **F_yeojohnson_huber** | 5.985 | **4.334** | 2.849 | 4.096 |
+| G_yeojohnson_mse | 6.006 | 4.362 | 2.893 | 4.133 |
+
+### Winners vs incumbents
+
+| position | incumbent | new winner | | margin |
+|---|---|---|---|---|
+| QB | F_yeojohnson_huber | C_gbm_mae | changed | **0.025** |
+| RB | C_gbm_mae | F_yeojohnson_huber | changed | **0.022** |
+| WR | C_gbm_mae | C_gbm_mae | same | 0.000 |
+| TE | B_gbm_huber | C_gbm_mae | changed | **0.106** |
+
+### Reading: the corrections did NOT overturn the architecture selection
+
+Three of four "changed", but QB and RB merely **swapped with each other** at
+margins of 0.025 and 0.022 — inside the +/-0.046 per-fold noise band this
+session established. Those are ties broken differently by the sort, not
+real changes.
+
+TE is the one substantive move (0.106, ~4x the noise band), and TE is also
+the position the corrections hit hardest: 39% of its rows are played-zeros
+and its `age_curve` was the flattest of the four.
+
+`C_gbm_mae` is now at or near the top everywhere, which is a
+simplification rather than an upheaval.
+
+### A trap worth recording
+
+The script's own summary named `E_quantile_gbm` as best for WR and TE. The
+**original selection rule deliberately excludes E** — it is a
+floor/median/ceiling tool, not a competing point estimator
+(see `PHASE3_WINNER_ARCHITECTURE`'s comment). Taking the printed "best"
+would have manufactured two false changes. Re-validation must reuse the
+original selection rule, not just the original harness.
+
+### Consequence for Step 8A
+
+A 0.02-0.11 MAE shift in architecture cannot explain Step 8A's +25.81 MAE
+gap. On this evidence Step 8A's result looks **robust to config staleness,
+not conditional on it**. Phase 3 (window/weighting) still pending before
+that is stated firmly.
+
+`FINAL_CONFIG` is NOT changed. No edits until Phase 3 is in.
