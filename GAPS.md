@@ -10081,3 +10081,100 @@ regime-transition-aware model for QB job loss, as opposed to a stable
 per-season Bernoulli rate), not a Phase 9-specific one -- and any fix
 there would improve Phase 7's point estimates too, not just Phase 9's
 intervals. Still not undertaken here; no production code changed.
+
+## QUICK REFERENCE: 2025 season architecture comparison (2026-08-22)
+
+Matched population, test season 2025, n=352 (QB 41, RB 69, WR 146, TE 96).
+`walk_forward_preseason.py --test-seasons 2025 --intersect-populations`,
+Phase 7 arm regenerated under the current `FINAL_CONFIG` (raw JSON:
+`data/backtest_results/walk_forward_preseason_20260822_123317.json`).
+
+### Headline table (sample-weighted across positions)
+
+| Arm | MAE | RMSE |
+|---|---:|---:|
+| Phase 7 (summed-weekly) | 21.51 | 32.22 |
+| Step 8A (games x rate) | 42.68 | 59.41 |
+| Candidate (Ridge multi-year) | 43.41 | 59.92 |
+| Production (`PreseasonProjector`) | 45.76 | 63.46 |
+
+### Per position
+
+| Pos | n | P7 MAE/RMSE/R2 | S8A MAE/RMSE/R2 |
+|---|---:|---|---|
+| QB | 41 | 30.0 / 40.4 / 0.876 | 75.9 / 89.9 / 0.389 |
+| RB | 69 | 24.0 / 32.7 / 0.890 | 51.1 / 68.0 / 0.524 |
+| WR | 146 | 21.9 / 34.9 / 0.820 | 40.2 / 57.0 / 0.520 |
+| TE | 96 | 15.5 / 22.1 / 0.875 | 26.2 / 35.0 / 0.687 |
+
+Step 8A decomposition (`data/experiments/step8a_decomposition.csv`) again
+locates the failure in exposure: games R2 = 0.31 / -0.15 / 0.04 / 0.12
+(QB/RB/WR/TE) against rate R2 = 0.41 / 0.60 / 0.68 / 0.77. Same failure
+mode as the 2013-2025 run, independently reproduced on corrected data.
+
+### READ THIS BEFORE QUOTING THE TABLE ABOVE
+
+**The four arms do NOT solve the same problem, and the top row is not
+comparable to the bottom three.**
+
+Phase 7 projects a **completed** season. For each week it checks whether a
+real/inferred row exists; if so it treats P(plays)=1 as known and predicts
+off that week's actual in-season feature row. Measured on the 2025 run,
+**89% of the weeks Phase 7 sums are real known-played weeks** (per
+position, mean synthetic weeks: QB 4.62 of 13.33, RB 1.47 of 12.19, WR
+0.75 of 11.99, TE 0.40 of 12.51 -- TE is 97% real). Only the remaining
+~11% are forecast.
+
+Step 8A, Candidate and Production are **preseason** forecasters: they
+predict a whole season from strictly prior-season information, with
+Step 8A additionally bound by THE EXPOSURE-LEAKAGE CONTRACT above.
+
+So Phase 7's 21.51 is an in-season reconstruction with largely known
+exposure; 42.68 / 43.41 / 45.76 are pre-Week-1 forecasts. The gap is
+substantially an **information** gap, not purely an architecture gap.
+
+Consequences, stated so this table cannot be misread later:
+
+1. **Phase 7 cannot be used for the draft board.** It structurally
+   requires real played games in the test season (`run_season_projection`
+   iterates `pos_test.groupby("player_id")` and skips empty groups). The
+   DB holds 2006-2025 only; there are no 2026 rows, so a 2026 Phase 7 run
+   produces nothing at all. `docs/data/projections_2026.json` (620
+   forward-looking draft projections) is a preseason artifact and Phase 7
+   is not a preseason architecture.
+2. **The like-for-like preseason ranking is the bottom three**, where the
+   order inverts against the repo's current disposition: Step 8A (42.68)
+   < Candidate (43.41) < Production (45.76). Step 8A is the *best*
+   available preseason arm on this fold, though by a modest ~7% over
+   production.
+3. **The Step 8A rejection is partially confounded by this asymmetry.**
+   The Step 8A pre-registration matched *populations* but never matched
+   *information*. GAPS.md's hypothesis 2 ("Phase 7's advantage comes from
+   its week-by-week conditional assessment") gestures at this; the
+   measurement above makes it concrete and quantified. This does NOT
+   overturn outcome C -- Phase 7 remains production for its own task --
+   but "Step 8A loses by 103%" should not be quoted as a clean
+   architecture verdict.
+
+### The one clean, confound-free result: the TE architecture change
+
+Old vs new Phase 7 CSV for 2025, same players. QB/RB/WR predictions are
+**bit-identical** (config unchanged), so TE is isolated exactly:
+
+| TE (n=135) | MAE | RMSE | R2 |
+|---|---:|---:|---:|
+| `B_gbm_huber` (old) | 18.11 | 30.60 | 0.751 |
+| `C_gbm_mae` (current) | 14.95 | 22.39 | 0.867 |
+
+-17% MAE, -27% RMSE, +0.12 R2. The 0.106 **weekly** MAE margin that
+justified adopting the change substantially understated its **season**
+level benefit. This comparison is valid because both sides are Phase 7 --
+same task, same information, one changed variable.
+
+### Caveats
+
+Single fold (2025), no fold-to-fold variance; the original Step 8A verdict
+rested on 52 folds. Matched-population figures are not comparable to
+native-population ones (Phase 7 QB is 30.0 matched vs 24.42 native --
+intersection drops easy-to-predict backups, raising MAE). Pooled overall
+R2 is not derivable from per-position R2 and is deliberately not reported.
