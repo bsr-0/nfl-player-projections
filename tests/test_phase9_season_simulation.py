@@ -16,6 +16,8 @@ from src.models.single_week_ppr.season_simulation import (
     build_residual_donor_pools,
     simulate_player_season,
     _sample_block,
+    _require_nonempty_donor_pool,
+    EmptyDonorPoolError,
 )
 
 
@@ -69,6 +71,40 @@ class TestBuildResidualDonorPools:
             [tmp_path / "does_not_exist.csv"], "QB", "F_yeojohnson_huber", before_season=2023,
         )
         assert pools == {}
+
+
+class TestRequireNonemptyDonorPool:
+    def test_raises_when_final_config_architecture_not_in_residual_csv(self, tmp_path):
+        """Reproduces the real TE failure: FINAL_CONFIG selects an
+        architecture (C_gbm_mae) newer than the Phase 4 residual CSV, which
+        only has rows for the previously-selected architecture
+        (B_gbm_huber). The donor pool silently comes back empty; the
+        pipeline must raise instead of feeding it to `_sample_block`, which
+        would otherwise fall back to all-zero residual blocks.
+        """
+        df = pd.DataFrame({
+            "player": ["P1"],
+            "position": ["TE"],
+            "season": [2022],
+            "week": [1],
+            "actual_ppr": [10.0],
+            "prediction": [8.0],
+            "model": ["B_gbm_huber"],  # stale architecture, not the current FINAL_CONFIG choice
+        })
+        csv_path = tmp_path / "phase4.csv"
+        df.to_csv(csv_path, index=False)
+
+        donor_pool = build_residual_donor_pools(
+            [csv_path], "TE", "C_gbm_mae", before_season=2023,
+        )
+        assert donor_pool == {}
+
+        with pytest.raises(EmptyDonorPoolError):
+            _require_nonempty_donor_pool(donor_pool, "TE", 2023, "C_gbm_mae", [csv_path])
+
+    def test_does_not_raise_when_pool_nonempty(self):
+        pool = {("P1", 2021): [(1, 1.0)]}
+        _require_nonempty_donor_pool(pool, "TE", 2023, "C_gbm_mae", [])  # no raise
 
 
 class TestSampleBlock:

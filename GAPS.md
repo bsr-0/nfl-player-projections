@@ -9935,3 +9935,149 @@ The Phase 7 2013-2025 benchmark (25.08 MAE matched) was generated with
 for the old production config. Anything consuming the new TE architecture
 is not directly comparable to that artifact without a re-run. Recorded in
 `final_config.py` as well so the artifact/config lineage cannot be lost.
+
+## Phase 9 empty-donor-pool fix + re-run; prior Phase 9 artifact SUPERSEDED (2026-08-21/22)
+
+Two separate discoveries, kept separate because only the second is
+TE-specific:
+
+1. **Stale residual donors, all four positions.** Phase 9's block-bootstrap
+   (`season_simulation.py`) draws residuals from
+   `phase4_row_level_predictions_v2_corrected*.csv`, filtered to
+   `model == FINAL_CONFIG[position]["architecture"]`. Those CSVs predated
+   the 2026-08-20 data corrections AND the 2026-08-21 FINAL_CONFIG
+   re-validation (LINEAGE section above), so every position's donor pool
+   was drawn from stale predictions even where the architecture string
+   still matched.
+2. **TE additionally had ZERO donors.** TE's re-validated architecture
+   (`C_gbm_mae`) does not appear anywhere in the pre-fix CSVs, which only
+   have TE rows for the old `B_gbm_huber`. `build_residual_donor_pools`
+   filters by exact `model` match, silently returned `{}`, and
+   `_sample_block`'s empty-pool fallback (by design, for the thin-donor
+   case) returned all-zero residual blocks — so every TE P25/P50/P75/P90
+   was silently collapsing to the point prediction with no error anywhere
+   in the pipeline. This would have existed even under a hypothetical
+   fresh-CSV-but-old-architecture regenerate; it is a lineage bug, not a
+   data-staleness bug.
+
+### Fix (no change to residual methodology)
+
+- Added `EmptyDonorPoolError` / `_require_nonempty_donor_pool` in
+  `season_simulation.py`, called in `run_season_simulation` immediately
+  after each fold's donor pool is built. An empty pool now raises instead
+  of silently degrading to zero-variance quantiles. `build_residual_donor_pools`
+  and `_sample_block` themselves are unchanged — their empty/thin-pool
+  fallbacks remain legitimate primitive behavior (see their existing
+  tests); the guard lives at the pipeline level, which is where "this
+  position/architecture is required to produce real output" is actually
+  known.
+- Regression test (`TestRequireNonemptyDonorPool` in
+  `tests/test_phase9_season_simulation.py`) reproduces the exact failure:
+  a donor CSV with only `B_gbm_huber` TE rows, requested against
+  `C_gbm_mae`, must raise `EmptyDonorPoolError`.
+- Regenerated both Phase 4 CSVs
+  (`phase4_row_level_predictions_v2_corrected.csv` for 2023-2025,
+  `..._2020_2022.csv` for the extension window) from scratch (not
+  appended — appending would have interleaved stale and fresh rows for
+  the same `(player, season)` under the group-by-week donor construction)
+  against the current DB and current `FINAL_CONFIG`. Verified all four
+  positions now have rows for their configured architecture; TE:
+  5,001 / 4,849 `C_gbm_mae` rows in the two files respectively (zero
+  before).
+- Re-ran Phase 9 (`scripts/run_phase9_season_simulation.py`, QB RB WR TE,
+  2023-2025). All 12 folds completed; TE donor pools are 410/539/670
+  player-seasons by fold (previously `{}`). Full suite: 443 passed.
+
+### SUPERSEDED: the prior Phase 9 artifact
+
+`data/experiments/phase9_season_simulation.csv` as it stood before this
+fix — and the Phase 4 CSVs it was built from — are **superseded**. Backed
+up to `data/experiments/backups/*.SUPERSEDED_pre_te_donor_fix_2026-08-22.csv`
+for reference only; do not read quantiles (especially TE's) from them.
+The current `data/experiments/phase9_season_simulation.csv` is the first
+Phase 9 artifact with corrected data, the re-validated `FINAL_CONFIG`,
+lineage-correct Phase 4 predictions, and the empty-pool invariant, and is
+the one that should inform any future decision.
+
+### Calibration diagnostic (descriptive only — no tuning applied)
+
+The re-run's printed summary showed QB P50 MAE (12.60) far above
+RB/TE/WR (1.94/0.19/0.57) and P25-P75 coverage off nominal 50% in both
+directions (QB 0.475, RB 0.636, TE 0.790, WR 0.728). Per explicit
+direction, this was investigated but NOT acted on --
+`scripts/diagnose_phase9_calibration.py` (donor residual distribution,
+donor-pool composition, synthetic-week share, coverage by position/season,
+worst QB errors) was written and run read-only against the new artifacts.
+
+Findings:
+
+- **Donor residual distributions are not the problem.** QB's pooled donor
+  residual std (7.38) is actually SIMILAR TO/below RB and WR (6.32,
+  6.20); TE's is tightest (4.42), consistent with TE's narrow observed
+  intervals. Sequence lengths are comparable across positions (medians
+  7-14 games). Nothing here explains a QB-specific miscalibration.
+- **The pooled coverage numbers are dominated by trivially-known seasons.**
+  83% of TE player-seasons and 76% of WR player-seasons have ZERO
+  synthetic weeks (fully observed already), which are zero-width
+  intervals by construction and inflate the pooled `in_p25_p75` figures
+  (TE 0.79-0.87, WR 0.81-0.84) without saying anything about the
+  simulation. QB has only 40% fully-known seasons, so QB's pooled number
+  is much closer to its actual simulated behavior — the positions are not
+  comparable pooled.
+- **Restricting to seasons with >=1 synthetic week reframes the QB result
+  entirely.** In that subset, QB's `below_p25` rate is 0.46-0.75 (vs.
+  nominal 0.25) across all three seasons — the simulated distribution is
+  centered systematically too high, not just wide-but-off-center. RB/TE/WR
+  show the same directional bias in the synthetic-only cut (below_p25
+  0.13-0.37) but far less severely than QB.
+- **The largest QB point-estimate errors are availability-driven, not
+  residual-driven.** The 10 largest QB |P50-actual| errors are all cases
+  where `games_actually_played` is 3-10 out of 11-17 possible weeks
+  (benched/injured/lost-job scenarios) while `availability_rate` (fed to
+  the Bernoulli synthetic-week draw) is still 0.67-0.90 — i.e. the
+  *availability* estimate, not the residual/block-bootstrap machinery, is
+  assuming these QBs keep playing at a rate their season didn't support.
+  This points at `estimate_availability_rate` /
+  `season_projection.py`'s availability model under-capturing QB-specific
+  discrete job-loss dynamics (benching, single-injury-ends-season), not
+  at the donor pool or the bootstrap construction.
+
+No changes were made in response to this — recorded as the diagnosis to
+resume from, not a directive to fix the availability model. Next step
+identified: check whether this is a pre-existing `estimate_availability_rate`
+gap (i.e. also present in Phase 7's point-estimate QB numbers) before
+concluding Phase 9 introduced anything new.
+
+### Cross-check vs. Phase 7: CONFIRMED pre-existing (Option A) — 2026-08-22
+
+Ran a fresh QB-only Phase 7 (`run_season_projection`) pass against the
+identical corrected-DB state used for the new Phase 9 run, then joined on
+`(player, season)` against the same 238 QB player-seasons. Phase 7 and
+Phase 9 call the same `estimate_availability_rate` and apply it the same
+way to synthetic weeks (`point_prediction * rate`, summed) -- Phase 9's
+P50 differs only by the added block-bootstrap residual noise -- so this
+isolates whether the exposure error is availability-model-wide or
+specific to Phase 9's stochastic translation of it.
+
+| | Overall MAE (n=238) | synthetic_weeks>0 subset (n=144) |
+|---|---|---|
+| Phase 7 point estimate | 26.31 | 28.40 |
+| Phase 9 P50 | 12.60 | 20.82 |
+| Phase 9 sim_mean | 13.89 | -- |
+
+Phase 7's point estimate is **not better** than Phase 9 on these cases --
+it is worse, both overall and on the exposure-uncertain subset. Row-by-row
+on the same worst-case job-loss players flagged above (e.g. `00-0036898`/
+2023: Phase 7 off by 132.4 vs. Phase 9 P50 off by 106.0), Phase 7's error
+is comparable to or larger than Phase 9's.
+
+**Conclusion: Option A.** The QB job-loss/exposure error is a pre-existing
+limitation of `estimate_availability_rate` in `season_projection.py`,
+shared by Phase 7 and Phase 9 alike -- not something Phase 9's simulation
+translation introduced. Phase 9 is exposing a known upstream limitation,
+not creating a new one. This reframes any future fix as an
+`estimate_availability_rate` / exposure-modeling project (e.g. a
+regime-transition-aware model for QB job loss, as opposed to a stable
+per-season Bernoulli rate), not a Phase 9-specific one -- and any fix
+there would improve Phase 7's point estimates too, not just Phase 9's
+intervals. Still not undertaken here; no production code changed.

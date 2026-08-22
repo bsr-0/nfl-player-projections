@@ -49,6 +49,39 @@ DEFAULT_N_SIMULATIONS = 2000
 DEFAULT_SEED = 42
 
 
+class EmptyDonorPoolError(RuntimeError):
+    """Raised when a position/season/architecture has zero residual donors.
+
+    `build_residual_donor_pools` and `_sample_block` legitimately return/
+    fall back to empty results as reusable primitives (see their tests),
+    but at the run_season_simulation pipeline level an empty pool is never
+    acceptable: `_sample_block` degrades to all-zero residual blocks,
+    silently turning "Monte Carlo quantiles" into a deterministic point
+    prediction repeated at every percentile. This was found for real: TE's
+    FINAL_CONFIG architecture changed (B_gbm_huber -> C_gbm_mae) while the
+    Phase 4 residual CSVs still only had B_gbm_huber rows, so the donor
+    pool came back empty with no error anywhere in the pipeline.
+    """
+
+
+def _require_nonempty_donor_pool(
+    donor_pool: Dict[Tuple[str, int], List[Tuple[int, float]]],
+    position: str,
+    season: int,
+    architecture: str,
+    residual_csv_paths: Sequence[Path],
+) -> None:
+    if not donor_pool:
+        raise EmptyDonorPoolError(
+            f"Empty residual donor pool for {position}/{season}, architecture="
+            f"{architecture!r}. Regenerate the Phase 4 residual CSVs "
+            f"({[str(p) for p in residual_csv_paths]}) for the current "
+            f"FINAL_CONFIG architecture before trusting Phase 9 output -- an "
+            f"empty pool silently degrades every simulated quantile to a "
+            f"deterministic point prediction instead of raising."
+        )
+
+
 def build_residual_donor_pools(
     csv_paths: Sequence[Path],
     position: str,
@@ -248,6 +281,9 @@ def run_season_simulation(
 
             donor_pool = build_residual_donor_pools(
                 residual_csv_paths, position, cfg["architecture"], before_season=season,
+            )
+            _require_nonempty_donor_pool(
+                donor_pool, position, season, cfg["architecture"], residual_csv_paths,
             )
             print(f"  Residual donor pool: {len(donor_pool)} player-seasons "
                   f"(strictly before {season})")
