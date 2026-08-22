@@ -10178,3 +10178,98 @@ rested on 52 folds. Matched-population figures are not comparable to
 native-population ones (Phase 7 QB is 30.0 matched vs 24.42 native --
 intersection drops easy-to-predict backups, raising MAE). Pooled overall
 R2 is not derivable from per-position R2 and is deliberately not reported.
+
+## RESULT: information-matched preseason test — Phase 7's edge was INFORMATION, not architecture (2026-08-22)
+
+Direct follow-up to the QUICK REFERENCE section above, which flagged that
+its four arms did not solve the same problem. This closes that question by
+running the test the earlier comparison could not: **all four models
+forecasting the full 2025 season once, in August, before Week 1, on one
+intersected population (n=352), with no arm holding information the others
+lack.**
+
+### Headline (sample-weighted, matched population, 2025)
+
+| Arm | MAE | RMSE | vs. its in-season figure |
+|---|---:|---:|---|
+| Step 8A (games x rate) | **42.68** | **59.41** | unchanged (already preseason) |
+| Candidate (Ridge multi-year) | 43.41 | 59.92 | unchanged (already preseason) |
+| **Phase 7 (summed-weekly)** | **43.79** | **60.64** | **21.51 -> 43.79 (+104%)** |
+| Production (`PreseasonProjector`) | 45.76 | 63.46 | unchanged (already preseason) |
+
+Only Phase 7 moved, because only Phase 7 had been consuming in-season data.
+
+### Per position (Phase 7, in-season vs. August-legal)
+
+| Pos | P7 in-season MAE / R2 | P7 preseason MAE / R2 | preseason winner |
+|---|---|---|---|
+| QB | 30.0 / 0.876 | 75.2 / 0.310 | **Phase 7** (75.2) |
+| RB | 24.0 / 0.890 | 49.3 / 0.584 | **Phase 7** (49.3) |
+| WR | 21.9 / 0.820 | 41.7 / 0.518 | Step 8A (40.2) |
+| TE | 15.5 / 0.875 | 29.6 / 0.557 | Step 8A (26.2) |
+
+### What this establishes
+
+1. **Phase 7's 2x season-level dominance was ~entirely an information
+   effect.** Information-matched, it falls from first by a factor of two to
+   **third of four**, and its R2 collapses at every position (0.876 -> 0.310
+   at QB; 0.875 -> 0.557 at TE).
+2. **All four arms are within 3.1 MAE (~7%) of each other.** The season
+   architecture question is far closer than any prior artifact suggested.
+3. **The "+103% / +98% Step 8A loses" figure must NOT be quoted as an
+   architecture verdict.** Under matched information Step 8A is the *best*
+   arm overall and beats Phase 7 at WR and TE. Outcome C still stands for
+   Phase 7's own task (in-season projection, where it is excellent and
+   remains production), but the head-to-head framing was measuring an
+   information gap.
+4. **Split by position** (pre-registration outcome D): Phase 7 wins QB and
+   RB, Step 8A wins WR and TE. Per the pre-registration, this is evidence
+   toward a hybrid but explicitly does NOT license building one yet.
+5. **The production `PreseasonProjector` is last in every comparison run
+   this session**, in-season or not. It is the model currently feeding
+   `docs/data/projections_2026.json`.
+
+### What this does NOT establish
+
+Single fold (2025), no fold-to-fold variance -- the original Step 8A verdict
+rested on 52. A ~7% spread on one season is not a migration mandate for
+anything. `is_dome` is derived inside `add_external_features`, which
+preseason mode skips, so it stays carried-forward; that slightly
+UNDERSTATES Phase 7 (high-importance RB feature) and is a conservative
+error here, not a leak.
+
+### Implementation: `preseason_mode` (`season_projection.py`)
+
+August-legal, not information-stripped. GRANTED, because a real August
+forecaster has it: the 2025 schedule (published in May) -- opponent,
+home/away, byes -- and each opponent graded on its **2024** defensive
+record. DENIED, because it does not exist in August: which weeks he played,
+in-season opponent strength, week-by-week Vegas/weather, in-season team
+rolling context, as-of-week depth chart, mid-season trades.
+
+Opponent strength reuses `refresh_matchup_features` via a probe row stamped
+to the END of the prior season, rather than reimplementing its DVOA
+residual logic. The three columns that actually reach the model
+(`opp_fpts_allowed`, `opp_fpts_allowed_s2d_lag1`,
+`opp_fpts_allowed_dvoa_adjusted_lag1` -- identical across all four
+positions) are all season-to-date-through-week-N-1 of the season being
+predicted, hence all three need the prior-season substitute.
+
+### A bug worth recording, because it nearly produced a plausible lie
+
+`preseason_mode` was initially threaded through every function signature
+but NOT through the `compute_player_week_predictions` call site inside
+`run_season_projection`. The flag was silently inert: the first smoke run
+reported TE MAE 14.83 at a synthetic-week share of 0.250, i.e. in-season
+numbers under a preseason label -- a result that looked entirely reasonable
+and would have been reported as fact. Caught only by checking the synthetic
+share rather than the MAE.
+
+Now guarded structurally: `run_season_projection` RAISES if any week is
+counted as known-played while `preseason_mode` is set. Four behavioural
+leak tests were added (`TestPreseasonModeLeakInvariants`), written as "the
+mode cannot consume this" rather than "this column is excluded", matching
+the exposure-leakage contract's reasoning. Suite: 447 passed.
+
+Same lesson as this session's empty-donor-pool bug: a wrong-but-plausible
+number is the worst failure mode, so the invariant must be loud.

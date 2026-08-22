@@ -309,6 +309,53 @@ def _lookup_depth_chart_rank_asof(gsis_id: str, target_season: int, target_week:
     return int(prior_rows.loc[best_key, "depth_chart_rank"])
 
 
+""" The three opponent-strength columns that actually reach the model
+(identical across QB/RB/WR/TE in CAUSAL_FEATURES). All three are
+season-to-date-through-week-N-1 measures of the season being predicted, so
+all three need an August-legal replacement in preseason mode."""
+_OPPONENT_STRENGTH_COLS = (
+    "opp_fpts_allowed",
+    "opp_fpts_allowed_s2d_lag1",
+    "opp_fpts_allowed_dvoa_adjusted_lag1",
+)
+
+
+def _apply_august_legal_matchup(row, team, target_season, target_week, db, feature_engineer):
+    """Sets the target week's opponent from the published schedule, then
+    grades that opponent using ONLY prior-season defensive performance.
+
+    An August forecaster does know the schedule (released in May) and does
+    know how each defense played last year. They do not know how it will
+    play this year -- which is exactly what the live `opp_fpts_allowed*`
+    features measure, since all three are season-to-date through week N-1
+    of the season being predicted (see `_add_opp_fpts_allowed_s2d_lag1` /
+    `_add_opp_fpts_allowed_dvoa_adjusted_lag1`).
+
+    So the opponent comes from the target season's schedule, but the three
+    strength columns are harvested from a probe row stamped to the END of
+    the PRIOR season. That reuses `refresh_matchup_features` as-is rather
+    than reimplementing its DVOA residual logic, and yields precisely "this
+    defense's body of work last year" against the correct upcoming
+    opponent.
+    """
+    from src.predict import get_schedule_map_for_week
+    schedule_map = get_schedule_map_for_week(db, target_season, target_week)
+    opponent, home_away = schedule_map.get(team, ("", "unknown"))
+    row["opponent"] = opponent
+    row["home_away"] = home_away
+    if not opponent:
+        return row
+
+    probe = row.copy()
+    probe["season"] = target_season - 1
+    probe["week"] = REGULAR_SEASON_MAX_WEEK
+    probe = feature_engineer.refresh_matchup_features(probe)
+    for col in _OPPONENT_STRENGTH_COLS:
+        if col in probe.columns and col in row.columns:
+            row[col] = probe[col].to_numpy()
+    return row
+
+
 def build_synthetic_week_row(
     player_history_df: pd.DataFrame,
     player_id: str,
@@ -317,6 +364,7 @@ def build_synthetic_week_row(
     team: str,
     db,
     feature_engineer,
+    preseason_mode: bool = False,
 ) -> Optional[pd.DataFrame]:
     """Builds a single-row DataFrame representing what player_id's feature
     row WOULD have been for (target_season, target_week), had they played.
@@ -330,11 +378,19 @@ def build_synthetic_week_row(
     Returns None if the player has no real history before the target week
     (can't retrospectively project a debut without any prior data).
     """
-    prior = player_history_df[
-        (player_history_df["player_id"] == player_id)
-        & ((player_history_df["season"] < target_season)
-           | ((player_history_df["season"] == target_season) & (player_history_df["week"] < target_week)))
-    ].sort_values(["season", "week"])
+    if preseason_mode:
+        # Matched-information mode: nothing from the target season at all,
+        # not even earlier weeks of it.
+        prior = player_history_df[
+            (player_history_df["player_id"] == player_id)
+            & (player_history_df["season"] < target_season)
+        ].sort_values(["season", "week"])
+    else:
+        prior = player_history_df[
+            (player_history_df["player_id"] == player_id)
+            & ((player_history_df["season"] < target_season)
+               | ((player_history_df["season"] == target_season) & (player_history_df["week"] < target_week)))
+        ].sort_values(["season", "week"])
     if prior.empty:
         return None
 
@@ -342,6 +398,30 @@ def build_synthetic_week_row(
     row["season"] = target_season
     row["week"] = target_week
     row["team"] = team
+
+    if preseason_mode:
+        # August-legal: the schedule IS knowable (published in May), so the
+        # opponent and home/away are set and the opponent is graded on last
+        # season's defensive record. What is NOT knowable in August, and is
+        # therefore deliberately left carried forward from the player's last
+        # prior-season game rather than refreshed:
+        #   * that week's Vegas line and weather (add_external_features) --
+        #     week-by-week lines do not exist until the season is underway;
+        #   * team rolling context (_compute_team_rolling_context) -- it
+        #     averages the target season's preceding weeks;
+        #   * depth chart as-of-week (_lookup_depth_chart_rank_asof) -- it
+        #     reflects in-season promotions and demotions.
+        # Known limitation, stated rather than hidden: `is_dome` is derived
+        # inside add_external_features, so it stays at the carried-forward
+        # value even though the stadium is August-knowable. That understates
+        # Phase 7 slightly (is_dome is a high-importance RB feature) and is
+        # a conservative error in this comparison, not a leak.
+        row = _apply_august_legal_matchup(
+            row, team, target_season, target_week, db, feature_engineer,
+        )
+        if "injury_score" in row.columns:
+            row["injury_score"] = 1.0
+        return row
 
     from src.predict import get_schedule_map_for_week
     schedule_map = get_schedule_map_for_week(db, target_season, target_week)
@@ -539,6 +619,7 @@ def compute_player_week_predictions(
     exclude_pbp_confirmed_zeros: bool = False,
     capture_rows: bool = False,
     skip_tracker: Optional["WeekSkipTracker"] = None,
+    preseason_mode: bool = False,
 ) -> List[dict]:
     """Per-week prediction list for one player's season -- the shared core
     reused by both `run_season_projection` (Phase 7, deterministic point
@@ -565,7 +646,9 @@ def compute_player_week_predictions(
             g_by_week[week]["data_source"].iloc[0]
             if week in real_weeks and has_data_source else None
         )
-        treat_as_real = resolve_week_source(
+        # In preseason mode WHICH weeks he played is itself target-season
+        # exposure information, so no week may be treated as known-played.
+        treat_as_real = (not preseason_mode) and resolve_week_source(
             week, real_weeks, data_source, exclude_pbp_confirmed_zeros,
         )
         if treat_as_real:
@@ -574,7 +657,7 @@ def compute_player_week_predictions(
         else:
             synth = build_synthetic_week_row(
                 full_history, player_id, season, week, team_by_week[week],
-                db, feature_engineer,
+                db, feature_engineer, preseason_mode=preseason_mode,
             )
             if synth is None:
                 if skip_tracker is not None:
@@ -618,6 +701,7 @@ def run_season_projection(
     exclude_pbp_confirmed_zeros: bool = False,
     architecture_override: Optional[dict] = None,
     week_output_path=None,
+    preseason_mode: bool = False,
 ) -> pd.DataFrame:
     """For each position's FINAL_CONFIG fold: fit once, then for every player
     with >=1 real game that season, sum E[PPR] across every possible week,
@@ -640,6 +724,25 @@ def run_season_projection(
     behavior) double-discounted weeks we already had direct evidence for --
     real games, including true zero-PPR ones, were being scaled down by a
     play-rate prior even though P(plays)=1 was already known for them.
+
+    `preseason_mode`: scores this as a TRUE preseason forecast, information-
+    matched to the three arms in `scripts/walk_forward_preseason.py`
+    (PreseasonProjector, the multi-year Ridge candidate, Step 8A), which see
+    only prior-season player aggregates plus destination team. Four
+    target-season leaks are closed together, since closing any subset still
+    leaves the comparison unfair:
+
+      1. no week is treated as known-played (see compute_player_week_
+         predictions) -- which weeks he played is target-season exposure;
+      2. carry-forward history is restricted to seasons strictly before the
+         target, and `full_history` drops the test frame entirely;
+      3. every per-week refresh is skipped (see build_synthetic_week_row);
+      4. the active-roster gate is disabled and the team is pinned to the
+         player's entering-season team, since weekly roster status and
+         mid-season trades are both unknowable in August.
+
+    `availability_rate` then applies to every week, making the result
+    structurally comparable to Step 8A's E[games] x E[PPR/game].
 
     `exclude_pbp_confirmed_zeros`: sensitivity toggle. When True, treats
     `inferred_pbp_confirmed_zero` rows (the weaker, 2006-2017 tier -- see
@@ -711,7 +814,14 @@ def run_season_projection(
 
             # Full player-season history (for carrying forward into synthetic rows)
             # includes this fold's train+test frame so mid-season history is present.
-            full_history = pd.concat([pos_train, pos_test], ignore_index=True)
+            # Preseason mode must not see the target season at all, so the
+            # test frame is excluded from the carry-forward pool -- otherwise
+            # a synthetic week could carry forward from a real target-season
+            # game even with treat_as_real forced off.
+            full_history = (
+                pos_train.reset_index(drop=True) if preseason_mode
+                else pd.concat([pos_train, pos_test], ignore_index=True)
+            )
 
             for player_id, g_all in pos_test.groupby("player_id"):
                 # Regular season only -- player_weekly_stats also carries
@@ -728,9 +838,21 @@ def run_season_projection(
                 g_by_week = {int(w): sub for w, sub in g.groupby(g["week"].astype(int))}
                 real_weeks = set(g_by_week.keys())
                 real_team_by_week = {int(w): sub["team"].iloc[0] for w, sub in g_by_week.items()}
+                if preseason_mode:
+                    # Mid-season trades are not knowable in August, and the
+                    # weekly active-roster status that normally gates
+                    # synthetic weeks is itself in-season information. Pin to
+                    # the entering-season team (the `dest_team` the other
+                    # arms get) and let availability_rate carry the exposure
+                    # discount for every week instead.
+                    first_week = min(real_team_by_week)
+                    lookup_team_by_week = {first_week: real_team_by_week[first_week]}
+                else:
+                    lookup_team_by_week = real_team_by_week
                 possible_weeks, team_by_week = possible_weeks_for_player(
-                    db, real_team_by_week, season, player_id=player_id,
-                    skip_tracker=week_skips)
+                    db, lookup_team_by_week, season, player_id=player_id,
+                    skip_tracker=week_skips,
+                    require_active_roster=not preseason_mode)
                 if not possible_weeks:
                     continue
 
@@ -740,6 +862,7 @@ def run_season_projection(
                     player_id, g_by_week, real_weeks, team_by_week, possible_weeks, model,
                     feature_cols, full_history, db, feature_engineer, season,
                     exclude_pbp_confirmed_zeros, skip_tracker=week_skips,
+                    preseason_mode=preseason_mode,
                 )
 
                 predicted_total = 0.0
@@ -774,6 +897,23 @@ def run_season_projection(
 
                 if weeks_predicted == 0:
                     continue
+
+                # Invariant, enforced rather than assumed: in preseason mode
+                # no week may be known-played. Found the hard way -- the
+                # `preseason_mode` argument was initially threaded through
+                # every signature but not through THIS call site, so the flag
+                # was silently inert and the run produced in-season numbers
+                # under a preseason label. A wrong-but-plausible MAE is the
+                # worst possible failure here, so it raises.
+                if preseason_mode and (weeks_real_stats or weeks_inferred_snap_verified
+                                       or weeks_inferred_pbp_confirmed):
+                    raise RuntimeError(
+                        f"preseason_mode invariant violated for {player_id} "
+                        f"({position}/{season}): {weeks_real_stats} real + "
+                        f"{weeks_inferred_snap_verified} snap-verified + "
+                        f"{weeks_inferred_pbp_confirmed} pbp-confirmed weeks were "
+                        f"treated as known-played. Every week must be synthetic."
+                    )
 
                 actual_total = float(g["fantasy_points"].sum())
                 result_row = {

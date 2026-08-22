@@ -1,0 +1,299 @@
+{
+  "generated_at": "2026-08-22T14:20:27.741874",
+  "test_seasons": [
+    2025
+  ],
+  "min_train_seasons": 3,
+  "fold_records": {
+    "production": {
+      "QB": [
+        {
+          "n": 41,
+          "r2": 0.291,
+          "rmse": 107.4,
+          "mae": 84.9,
+          "test_season": 2025
+        }
+      ],
+      "RB": [
+        {
+          "n": 69,
+          "r2": 0.604,
+          "rmse": 65.0,
+          "mae": 52.7,
+          "test_season": 2025
+        }
+      ],
+      "WR": [
+        {
+          "n": 146,
+          "r2": 0.556,
+          "rmse": 58.5,
+          "mae": 42.7,
+          "test_season": 2025
+        }
+      ],
+      "TE": [
+        {
+          "n": 96,
+          "r2": 0.621,
+          "rmse": 40.0,
+          "mae": 28.7,
+          "test_season": 2025
+        }
+      ]
+    },
+    "candidate": {
+      "QB": [
+        {
+          "n": 41,
+          "r2": 0.279,
+          "rmse": 97.6,
+          "mae": 79.5,
+          "test_season": 2025
+        }
+      ],
+      "RB": [
+        {
+          "n": 69,
+          "r2": 0.544,
+          "rmse": 66.5,
+          "mae": 50.3,
+          "test_season": 2025
+        }
+      ],
+      "WR": [
+        {
+          "n": 146,
+          "r2": 0.553,
+          "rmse": 55.0,
+          "mae": 41.2,
+          "test_season": 2025
+        }
+      ],
+      "TE": [
+        {
+          "n": 96,
+          "r2": 0.662,
+          "rmse": 36.3,
+          "mae": 26.4,
+          "test_season": 2025
+        }
+      ]
+    },
+    "phase7": {
+      "QB": [
+        {
+          "n": 41,
+          "r2": 0.31,
+          "rmse": 95.5,
+          "mae": 75.2,
+          "test_season": 2025
+        }
+      ],
+      "RB": [
+        {
+          "n": 69,
+          "r2": 0.584,
+          "rmse": 63.5,
+          "mae": 49.3,
+          "test_season": 2025
+        }
+      ],
+      "WR": [
+        {
+          "n": 146,
+          "r2": 0.518,
+          "rmse": 57.1,
+          "mae": 41.7,
+          "test_season": 2025
+        }
+      ],
+      "TE": [
+        {
+          "n": 96,
+          "r2": 0.557,
+          "rmse": 41.6,
+          "mae": 29.6,
+          "test_season": 2025
+        }
+      ]
+    },
+    "step8": {
+      "QB": [
+        {
+          "n": 41,
+          "r2": 0.389,
+          "rmse": 89.9,
+          "mae": 75.9,
+          "test_season": 2025
+        }
+      ],
+      "RB": [
+        {
+          "n": 69,
+          "r2": 0.524,
+          "rmse": 68.0,
+          "mae": 51.1,
+          "test_season": 2025
+        }
+      ],
+      "WR": [
+        {
+          "n": 146,
+          "r2": 0.52,
+          "rmse": 57.0,
+          "mae": 40.2,
+          "test_season": 2025
+        }
+      ],
+      "TE": [
+        {
+          "n": 96,
+          "r2": 0.687,
+          "rmse": 35.0,
+          "mae": 26.2,
+          "test_season": 2025
+        }
+      ]
+    }
+  },
+  "summary": {
+    "production": {
+      "QB": {
+        "n_folds": 1,
+        "total_n": 41,
+        "r2_mean": 0.291,
+        "r2_std": 0.0,
+        "mae_mean": 84.9,
+        "rmse_mean": 107.4
+      },
+      "RB": {
+        "n_folds": 1,
+        "total_n": 69,
+        "r2_mean": 0.604,
+        "r2_std": 0.0,
+        "mae_mean": 52.7,
+        "rmse_mean": 65.0
+      },
+      "WR": {
+        "n_folds": 1,
+        "total_n": 146,
+        "r2_mean": 0.556,
+        "r2_std": 0.0,
+        "mae_mean": 42.7,
+        "rmse_mean": 58.5
+      },
+      "TE": {
+        "n_folds": 1,
+        "total_n": 96,
+        "r2_mean": 0.621,
+        "r2_std": 0.0,
+        "mae_mean": 28.7,
+        "rmse_mean": 40.0
+      }
+    },
+    "candidate": {
+      "QB": {
+        "n_folds": 1,
+        "total_n": 41,
+        "r2_mean": 0.279,
+        "r2_std": 0.0,
+        "mae_mean": 79.5,
+        "rmse_mean": 97.6
+      },
+      "RB": {
+        "n_folds": 1,
+        "total_n": 69,
+        "r2_mean": 0.544,
+        "r2_std": 0.0,
+        "mae_mean": 50.3,
+        "rmse_mean": 66.5
+      },
+      "WR": {
+        "n_folds": 1,
+        "total_n": 146,
+        "r2_mean": 0.553,
+        "r2_std": 0.0,
+        "mae_mean": 41.2,
+        "rmse_mean": 55.0
+      },
+      "TE": {
+        "n_folds": 1,
+        "total_n": 96,
+        "r2_mean": 0.662,
+        "r2_std": 0.0,
+        "mae_mean": 26.4,
+        "rmse_mean": 36.3
+      }
+    },
+    "phase7": {
+      "QB": {
+        "n_folds": 1,
+        "total_n": 41,
+        "r2_mean": 0.31,
+        "r2_std": 0.0,
+        "mae_mean": 75.2,
+        "rmse_mean": 95.5
+      },
+      "RB": {
+        "n_folds": 1,
+        "total_n": 69,
+        "r2_mean": 0.584,
+        "r2_std": 0.0,
+        "mae_mean": 49.3,
+        "rmse_mean": 63.5
+      },
+      "WR": {
+        "n_folds": 1,
+        "total_n": 146,
+        "r2_mean": 0.518,
+        "r2_std": 0.0,
+        "mae_mean": 41.7,
+        "rmse_mean": 57.1
+      },
+      "TE": {
+        "n_folds": 1,
+        "total_n": 96,
+        "r2_mean": 0.557,
+        "r2_std": 0.0,
+        "mae_mean": 29.6,
+        "rmse_mean": 41.6
+      }
+    },
+    "step8": {
+      "QB": {
+        "n_folds": 1,
+        "total_n": 41,
+        "r2_mean": 0.389,
+        "r2_std": 0.0,
+        "mae_mean": 75.9,
+        "rmse_mean": 89.9
+      },
+      "RB": {
+        "n_folds": 1,
+        "total_n": 69,
+        "r2_mean": 0.524,
+        "r2_std": 0.0,
+        "mae_mean": 51.1,
+        "rmse_mean": 68.0
+      },
+      "WR": {
+        "n_folds": 1,
+        "total_n": 146,
+        "r2_mean": 0.52,
+        "r2_std": 0.0,
+        "mae_mean": 40.2,
+        "rmse_mean": 57.0
+      },
+      "TE": {
+        "n_folds": 1,
+        "total_n": 96,
+        "r2_mean": 0.687,
+        "r2_std": 0.0,
+        "mae_mean": 26.2,
+        "rmse_mean": 35.0
+      }
+    }
+  }
+}

@@ -18,6 +18,7 @@ from src.models.single_week_ppr.season_projection import (
     possible_weeks_for_team,
     estimate_availability_rate,
     build_synthetic_week_row,
+    compute_player_week_predictions,
     resolve_week_source,
     _lookup_depth_chart_rank_asof,
     REGULAR_SEASON_MAX_WEEK,
@@ -299,3 +300,125 @@ class TestBuildSyntheticWeekRow:
         result = build_synthetic_week_row(history, "P1", 2018, 2, "KC", db, feature_engineer)
         assert result["depth_chart_rank"].iloc[0] == 1
         assert result["snap_share_pct_roll3_mean"].iloc[0] == 0.9
+
+
+class TestPreseasonModeLeakInvariants:
+    """Behavioural guards for `preseason_mode` (the August-legal arm used to
+    compare Phase 7 against the three preseason models in
+    scripts/walk_forward_preseason.py).
+
+    Written behaviourally rather than as "this column is excluded", matching
+    the exposure-leakage contract's reasoning in GAPS.md: the point is that
+    the mode CANNOT consume target-season in-season data, not that some list
+    happens to omit it.
+    """
+
+    @staticmethod
+    def _patch_refreshes(monkeypatch, recorder):
+        for name, target in (
+            ("external", "src.data.external_data.add_external_features"),
+            ("team_context",
+             "src.models.single_week_ppr.season_projection._compute_team_rolling_context"),
+            ("depth_chart",
+             "src.models.single_week_ppr.season_projection._lookup_depth_chart_rank_asof"),
+        ):
+            def _make(n):
+                def _fn(*a, **k):
+                    recorder.append(n)
+                    return {} if n == "team_context" else (None if n == "depth_chart" else a[0])
+                return _fn
+            monkeypatch.setattr(target, _make(name))
+        monkeypatch.setattr(
+            "src.predict.get_schedule_map_for_week",
+            lambda db, season, week: {"KC": ("BUF", "home")},
+        )
+
+    def test_ignores_target_season_rows_when_carrying_forward(self, monkeypatch):
+        """The whole point: a target-season game must not reach the row even
+        though it sits in the history frame and is chronologically closer."""
+        history = pd.DataFrame({
+            "player_id": ["P1", "P1"],
+            "season": [2024, 2025],
+            "week": [17, 1],
+            "team": ["KC", "KC"],
+            "position": ["WR", "WR"],
+            "targets_roll3_mean": [4.0, 99.0],  # 99.0 is the target-season value
+        })
+        calls = []
+        self._patch_refreshes(monkeypatch, calls)
+        fe = MagicMock()
+        fe.refresh_matchup_features.side_effect = lambda df: df
+
+        row = build_synthetic_week_row(
+            history, "P1", 2025, 8, "KC", MagicMock(), fe, preseason_mode=True,
+        )
+        assert row is not None
+        assert row["targets_roll3_mean"].iloc[0] == 4.0, "carried forward a 2025 game"
+
+    def test_skips_every_in_season_refresh(self, monkeypatch):
+        history = pd.DataFrame({
+            "player_id": ["P1"], "season": [2024], "week": [17],
+            "team": ["KC"], "position": ["WR"], "depth_chart_rank": [1],
+            "injury_score": [0.2],
+        })
+        calls = []
+        self._patch_refreshes(monkeypatch, calls)
+        fe = MagicMock()
+        fe.refresh_matchup_features.side_effect = lambda df: df
+
+        row = build_synthetic_week_row(
+            history, "P1", 2025, 8, "KC", MagicMock(), fe, preseason_mode=True,
+        )
+        assert calls == [], f"preseason mode consumed in-season data: {calls}"
+        # Conditional-on-playing: never serve a real injury status.
+        assert row["injury_score"].iloc[0] == 1.0
+
+    def test_opponent_graded_on_prior_season_not_target_season(self, monkeypatch):
+        """The schedule is August-knowable, so the opponent IS set -- but the
+        strength probe must be stamped to the prior season."""
+        history = pd.DataFrame({
+            "player_id": ["P1"], "season": [2024], "week": [17],
+            "team": ["KC"], "position": ["WR"], "opp_fpts_allowed_s2d_lag1": [0.0],
+        })
+        calls = []
+        self._patch_refreshes(monkeypatch, calls)
+
+        seen = {}
+        def _refresh(df):
+            seen["season"] = int(df["season"].iloc[0])
+            df = df.copy()
+            df["opp_fpts_allowed_s2d_lag1"] = 12.5
+            return df
+        fe = MagicMock()
+        fe.refresh_matchup_features.side_effect = _refresh
+
+        row = build_synthetic_week_row(
+            history, "P1", 2025, 8, "KC", MagicMock(), fe, preseason_mode=True,
+        )
+        assert row["opponent"].iloc[0] == "BUF", "schedule is knowable in August"
+        assert seen["season"] == 2024, "opponent strength probed in the target season"
+        assert row["opp_fpts_allowed_s2d_lag1"].iloc[0] == 12.5
+        assert int(row["season"].iloc[0]) == 2025, "probe must not restamp the real row"
+
+    def test_no_week_is_ever_treated_as_known_played(self, monkeypatch):
+        """Which weeks he played is target-season exposure. Even with real
+        rows present for every week, preseason mode must synthesize all."""
+        real = pd.DataFrame({
+            "player_id": ["P1"], "season": [2025], "week": [1], "team": ["KC"],
+            "fantasy_points": [30.0], "feat": [1.0], "data_source": ["nflverse_stats"],
+        })
+        model = MagicMock()
+        model.predict.return_value = np.array([7.0])
+        monkeypatch.setattr(
+            "src.models.single_week_ppr.season_projection.build_synthetic_week_row",
+            lambda *a, **k: pd.DataFrame({"feat": [1.0]}),
+        )
+
+        out = compute_player_week_predictions(
+            "P1", {1: real}, {1}, {1: "KC"}, [1], model, ["feat"],
+            pd.DataFrame({"player_id": ["P1"], "season": [2024], "week": [17], "feat": [1.0]}),
+            MagicMock(), MagicMock(), 2025, preseason_mode=True,
+        )
+        assert len(out) == 1
+        assert out[0]["is_real"] is False, "preseason mode treated a week as known-played"
+        assert out[0]["actual_value"] is None

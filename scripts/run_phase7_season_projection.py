@@ -30,11 +30,19 @@ def main():
                          help="Sensitivity toggle: treat the weaker 2006-2017 "
                               "inferred_pbp_confirmed_zero tier as absent, falling back "
                               "to synthetic estimation for those weeks instead (default: off)")
+    parser.add_argument(
+        "--preseason-mode", action="store_true",
+        help="Score as a TRUE preseason (August) forecast, information-matched "
+             "to the three arms in walk_forward_preseason.py: no week is treated "
+             "as known-played, carry-forward is restricted to prior seasons, and "
+             "opponents are graded on last season's defense. See "
+             "run_season_projection's docstring for the full list of closed leaks.")
     args = parser.parse_args()
 
     result = run_season_projection(
         positions=args.positions, seasons=args.seasons, output_path=args.output,
         exclude_pbp_confirmed_zeros=args.exclude_pbp_confirmed_zeros,
+        preseason_mode=args.preseason_mode,
     )
     if result.empty:
         print("No results produced.")
