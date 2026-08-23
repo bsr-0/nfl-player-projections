@@ -10503,3 +10503,90 @@ project.
     preseason cold-start path.
   * Any future rookie experiment must re-baseline after the join -- prior
     rookie-feature importance rankings were measured on constants.
+
+## SCOPE: wiring real rookie/draft/age data into the feature frame (2026-08-22)
+
+Investigation follow-up to "The rookie feature set is NOMINAL" above. Scoped,
+not built. Nothing below has been implemented.
+
+### Investigation findings
+
+**Present in the DB, never joined:**
+
+| Source | Rows | Key | Coverage |
+|---|---:|---|---|
+| `draft_picks_v2` | 11,081 | `player_id` (GSIS) | 1980-2026; matches **61%** of training players |
+| `draft_values` | 262 | `pick` | pick -> 5 value charts (stuart/johnson/hill/otc/pff). **Entirely unused.** |
+| `players.birth_date` | 2,952 | `player_id` | **98.9%** -- and `players` is ALREADY left-joined by the training query |
+| `combine_data_v2` | 8,968 | `pfr_id` / `player_name` | 2000-2026; metrics 56.6%-89.6% complete |
+
+**The unmatched 39% of the draft join are genuinely undrafted, not a join
+bug.** Top unmatched by career FP: Welker, Gates, Thielen, Ekeler, Baldwin,
+Amendola, Beasley -- all famous UDFAs. Median career FP is 168 (drafted) vs
+24 (unmatched), the expected UDFA shape.
+
+**Bugs / missing data found:**
+
+1. `draft_round`/`draft_pick` default to **5 / 150** for every rookie
+   (`advanced_rookie_injury.py:1055-1056`), because the columns are absent
+   from the 87-column training frame. Conflates "undrafted" with
+   "mid-5th-round" -- UDFAs must be encoded as undrafted, not as pick 150.
+2. `rosters` table is **EMPTY (0 rows)** -- the `years_exp` source, already
+   documented at `preseason_features.py:28`. `years_exp` must be DERIVED
+   (season - draft_season; season - first_season for UDFA).
+3. `combine_data` (v1) is **EMPTY (0 rows)** while `combine_data_v2` has
+   8,968. Same dead-v1 pattern as `draft_picks` vs `draft_picks_v2`. Both v1
+   tables should be dropped or documented so a future reader does not join
+   the empty one.
+4. `combine_score` defaults to **50.0** when no metrics are present
+   (`advanced_rookie_injury.py:437`) -- currently constant for everyone.
+5. **No GSIS<->PFR bridge exists.** No table carries both `player_id` and a
+   `pfr_*` column. Combine must be matched by name, the same way
+   `snap_counts` / `weekly_pfr` already are. `src/data/entity_resolver.py`
+   exists for this.
+6. `players.name` is blank for **36.5%** (1,090 of 2,985; 993 with
+   production, 140 with >500 career FP) and is **NOT** recoverable from
+   `weekly_rosters_v2` (0 of 1,090). BUT this is purely legacy: blank rate
+   by debut era is 82.9% (1999-2009), 50.5% (2010-2014), 3.4% (2015-2019),
+   **0.0% (2020-2025)**, and **0.0% of players active 2023+**. Name-keyed
+   joins are therefore safe for current players and degrade only historical
+   training rows.
+7. `players.name` is ABBREVIATED (`W.Welker`) while `combine_data_v2.
+   player_name` is full (`John Abraham`) -- a direct equality join is
+   impossible; needs last-name + first-initial + position matching.
+8. `injury_prob_ml` is **100% missing** (run logs:
+   `rate=1.000 warn_threshold=0.030`).
+9. `is_rookie` dual definition + bare-except silent fallback -- see the
+   preceding GAPS entry.
+
+### Proposed phases
+
+**Phase A -- draft capital + age.** Highest value, lowest risk. Join
+`draft_picks_v2` on `player_id`; add `p.birth_date` to the existing
+`players` left join (a one-column change at `database.py:2056`); join
+`draft_values` on pick for a real `rookie_draft_value`; derive `years_exp`.
+Add an explicit `is_undrafted` flag rather than defaulting UDFAs to pick
+150. Files: `database.py`, `advanced_rookie_injury.py`, `settings.py`.
+
+**Phase B -- close the silent-failure paths.** Remove or narrow the bare
+`except Exception` in `feature_preparation.py:158-165`; reconcile the two
+`is_rookie` definitions to one; add a guard asserting the `rookie_*`
+features are NOT constant across rookies, so a future regression to
+defaults fails loudly instead of silently. This phase is what stops the
+same class of bug recurring and should not be deferred.
+
+**Phase C -- combine (defer).** Name-based matching via `entity_resolver`,
+accepting a ~60% metric-completeness ceiling and legacy blank names. Lower
+value than A, materially more work.
+
+**Phase D -- re-baseline.** Any prior rookie-feature importance ranking was
+measured on constants and is void. Retrain and re-measure after A.
+
+### LINEAGE WARNING
+
+Phase A changes the feature set, so `FEATURE_VERSION` must bump from 33.
+That invalidates `data/cached_features.parquet` and makes today's 11-fold
+walk-forward artifacts (`walk_forward_preseason_20260822_194322.json`, the
+`phase7_preseason_loyo/` CSVs) non-comparable to anything produced
+afterwards. Either re-run the 11-fold comparison after Phase A, or treat
+the two as separate lineages -- do NOT compare across the bump.
