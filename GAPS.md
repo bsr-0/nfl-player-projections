@@ -10669,3 +10669,66 @@ and today's 11-fold walk-forward artifacts
 (`walk_forward_preseason_20260822_194322.json`, `phase7_preseason_loyo/`)
 were produced at v33. Do NOT compare across the bump -- re-run the
 comparison at v34 or treat them as separate lineages.
+
+## QA/QC of the v34 draft matching: clean. Plus college/conference availability (2026-08-22)
+
+### Six checks, all passed
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Undrafted rate by debut era | 32.0% / 42.7% / 45.7% / 38.4% (2006-09 / 10-14 / 15-19 / 20-25). Plausible; no spike that would indicate a join failure. |
+| 2 | draft_season vs first NFL season | **0** players with a negative gap. Nobody "played before being drafted". |
+| 3 | Undrafted rate by position | QB **24.3%** vs RB 41.7% / WR 44.0% / TE 47.1%. Matches reality -- teams rarely carry UDFA quarterbacks. |
+| 4 | Top 15 undrafted by career FP (debut 2015+) | Ekeler, Meyers, Chosen, Bourne, Mostert, Taysom Hill, Lazard, Snead, Humphries, Breida... **every one a genuine UDFA.** Zero false negatives. |
+| 5 | Draft rows that cannot join (no GSIS id) | 27, **all from the 2026 class**. Of 80 skill-position 2026 picks, 73 have an id, 7 do not. |
+| 6 | Cross-source vs `combine_data_v2.draft_ovr` | 10 era-plausible suspects, **all resolved as distinct players sharing an abbreviated name**. |
+
+Check 6 is worth recording because it nearly produced a false alarm. Matching
+`players.name` ("J.Taylor") to combine's full names by first-initial +
+surname + position yielded 53 apparent contradictions. Every one dissolved on
+inspection: `J.Taylor` RB resolves to `00-0036223` (1,554 FP, correctly
+drafted) AND `00-0036096` (40 FP, genuinely undrafted) -- two different
+players. Same for H.Bryant, T.Williams (Terrance drafted / Tyrell UDFA, both
+correct) and J.Wright. **The join is on GSIS `player_id`, which disambiguates
+them correctly; the ambiguity was in the QA method, not the data.**
+
+**Conclusion: zero confirmed missed matches among players with NFL
+production.** The ~39% "unmatched" are genuinely undrafted and are now
+correctly represented by `is_undrafted` rather than being silently defaulted
+to a mid-5th-round pick.
+
+**The one fixable gap:** 7 of 80 skill-position 2026 draft picks have no GSIS
+id in `draft_picks_v2`. They have no NFL rows yet, so training is unaffected
+-- but a 2026 preseason/cold-start projection would miss them. Recoverable by
+name+college against `players`, or on the next nfl-data-py refresh once ids
+are assigned.
+
+### College is available; conference is NOT
+
+| Source | Coverage | Distinct | Shape |
+|---|---|---:|---|
+| `draft_picks_v2.college` | 100% | 200 (skill, 2006+) | single school, `"Ohio St."` |
+| `combine_data_v2.school` | 100% | 358 | single school |
+| `players.college` | 98.9% | 792 | **transfer strings**: `"Miami; Washington State; Incarnate Word"` |
+
+**No conference table or column exists anywhere in the DB.** The only match
+for "conference" is `utilization.py`'s `is_conference_championship`, an NFL
+week-21 flag, unrelated.
+
+Adding conference would need three things, in order:
+
+1. **Name normalization.** Two conventions collide -- `draft_picks_v2` says
+   `"Ohio St."` while `players` says `"Ohio State"`, plus `"Miami (FL)"` vs
+   `"Miami (OH)"` vs `"Miami (Ohio)"`. Use `draft_picks_v2.college` as the
+   key: it is single-school and 100% populated, whereas `players.college`
+   carries multi-school transfer histories that have no single conference.
+2. **A college -> conference mapping.** Not in nfl-data-py; would be authored
+   or sourced. Cardinality argues for it: college is a 200-value categorical
+   with a long tail (top 10 = 23.4%, top 50 = 68.6%, top 100 = 90.8%),
+   which is poor for direct encoding, whereas conference is ~12 values.
+3. **Era-awareness.** Conference realignment makes a static map wrong for
+   historical rows -- Texas A&M moved Big 12 -> SEC in 2012, Nebraska ->
+   Big Ten in 2011, USC/UCLA -> Big Ten in 2024. The mapping must be keyed on
+   `(college, draft_season)`, not college alone.
+
+Neither college nor conference is currently in CAUSAL_FEATURES.
