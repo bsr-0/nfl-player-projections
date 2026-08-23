@@ -11048,3 +11048,51 @@ INNER merge -- so rookies never form a row. Until that changes, the harness's
 population intersection strips rookies back out of the comparison, and the
 work above is invisible end-to-end. That is the next step, and it touches the
 live production model rather than experiment code.
+
+## Production gains a cold-start path; equal-n assertion added (2026-08-23)
+
+### `PreseasonProjector` now forms rookie rows
+
+Three coupled changes, none of which works alone:
+
+1. **`prior_df.merge(curr_df)` (INNER) -> `curr_df.merge(prior_df, how="left")`.**
+   The inner join required a prior-season row, so a player whose first NFL
+   season is the target never formed a pair.
+2. **`curr_df` now carries identity.** It selected only
+   `player_id, season_total`; name/position/birth_date came from `prior_df`
+   and are NaN for a rookie. Without backfilling them from the current season,
+   every rookie row has `position = NaN` and `fit()`'s per-position loop drops
+   all of them -- **the rows would exist and still never be trained on**, which
+   looks identical to success from outside.
+3. **`_fit_linear_model` imputes instead of zero-filling.** Median within
+   position, fitted on the training fold only, plus 0/1 `__isna` indicators.
+
+Result, 2025 WR: **146 rows -> 211, true rookies 0 -> 38, zero NaN positions.**
+
+### The trap in the old fit, stated precisely
+
+`_fit_linear_model` ran `X = pos_df[features].fillna(0.0)` and only then
+`valid = np.isfinite(X).all(axis=1)`. The mask was therefore **inert** -- the
+fillna guaranteed finiteness. The real defect was the zero-fill itself:
+**1,054 of 3,226 WR training rows carried at least one NaN feature** and were
+being told they had scored 0 PPG last season, indistinguishable from a
+genuinely unproductive veteran.
+
+But removing the fillna WITHOUT changing the mask would have converted an
+inert guard into a silent row-dropper, discarding exactly the 1,054 rows --
+including every rookie just added. The mask is now scoped to the TARGET only.
+Both had to change together, which is why they did.
+
+### Equal-n assertion (`_assert_equal_n`)
+
+Raises when any two arms are scored on different row counts within a
+position/fold. It catches the failure that looks like success: an arm that
+silently drops rookies is scored on an easier, veteran-only population and
+posts a BETTER metric for it. Nothing errors, the log still prints an `n` per
+arm, and the winner is decided by whichever model discarded the hardest
+players.
+
+The harness already printed those counts. Nobody diffs log lines, which is
+exactly why this is an assertion rather than a warning. Verified both ways:
+silent on matched populations, raising with a per-arm breakdown on a
+mismatch.

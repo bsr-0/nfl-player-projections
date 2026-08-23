@@ -121,6 +121,42 @@ def _predict_candidate(model, scaler, features, imputer, pos_df: pd.DataFrame) -
     return model.predict(scaler.transform(Xi))
 
 
+def _assert_equal_n(fold_records: dict, variants, positions) -> None:
+    """Every arm must be scored on IDENTICAL rows within a position/fold.
+
+    Raises rather than warns. The failure this catches is the one that looks
+    like success: an arm that silently drops rookies -- a Ridge pipeline
+    dropna-ing them, or a population intersection quietly excluding them -- is
+    then scored on an easier, veteran-only set and posts a BETTER metric for
+    it. Nothing errors, the log still prints an n per arm, and the winner is
+    decided by which model discarded the hardest players.
+
+    The harness already printed n per arm per fold and nobody diffs log lines,
+    which is precisely why this is an assertion.
+    """
+    by_key: dict = {}
+    for variant in variants:
+        for pos in positions:
+            for m in fold_records[variant][pos]:
+                by_key.setdefault((pos, m["test_season"]), {})[variant] = m["n"]
+
+    mismatches = []
+    for (pos, season), per_arm in sorted(by_key.items()):
+        counts = set(per_arm.values())
+        if len(counts) > 1:
+            mismatches.append(f"  {pos}/{season}: " + ", ".join(
+                f"{a}={n}" for a, n in sorted(per_arm.items())))
+    if mismatches:
+        raise AssertionError(
+            "Arms were scored on DIFFERENT populations, so their metrics are "
+            "not comparable:\n" + "\n".join(mismatches)
+            + "\n\nAn arm with fewer rows is very likely dropping rookies and "
+              "being flattered by an easier population. Fix before reading any "
+              "metric.")
+    print(f"\n[equal-n] OK: all arms scored on identical populations "
+          f"across {len(by_key)} position-folds.")
+
+
 def _metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     return {
         "n": int(len(y_true)),
@@ -350,6 +386,8 @@ def main():
                 m["test_season"] = test_season
                 fold_records["phase7"][pos].append(m)
                 print(f"  phase7     {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
+
+    _assert_equal_n(fold_records, VARIANTS, POSITIONS)
 
     if decomp_records:
         import pandas as _pd

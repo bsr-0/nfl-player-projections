@@ -107,6 +107,9 @@ BASE_FEATURES_BY_POSITION: Dict[str, List[str]] = {
     ],
 }
 
+# A feature missing on at least this share of rows gets a companion indicator.
+MIN_MISSING_FOR_INDICATOR = 0.01
+
 RIDGE_ALPHA_BY_POSITION = {"QB": 14.0, "RB": 28.0, "WR": 24.0, "TE": 18.0}
 SUPPORT_CLASS_ORDER = ("starter", "committee", "backup", "rotational")
 
@@ -118,6 +121,7 @@ class PreseasonProjector:
         self.models: Dict[str, Ridge] = {}
         self.scalers: Dict[str, StandardScaler] = {}
         self.feature_names: Dict[str, List[str]] = {}
+        self.imputers: Dict[str, dict] = {}
         self.audit_report: Dict[str, Any] = {}
         self.is_fitted = False
 
@@ -322,15 +326,40 @@ class PreseasonProjector:
         features: List[str],
         alpha: float,
     ) -> Tuple[Ridge, StandardScaler]:
-        X = pos_df[features].fillna(0.0).to_numpy(dtype=float)
+        raw = pos_df[features].replace([np.inf, -np.inf], np.nan)
+        miss_rate = raw.isna().mean()
+        indicators = sorted(miss_rate[miss_rate >= MIN_MISSING_FOR_INDICATOR].index)
+        medians = raw.median().fillna(0.0)
+        imputer = {"medians": medians, "indicators": indicators}
+
+        X = PreseasonProjector._apply_imputer(raw, imputer).to_numpy(dtype=float)
         y = pos_df["season_total"].to_numpy(dtype=float)
-        valid = np.isfinite(X).all(axis=1) & np.isfinite(y)
+        # Rows are dropped ONLY for a missing TARGET. The previous version also
+        # required every FEATURE to be finite, which after adding rookies would
+        # have silently discarded exactly the population being added -- the
+        # model would then have been scored on an easier, veteran-only set and
+        # looked better for it.
+        valid = np.isfinite(y)
         X, y = X[valid], y[valid]
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         model = Ridge(alpha=alpha)
         model.fit(X_scaled, y)
-        return model, scaler
+        return model, scaler, imputer
+
+    @staticmethod
+    def _apply_imputer(raw: pd.DataFrame, imputer: dict) -> pd.DataFrame:
+        """Median-impute plus 0/1 indicators, using TRAIN-fitted values.
+
+        The indicator is what lets Ridge separate "no prior season" from "an
+        average prior season"; imputing alone would tell the model a rookie was
+        a median veteran.
+        """
+        out = raw.copy()
+        for col in imputer["indicators"]:
+            out[f"{col}__isna"] = out[col].isna().astype(float)
+        out = out.fillna(imputer["medians"])
+        return out.fillna(0.0)
 
     @classmethod
     def _predict_base(
@@ -339,9 +368,18 @@ class PreseasonProjector:
         features: List[str],
         scaler: StandardScaler,
         model: Ridge,
+        imputer: Optional[dict] = None,
     ) -> np.ndarray:
-        X = frame.reindex(columns=features, fill_value=0.0).fillna(0.0).to_numpy(dtype=float)
-        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        raw = frame.reindex(columns=features).replace([np.inf, -np.inf], np.nan)
+        if imputer is None:
+            # Legacy callers / models persisted before FEATURE_VERSION 35 have
+            # no imputer. Fall back to the old zero-fill rather than raising,
+            # but do NOT pretend it is equivalent: zero-filling a rookie's
+            # prior season asserts he scored zero.
+            X = raw.fillna(0.0).to_numpy(dtype=float)
+            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        else:
+            X = PreseasonProjector._apply_imputer(raw, imputer).to_numpy(dtype=float)
         pred = model.predict(scaler.transform(X))
         return np.maximum(pred, 0.0)
 
@@ -439,9 +477,12 @@ class PreseasonProjector:
             features = [f for f in BASE_FEATURES_BY_POSITION[pos] if f in train_df.columns]
             if len(train_df) < MIN_SAMPLES or not features or test_df.empty:
                 continue
-            model, scaler = cls._fit_linear_model(train_df, features, RIDGE_ALPHA_BY_POSITION[pos])
+            model, scaler, imputer = cls._fit_linear_model(
+                train_df, features, RIDGE_ALPHA_BY_POSITION[pos])
             scored = test_df.copy()
-            scored["pred"] = cls._predict_base(scored, features, scaler, model)
+            # Imputer fitted on train_df only, applied to the holdout -- fitting
+            # it across both would leak the holdout's distribution.
+            scored["pred"] = cls._predict_base(scored, features, scaler, model, imputer)
             rows.append(scored)
         if not rows:
             return {}
@@ -543,10 +584,13 @@ class PreseasonProjector:
                 )
                 curr_df = pd.read_sql_query(
                     """
-                    SELECT player_id, SUM(fantasy_points) AS season_total
-                    FROM player_weekly_stats
-                    WHERE season = ?
-                    GROUP BY player_id
+                    SELECT pws.player_id, p.name AS curr_name,
+                           p.position AS curr_position, p.birth_date AS curr_birth_date,
+                           SUM(pws.fantasy_points) AS season_total
+                    FROM player_weekly_stats pws
+                    JOIN players p ON pws.player_id = p.player_id
+                    WHERE pws.season = ?
+                    GROUP BY pws.player_id, p.name, p.position, p.birth_date
                     HAVING COUNT(*) >= 4
                     """,
                     conn,
@@ -556,7 +600,25 @@ class PreseasonProjector:
             if prior_df.empty or curr_df.empty:
                 continue
 
-            merged = prior_df.merge(curr_df, on="player_id")
+            # LEFT from the CURRENT season, not an inner join. The inner
+            # version required a prior-season row, so a player whose first NFL
+            # season is `curr` never formed a pair at all -- measured, 0 of the
+            # true 2025 rookies reached this frame. Their prior-season columns
+            # arrive NaN, which _fit_linear_model now imputes explicitly rather
+            # than dropping.
+            merged = curr_df.merge(prior_df, on="player_id", how="left")
+            # Identity comes from prior_df for veterans and is NaN for rookies,
+            # who have no prior row. Without this backfill their `position` is
+            # NaN and fit()'s per-position loop drops every one of them -- the
+            # rows would exist and still never be trained on.
+            for col, src in (("player_name", "curr_name"),
+                             ("position", "curr_position"),
+                             ("birth_date", "curr_birth_date")):
+                if col in merged.columns:
+                    merged[col] = merged[col].fillna(merged[src])
+                else:
+                    merged[col] = merged[src]
+            merged = merged.drop(columns=["curr_name", "curr_position", "curr_birth_date"])
             merged["prior_season"] = prior
             merged["curr_season"] = curr
             merged["projection_season"] = curr
@@ -581,10 +643,12 @@ class PreseasonProjector:
             features = [f for f in BASE_FEATURES_BY_POSITION[pos] if f in pos_df.columns]
             if len(pos_df) < MIN_SAMPLES or not features:
                 continue
-            model, scaler = self._fit_linear_model(pos_df, features, RIDGE_ALPHA_BY_POSITION[pos])
+            model, scaler, imputer = self._fit_linear_model(
+                pos_df, features, RIDGE_ALPHA_BY_POSITION[pos])
             self.models[pos] = model
             self.scalers[pos] = scaler
             self.feature_names[pos] = features
+            self.imputers[pos] = imputer
 
         self.audit_report = self._sanitize_jsonable(audit)
         self.is_fitted = len(self.models) > 0
@@ -605,6 +669,7 @@ class PreseasonProjector:
             self.feature_names[position],
             self.scalers[position],
             self.models[position],
+            self.imputers.get(position),
         )
         return pd.DataFrame(
             {
