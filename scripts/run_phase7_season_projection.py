@@ -37,12 +37,23 @@ def main():
              "as known-played, carry-forward is restricted to prior seasons, and "
              "opponents are graded on last season's defense. See "
              "run_season_projection's docstring for the full list of closed leaks.")
+    parser.add_argument(
+        "--cold-start", action="store_true",
+        help="Also project players with NO prior NFL history (true rookies), "
+             "who are otherwise dropped at row-construction time -- 0 of 95 in "
+             "2025. Career-static features (draft capital, combine, college, "
+             "age, destination-team context) populate; NFL-history features are "
+             "left NaN for LightGBM's missing-aware splits. Requires "
+             "--preseason-mode.")
     args = parser.parse_args()
+    if args.cold_start and not args.preseason_mode:
+        parser.error("--cold-start requires --preseason-mode: in-season runs "
+                     "already project rookies off their real weekly rows.")
 
     result = run_season_projection(
         positions=args.positions, seasons=args.seasons, output_path=args.output,
         exclude_pbp_confirmed_zeros=args.exclude_pbp_confirmed_zeros,
-        preseason_mode=args.preseason_mode,
+        preseason_mode=args.preseason_mode, cold_start=args.cold_start,
     )
     if result.empty:
         print("No results produced.")

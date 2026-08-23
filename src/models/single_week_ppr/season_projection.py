@@ -320,6 +320,92 @@ _OPPONENT_STRENGTH_COLS = (
 )
 
 
+"""Features that survive onto a COLD-START row -- a player with no NFL history
+at all. An explicit allowlist, not a pattern match: on a real rookie's row
+every feature is populated (their week-8 `target_share_pct_roll3_mean` is a
+genuine in-season value), so "what looks filled" cannot be used to classify
+them. Anything absent here is blanked to NaN and left for LightGBM's
+missing-aware splits.
+
+Each entry is here because it is fixed before Week 1 of the target season:
+
+  * draft capital and athleticism -- settled at the draft, in April;
+  * college pedigree -- settled before that;
+  * age -- birth date plus season;
+  * destination-team context -- `dest_team_pos_*` is a shift(1) 3-season
+    rolling team profile, and `team_prior_season_wins` / the coaching columns
+    are prior-season facts;
+  * `team_changed` is 0 by definition for a player who has never had a team.
+
+Deliberately EXCLUDED even though a rookie's row carries values for them:
+every `*_roll3_mean` / `*_lag*` / `*_accel`, `prev_season_ppg`,
+`bayesian_prior_ppg`, `availability_3yr`, `career_year_flag`,
+`fp_volatility_roll5`, `recv_drop_pct_season_prior`, `depth_chart_rank`,
+`current_qb_epa_per_att`, and the per-week Vegas/weather columns. Those are
+NFL history or in-season context, which is exactly what a rookie does not
+have."""
+COLD_START_KEEP_FEATURES = frozenset({
+    # Draft capital / athleticism / pedigree
+    "is_rookie", "is_undrafted", "draft_round", "draft_pick", "draft_pick_value",
+    "rookie_draft_value", "rookie_bust_prob", "rookie_breakout_prob",
+    "rookie_ceiling_ppg", "rookie_floor_ppg", "rookie_opportunity_score",
+    "combine_score", "speed_score", "is_power5", "age_curve",
+    # Destination-team context, all prior-season derived
+    "dest_team_pos_tgt_pg", "dest_team_pos_carry_pg", "team_prior_season_wins",
+    "coaching_change", "coaching_change_impact", "coaching_stability",
+    "coaching_adaptation_score", "team_changed",
+})
+
+# Set on a cold-start row rather than left NaN: the conditional-on-playing
+# assumption already used for synthetic weeks, since availability_rate carries
+# the exposure discount separately.
+COLD_START_NEUTRAL_INJURY_SCORE = 1.0
+
+
+def build_cold_start_week_row(
+    static_source: pd.DataFrame,
+    feature_cols: List[str],
+    target_season: int,
+    target_week: int,
+    team: str,
+    db,
+    feature_engineer,
+) -> Optional[pd.DataFrame]:
+    """Feature row for a player with NO prior NFL history (a true rookie).
+
+    `build_synthetic_week_row` cannot help here: it works by carrying forward
+    the most recent real game, and there is no such game. Without this, every
+    rookie is dropped at row-construction time -- measured, 0 of 95 in 2025 --
+    so no amount of missing-value handling downstream can reach them.
+
+    `static_source` is any row of the player's own target-season data. Reading
+    from it is NOT leakage: only `COLD_START_KEEP_FEATURES` is retained, and
+    every column in that set is fixed before Week 1 (draft capital, combine,
+    college, age, prior-season team context). All other features are set to
+    NaN, which is the honest value -- a rookie has no prior-season target
+    share, and 0 would assert that he had one and it was zero.
+    """
+    if static_source is None or static_source.empty:
+        return None
+
+    row = static_source.iloc[[0]].copy()
+    row["season"] = target_season
+    row["week"] = target_week
+    row["team"] = team
+
+    blanked = [c for c in feature_cols
+               if c in row.columns and c not in COLD_START_KEEP_FEATURES]
+    for col in blanked:
+        row[col] = np.nan
+
+    row = _apply_august_legal_matchup(
+        row, team, target_season, target_week, db, feature_engineer,
+    )
+    if "injury_score" in row.columns:
+        row["injury_score"] = COLD_START_NEUTRAL_INJURY_SCORE
+    return row
+
+
 def _apply_august_legal_matchup(row, team, target_season, target_week, db, feature_engineer):
     """Sets the target week's opponent from the published schedule, then
     grades that opponent using ONLY prior-season defensive performance.
@@ -620,6 +706,7 @@ def compute_player_week_predictions(
     capture_rows: bool = False,
     skip_tracker: Optional["WeekSkipTracker"] = None,
     preseason_mode: bool = False,
+    cold_start: bool = False,
 ) -> List[dict]:
     """Per-week prediction list for one player's season -- the shared core
     reused by both `run_season_projection` (Phase 7, deterministic point
@@ -659,6 +746,15 @@ def compute_player_week_predictions(
                 full_history, player_id, season, week, team_by_week[week],
                 db, feature_engineer, preseason_mode=preseason_mode,
             )
+            if synth is None and cold_start:
+                # No prior NFL game to carry forward -- a true rookie. Build
+                # from career-static attributes instead of dropping the player,
+                # which is what excluded 100% of rookies before.
+                synth = build_cold_start_week_row(
+                    g_by_week.get(min(g_by_week)) if g_by_week else None,
+                    feature_cols, season, week, team_by_week[week],
+                    db, feature_engineer,
+                )
             if synth is None:
                 if skip_tracker is not None:
                     skip_tracker.record(player_id, season, week,
@@ -702,6 +798,7 @@ def run_season_projection(
     architecture_override: Optional[dict] = None,
     week_output_path=None,
     preseason_mode: bool = False,
+    cold_start: bool = False,
 ) -> pd.DataFrame:
     """For each position's FINAL_CONFIG fold: fit once, then for every player
     with >=1 real game that season, sum E[PPR] across every possible week,
@@ -862,7 +959,7 @@ def run_season_projection(
                     player_id, g_by_week, real_weeks, team_by_week, possible_weeks, model,
                     feature_cols, full_history, db, feature_engineer, season,
                     exclude_pbp_confirmed_zeros, skip_tracker=week_skips,
-                    preseason_mode=preseason_mode,
+                    preseason_mode=preseason_mode, cold_start=cold_start,
                 )
 
                 predicted_total = 0.0

@@ -1028,11 +1028,34 @@ class AdvancedRookieProjector:
         # Peterson and LeSean McCoy, 127 of 292 rookie player-seasons in that
         # frame. Harmless while the rookie_* features were constant; actively
         # wrong now that they carry real draft capital (FEATURE_VERSION 34).
+        #
+        # SECOND correction: `first_nfl_season` alone is still wrong AT THE
+        # DATA FLOOR. player_weekly_stats begins in MIN_HISTORICAL_YEAR (2006),
+        # so a player who debuted earlier has his first VISIBLE season in 2006
+        # and reads as a rookie. Measured: 548 players have
+        # first_nfl_season == 2006, and of the 382 with draft records, 332 were
+        # drafted BEFORE 2006 -- some as far back as 1982. Only 50 are genuine.
+        # 87% of "2006 rookies" are censored veterans.
+        #
+        # `draft_season` (joined as of FEATURE_VERSION 34) resolves it: at the
+        # floor, a debut is only believed when the draft year agrees. Undrafted
+        # players at the floor are unknowable and resolve to NOT-rookie, which
+        # is the conservative direction -- claiming rookie status for a
+        # 10-year veteran hands him rookie draft-capital priors, while the
+        # reverse merely omits him from a subgroup.
         if 'first_nfl_season' in result.columns and result['first_nfl_season'].notna().any():
-            result['is_rookie'] = (
-                pd.to_numeric(result['season'], errors='coerce')
-                == pd.to_numeric(result['first_nfl_season'], errors='coerce')
-            ).astype(int)
+            from config.settings import MIN_HISTORICAL_YEAR
+
+            season_num = pd.to_numeric(result['season'], errors='coerce')
+            first_num = pd.to_numeric(result['first_nfl_season'], errors='coerce')
+            is_rook = season_num == first_num
+            censored = first_num <= int(MIN_HISTORICAL_YEAR)
+            if 'draft_season' in result.columns:
+                draft_num = pd.to_numeric(result['draft_season'], errors='coerce')
+                is_rook &= ~censored | (draft_num == first_num)
+            else:
+                is_rook &= ~censored
+            result['is_rookie'] = is_rook.fillna(False).astype(int)
         elif 'years_exp' in result.columns:
             result['is_rookie'] = (result['years_exp'] == 0).astype(int)
         else:

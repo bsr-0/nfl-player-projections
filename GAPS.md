@@ -10926,3 +10926,50 @@ early-2016 rows whose 3-week lookback crosses the coverage boundary -- the
 expected shape. Five regression tests (`tests/test_personnel_missingness_flag.py`)
 encode both inertness failures directly. Suite: 481 passed. Default OFF, so
 current behaviour is unchanged.
+
+## is_rookie: the THIRD correction — data-floor censoring (2026-08-22)
+
+Asked directly whether the rookie definition is now accurate. It was not, and
+the remaining error was distinct from the two already fixed today.
+
+`first_nfl_season` cannot distinguish "debuted in 2006" from "our data starts
+in 2006". `player_weekly_stats` begins at `MIN_HISTORICAL_YEAR`, so every
+player already in the league at the floor read as a rookie:
+
+  * 548 players have `first_nfl_season == 2006`;
+  * of the 382 with draft records, **332 were drafted BEFORE 2006** -- draft
+    years run back to 1982, with 46-47 apiece from 2003/2004/2005;
+  * only **50** are genuine. **87% of "2006 rookies" were censored veterans.**
+
+Fixed using `draft_season` (joined at FEATURE_VERSION 34): at the floor a
+debut is believed only when the draft year agrees. Undrafted players at the
+floor are unknowable and resolve to NOT-rookie -- the conservative direction,
+since handing a 10-year veteran rookie draft-capital priors is worse than
+omitting him from a subgroup. Measured on WR: rookie player-seasons in 2006
+fell **548 -> 14**, and 2007+ counts are unchanged.
+
+### The residual 9.7% is a definitional choice, kept deliberately
+
+Of 528 labelled WR rookies with draft data, 477 (90.3%) were drafted that same
+year. The other 51 (9.7%) were drafted 1-4 years earlier and had no stats row
+until later -- late debuts.
+
+They are STILL labelled rookies, on purpose. `is_rookie` here means "no prior
+NFL production to learn from", which is true for a 2010 pick whose first stats
+row is 2013. Keying on `season == draft_season` instead would label him a
+veteran while every history feature is NaN -- a contradiction the model cannot
+resolve. If the distinction is ever wanted, the honest way to express it is a
+separate `years_since_draft` feature, not a redefinition of this one.
+
+### All three failures had the same signature
+
+| # | Wrong definition | Damage |
+|---|---|---|
+| 1 | `games_count <= 8` | any veteran missing half a season |
+| 2 | frame-relative debut | 127 of 292 in a 2020+ frame (Gore, Peterson, McCoy) |
+| 3 | data-floor censoring | 332 of 382 at the 2006 floor |
+
+None raised. In every case the column existed, was int-typed, and carried a
+plausible mean. Six regression tests
+(`tests/test_is_rookie_definition.py`) now pin all three, including the
+frame-independence property and the deliberate late-debut behaviour.
