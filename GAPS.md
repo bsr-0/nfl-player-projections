@@ -10415,3 +10415,91 @@ population retains 3,620 of 5,105 preseason-eligible player-seasons (71%),
 and the exclusion is systematic -- players without prior-season aggregates
 are dropped by every arm. For a draft board that is a material blind spot,
 since rookies are exactly where projection is hardest and most valuable.
+
+## The rookie feature set is NOMINAL: declared, computed, and fed constants (2026-08-22)
+
+Found while asking whether any of the four season architectures could be
+extended to project rookies. Two separate defects; the second is the
+material one.
+
+### 1. `is_rookie` has two contradictory definitions
+
+| Location | Definition |
+|---|---|
+| `feature_engineering.py:4170,4174` (`_add_injury_features`) | `games_count <= 8` |
+| `advanced_rookie_injury.py:1010` | `years_exp == 0` |
+| `advanced_rookie_injury.py:1029` (fallback) | `season == first_season` |
+
+`prepare_features` runs `add_engineered_features` (which sets the
+`games_count <= 8` version) and THEN `add_advanced_features` (which
+overwrites it). `years_exp` is absent from the training frame, so the
+`season == first_season` branch wins -- the correct definition. Verified
+running: `/tmp/p7_loyo_2024.log` shows 8x "Adding advanced rookie
+features" + "Added: rookie_draft_value, ...". The historical bug recorded
+in that module's own comment (module silently skipped for all of v22-v26)
+is fixed.
+
+**Latent hazard, not currently firing:** `add_advanced_features`
+(`feature_preparation.py:158-165`) wraps the whole module in
+`except Exception` + a print. If it throws for any position/fold,
+`is_rookie` silently reverts to `games_count <= 8` -- i.e. every veteran
+who missed half a season is relabelled a rookie -- with no error, no
+column-shape change, and no visible difference in the output artifact.
+Same silent-degradation class as this session's empty-donor-pool and
+inert-preseason-flag bugs.
+
+### 2. Every rookie is modelled as a mid-5th-round pick
+
+`get_all_players_for_training()` returns **87 columns and none of them are
+`draft_round`, `draft_pick`, `years_exp`, combine metrics, or
+`age`/`birth_date`.** So in `add_advanced_rookie_features`:
+
+    draft_round = int(row.get('draft_round', 5))    # -> ALWAYS 5
+    draft_pick  = int(row.get('draft_pick', 150))   # -> ALWAYS 150
+
+Every rookie in every training run is projected as pick 150. The #1
+overall selection and an undrafted free agent receive **identical** draft
+capital. Since `project_rookie()` derives its tier from draft slot, that
+makes five of the six `rookie_*` features constant per position:
+
+  * `rookie_draft_value`, `rookie_breakout_prob`, `rookie_bust_prob`,
+    `rookie_ceiling_ppg`, `rookie_floor_ppg` -- constant;
+  * `rookie_opportunity_score` -- the ONLY one carrying per-player signal
+    (from `_compute_prior_opportunity_scores`, prior team usage);
+  * `combine_score` -- defaults to 50.0 when no metrics are present
+    (`advanced_rookie_injury.py:437`), and combine columns are absent, so
+    also constant;
+  * `age_curve` -- `player_age.py:143` already carries its own warning
+    that it is "near-constant".
+
+So of the 9 rookie/draft/athleticism features declared in CAUSAL_FEATURES
+for all four positions, **at most one varies between rookies.**
+
+### The data exists. It is simply not joined.
+
+| Table | Rows | Coverage |
+|---|---:|---|
+| `draft_picks_v2` | 11,081 (11,054 with GSIS `player_id`) | draft_season 1980-2026 |
+| `combine_data_v2` | 8,968 | 2000-2026 |
+
+`DatabaseManager.get_draft_picks()` already exists and its docstring notes
+the legacy `draft_picks` table is empty while v2 "has data". Neither table
+is joined into the training query. This is a JOIN, not a data-acquisition
+project.
+
+### Consequences
+
+  * **Does NOT invalidate the 11-fold result.** Those features are 0.0 for
+    veterans by construction (`advanced_rookie_injury.py:1032-1037`) and
+    the scored population contained zero rookies, so they contributed
+    nothing either way.
+  * **Does invalidate "Phase 7 has a cold-start rookie toolkit."** It has
+    the column names. It does not have the information.
+  * **Reorders the rookie work.** A cold-start row builder was the wrong
+    first step. Wiring `draft_picks_v2` + `combine_data_v2` into
+    `get_all_players_for_training` comes first: it makes the existing
+    features real for IN-SEASON rookie prediction (where Phase 7 already
+    projects all 95 of 2025's rookies), and is a hard prerequisite for any
+    preseason cold-start path.
+  * Any future rookie experiment must re-baseline after the join -- prior
+    rookie-feature importance rankings were measured on constants.
