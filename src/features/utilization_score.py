@@ -107,6 +107,39 @@ MISSINGNESS_PRESERVED_COLS = frozenset({
     "snap_count", "team_snaps", "snap_share", "snap_share_pct",
 })
 
+# Same argument, applied to team personnel usage: a NaN in team_pct_12_personnel
+# means the personnel table has no row for that team-week, NOT that the team
+# lined up in 12 personnel on 0% of snaps. Filling it zero is a factual claim
+# the data does not support, and it propagates: the model-facing features are
+# the roll3 means derived FROM these columns
+# (team_pct_{11,12,21}_personnel_roll3_mean), so the fabricated zeros are
+# averaged into two live features per position.
+#
+# Held behind PRESERVE_PERSONNEL_MISSINGNESS (default OFF) rather than switched
+# on directly. Every prior result -- Phase 2 architecture selection, Phase 3
+# windows, FINAL_CONFIG, the 11-fold walk-forward -- was produced with these
+# filled, and flipping the default silently would invalidate all of it while
+# blending the effect into the pending v34/v35 re-baseline. Turning it on is a
+# config change, so it can run as its own attributable arm.
+PERSONNEL_MISSINGNESS_COLS = frozenset({
+    "team_pct_11_personnel", "team_pct_12_personnel",
+    "team_pct_13_personnel", "team_pct_21_personnel",
+})
+
+
+def missingness_preserved_cols() -> frozenset:
+    """Columns exempt from the blanket numeric fill, resolved at CALL time.
+
+    Read live rather than captured at import: GAPS.md 7.7/7.8 records that
+    monkeypatching module-level constants in this codebase is unreliable, so a
+    module-level union would make the toggle untestable and easy to mis-set.
+    """
+    from config.settings import PRESERVE_PERSONNEL_MISSINGNESS
+
+    if PRESERVE_PERSONNEL_MISSINGNESS:
+        return MISSINGNESS_PRESERVED_COLS | PERSONNEL_MISSINGNESS_COLS
+    return MISSINGNESS_PRESERVED_COLS
+
 # Fallback keys, used when a fold's training data has no rows for a given
 # position/era combination.
 _ALL_ERAS = "all"
@@ -368,8 +401,9 @@ class UtilizationScoreCalculator:
         # would then have nothing to fill and `known` would read 1.0
         # everywhere. Caught by the end-to-end trace test; see
         # tests/test_snap_missingness_end_to_end.py.
+        preserved = missingness_preserved_cols()
         numeric_cols = [c for c in result.select_dtypes(include=[np.number]).columns
-                        if c not in MISSINGNESS_PRESERVED_COLS]
+                        if c not in preserved]
         result[numeric_cols] = result[numeric_cols].fillna(0)
         
         return result

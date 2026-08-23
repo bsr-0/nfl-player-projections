@@ -10868,3 +10868,61 @@ invent values for columns whose missingness is meaningful.** Undrafted,
 un-debuted and FCS are all real states, not gaps.
 
 FEATURE_VERSION 34 -> 35. Suite: 476 passed.
+
+## Staged arm: PRESERVE_PERSONNEL_MISSINGNESS (default OFF) (2026-08-22)
+
+`team_pct_{11,12,13,21}_personnel` are NaN before 2016 (PBP personnel coverage
+starts then) and were blanket-filled to 0 -- a factual claim that the team
+lined up in 12 personnel on 0% of snaps, which the data does not support. The
+model-facing features are the roll3 means derived from them, so the fabricated
+zeros are averaged into two live features per position
+(`team_pct_{11,12}_personnel_roll3_mean` for WR,
+`team_pct_{12,21}_personnel_roll3_mean` for RB).
+
+**Deliberately NOT switched on.** Phase 2 architecture selection, Phase 3
+windows, FINAL_CONFIG and the 11-fold walk-forward were all produced with these
+filled. Flipping the default would invalidate every one of them while blending
+the effect into the pending v34/v35 re-baseline. Staged as a config flag so it
+runs as its own attributable arm -- the same discipline that let the Phase 2
+re-validation catch a false "3 of 4 architectures changed".
+
+### Correcting an earlier claim in this file
+
+An earlier note said `add_utilization_scores` "corrupts NA for every feature".
+That was **wrong**. It destroys NaN in 32 columns (325,426 -> 58,059 cells),
+all present at the raw-DB stage; features engineered afterwards keep their NaN,
+which is why 2.3% of feature cells already reach the model missing. The blast
+radius on model-facing features is also small: **zero direct hits**, only the
+two personnel roll3 means per position.
+
+### FOUR fillers, not one -- and the flag was inert twice
+
+Making the arm real required exempting the column at every filler between the
+raw table and the model. It read inert twice, both times with byte-identical
+NaN counts on and off:
+
+1. **Exempted `utilization_score`'s blanket fill only.** `_impute_missing`
+   (`feature_engineering.py`) median-filled the column afterwards regardless.
+2. **Exempted the BASE columns only.** The model never sees
+   `team_pct_12_personnel`; it sees `team_pct_12_personnel_roll3_mean`, a
+   different name, still filled. (`team_motion_rate` survives today only
+   because it happens to BE the feature name rather than a base behind one.)
+
+Both mechanisms already existed and are now flag-aware:
+`utilization_score.missingness_preserved_cols()` and
+`feature_engineering._structurally_missing_cols()`, both resolved at CALL time
+because GAPS.md 7.7/7.8 records that monkeypatching module constants here is
+unreliable.
+
+### Verified in both directions
+
+| Position | flag OFF | flag ON |
+|---|---:|---:|
+| WR personnel roll3 NaN | 0 | **20,543** |
+| RB personnel roll3 NaN | 0 | **13,912** |
+
+NaN counts track the pre-2016 populations (WR 19,921 rows, RB 13,507) plus
+early-2016 rows whose 3-week lookback crosses the coverage boundary -- the
+expected shape. Five regression tests (`tests/test_personnel_missingness_flag.py`)
+encode both inertness failures directly. Suite: 481 passed. Default OFF, so
+current behaviour is unchanged.

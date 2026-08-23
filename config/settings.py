@@ -734,6 +734,13 @@ FEATURE_VERSION = "35"  # v35: is_power5 from an era-aware college->conference m
 # v31: rolling catch rate (catch_rate_roll3_mean, RB/WR/TE) — GAPS.md §8.1 Phase 6 (next_focus.md) audit; also corrects 10 stale "missing" items in that section, actually resolved v24-v30
 # v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H)
 # v29: offensive personnel grouping usage (team_pct_11/12/21/13_personnel_roll3_mean, GAPS.md §3.3/§11.1.E) — parsed from PBP offense_personnel, 2016+ coverage
+# Preserve NaN in team personnel columns instead of blanket-filling them to 0.
+# OFF by default deliberately: every existing result was produced with them
+# filled, so this is staged as an attributable arm for the pending v34/v35
+# re-baseline rather than a silent default flip. See
+# src/features/utilization_score.py PERSONNEL_MISSINGNESS_COLS and GAPS.md.
+PRESERVE_PERSONNEL_MISSINGNESS = False
+
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

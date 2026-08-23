@@ -80,6 +80,33 @@ _STRUCTURALLY_MISSING = frozenset({
 })
 
 
+def _structurally_missing_cols() -> frozenset:
+    """Columns `_impute_missing` must leave alone, resolved at CALL time.
+
+    Personnel usage joins the set only when PRESERVE_PERSONNEL_MISSINGNESS is
+    on. Two fillers stand between the raw table and the model -- the blanket
+    numeric fill in utilization_score, then this median impute -- and exempting
+    only the first leaves the flag INERT: the base column reaches here with its
+    NaN intact and gets median-filled anyway, so the model still never sees
+    missing. Verified: exempting only utilization_score produced byte-identical
+    NaN counts with the flag on and off.
+    """
+    from config.settings import PRESERVE_PERSONNEL_MISSINGNESS
+    from src.features.utilization_score import PERSONNEL_MISSINGNESS_COLS
+
+    if not PRESERVE_PERSONNEL_MISSINGNESS:
+        return _STRUCTURALLY_MISSING
+    # The roll3 DERIVATIVES must be exempted too, not just the base columns.
+    # The model never sees team_pct_12_personnel; it sees
+    # team_pct_12_personnel_roll3_mean, which is a different column name and so
+    # was still median-filled -- the reason the flag read inert a second time.
+    # (team_motion_rate survives today only because it happens to BE the
+    # feature name rather than a base column behind one.)
+    return _STRUCTURALLY_MISSING | PERSONNEL_MISSINGNESS_COLS | frozenset(
+        f"{c}_roll3_mean" for c in PERSONNEL_MISSINGNESS_COLS
+    )
+
+
 # The NFL abolished the "Probable" designation after the 2015 season. It
 # appears 2,772 / 2,607 / 2,702 times in 2013-2015 and exactly 0 from 2016.
 PROBABLE_ABOLISHED_AFTER_SEASON = 2015
@@ -4383,7 +4410,7 @@ class FeatureEngineer:
         for col in numeric_cols:
             if col not in df.columns or not df[col].isna().any():
                 continue
-            if col in _SNAP_IMPUTATION_OWNED or col in _STRUCTURALLY_MISSING:
+            if col in _SNAP_IMPUTATION_OWNED or col in _structurally_missing_cols():
                 continue
             is_qb_col = any(tok in col.lower() for tok in qb_specific_tokens)
             if is_qb_col and has_position:
