@@ -10273,3 +10273,121 @@ the exposure-leakage contract's reasoning. Suite: 447 passed.
 
 Same lesson as this session's empty-donor-pool bug: a wrong-but-plausible
 number is the worst failure mode, so the invariant must be loud.
+
+## PRODUCTION-GRADE RESULT: 11-fold walk-forward, information-matched, 2015-2025 (2026-08-22)
+
+Supersedes the single-fold 2025 comparison above as the basis for any
+production decision. That run could not distinguish signal from
+season-to-season noise; this one can.
+
+### Method
+
+Expanding-window walk-forward, 11 test seasons (2015-2025) x 4 positions =
+**44 position-folds**, all four arms scored on the SAME intersected
+population per fold (n=3,620 player-seasons), all four making a single
+pre-Week-1 forecast of the full season.
+
+**Not literal LOYO, deliberately.** True leave-one-year-out would train on
+seasons AFTER the test year, which leaks. Every fold here trains only on
+seasons strictly before the test season, and always includes the most
+recent one (test-1).
+
+### Leakage gate (`scripts/verify_loyo_no_leakage.py`, exit 0 = usable)
+
+Asserted mechanically before the comparison was run, because the
+silently-inert-flag bug earlier the same day proved a plausible-looking MAE
+is not self-validating:
+
+  * all 11 Phase 7 artifacts: **zero** known-played weeks, synthetic-week
+    share exactly 1.0000, all four positions present, one season each;
+  * Phase 7 training span ends at exactly test-1 in all 44 folds and never
+    contains the test season;
+  * combined artifact: 5,105 rows, zero duplicate (player, season) -- the
+    append-not-overwrite behaviour of `run_season_projection` makes
+    double-counting a real hazard;
+  * the other three arms verified structurally: `_build_season_pairs` sets
+    `curr_season = season_list[i+1]`, i.e. the TARGET season, so
+    `curr_season < test_season` excludes the pair whose target is the test
+    season. Had `curr_season` meant the FEATURE season, that filter would
+    have trained on the test season's outcome. It does not.
+
+### Overall (sample-weighted, 44 position-folds, n=3,620)
+
+| Arm | MAE | RMSE |
+|---|---:|---:|
+| Phase 7 (preseason mode) | 46.40 | 63.05 |
+| Candidate (Ridge multi-year) | 46.49 | 62.33 |
+| Step 8A (games x rate) | 46.50 | 62.15 |
+| **Production (`PreseasonProjector`)** | **49.11** | **65.11** |
+
+### The top three are indistinguishable
+
+Paired per-fold MAE differences (same players, same folds), mean +/- SD
+over 11 season-folds:
+
+| | vs Step 8A | vs Candidate |
+|---|---|---|
+| Phase 7 | -0.08 +/- 1.36 | -0.06 +/- 1.56 |
+| Step 8A | -- | +0.02 +/- 1.45 |
+
+Every mean is ~0.1 MAE against an SD of ~1.4 -- an order of magnitude
+smaller than its own fold-to-fold variation. Head-to-head over 44
+position-folds: Phase 7 vs Step 8A 23/44, Phase 7 vs Candidate 24/44,
+Step 8A vs Candidate 27/44 -- all coin-flips. Season-fold wins split
+Phase 7 3, Step 8A 4, Candidate 4.
+
+**No basis exists for ranking these three.** The 0.10 MAE spread between
+them is noise.
+
+### Production is reliably WORST, and this one IS a real effect
+
+  * loses **0 of 11** season-folds; wins outright only 2 of 44
+    position-folds;
+  * head-to-head: loses 35/44 to Phase 7, 36/44 to Step 8A, **39/44** to
+    Candidate;
+  * paired gap vs Candidate **+2.60 +/- 0.94** -- mean 2.8x its SD, unlike
+    every comparison among the top three;
+  * worst MAE at **all four positions** (QB 76.1, RB 56.3, WR 47.6, TE
+    33.7).
+
+This is the model currently generating `docs/data/projections_2026.json`.
+
+### Stable position structure, reproduced across 11 folds
+
+| Pos | Phase 7 | Step 8A | Candidate | Production |
+|---|---:|---:|---:|---:|
+| QB | **69.3** | 71.8 | 72.7 | 76.1 |
+| RB | **52.9** | 54.5 | 53.6 | 56.3 |
+| WR | 46.0 | **45.0** | **45.0** | 47.6 |
+| TE | 31.4 | **30.8** | 31.3 | 33.7 |
+
+Phase 7 leads QB/RB; Step 8A and Candidate lead WR/TE. This is the same
+split the single 2025 fold showed, now reproduced over 11 seasons -- so it
+is structure, not noise, even though the overall totals tie. Consistent
+with pre-registration outcome D, which explicitly does not license building
+a hybrid before the mechanism is understood.
+
+### An anomaly worth a future look, not acted on here
+
+Production posts competitive or best **R2** (QB 0.36 -- highest of any arm;
+RB 0.40 -- highest) while posting the worst **MAE at every position**. R2
+rewards explaining variance; MAE punishes absolute error. That divergence
+is the signature of a scale/bias problem rather than a ranking problem --
+it may be ordering players roughly correctly while systematically missing
+the magnitude. Not diagnosed here; flagged because it suggests a
+potentially cheap fix (recalibration) rather than a model replacement.
+
+### What this establishes / does NOT establish
+
+**Establishes:** the production preseason model is reliably ~2.6 MAE
+(~5.3%) worse than three alternatives, across 11 seasons, on matched
+populations, with no leakage. Phase 7's summed-weekly architecture confers
+no season-level advantage once information is matched -- confirming the
+2025 finding at 11x the evidence.
+
+**Does NOT establish:** which of the three replacements is better (they
+tie); anything about ROOKIES or thin-history players. The intersected
+population retains 3,620 of 5,105 preseason-eligible player-seasons (71%),
+and the exclusion is systematic -- players without prior-season aggregates
+are dropped by every arm. For a draft board that is a material blind spot,
+since rookies are exactly where projection is hardest and most valuable.
