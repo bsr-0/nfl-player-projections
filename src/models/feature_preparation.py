@@ -171,7 +171,24 @@ def add_advanced_features(data: pd.DataFrame) -> pd.DataFrame:
     feature set, which is the worst available outcome.
     """
     from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features
-    return add_advanced_rookie_injury_features(data)
+    out = add_advanced_rookie_injury_features(data)
+
+    # Restore debut-week history NaN LAST, past every filler. There are five:
+    # per-column fillna at creation sites, the blanket numeric fill in
+    # utilization_score, _impute_missing's median, the position-specific block
+    # that runs after it, and advanced_rookie_injury above -- measured wiping
+    # 959 restored NaNs straight back to 0.
+    #
+    # It lives HERE, not in prepare_features, because the training path does
+    # NOT go through prepare_features: _prepare_training_data calls
+    # `add_advanced_features(add_engineered_features(d))` directly. Restoring in
+    # prepare_features left the flag inert for Phase 7 training -- the one place
+    # it has to work -- while still looking correct in a prepare_features probe.
+    from config.settings import PRESERVE_HISTORY_MISSINGNESS
+    if PRESERVE_HISTORY_MISSINGNESS:
+        from src.features.feature_engineering import FeatureEngineer
+        out = FeatureEngineer()._restore_debut_history_nan(out)
+    return out
 
 
 def prepare_features(data: pd.DataFrame, position: str = None,
@@ -190,20 +207,7 @@ def prepare_features(data: pd.DataFrame, position: str = None,
     data = add_utilization_scores(data, weights=utilization_weights)
     print("Engineering features...")
     data = add_engineered_features(data, position=position)
-    data = add_advanced_features(data)
-
-    # Restore debut-week history NaN LAST, after every filler in the pipeline.
-    # There are at least five: the per-column fillna at creation sites, the
-    # blanket numeric fill in utilization_score, _impute_missing's median, the
-    # position-specific block, and advanced_rookie_injury -- which was measured
-    # wiping 959 restored NaNs straight back to 0. Restoring inside feature
-    # engineering is therefore not sufficient; only the end of the pipeline is
-    # past all of them.
-    from config.settings import PRESERVE_HISTORY_MISSINGNESS
-    if PRESERVE_HISTORY_MISSINGNESS:
-        from src.features.feature_engineering import FeatureEngineer
-        data = FeatureEngineer()._restore_debut_history_nan(data)
-    return data
+    return add_advanced_features(data)
 
 
 def _infer_bounded_columns(df: pd.DataFrame) -> List[str]:

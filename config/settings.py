@@ -746,9 +746,9 @@ FEATURE_VERSION = "35"  # v35: is_power5 from an era-aware college->conference m
 # with no missing-direction to use when a real cold-start row arrives.
 # OFF by default: this is the third arm of the pending re-baseline, not a
 # silent default flip. See GAPS.md and feature_engineering.history_missingness_cols.
-PRESERVE_HISTORY_MISSINGNESS = False
+PRESERVE_HISTORY_MISSINGNESS = os.getenv("NFL_PRESERVE_HISTORY_MISSINGNESS", "0") == "1"
 
-PRESERVE_PERSONNEL_MISSINGNESS = False
+PRESERVE_PERSONNEL_MISSINGNESS = os.getenv("NFL_PRESERVE_PERSONNEL_MISSINGNESS", "0") == "1"
 
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
