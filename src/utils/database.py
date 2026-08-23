@@ -2098,7 +2098,17 @@ class DatabaseManager:
                    COALESCE(dp.draft_round, 8) as draft_round,
                    COALESCE(dp.draft_pick, 400) as draft_pick,
                    COALESCE(dv.otc, 0) as draft_pick_value,
-                   dp.draft_season,
+                   dp.draft_season, dp.college as draft_college,
+                   -- Career-true NFL debut, computed over the WHOLE table.
+                   -- advanced_rookie_injury derives is_rookie from the minimum
+                   -- season it can see, which is frame-relative: filter a fold
+                   -- to 2020+ and Frank Gore, Adrian Peterson and LeSean McCoy
+                   -- all become "rookies" in 2020 (127 of 292 rookie
+                   -- player-seasons in that frame were veterans). Every
+                   -- windowed fold filters seasons -- WR trains on 3y, TE on
+                   -- 10y -- so this fired constantly. Supplying the real debut
+                   -- makes the label immune to whatever slice a caller takes.
+                   fns.first_nfl_season,
                    us.utilization_score, us.snap_share as util_snap_share,
                    us.target_share as util_target_share, us.rush_share as util_rush_share,
                    us.redzone_share as util_redzone_share,
@@ -2133,7 +2143,8 @@ class DatabaseManager:
             -- (best) selection intact rather than mixing columns across rows.
             -- Empty player_ids (27 rows) are excluded so they cannot join to ''.
             LEFT JOIN (
-                SELECT player_id, draft_season, draft_round, MIN(draft_pick) AS draft_pick
+                SELECT player_id, draft_season, draft_round, college,
+                       MIN(draft_pick) AS draft_pick
                 FROM draft_picks_v2
                 WHERE player_id IS NOT NULL AND player_id != ''
                 GROUP BY player_id
@@ -2143,6 +2154,10 @@ class DatabaseManager:
             -- clamp rather than yield NULL for those: a pick past 262 is at
             -- least as low-value as pick 262.
             LEFT JOIN draft_values dv ON dv.pick = MIN(dp.draft_pick, 262)
+            LEFT JOIN (
+                SELECT player_id, MIN(season) AS first_nfl_season
+                FROM player_weekly_stats GROUP BY player_id
+            ) fns ON pws.player_id = fns.player_id
             LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
                 AND pws.season = us.season AND pws.week = us.week
             LEFT JOIN team_stats ts ON pws.team = ts.team

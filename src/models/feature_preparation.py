@@ -177,6 +177,15 @@ def add_advanced_features(data: pd.DataFrame) -> pd.DataFrame:
 def prepare_features(data: pd.DataFrame, position: str = None,
                      utilization_weights: dict = None) -> pd.DataFrame:
     """Prepare features for training (utilization + engineered features + advanced features)."""
+    # Conference FIRST, on the raw frame, because it reads `draft_college` and
+    # `draft_season` and both are destroyed downstream by blanket fillers:
+    # add_utilization_scores fills draft_season NaN -> 0, and
+    # add_advanced_rookie_injury_features mode-fills draft_college, which
+    # replaced every undrafted player's missing college with "Ohio St." (1,416
+    # rows -> 12,157) and handed them a fabricated Big Ten pedigree. Resolving
+    # here means the feature is derived from what the database actually said.
+    from src.features.college_conference import add_conference_features
+    data = add_conference_features(data)
     print("Calculating utilization scores...")
     data = add_utilization_scores(data, weights=utilization_weights)
     print("Engineering features...")

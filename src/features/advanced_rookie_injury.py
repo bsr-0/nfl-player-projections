@@ -1018,8 +1018,22 @@ class AdvancedRookieProjector:
         
         print("Adding advanced rookie features...")
         
-        # Identify rookies
-        if 'years_exp' in result.columns:
+        # Identify rookies. `first_nfl_season` is preferred over every other
+        # source because it is the only FRAME-INDEPENDENT one:
+        # get_all_players_for_training computes it over the whole table, so a
+        # caller that filters to a training window cannot change it. The
+        # fallbacks below derive the debut from whatever seasons happen to be
+        # present, which silently relabels a window's oldest veterans as
+        # rookies -- filtering to 2020+ made rookies of Frank Gore, Adrian
+        # Peterson and LeSean McCoy, 127 of 292 rookie player-seasons in that
+        # frame. Harmless while the rookie_* features were constant; actively
+        # wrong now that they carry real draft capital (FEATURE_VERSION 34).
+        if 'first_nfl_season' in result.columns and result['first_nfl_season'].notna().any():
+            result['is_rookie'] = (
+                pd.to_numeric(result['season'], errors='coerce')
+                == pd.to_numeric(result['first_nfl_season'], errors='coerce')
+            ).astype(int)
+        elif 'years_exp' in result.columns:
             result['is_rookie'] = (result['years_exp'] == 0).astype(int)
         else:
             # season_long_features.add_rookie_features() runs earlier in the

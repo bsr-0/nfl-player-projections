@@ -10784,3 +10784,87 @@ re-running that script rewrites many tables and is out of scope for this fix.
 Neither `draft_picks` (legacy) nor the empty-string case was caught by that
 dropna either, which is why 27 empty-`player_id` rows survived while 1,846
 NaN ones did not -- the same column arriving in two different null forms.
+
+## Re-ingest, the is_rookie year bug, and an era-aware conference map (2026-08-22)
+
+### Re-ingest: +1,846 recovered draft picks, training unchanged
+
+`draft_picks_v2` 11,081 -> **12,927** rows after removing the
+`dropna(subset=["player_id"])`. 11,054 carry a GSIS id; 1,873 do not (players
+who have not debuted). Training is provably unaffected -- 28,402 rows, 0
+duplicate `(player_id, season, week)`, `is_undrafted` mean 0.222 before and
+after -- because the join subquery excludes id-less rows by construction.
+
+### CRITICAL: is_rookie was frame-relative, and v34 made it dangerous
+
+`add_advanced_rookie_features` derived `is_rookie` from the minimum season
+**present in the frame**. Every windowed fold filters seasons (WR trains on
+3y, TE on 10y), so each fold relabelled its own oldest veterans as rookies:
+filtering to 2020+ made rookies of **Frank Gore, Adrian Peterson and LeSean
+McCoy** -- 127 of 292 rookie player-seasons in that frame, **43% wrong**.
+
+Latent and near-harmless while the rookie_* features were constant. The v34
+join made it actively harmful: a 15-year veteran now receives real
+draft-capital priors under a rookie flag.
+
+Fixed by supplying `first_nfl_season` from the database, computed over the
+whole `player_weekly_stats` table, so no caller's slice can move it.
+Verified: false rookies **127 -> 0**, Gore/Peterson/McCoy `is_rookie=0`, and
+`is_rookie` fires in at most one season per player across the full frame.
+
+### Rookie data QA (right player, right year, right format)
+
+| Check | Result |
+|---|---|
+| Known draft positions | Barkley (2018/1/2), McCaffrey (2017/1/8), Jacobs (2019/1/24), Henry (2016/2/45) all exact |
+| Draft attrs constant per player | 0 players whose draft_round/pick/value/is_undrafted vary across their own rows |
+| Sentinels confined to undrafted | 0 drafted rows with pick 400 or round 8; 0 undrafted rows off-sentinel; 0 undrafted with nonzero pick value |
+| dtypes | draft_round/pick/value/is_undrafted all int64 |
+| is_rookie timing | fires in <=1 season per player, frame-independent |
+
+`B.Robinson` initially read as a mismatch and was not: Bijan (2023/1/8,
+Texas) and Brian Jr (2022/3/98, Alabama) both resolve correctly. The join is
+on GSIS `player_id`; the ambiguity was in the abbreviated-name lookup used to
+test it. The newly-backfilled `cfb_player_id` now separates them outright.
+
+### College -> conference: era-aware, `src/features/college_conference.py`
+
+Keyed on **(college, draft_season - 1)**, because a player drafted in year N
+played their final college season in N-1. That distinction is the entire
+point: a Texas A&M player drafted 2012 played 2011 in the **Big 12**; one
+drafted 2013 played 2012 in the **SEC**. A static map would have asserted a
+fact that was not true when they played.
+
+Coverage on skill picks 2006+ (1,680): SEC 20.5%, Big Ten 14.8%, ACC 12.9%,
+Pac-12 11.9%, Big 12 11.1%, then G5 conferences, with **6.1% UNMAPPED** --
+almost entirely FCS/DII/DIII (North Dakota St., Montana, Delaware). UNMAPPED
+is a real countable value, not a silent fallback to a plausible guess.
+Schools are also absent from the base map for their pre-FBS years, so
+Appalachian St. is UNMAPPED before 2014 rather than falsely Sun Belt.
+
+Only `is_power5` is model-facing (added to CAUSAL_FEATURES at all four
+positions). `college_conference` stays a string for inspection -- encoding a
+15-value categorical has not been justified yet.
+
+### A THIRD blanket-filler corruption, found by building the above
+
+`add_advanced_rookie_injury_features` **mode-fills `draft_college`**,
+replacing every undrafted player's missing college with the modal value
+"Ohio St." -- 1,416 rows -> **12,157**. The first wiring of the conference
+feature ran after it and duly reported Big Ten 15,369 with **every undrafted
+player labelled Big Ten**. Fixed by resolving conference at the START of
+`prepare_features`, on the raw frame, before any filler runs.
+
+That is now three distinct silent-fabrication fillers found in this area:
+
+1. `add_utilization_scores` NaN->0, which would have made undrafted players
+   "pick 0", the most valuable selection in the draft;
+2. this mode-fill of `draft_college`, fabricating a Big Ten pedigree;
+3. the historical `FeaturePolicyRegistry` median-fill of the snap column
+   (already recorded earlier in this file).
+
+The pattern is worth naming: **a filler that runs over every column will
+invent values for columns whose missingness is meaningful.** Undrafted,
+un-debuted and FCS are all real states, not gaps.
+
+FEATURE_VERSION 34 -> 35. Suite: 476 passed.

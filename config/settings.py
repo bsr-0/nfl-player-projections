@@ -331,6 +331,12 @@ CAUSAL_FEATURES = {
         # players who reach the league are undrafted, and that is signal, not a
         # missing value.
         "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
+        # v35: college pedigree, era-aware. Conference is resolved for the
+        # season BEFORE the draft, so realignment cannot backdate a fact --
+        # a 2011 Texas A&M pick is Big 12, a 2013 one is SEC. Only the binary
+        # is exposed to the models; college_conference stays a string for
+        # inspection. See src/features/college_conference.py.
+        "is_power5",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -397,6 +403,12 @@ CAUSAL_FEATURES = {
         # players who reach the league are undrafted, and that is signal, not a
         # missing value.
         "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
+        # v35: college pedigree, era-aware. Conference is resolved for the
+        # season BEFORE the draft, so realignment cannot backdate a fact --
+        # a 2011 Texas A&M pick is Big 12, a 2013 one is SEC. Only the binary
+        # is exposed to the models; college_conference stays a string for
+        # inspection. See src/features/college_conference.py.
+        "is_power5",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -469,6 +481,12 @@ CAUSAL_FEATURES = {
         # players who reach the league are undrafted, and that is signal, not a
         # missing value.
         "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
+        # v35: college pedigree, era-aware. Conference is resolved for the
+        # season BEFORE the draft, so realignment cannot backdate a fact --
+        # a 2011 Texas A&M pick is Big 12, a 2013 one is SEC. Only the binary
+        # is exposed to the models; college_conference stays a string for
+        # inspection. See src/features/college_conference.py.
+        "is_power5",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -537,6 +555,12 @@ CAUSAL_FEATURES = {
         # players who reach the league are undrafted, and that is signal, not a
         # missing value.
         "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
+        # v35: college pedigree, era-aware. Conference is resolved for the
+        # season BEFORE the draft, so realignment cannot backdate a fact --
+        # a 2011 Texas A&M pick is Big 12, a 2013 one is SEC. Only the binary
+        # is exposed to the models; college_conference stays a string for
+        # inspection. See src/features/college_conference.py.
+        "is_power5",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -705,7 +729,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "34"  # v34: real draft capital (draft_round/draft_pick/draft_pick_value/is_undrafted) joined from draft_picks_v2 + draft_values, and birth_date joined so age_curve stops being near-constant. Before this, every rookie was modelled as round 5 / pick 150 and five of six rookie_* features were constant — see GAPS.md "The rookie feature set is NOMINAL".
+FEATURE_VERSION = "35"  # v35: is_power5 from an era-aware college->conference map (realignment-correct: Texas A&M is Big 12 pre-2012, SEC after; USC is Pac-12 until the 2024 Big Ten move). v34: real draft capital + birth_date. See GAPS.md.
 # v32: team pass-rate-over-expected (team_neutral_pass_rate_oe_roll3_mean, all 4 positions) + WR rushing usage (rush_share_pct_roll3_mean) — GAPS.md Phase 6b follow-up, two real gaps missed by the v31/Phase 6 audit — see FEATURE_VERSION history below
 # v31: rolling catch rate (catch_rate_roll3_mean, RB/WR/TE) — GAPS.md §8.1 Phase 6 (next_focus.md) audit; also corrects 10 stale "missing" items in that section, actually resolved v24-v30
 # v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H)
