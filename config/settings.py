@@ -323,6 +323,14 @@ CAUSAL_FEATURES = {
         # v27: rookie identity/draft-capital/combine (real target-leakage
         # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2)
         "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
+        # v34: real draft capital. Until FEATURE_VERSION 34 these columns were
+        # absent from the training frame, so advanced_rookie_injury.py fell
+        # through to its round-5/pick-150 defaults for EVERY rookie and five of
+        # the six rookie_* features were constant. See GAPS.md, "The rookie
+        # feature set is NOMINAL". is_undrafted is separate on purpose: ~39% of
+        # players who reach the league are undrafted, and that is signal, not a
+        # missing value.
+        "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -381,6 +389,14 @@ CAUSAL_FEATURES = {
         # v27: rookie identity/draft-capital/combine (real target-leakage
         # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2)
         "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
+        # v34: real draft capital. Until FEATURE_VERSION 34 these columns were
+        # absent from the training frame, so advanced_rookie_injury.py fell
+        # through to its round-5/pick-150 defaults for EVERY rookie and five of
+        # the six rookie_* features were constant. See GAPS.md, "The rookie
+        # feature set is NOMINAL". is_undrafted is separate on purpose: ~39% of
+        # players who reach the league are undrafted, and that is signal, not a
+        # missing value.
+        "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -445,6 +461,14 @@ CAUSAL_FEATURES = {
         # v27: rookie identity/draft-capital/combine (real target-leakage
         # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2)
         "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
+        # v34: real draft capital. Until FEATURE_VERSION 34 these columns were
+        # absent from the training frame, so advanced_rookie_injury.py fell
+        # through to its round-5/pick-150 defaults for EVERY rookie and five of
+        # the six rookie_* features were constant. See GAPS.md, "The rookie
+        # feature set is NOMINAL". is_undrafted is separate on purpose: ~39% of
+        # players who reach the league are undrafted, and that is signal, not a
+        # missing value.
+        "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -505,6 +529,14 @@ CAUSAL_FEATURES = {
         # v27: rookie identity/draft-capital/combine (real target-leakage
         # bug fixed in advanced_rookie_injury.py first, see GAPS.md §7.2)
         "is_rookie", "rookie_draft_value", "rookie_bust_prob", "combine_score",
+        # v34: real draft capital. Until FEATURE_VERSION 34 these columns were
+        # absent from the training frame, so advanced_rookie_injury.py fell
+        # through to its round-5/pick-150 defaults for EVERY rookie and five of
+        # the six rookie_* features were constant. See GAPS.md, "The rookie
+        # feature set is NOMINAL". is_undrafted is separate on purpose: ~39% of
+        # players who reach the league are undrafted, and that is signal, not a
+        # missing value.
+        "draft_round", "draft_pick", "draft_pick_value", "is_undrafted",
         # v28: rookie opportunity/breakout/ceiling/floor — held back at v27
         # pending two separate leakage bugs in calculate_opportunity_score
         # (full-season sum, no time filter) and add_advanced_injury_features'
@@ -673,7 +705,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "33"  # v33: depth_chart_rank now computed as-of each row's own week (was always week=1 preseason, a real bug — see GAPS.md, real-vs-synthetic-week bias investigation, 2026-08). Fixes a real distortion: every row's depth chart status previously reflected preseason only, never in-season promotions/demotions.
+FEATURE_VERSION = "34"  # v34: real draft capital (draft_round/draft_pick/draft_pick_value/is_undrafted) joined from draft_picks_v2 + draft_values, and birth_date joined so age_curve stops being near-constant. Before this, every rookie was modelled as round 5 / pick 150 and five of six rookie_* features were constant — see GAPS.md "The rookie feature set is NOMINAL".
 # v32: team pass-rate-over-expected (team_neutral_pass_rate_oe_roll3_mean, all 4 positions) + WR rushing usage (rush_share_pct_roll3_mean) — GAPS.md Phase 6b follow-up, two real gaps missed by the v31/Phase 6 audit — see FEATURE_VERSION history below
 # v31: rolling catch rate (catch_rate_roll3_mean, RB/WR/TE) — GAPS.md §8.1 Phase 6 (next_focus.md) audit; also corrects 10 stale "missing" items in that section, actually resolved v24-v30
 # v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H)

@@ -543,6 +543,36 @@ class DatabaseManager:
                 )
             """)
 
+            # Draft picks, nfl-data-py source (GSIS player_id). This is the
+            # table that actually has data -- the legacy `draft_picks` above is
+            # empty on most installs (see get_draft_picks). Declared in the
+            # schema because get_all_players_for_training() JOINs it, so a
+            # freshly-created DB that lacks it fails the query outright rather
+            # than degrading.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS draft_picks_v2 (
+                    player_id TEXT,
+                    position TEXT,
+                    college TEXT,
+                    draft_season INTEGER,
+                    draft_round INTEGER,
+                    draft_pick INTEGER,
+                    draft_team TEXT
+                )
+            """)
+
+            # Draft pick value charts, one row per overall pick (1-262).
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS draft_values (
+                    pick INTEGER PRIMARY KEY,
+                    stuart REAL,
+                    johnson REAL,
+                    hill REAL,
+                    otc REAL,
+                    pff REAL
+                )
+            """)
+
             # NFL Combine data
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS combine_data (
@@ -2053,7 +2083,18 @@ class DatabaseManager:
         opponent stats encode the target via the opponent's "points allowed").
         """
         query = """
-            SELECT pws.*, p.name, p.position,
+            SELECT pws.*, p.name, p.position, p.birth_date,
+                   -- Resolved to sentinels HERE, in SQL, rather than left NULL
+                   -- for a consumer to interpret. add_utilization_scores()
+                   -- blanket-fills NaN->0 downstream, which would have turned
+                   -- every undrafted player into "pick 0" -- i.e. the single
+                   -- most valuable selection in the draft, the exact inverse of
+                   -- the truth. Emitting no NULLs makes that unreachable.
+                   CASE WHEN dp.draft_pick IS NULL THEN 1 ELSE 0 END as is_undrafted,
+                   COALESCE(dp.draft_round, 8) as draft_round,
+                   COALESCE(dp.draft_pick, 400) as draft_pick,
+                   COALESCE(dv.otc, 0) as draft_pick_value,
+                   dp.draft_season,
                    us.utilization_score, us.snap_share as util_snap_share,
                    us.target_share as util_target_share, us.rush_share as util_rush_share,
                    us.redzone_share as util_redzone_share,
@@ -2079,6 +2120,25 @@ class DatabaseManager:
                    tps.pct_21 as team_pct_21_personnel, tps.pct_13 as team_pct_13_personnel
             FROM player_weekly_stats pws
             JOIN players p ON pws.player_id = p.player_id
+            -- Draft capital. Static pre-career attributes, so joining on
+            -- player_id alone is leakage-safe: a player is drafted before any
+            -- of their NFL rows exist. Deduplicated because draft_picks_v2 has
+            -- 2 player_ids appearing twice, and a bare LEFT JOIN would silently
+            -- DOUBLE every training row for them. SQLite returns bare columns
+            -- from the row that matched MIN(), so this keeps the earliest
+            -- (best) selection intact rather than mixing columns across rows.
+            -- Empty player_ids (27 rows) are excluded so they cannot join to ''.
+            LEFT JOIN (
+                SELECT player_id, draft_season, draft_round, MIN(draft_pick) AS draft_pick
+                FROM draft_picks_v2
+                WHERE player_id IS NOT NULL AND player_id != ''
+                GROUP BY player_id
+            ) dp ON pws.player_id = dp.player_id
+            -- Pick value chart (Over The Cap). draft_values covers picks 1-262
+            -- but draft_picks_v2 reaches 336 from the old 8-12 round era, so
+            -- clamp rather than yield NULL for those: a pick past 262 is at
+            -- least as low-value as pick 262.
+            LEFT JOIN draft_values dv ON dv.pick = MIN(dp.draft_pick, 262)
             LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
                 AND pws.season = us.season AND pws.week = us.week
             LEFT JOIN team_stats ts ON pws.team = ts.team

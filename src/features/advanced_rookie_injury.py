@@ -61,6 +61,19 @@ def draft_capital_value_from_pick(draft_pick: int) -> float:
 # ADVANCED ROOKIE PREDICTION
 # =============================================================================
 
+# Undrafted encoding. The modern draft ends at pick 262 (draft_values covers
+# 1-262); draft_picks_v2 reaches 336 from the old 8-12 round era. Sitting
+# undrafted players past both keeps them ordered below every real selection
+# instead of colliding with mid-round picks, and round 8 falls through
+# get_draft_tier() into 'round_3_plus' as intended.
+UNDRAFTED_ROUND = 8
+UNDRAFTED_PICK = 400
+
+# Below this many rookies, a constant rookie_* feature is plausible rather than
+# a bug, so the degeneracy check stays quiet.
+MIN_ROOKIES_FOR_VARIANCE_CHECK = 30
+
+
 @dataclass
 class RookieProfile:
     """Complete rookie profile for projection."""
@@ -1035,6 +1048,15 @@ class AdvancedRookieProjector:
         result['rookie_bust_prob'] = 0.0
         result['rookie_ceiling_ppg'] = 0.0
         result['rookie_floor_ppg'] = 0.0
+        # Undrafted is a real, informative status -- roughly 39% of players who
+        # reach the league, including Welker/Gates/Thielen/Ekeler. It gets its
+        # own flag rather than being smuggled in as a sentinel pick number.
+        # Only defaulted when ABSENT: get_all_players_for_training resolves it
+        # in SQL (while the NULL still exists to be detected), and
+        # unconditionally assigning 0.0 here would erase that and make every
+        # player look drafted.
+        if 'is_undrafted' not in result.columns:
+            result['is_undrafted'] = 0.0
         
         # Calculate for rookies
         rookies = result[result['is_rookie'] == 1]
@@ -1052,8 +1074,36 @@ class AdvancedRookieProjector:
         for idx, row in rookies.iterrows():
             player_id = row['player_id']
 
-            draft_round = int(row.get('draft_round', 5)) if pd.notna(row.get('draft_round')) else 5
-            draft_pick = int(row.get('draft_pick', 150)) if pd.notna(row.get('draft_pick')) else 150
+            # Real draft capital, joined by get_all_players_for_training as of
+            # FEATURE_VERSION 34. Before that join existed these columns were
+            # simply absent, so the old `row.get('draft_round', 5)` /
+            # `row.get('draft_pick', 150)` defaults fired for EVERY rookie --
+            # the #1 overall pick and an undrafted free agent received
+            # identical draft capital, making five of the six rookie_*
+            # features constant. See GAPS.md, "The rookie feature set is
+            # NOMINAL".
+            #
+            # A missing row now means UNDRAFTED rather than "mid-5th-round".
+            # Encoding them past the last real pick keeps them ordered
+            # correctly against actual late-round picks instead of colliding
+            # with them.
+            # `is_undrafted` is read rather than re-derived from a null check:
+            # by the time this runs, add_utilization_scores() has already
+            # blanket-filled NaN->0, so "is the pick missing?" is unanswerable
+            # here. The database layer resolves it while the NULL still exists.
+            raw_round, raw_pick = row.get('draft_round'), row.get('draft_pick')
+            # Absent columns (a caller that bypassed the join) degrade to
+            # "undrafted" rather than raising: crashing on int(None) here would
+            # obscure the real problem, whereas degrading makes every rookie
+            # identical, which is precisely what
+            # _warn_if_rookie_features_degenerate is built to detect and name.
+            undrafted = (
+                bool(row.get('is_undrafted', 0))
+                or pd.isna(raw_round) or pd.isna(raw_pick)
+            )
+            draft_round = UNDRAFTED_ROUND if undrafted else int(raw_round)
+            draft_pick = UNDRAFTED_PICK if undrafted else int(raw_pick)
+            result.at[idx, 'is_undrafted'] = float(undrafted)
 
             profile = self.project_rookie(
                 player_id=player_id,
@@ -1084,8 +1134,50 @@ class AdvancedRookieProjector:
             result.at[idx, 'rookie_floor_ppg'] = profile.floor_ppg
 
         print(f"  Added: rookie_draft_value, rookie_opportunity_score, rookie_breakout_prob, rookie_bust_prob")
+        self._warn_if_rookie_features_degenerate(rookies.index, result)
 
         return result
+
+    @staticmethod
+    def _warn_if_rookie_features_degenerate(rookie_idx, result: pd.DataFrame) -> None:
+        """Warn when a rookie_* feature takes ONE value across all rookies.
+
+        This is the exact failure that hid for FEATURE_VERSIONs 22-33: the
+        draft columns were absent, every rookie fell through to the
+        round-5/pick-150 defaults, and five of six rookie_* features were
+        constant -- so a #1 overall pick and an undrafted free agent were
+        indistinguishable. Nothing failed; the columns existed and were the
+        right dtype and shape, they simply carried no information.
+
+        Shape and null checks cannot catch that, so variance is checked
+        directly. Warn rather than raise: a genuinely tiny rookie cohort (an
+        early season, a narrow position slice) can be legitimately constant.
+        """
+        if len(rookie_idx) < MIN_ROOKIES_FOR_VARIANCE_CHECK:
+            return
+        rookies = result.loc[rookie_idx]
+        degenerate = [
+            c for c in ('rookie_draft_value', 'rookie_breakout_prob', 'rookie_bust_prob',
+                        'rookie_ceiling_ppg', 'rookie_floor_ppg', 'combine_score')
+            if c in rookies.columns and rookies[c].nunique(dropna=True) <= 1
+        ]
+        if not degenerate:
+            return
+        # Deliberately print rather than warnings.warn: this module sets a
+        # process-wide `warnings.filterwarnings('ignore')` at import (line 30),
+        # so a warning here is swallowed before anyone sees it -- verified, the
+        # first version of this guard fired correctly when called directly and
+        # was invisible through the real pipeline. print() is the module's own
+        # reporting idiom and cannot be filtered away.
+        print(
+            f"\n  !! ROOKIE FEATURES ARE CONSTANT across {len(rookie_idx)} rookies: "
+            f"{degenerate}\n"
+            f"  !! They carry no signal in this run. Most likely the draft/combine "
+            f"columns are absent from the frame, so this module fell back to its "
+            f"defaults.\n"
+            f"  !! Check that get_all_players_for_training() still joins "
+            f"draft_picks_v2 and that draft_round/draft_pick survived to here.\n"
+        )
 
 
 # =============================================================================

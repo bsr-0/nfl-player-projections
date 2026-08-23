@@ -4165,13 +4165,15 @@ class FeatureEngineer:
             if "is_injured" in df.columns else 0
         )
 
-        # Rookie: first season or very few games in current season (improves utilization prediction)
-        if "games_count" in df.columns:
-            injury_cols["is_rookie"] = (df["games_count"] <= 8).astype(int)
-        else:
-            # Approximate: count rows per player up to this row (no full history in single df)
-            games_per_player = df.groupby("player_id").cumcount() + 1
-            injury_cols["is_rookie"] = (games_per_player <= 8).astype(int)
+        # `is_rookie` deliberately NOT set here. This function used to define it
+        # as `games_count <= 8`, which is not rookie status at all -- it labels
+        # any veteran who missed half a season as a rookie. It was harmless only
+        # because advanced_rookie_injury.py overwrites the column afterwards
+        # with the real definition (season == first_season). But that module was
+        # wrapped in a bare `except` until FEATURE_VERSION 34, so on any failure
+        # this wrong definition silently survived into training, attached to
+        # rookie_* priors that are 0.0 for veterans. One owner now:
+        # advanced_rookie_injury.py.
 
         df = df.assign(**injury_cols)
         return df

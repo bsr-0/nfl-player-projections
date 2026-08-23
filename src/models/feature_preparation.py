@@ -156,13 +156,22 @@ def add_engineered_features(data: pd.DataFrame, position: str = None) -> pd.Data
 
 
 def add_advanced_features(data: pd.DataFrame) -> pd.DataFrame:
-    """Add advanced rookie/injury/combine features with safe fallback."""
-    try:
-        from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features
-        return add_advanced_rookie_injury_features(data)
-    except Exception as e:
-        print(f"  Advanced rookie/injury features skipped: {e}")
-        return data
+    """Add advanced rookie/injury/combine features.
+
+    Raises rather than swallowing, as of FEATURE_VERSION 34. This used to
+    catch bare `Exception`, print a line, and return the frame unchanged --
+    which is how the entire module (rookie profiles, combine scores, injury
+    predictions) silently failed to run for every v22-v26 training run, on a
+    KeyError nobody saw. See GAPS.md, "The rookie feature set is NOMINAL".
+
+    Swallowing is no longer defensible: this module owns 9+ columns that are
+    declared in CAUSAL_FEATURES, and `is_rookie` itself. Downstream fold code
+    filters features to those actually present, so a silent skip does not
+    error -- it just trains a quietly weaker model on a quietly different
+    feature set, which is the worst available outcome.
+    """
+    from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features
+    return add_advanced_rookie_injury_features(data)
 
 
 def prepare_features(data: pd.DataFrame, position: str = None,

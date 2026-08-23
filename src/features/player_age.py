@@ -86,23 +86,29 @@ def age_from_birth_date(birth_date, season) -> float:
 def derive_age(df: pd.DataFrame, db_path: Optional[str] = None) -> pd.Series:
     """Age in years per row, best available source first.
 
-        1. an `age` column already on the frame
-        2. a `birth_date` column on the frame
-        3. `players.birth_date`, joined on player_id
+        1. a `birth_date` column on the frame
+        2. `players.birth_date`, joined on player_id
+        3. an `age` column already on the frame
         4. 22 + years_exp
         5. the position constant
 
     Steps 4-5 are the degraded paths the original bug lived in; the
     fallback rate is logged so they cannot be silent again.
+
+    Birth dates deliberately outrank an existing `age` column (they were
+    ranked below it until FEATURE_VERSION 34). `season_long_features`
+    populates `age` with a per-POSITION CONSTANT before this runs, and since
+    the birth-date fill only touches NaNs, consulting the column first meant
+    real birth dates were never read at all -- `age_curve` was effectively
+    constant even for the 98.9% of players whose birth date is known. A real
+    date always beats a placeholder; the column survives as a fallback for
+    rows with no birth date.
     """
     if "season" not in df.columns:
         raise ValueError("derive_age needs a 'season' column")
 
     season = pd.to_numeric(df["season"], errors="coerce")
     age = pd.Series(np.nan, index=df.index, dtype=float)
-
-    if "age" in df.columns:
-        age = pd.to_numeric(df["age"], errors="coerce")
 
     def _fill_from_birth_dates(current: pd.Series, births: pd.Series) -> pd.Series:
         missing = current.isna() & births.notna() & season.notna()
@@ -120,6 +126,11 @@ def derive_age(df: pd.DataFrame, db_path: Optional[str] = None) -> pd.Series:
 
     if age.isna().any() and "player_id" in df.columns:
         age = _fill_from_birth_dates(age, df["player_id"].map(birth_date_map(db_path)))
+
+    # Only now consult a pre-existing `age` column -- see the docstring for why
+    # it must not take priority over a real birth date.
+    if age.isna().any() and "age" in df.columns:
+        age = age.fillna(pd.to_numeric(df["age"], errors="coerce"))
 
     n_before_degraded = int(age.isna().sum())
 

@@ -10590,3 +10590,82 @@ walk-forward artifacts (`walk_forward_preseason_20260822_194322.json`, the
 `phase7_preseason_loyo/` CSVs) non-comparable to anything produced
 afterwards. Either re-run the 11-fold comparison after Phase A, or treat
 the two as separate lineages -- do NOT compare across the bump.
+
+## FEATURE_VERSION 34: real draft capital, real age, and loud rookie-degeneracy detection (2026-08-22)
+
+Implements Phases A and B of the preceding scope. Phase C (combine) turned
+out to be unnecessary -- see below.
+
+### Phase A -- the data is now joined
+
+  * `get_all_players_for_training()` joins `draft_picks_v2` (deduplicated:
+    2 player_ids appear twice and a bare LEFT JOIN would have silently
+    DOUBLED their training rows) and `draft_values` (clamped to pick 262,
+    since draft_picks_v2 reaches 336 from the old 8-12 round era), and adds
+    `p.birth_date` to the `players` join that already existed.
+  * `is_undrafted` / sentinel picks are resolved **in SQL**, not downstream.
+    Found the hard way: `add_utilization_scores()` blanket-fills NaN->0, so
+    leaving `draft_pick` NULL turned every undrafted player into **"pick 0"
+    -- the single most valuable selection in the draft**, the exact inverse
+    of the truth. Emitting no NULLs makes that unreachable.
+  * Undrafted encoded as round 8 / pick 400, past every real selection, with
+    `is_undrafted` as its own feature. ~39% of players who reach the league
+    are undrafted (Welker, Gates, Thielen, Ekeler); that is signal, not a
+    missing value.
+  * `player_age.derive_age()` now ranks birth dates ABOVE a pre-existing
+    `age` column. `season_long_features` populates `age` with a per-position
+    CONSTANT before it runs, and the birth-date fill only touched NaNs, so
+    real dates were never consulted -- `age_curve` was effectively constant
+    even for the 98.9% of players whose birth date is known.
+
+### Phase B -- the silent-failure paths are closed
+
+  * `feature_preparation.add_advanced_features` no longer catches bare
+    `Exception` and returns the frame unchanged. That is how the entire
+    module failed silently for v22-v26. It now raises.
+  * `feature_engineering._add_injury_features` no longer defines
+    `is_rookie` as `games_count <= 8` (which labels any veteran who missed
+    half a season a rookie). One owner: `advanced_rookie_injury.py`.
+  * `_warn_if_rookie_features_degenerate()` checks that rookie_* features
+    actually VARY across rookies. Shape and null checks cannot catch a
+    column that is present, correctly typed, and carries one value.
+  * `draft_picks_v2` and `draft_values` added to the schema, so a fresh DB
+    has the tables the training query depends on.
+
+### Verified working (RB, 2020+, 2,966 rookie rows)
+
+| Feature | Before | After |
+|---|---|---|
+| `rookie_draft_value` | constant | 143 distinct |
+| `combine_score` | constant 50.0 | 64 distinct, **0% defaulted** |
+| `age_curve` | near-constant | 322 distinct |
+| `rookie_ceiling_ppg` | constant | 8 distinct |
+| `is_undrafted` | did not exist | 22.4% of rookie rows |
+
+Directional sanity: undrafted `rookie_draft_value` 0.100 vs drafted 0.347;
+`draft_pick` 400 vs 117. Guard verified in BOTH directions -- fires on a
+simulated pre-v34 frame, silent on real v34 data. Suite: 447 passed.
+
+**Phase C (combine) is not needed.** A PFR->GSIS mapping is built at
+runtime (7,791 players), and combine_score is 100% real for 2020+ rookies.
+The earlier "no bridge exists" finding was about DB tables only.
+
+### Still open, found while implementing
+
+1. **`advanced_rookie_injury.py:30` sets `warnings.filterwarnings('ignore')`
+   at module scope** -- a process-wide suppression of every warning, from
+   any library, for the life of the process. It silently swallowed the
+   first version of the degeneracy guard, which is why that guard prints
+   instead. Not changed here: narrowing it could surface a flood of
+   previously-hidden warnings and deserves its own assessment.
+2. `injury_prob_ml` remains 100% missing.
+3. Phase D re-baseline is now due -- every prior rookie-feature importance
+   ranking was measured on constants and is void.
+
+### LINEAGE
+
+FEATURE_VERSION 33 -> 34. `data/cached_features.parquet` is invalidated,
+and today's 11-fold walk-forward artifacts
+(`walk_forward_preseason_20260822_194322.json`, `phase7_preseason_loyo/`)
+were produced at v33. Do NOT compare across the bump -- re-run the
+comparison at v34 or treat them as separate lineages.
