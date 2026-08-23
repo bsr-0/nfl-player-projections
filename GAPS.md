@@ -11315,11 +11315,44 @@ including that career-static columns (draft capital, combine, age) survive the
 blanking and that week 2 is NOT blanked -- blanking it would fabricate
 missingness rather than preserve it. Suite 494 passed, default OFF.
 
-### Pre-registered expectation
+### Which TERM is broken -- decomposed before pre-registering
 
-If the distribution mismatch is the binding constraint, Phase 7's rookie bias
-should move sharply toward zero and its rookie MAE toward Step 8A's ~40. If
-rookie MAE stays near 50, the mismatch was NOT the constraint and the real
-limit is that draft capital alone cannot predict rookie production -- also a
-legitimate finding. Recorded BEFORE running so the result cannot be
-rationalised afterwards.
+Phase 7 predicts `sum(weekly prediction) x availability`, so "rookie MAE is
+bad" does not say which half. Decomposed on the 2025 cold-start artifact:
+
+| | rookies | veterans |
+|---|---:|---:|
+| predicted per-week | **1.94** | 5.77 |
+| actual per-week | **4.93** | 6.07 |
+| pred / veteran ratio | 0.34 | -- |
+| actual / veteran ratio | **0.81** | -- |
+
+**The PRODUCTION term is the failure.** Rookies genuinely produce at 81% of
+the veteran per-week rate; the model predicts 34% -- a 2.4x under-prediction.
+1.94 pts/week sits near the floor of the model's range, which is exactly the
+signature of NaN routed to an unlearned default direction.
+
+**A second, independent defect partially hides it.** The exposure term
+OVER-estimates rookies: `estimate_availability_rate` falls back to
+`position_avg_fallback = 0.88` for anyone with no prior seasons, implying 15.0
+games, while rookies actually played 11.7. So production is 2.4x too low and
+exposure 1.28x too high, netting 2.2x too low.
+
+That matters for sequencing: **fixing exposure alone would make Phase 7's
+rookie totals WORSE**, because the over-estimate is currently offsetting the
+production shortfall. Recorded so a future reader does not "fix" the
+availability fallback in isolation and conclude the change regressed things.
+
+### Pre-registered expectation (sharpened)
+
+Judged on the PER-WEEK production term, which isolates the half under test:
+
+  * **Mismatch binding:** rookie per-week prediction rises from **1.94 toward
+    ~4-5**, season total from 29.0 toward ~50-64, bias from -34.8 toward ~-10.
+  * **Mismatch NOT binding:** per-week stays near 1.94. Then draft capital +
+    combine + destination-team context genuinely cannot predict rookie
+    production, and the ceiling is set by feature availability -- consistent
+    with this repo having **no college production stats at all**, only draft
+    position and combine measurables.
+
+Recorded BEFORE running so the result cannot be rationalised afterwards.
