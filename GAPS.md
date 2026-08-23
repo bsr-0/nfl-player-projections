@@ -10732,3 +10732,55 @@ Adding conference would need three things, in order:
    `(college, draft_season)`, not college alone.
 
 Neither college nor conference is currently in CAUSAL_FEATURES.
+
+## The 7 anonymous 2026 draft picks: identified (2026-08-22)
+
+### The GSIS ids do not exist to be recovered
+
+`nfl.import_draft_picks([2026])` has **no GSIS id for the same 7 picks**
+(33, 65, 73, 140, 165, 170, 254) that were null locally. This is not a local
+ingestion fault: GSIS ids are minted when a player first appears in official
+game data, and the 2026 season has not started. No local source could have
+supplied them either -- `combine_data_v2` has 0 rows for `draft_year=2026`,
+`weekly_rosters_v2` has 0 rows for `season=2026`, and `draft_picks_v2` has no
+name column.
+
+### What was actually fixed: identity
+
+Upstream carries `pfr_player_id` and `cfb_player_id`, and this repo already
+matches PFR data by id elsewhere. Both were backfilled onto `draft_picks_v2`
+via `scripts/backfill_draft_pick_identity.py`, matched on
+`(draft_season, draft_round, draft_pick)` -- verified unique in BOTH sources,
+so the update cannot fan out. Coverage: `pfr_player_id` 11,081/11,081
+(100%), `cfb_player_id` 8,194/11,081 (73.9%; only recent drafts carry a
+college id). Row count unchanged.
+
+The 7 are no longer anonymous -- `cfb_player_id` is effectively the name:
+
+| Rd | Pick | Pos | College | pfr_player_id | cfb_player_id |
+|---:|---:|---|---|---|---|
+| 2 | 33 | WR | Mississippi | StriDe01 | dezhaun-stribling-1 |
+| 3 | 65 | QB | Miami (FL) | BeckCa01 | carson-beck-1 |
+| 3 | 73 | TE | Georgia | DelpOs01 | oscar-delp-1 |
+| 4 | 140 | WR | Georgia | YounCo01 | colbie-young-1 |
+| 5 | 165 | RB | Penn St. | SingNi01 | nicholas-singleton-1 |
+| 5 | 170 | TE | Cincinnati | RoyeJo01 | joe-royer-1 |
+| 7 | 254 | WR | Oklahoma | BurkDe02 | deion-burks-1 |
+
+They can now be reconciled to a GSIS id once nflverse assigns one, and are
+matchable for a cold-start projection in the meantime.
+
+### A second, larger bug found in the same place
+
+`backfill_all_data.backfill_draft_picks` ended with
+`.dropna(subset=["player_id"])`, which **silently discarded every draft pick
+lacking a GSIS id** -- upstream has 12,927 rows against our 11,081, so
+**~1,846 real picks were being thrown away**. That is precisely the
+not-yet-debuted population a rookie projection needs most. The dropna is
+removed and `pfr_player_id`/`cfb_player_id` are now retained, so the next
+backfill run picks up the missing rows. They are NOT re-ingested here:
+re-running that script rewrites many tables and is out of scope for this fix.
+
+Neither `draft_picks` (legacy) nor the empty-string case was caught by that
+dropna either, which is why 27 empty-`player_id` rows survived while 1,846
+NaN ones did not -- the same column arriving in two different null forms.

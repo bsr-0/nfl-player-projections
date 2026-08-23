@@ -557,7 +557,11 @@ class DatabaseManager:
                     draft_season INTEGER,
                     draft_round INTEGER,
                     draft_pick INTEGER,
-                    draft_team TEXT
+                    draft_team TEXT,
+                    -- Alternate ids, kept because player_id (GSIS) is null for
+                    -- anyone who has not yet played an NFL snap.
+                    pfr_player_id TEXT,
+                    cfb_player_id TEXT
                 )
             """)
 

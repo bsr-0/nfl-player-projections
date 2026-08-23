@@ -122,10 +122,22 @@ def backfill_draft_picks(conn):
         "season": "draft_season", "round": "draft_round",
         "pick": "draft_pick", "team": "draft_team",
     })
+    # pfr_player_id / cfb_player_id are RETAINED, not dropped. A GSIS id is
+    # minted only once a player appears in official game data, so every pick
+    # who has not yet debuted arrives here with a null one -- 7 of the 80
+    # skill-position picks in the 2026 class. Without an alternate identifier
+    # those rows are anonymous (this table has no name column), and
+    # cfb_player_id is effectively the name ("dezhaun-stribling-1"). Keeping
+    # them means such a pick is identifiable now and can be reconciled to a
+    # GSIS id later. See scripts/backfill_draft_pick_identity.py.
     legacy_cols = ["player_id", "player_name", "position", "college",
-                   "draft_season", "draft_round", "draft_pick", "draft_team"]
+                   "draft_season", "draft_round", "draft_pick", "draft_team",
+                   "pfr_player_id", "cfb_player_id"]
     legacy_cols = [c for c in legacy_cols if c in legacy.columns]
-    legacy = legacy[legacy_cols].dropna(subset=["player_id"])
+    # Deliberately NOT dropna(subset=["player_id"]) -- that silently discarded
+    # ~1,846 real draft picks whose GSIS id is absent, which is precisely the
+    # not-yet-debuted population a rookie projection needs most.
+    legacy = legacy[legacy_cols]
     _save_df(legacy, "draft_picks_v2", conn)
     # Also backfill the original draft_picks table
     conn.execute("DELETE FROM draft_picks")
