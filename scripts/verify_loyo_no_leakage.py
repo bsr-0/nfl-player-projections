@@ -43,9 +43,23 @@ REAL_WEEK_COLS = (
 )
 
 
-def check_artifacts(paths: list[Path]) -> list[str]:
+def _first_nfl_season() -> dict:
+    import sqlite3
+    from config.settings import DB_PATH
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        rows = conn.execute(
+            "SELECT player_id, MIN(season) FROM player_weekly_stats GROUP BY player_id"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {r[0]: r[1] for r in rows}
+
+
+def check_artifacts(paths: list[Path], require_rookies: bool = False) -> list[str]:
     failures = []
-    print(f"{'season':>8}{'rows':>7}{'known-played':>14}{'synth share':>13}  positions")
+    debut = _first_nfl_season() if require_rookies else {}
+    print(f"{'season':>8}{'rows':>7}{'known-played':>14}{'synth share':>13}{'rookies':>9}  positions")
     for path in sorted(paths):
         df = pd.read_csv(path)
         seasons = sorted(df["season"].unique())
@@ -53,7 +67,19 @@ def check_artifacts(paths: list[Path]) -> list[str]:
         share = df["weeks_synthetic"].sum() / df["weeks_predicted"].sum()
         present = tuple(sorted(df["position"].unique()))
         label = seasons[0] if len(seasons) == 1 else seasons
-        print(f"{str(label):>8}{len(df):>7}{known:>14}{share:>13.4f}  {','.join(present)}")
+        n_rookie = (sum(1 for pid in df["player"] if debut.get(pid) == seasons[0])
+                    if require_rookies and len(seasons) == 1 else -1)
+        rk = str(n_rookie) if n_rookie >= 0 else "-"
+        print(f"{str(label):>8}{len(df):>7}{known:>14}{share:>13.4f}{rk:>9}  {','.join(present)}")
+
+        # A cold-start artifact that produced NO rookies is the inert-flag
+        # failure mode: every other invariant still passes, the file is the
+        # right shape, and the whole point of the run is silently absent.
+        if require_rookies and n_rookie == 0:
+            failures.append(
+                f"{path.name}: ZERO rookies. --cold-start produced no "
+                f"first-NFL-season players, so the run is preseason-valid but "
+                f"pointless -- the population it exists to add is missing.")
 
         if known != 0:
             failures.append(
@@ -98,6 +124,9 @@ def main() -> int:
     ap.add_argument("--extra", type=Path, nargs="*",
                     default=[Path("data/experiments/phase7_season_projection_2025_preseason.csv")],
                     help="Additional preseason artifacts to include (2025 was generated separately)")
+    ap.add_argument("--require-rookies", action="store_true",
+                    help="Also assert each artifact contains players whose FIRST "
+                         "NFL season is that artifact's season (cold-start runs).")
     ap.add_argument("--min-season", type=int, default=2015)
     ap.add_argument("--max-season", type=int, default=2025)
     args = ap.parse_args()
@@ -107,7 +136,7 @@ def main() -> int:
         print(f"No artifacts found in {args.dir}")
         return 1
 
-    failures = check_artifacts(paths)
+    failures = check_artifacts(paths, require_rookies=args.require_rookies)
     failures += check_training_windows(
         list(range(args.min_season, args.max_season + 1)), list(range(2006, args.max_season + 1)),
     )

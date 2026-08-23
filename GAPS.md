@@ -11169,3 +11169,89 @@ seasons for an identical comparison. **The rookie gap is large enough
 (14-18 MAE) that it will likely survive, but this is not yet a
 production-grade result.** The multi-season rookie-inclusive run is required
 before acting.
+
+## PRODUCTION-GRADE ROOKIE-INCLUSIVE RESULT: 11 folds, 2015-2025 (2026-08-23)
+
+Supersedes the single-fold 2025 version. `_assert_equal_n` passes across all
+**44 position-folds**; 4,632 player-seasons per arm, 18,528 predictions.
+Artifacts passed the leakage gate including the new rookie-presence assertion
+(95-124 rookies per season).
+
+### Pooled MAE still hides it
+
+| Arm | pooled MAE |
+|---|---:|
+| Step 8A | 44.92 |
+| Candidate | 45.66 |
+| Phase 7 | 47.30 |
+| Production | 50.17 |
+
+### Stratified by years_exp
+
+| bucket | n | Candidate | Step 8A | Phase 7 | Production |
+|---|---:|---:|---:|---:|---:|
+| **0 (rookie)** | 1012 | 41.0 | **40.3** | **50.3** | **53.3** |
+| 1-2 | 1292 | 45.4 | 45.6 | 45.6 | 48.1 |
+| 3-5 | 1306 | 47.7 | 45.9 | 45.7 | 49.4 |
+| 6+ | 1022 | 48.0 | 47.4 | 48.5 | 50.7 |
+
+Between-arm spread is **~13 MAE on rookies** against **1-3 on every veteran
+bucket**. The pooled ranking is essentially the rookie ranking, diluted.
+
+### Paired differences, bootstrapped BY SEASON (11 folds, 4000 resamples)
+
+| Pair | ROOKIES (n=1012) | VETERANS (n=3620) |
+|---|---|---|
+| Step 8A - Phase 7 | **-10.05** [-12.2, -8.1] **SEP** | -0.22 [-1.2, +0.7] noise |
+| Candidate - Phase 7 | **-9.32** [-11.4, -7.3] **SEP** | +0.52 [-0.3, +1.4] noise |
+| Step 8A - Production | **-13.04** [-14.7, -11.4] **SEP** | -3.07 [-3.7, -2.5] SEP |
+| Phase 7 - Production | **-2.99** [-4.9, -0.9] **SEP** | -2.85 [-4.0, -1.8] SEP |
+| Step 8A - Candidate | -0.73 [-1.6, +0.1] noise | -0.74 [-1.6, +0.3] noise |
+
+This is the season-level bootstrap the single-fold run could not do, so the
+intervals now contain the season-to-season variation that the earlier 11-fold
+history showed was the dominant term.
+
+### What is established
+
+1. **On veterans, Step 8A / Candidate / Phase 7 are indistinguishable.**
+   Every pairwise comparison among them sits inside noise. Only Production
+   separates, and it is worse. This reproduces the pre-rookie 11-fold result
+   exactly.
+2. **On rookies, the season-level arms beat the weekly arms by 9-13 MAE, and
+   it is separable at every pairing.** This is the largest reliable effect
+   found in the whole comparison.
+3. **Step 8A vs Candidate is inside noise in BOTH subgroups.** They are tied,
+   as they were before rookies were added. No basis for ranking them.
+4. **Production is separably worst in both subgroups.** Consistent with the
+   pre-rookie result, now confirmed on a rookie-inclusive population.
+
+### Phase 7's rookie failure is a training-distribution artifact
+
+Rookie bias by arm: Phase 7 **-41.7**, Production +3.1, Candidate -10.4,
+Step 8A -9.4. Phase 7 under-predicts rookies by ~42 points -- far worse than
+its MAE alone suggests, and the deficit persists into years 1-2 (**-18.2**)
+before disappearing by year 6+ (+2.4).
+
+Mechanism, unchanged from the single-fold diagnosis and now confirmed at
+scale: **Phase 7 never trains on a cold-start-shaped row.** Its training rows
+come from real weekly data where a rookie's week-8 row carries genuine
+in-season rolling features. At prediction time it receives a row with 44 of 70
+features NaN -- a shape absent from training -- and extrapolates badly.
+Candidate and Step 8A do not have this problem because
+`build_multiyear_season_pairs` emits cold-start rows for every target season
+including training ones.
+
+The follow-up is AUGMENTATION -- train Phase 7 on cold-start-shaped rows --
+not tuning. Deliberately not attempted: the mechanism is located, the fix is
+not validated, and the pre-registration discipline that killed Step 8A applies
+here too.
+
+### Production implication
+
+Phase 7 remains the only weekly-capable arm and ties the field on veterans,
+but it is **separably worse on rookies than both season-level arms**, and
+rookies are ~22% of the scored population. A draft board built on Phase 7
+today would be reliably poor on exactly the players a draft is most uncertain
+about. That is an argument for the augmentation experiment, not for switching
+architectures: Step 8A and Candidate cannot do weekly at all.
