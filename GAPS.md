@@ -10361,11 +10361,35 @@ This is the model currently generating `docs/data/projections_2026.json`.
 | WR | 46.0 | **45.0** | **45.0** | 47.6 |
 | TE | 31.4 | **30.8** | 31.3 | 33.7 |
 
-Phase 7 leads QB/RB; Step 8A and Candidate lead WR/TE. This is the same
-split the single 2025 fold showed, now reproduced over 11 seasons -- so it
-is structure, not noise, even though the overall totals tie. Consistent
-with pre-registration outcome D, which explicitly does not license building
-a hybrid before the mechanism is understood.
+CORRECTION (same day, before this entry was relied on): an earlier draft
+of this section claimed the QB/RB vs WR/TE split was "structure, not
+noise" because it reproduced the single 2025 fold. **That claim was wrong
+and is withdrawn.** Testing it properly -- paired per-fold differences
+against the nominal per-position winner -- shows NOTHING among the top
+three is separable at ANY position:
+
+| Pos | nominal best | runner-up gap | folds runner-up wins |
+|---|---|---|---|
+| QB | Phase 7 | +2.70 +/- 5.86 (Step 8A) | 3/11 |
+| RB | Phase 7 | +0.72 +/- 2.63 (Candidate) | 3/11 |
+| WR | Candidate | +0.01 +/- 1.66 (Step 8A) | 6/11 |
+| TE | Step 8A | +0.42 +/- 1.35 (Candidate) | 3/11 |
+
+Every gap is smaller than its own SD, and the "winner" takes only 5-8 of
+11 folds. With four arms and four positions a recurring pattern is
+expected by chance; reproducing it in one extra fold is weak evidence, and
+I treated it as strong. **Do not read the bolded per-position winners as
+findings.**
+
+Production's per-position disadvantage is separable at QB (+6.69 +/- 3.87),
+WR (+2.47 +/- 1.97) and TE (+2.87 +/- 1.75), but NOT at RB (+3.31 +/-
+3.72). The pooled overall gap remains separable (+2.60 +/- 0.94) because
+pooling across positions cuts the variance -- that headline finding stands,
+but it is an aggregate claim, not a per-position one.
+
+Pre-registration outcome D (split result -> evidence toward a hybrid) is
+therefore NOT triggered: there is no demonstrated split to build a hybrid
+around.
 
 ### An anomaly worth a future look, not acted on here
 
