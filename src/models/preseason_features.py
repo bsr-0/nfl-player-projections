@@ -41,6 +41,11 @@ import numpy as np
 import pandas as pd
 
 MIN_GAMES = 6
+# Undrafted encoding, matching advanced_rookie_injury so the two feature
+# sources cannot disagree about what "undrafted" looks like.
+UNDRAFTED_ROUND = 8
+UNDRAFTED_PICK = 400
+
 LOOKBACK_YEARS = 3
 
 
@@ -151,6 +156,81 @@ def _destination_team_profiles(history: pd.DataFrame) -> pd.DataFrame:
     return agg[["team", "position", "season", "dest_hist_tgt_pg", "dest_hist_carry_pg"]]
 
 
+def career_static_by_player(db) -> pd.DataFrame:
+    """Per-player attributes fixed before any NFL season: draft capital and
+    college pedigree.
+
+    Populated for EVERY player, not just rookies. They exist for everyone,
+    their predictive weight simply decays with experience, and a tree finds
+    that itself given `years_of_history`. Restricting them to rookies would
+    also make them unusable for the only arms that need them most.
+
+    Undrafted is carried as its own flag rather than a sentinel pick: ~39% of
+    players who reach the league are undrafted, and `draft_pick = 400` would
+    be read as an ordinal position rather than a distinct state.
+    """
+    from src.features.college_conference import conference_for, is_power5
+
+    with db._get_connection() as conn:
+        picks = pd.read_sql_query(
+            """SELECT player_id, draft_season, draft_round, college,
+                      MIN(draft_pick) AS draft_pick
+               FROM draft_picks_v2
+               WHERE player_id IS NOT NULL AND player_id != ''
+               GROUP BY player_id""",
+            conn,
+        )
+        if picks.empty:
+            return pd.DataFrame(columns=["player_id"])
+        values = pd.read_sql_query(
+            "SELECT pick, otc AS draft_pick_value FROM draft_values", conn,
+        )
+    picks["_clamped"] = picks["draft_pick"].clip(upper=262)
+    picks = picks.merge(values, left_on="_clamped", right_on="pick", how="left")
+    picks["is_power5"] = [
+        is_power5(conference_for(c, s))
+        for c, s in zip(picks["college"], picks["draft_season"])
+    ]
+    return picks[["player_id", "draft_season", "draft_round", "draft_pick",
+                  "draft_pick_value", "is_power5"]]
+
+
+def _cold_start_rows(curr_totals: pd.DataFrame, season_agg: pd.DataFrame,
+                     history: pd.DataFrame, target: int) -> pd.DataFrame:
+    """Rows for players whose FIRST NFL season is `target`.
+
+    They have no prior-season aggregate to anchor on, so the normal path drops
+    them entirely -- measured, 0 of 38 true 2025 WR rookies reached the
+    feature matrix. Their `_y1/_y2/_y3` lags are left NaN rather than zeroed:
+    a zero would assert the player posted 0 PPG last season, when in fact
+    there was no last season, and the Ridge arms' in-fold imputer plus
+    indicator columns can then represent that honestly.
+    """
+    # Prior existence is checked against RAW history, not season_agg. season_agg
+    # drops player-seasons under MIN_GAMES, so a player with 3 games last year
+    # has no aggregate row and would be misread as a rookie -- that alone
+    # inflated the 2025 WR cold-start population from 38 to 82. A thin prior
+    # season is not the same as no NFL career.
+    #
+    # Those sub-threshold players stay dropped, exactly as before this change.
+    # That is a real pre-existing population gap, but widening it here would
+    # silently mix two different fixes into one measurement.
+    prior_ids = set(history.loc[history["season"] < target, "player_id"])
+    rookie_ids = sorted(set(curr_totals["player_id"]) - prior_ids)
+    if not rookie_ids:
+        return pd.DataFrame()
+
+    meta = (history[(history["season"] == target)
+                    & (history["player_id"].isin(rookie_ids))]
+            [["player_id", "player_name", "position"]].drop_duplicates("player_id"))
+    out = meta.copy()
+    out["season"] = target - 1          # matches the anchor convention
+    out["target_season"] = target
+    out["years_exp"] = 0
+    out["is_cold_start"] = 1
+    return out
+
+
 def build_multiyear_season_pairs(db, seasons: List[int],
                                   lookback_years: int = LOOKBACK_YEARS) -> pd.DataFrame:
     """Build (multi-year features, next-season target) pairs with real
@@ -247,9 +327,42 @@ def build_multiyear_season_pairs(db, seasons: List[int],
         row["dest_hist_tgt_pg"] = row["dest_hist_tgt_pg"].fillna(0.0) * row["team_changed"]
         row["dest_hist_carry_pg"] = row["dest_hist_carry_pg"].fillna(0.0) * row["team_changed"]
 
+        row["is_cold_start"] = 0
+
+        # Rookies, appended AFTER the veteran path so every derived column
+        # above already exists on `row` and concat aligns them as NaN rather
+        # than silently inventing values.
+        cold = _cold_start_rows(curr_totals, season_agg, history, target)
+        if not cold.empty:
+            cold = cold.merge(dest_team, on="player_id", how="left")
+            cold["prior_team"] = pd.NA
+            cold["team_changed"] = 0      # never had a team to change from
+            cold = cold.merge(dest_prof, on=["dest_team", "position"], how="left")
+            # dest_hist_* are multiplied by team_changed on the veteran path,
+            # which would zero them here. For a rookie the destination team's
+            # positional usage is the whole point, so it is kept as-is.
+            cold["dest_hist_tgt_pg"] = cold["dest_hist_tgt_pg"].fillna(0.0)
+            cold["dest_hist_carry_pg"] = cold["dest_hist_carry_pg"].fillna(0.0)
+            cold["years_of_history"] = 0
+            row = pd.concat([row, cold], ignore_index=True)
+
         row = row.merge(curr_totals, on="player_id", how="inner")
         frames.append(row)
 
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+    out = pd.concat(frames, ignore_index=True)
+
+    # Career-static attributes for EVERY row, veteran and rookie alike.
+    static = career_static_by_player(db)
+    if not static.empty:
+        out = out.merge(static, on="player_id", how="left")
+        out["is_undrafted"] = out["draft_season"].isna().astype(int)
+        # Resolved here, where the NaN still exists to be detected: the
+        # downstream Ridge imputer would otherwise fill draft_pick and make an
+        # undrafted player indistinguishable from a real late-round selection.
+        out["draft_pick"] = out["draft_pick"].fillna(UNDRAFTED_PICK)
+        out["draft_round"] = out["draft_round"].fillna(UNDRAFTED_ROUND)
+        out["draft_pick_value"] = out["draft_pick_value"].fillna(0.0)
+        out["is_power5"] = out["is_power5"].fillna(0).astype(int)
+    return out

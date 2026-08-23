@@ -10973,3 +10973,78 @@ None raised. In every case the column existed, was int-typed, and carried a
 plausible mean. Six regression tests
 (`tests/test_is_rookie_definition.py`) now pin all three, including the
 frame-independence property and the deliberate late-debut behaviour.
+
+## Rookie integration, steps 1-2: Phase 7, Candidate and Step 8A (2026-08-23)
+
+### Step 1 -- cold-start rows
+
+**Phase 7** (`build_cold_start_week_row`): a player with no NFL history cannot
+be handled by `build_synthetic_week_row`, which works by carrying forward the
+most recent real game. TE 2025 verified: 116 rows / 0 rookies -> **135 rows /
+19 rookies**, the 19 additions all rookies, and 135 exactly matches the
+in-season TE population. Feature split verified per-feature: **26 populated,
+44 NaN, zero columns populated outside the allowlist.**
+
+The split is an explicit allowlist (`COLD_START_KEEP_FEATURES`), not a pattern
+match, because on a real rookie's row EVERY feature is populated -- their
+week-8 `target_share_pct_roll3_mean` is a genuine in-season value. "What looks
+filled" cannot classify them.
+
+**Candidate + Step 8A** (`_cold_start_rows` in `preseason_features.py`, one
+fix for both since they share a source): 2025 WR goes 155 rows / 0 rookies ->
+**216 rows / 61 rookies**, veterans unchanged at 155. The emitted set is a
+strict SUBSET of the 64 true rookies -- zero false positives. (Three true
+rookies remain out: their only rows are week > 18, a pre-existing filter.)
+
+A first attempt emitted **82** cold-start rows against 38 true rookies,
+because it tested prior existence against `season_agg`, which drops
+player-seasons under `MIN_GAMES=6`. A player with three games last year has no
+aggregate row and read as a rookie. Now tested against raw history: a thin
+prior season is not the same as no NFL career.
+
+### Career-static features now populate for EVERY row
+
+`build_multiyear_season_pairs` had **no draft capital, combine or college at
+all**, so cold-start rows there would have been nearly featureless.
+`career_static_by_player()` joins draft round/pick/pick-value/undrafted plus
+`is_power5` for veterans and rookies alike -- these exist for everyone, their
+weight simply decays with experience, and a tree finds that itself given
+`years_of_history`.
+
+Measured side-effect on veterans (2025 QB, matched population): candidate MAE
+**79.5 -> 73.7**, Step 8A **75.9 -> 73.1**. Draft capital helps the existing
+population, not only rookies.
+
+### Step 2 -- Ridge imputation, in-fold
+
+`_fit_candidate` used an unconditional `.fillna(0.0)`, asserting that a player
+with no prior season posted exactly zero PPG -- indistinguishable from a
+genuinely unproductive veteran, since zero is a real value in those columns.
+
+Replaced with median-within-position (the function is already per-position),
+fitted on the TRAINING fold only and carried to predict, plus a 0/1 `__isna`
+indicator for any feature missing on >=1% of rows. Fitting the imputer on the
+combined frame would leak test-fold distribution -- quieter than leaking the
+target, but a leak. WR: 62 features -> 111 columns via 49 indicators, no NaN
+surviving.
+
+### First rookie-subgroup result, and why stratification was the right call
+
+Candidate arm, 2025 WR, trained on <2025:
+
+| Subgroup | n | predicted mean | actual mean |
+|---|---:|---:|---:|
+| Rookies | 61 | 50.4 | **32.0** |
+| Veterans | 155 | 97.1 | 90.1 |
+
+Rookies are over-predicted by **57%** against 8% for veterans. Pooled, that
+is invisible. This is exactly the failure mode a global metric hides.
+
+### Still open
+
+**Production (`PreseasonProjector`) has no cold-start path.** Its
+`_build_season_pairs` uses `prior_df.merge(curr_df, on="player_id")` -- an
+INNER merge -- so rookies never form a row. Until that changes, the harness's
+population intersection strips rookies back out of the comparison, and the
+work above is invisible end-to-end. That is the next step, and it touches the
+live production model rather than experiment code.

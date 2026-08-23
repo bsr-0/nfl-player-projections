@@ -64,23 +64,61 @@ CANDIDATE_EXCLUDE = {
 }
 
 
+# Features whose NaN is INFORMATIVE rather than incidental get a companion
+# 0/1 indicator, so Ridge can separate "no prior season" from "an average
+# prior season". Without it, imputation silently tells the model a rookie was
+# a median veteran.
+_MIN_MISSING_FOR_INDICATOR = 0.01
+
+
 def _fit_candidate(pos_df: pd.DataFrame, alpha: float):
+    """Ridge cannot consume NaN, so rookies need explicit imputation.
+
+    Median WITHIN position (this function is already called per position),
+    fitted on the TRAINING fold only and carried to predict -- fitting on the
+    combined frame would leak test-fold distribution into the imputer, a
+    quieter leak than leaking the target but a leak nonetheless.
+
+    Replaces an unconditional `.fillna(0.0)`, which asserted that a player
+    with no prior season posted exactly zero PPG. Zero is a real value in
+    these columns, so that was indistinguishable from a genuinely unproductive
+    veteran.
+    """
     features = [
         c for c in pos_df.columns
         if c not in CANDIDATE_EXCLUDE and pos_df[c].dtype.kind in "fi"
     ]
-    X = pos_df[features].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    X = pos_df[features].replace([np.inf, -np.inf], np.nan)
+    miss_rate = X.isna().mean()
+    indicators = sorted(miss_rate[miss_rate >= _MIN_MISSING_FOR_INDICATOR].index)
+    # An all-NaN column has no median; fall back to 0 so Ridge still fits, and
+    # its indicator carries whatever signal remains.
+    medians = X.median().fillna(0.0)
+    imputer = {"medians": medians, "indicators": indicators}
+
+    Xi = _apply_candidate_imputer(X, imputer)
     y = pos_df["season_total"].to_numpy(dtype=float)
     scaler = StandardScaler()
-    Xs = scaler.fit_transform(X)
+    Xs = scaler.fit_transform(Xi)
     model = Ridge(alpha=alpha)
     model.fit(Xs, y)
-    return model, scaler, features
+    return model, scaler, features, imputer
 
 
-def _predict_candidate(model, scaler, features, pos_df: pd.DataFrame) -> np.ndarray:
-    X = pos_df[features].replace([np.inf, -np.inf], np.nan).fillna(0.0)
-    return model.predict(scaler.transform(X))
+def _apply_candidate_imputer(X: pd.DataFrame, imputer: dict) -> pd.DataFrame:
+    out = X.copy()
+    for col in imputer["indicators"]:
+        out[f"{col}__isna"] = out[col].isna().astype(float)
+    out = out.fillna(imputer["medians"])
+    # Any column that was entirely NaN in TRAIN but present in test (or vice
+    # versa) would otherwise survive as NaN and crash Ridge at predict time.
+    return out.fillna(0.0)
+
+
+def _predict_candidate(model, scaler, features, imputer, pos_df: pd.DataFrame) -> np.ndarray:
+    X = pos_df[features].replace([np.inf, -np.inf], np.nan)
+    Xi = _apply_candidate_imputer(X, imputer)
+    return model.predict(scaler.transform(Xi))
 
 
 def _metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
@@ -280,8 +318,9 @@ def main():
 
             # --- Candidate ---
             if len(pos_train_c) >= MIN_SAMPLES and not pos_test_c.empty:
-                model, scaler, features = _fit_candidate(pos_train_c, RIDGE_ALPHA_BY_POSITION[pos])
-                preds = _predict_candidate(model, scaler, features, pos_test_c)
+                model, scaler, features, imputer = _fit_candidate(
+                    pos_train_c, RIDGE_ALPHA_BY_POSITION[pos])
+                preds = _predict_candidate(model, scaler, features, imputer, pos_test_c)
                 actual = pos_test_c["season_total"].to_numpy(dtype=float)
                 m = _metrics(actual, preds)
                 m["test_season"] = test_season
