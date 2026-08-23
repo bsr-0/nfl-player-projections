@@ -201,11 +201,11 @@ def _step8_arm(train_pairs, test_pairs, panel, test_season, pos):
     train = attach_conditional_target(train_pairs, panel).dropna(subset=[TARGET])
     test = attach_conditional_target(test_pairs, panel).dropna(subset=[TARGET])
     if len(train) < MIN_SAMPLES or test.empty:
-        return None, None
+        return None, None, None
 
     feats = [c for c in feature_columns(train) if c in test.columns]
     if not feats:
-        return None, None
+        return None, None, None
 
     # Production half.
     model = fit_conditional_production(train, feats)
@@ -217,12 +217,16 @@ def _step8_arm(train_pairs, test_pairs, panel, test_season, pos):
 
     season_pred = (games_pred * rate_pred).to_numpy(dtype=float)
     actual = test["ppr"].to_numpy(dtype=float)
+    preds_out = pd.DataFrame({
+        "player_id": test["player_id"].to_numpy(),
+        "pred": season_pred, "actual": actual,
+    })
     m = _metrics(actual, season_pred)
     m["test_season"] = test_season
     decomp = decompose_errors(games_pred, test["games_played"],
                               rate_pred, test[TARGET], test["ppr"])
     decomp.update({"position": pos, "test_season": test_season, "n": len(test)})
-    return m, decomp
+    return m, decomp, preds_out
 
 
 def main():
@@ -288,6 +292,16 @@ def main():
     VARIANTS = ("production", "candidate", "phase7", "step8")
     fold_records = {v: {p: [] for p in POSITIONS} for v in VARIANTS}
     decomp_records = []
+    # Per-player predictions, so results can be stratified by experience.
+    # Rookies are ~16-21% of rows: an arm can be badly wrong on them and leave
+    # no trace in a pooled MAE.
+    pred_records: list = []
+
+    def _record(arm, pos, season, ids, preds, actuals):
+        for pid, pr, ac in zip(ids, preds, actuals):
+            pred_records.append({"arm": arm, "position": pos, "season": season,
+                                 "player_id": pid, "pred": float(pr),
+                                 "actual": float(ac)})
 
     print("\nLoading contract-applied player-season panel for the Step 8 arm...")
     from src.models.single_week_ppr.season_availability import load_player_seasons
@@ -350,6 +364,8 @@ def main():
                 m = _metrics(actual, preds)
                 m["test_season"] = test_season
                 fold_records["production"][pos].append(m)
+                _record("production", pos, test_season,
+                        pos_test_p["player_id"].to_numpy(), preds, actual)
                 print(f"  production {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
             # --- Candidate ---
@@ -361,6 +377,8 @@ def main():
                 m = _metrics(actual, preds)
                 m["test_season"] = test_season
                 fold_records["candidate"][pos].append(m)
+                _record("candidate", pos, test_season,
+                        pos_test_c["player_id"].to_numpy(), preds, actual)
                 print(f"  candidate  {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
             # --- Step 8 (games x PPR/game) ---
@@ -369,10 +387,12 @@ def main():
             if args.intersect_populations and not pos_test_s8.empty:
                 pos_test_s8 = pos_test_s8[pos_test_s8["player_id"].isin(common_ids)]
             if not pos_train_s8.empty and not pos_test_s8.empty:
-                m8, d8 = _step8_arm(pos_train_s8, pos_test_s8, step8_panel, test_season, pos)
+                m8, d8, p8 = _step8_arm(pos_train_s8, pos_test_s8, step8_panel, test_season, pos)
                 if m8 is not None:
                     fold_records["step8"][pos].append(m8)
                     decomp_records.append(d8)
+                    _record("step8", pos, test_season, p8["player_id"].to_numpy(),
+                            p8["pred"].to_numpy(), p8["actual"].to_numpy())
                     print(f"  step8      {pos}: n={m8['n']} R2={m8['r2']} MAE={m8['mae']}"
                           f"  [games MAE={d8['games_mae']:.2f} rate MAE={d8['rate_mae']:.2f}"
                           f"  contrib g/r/i={d8['contrib_games']:+.1f}/"
@@ -385,9 +405,17 @@ def main():
                 m = _metrics(actual, preds)
                 m["test_season"] = test_season
                 fold_records["phase7"][pos].append(m)
+                _record("phase7", pos, test_season,
+                        pos_test_p7["player"].to_numpy(), preds, actual)
                 print(f"  phase7     {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
     _assert_equal_n(fold_records, VARIANTS, POSITIONS)
+
+    if pred_records:
+        _ppath = Path("data/experiments/walk_forward_player_predictions.csv")
+        _ppath.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(pred_records).to_csv(_ppath, index=False)
+        print(f"Wrote {len(pred_records)} per-player predictions to {_ppath}")
 
     if decomp_records:
         import pandas as _pd

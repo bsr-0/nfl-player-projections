@@ -11096,3 +11096,76 @@ The harness already printed those counts. Nobody diffs log lines, which is
 exactly why this is an assertion rather than a warning. Verified both ways:
 silent on matched populations, raising with a per-arm breakdown on a
 mismatch.
+
+## FIRST ROOKIE-INCLUSIVE COMPARISON (2025, single fold) — 2026-08-23
+
+All four arms now form rookie rows, and `_assert_equal_n` passes: **447
+players per arm, identical populations across 4 position-folds** (was 352
+before cold-start; QB 41->51, RB 69->97, WR 146->184, TE 96->115).
+
+### Pooled MAE hides the entire finding
+
+| Arm | pooled MAE |
+|---|---:|
+| Step 8A | 41.34 |
+| Candidate | 42.68 |
+| Phase 7 | 45.49 |
+| Production | 47.90 |
+
+### Stratified by years_exp, the picture inverts
+
+| bucket | n | Candidate | Step 8A | Phase 7 | Production |
+|---|---:|---:|---:|---:|---:|
+| **0 (rookie)** | 95 | 38.4 | **37.7** | **52.1** | **55.5** |
+| 1-2 | 117 | 43.7 | 42.0 | 41.8 | 44.0 |
+| 3-5 | 117 | 45.1 | 41.9 | 43.3 | 46.3 |
+| 6+ | 118 | 42.7 | 43.0 | 45.9 | 47.2 |
+
+Between-arm spread is **~18 MAE on rookies** against ~2-4 on every veteran
+bucket. Rookies also have the LOWEST actual mean (63.8 vs 94-115), so the
+relative error is worse still.
+
+### Paired per-player differences, bootstrapped
+
+| Pair | ROOKIES (n=95) | VETERANS (n=352) |
+|---|---|---|
+| Step 8A - Phase 7 | **-14.43** [-22.4, -6.7] **SEPARABLE** | -1.37 [-4.2, +1.5] noise |
+| Candidate - Phase 7 | **-13.76** [-20.8, -6.5] **SEPARABLE** | +0.14 [-3.1, +3.6] noise |
+| Step 8A - Production | **-17.75** [-23.1, -12.4] **SEPARABLE** | -3.53 [-6.3, -1.0] SEPARABLE |
+| Step 8A - Candidate | -0.67 [-3.9, +2.5] noise | -1.52 [-4.0, +1.0] noise |
+
+**On veterans the arms are indistinguishable** (only Production separates,
+confirming the 11-fold result). **On rookies the season-level arms beat the
+weekly ones by 14-18 MAE, well outside the noise band.** Step 8A vs Candidate
+is inside noise in BOTH subgroups -- genuinely tied.
+
+### Why Phase 7 is bad at rookies: its cold-start rows are OUT-OF-DISTRIBUTION
+
+Phase 7 has all nine rookie features and still posts rookie MAE 52.1 with bias
+**-34.8** -- it predicts ~29 against an actual mean of 63.8, massively
+under-predicting.
+
+The mechanism is structural, not a tuning problem. **Phase 7 never trains on a
+cold-start-shaped row.** Its training rows come from `run_fold`'s real weekly
+data, where a rookie's week-8 row carries genuine in-season rolling features.
+At prediction time it is handed a row with 44 of 70 features NaN -- a shape it
+has never seen -- and extrapolates badly.
+
+Candidate and Step 8A do not have this problem because
+`build_multiyear_season_pairs` emits cold-start rows for EVERY target season,
+including training ones. Their models have seen NaN-history rows and learned a
+sensible default direction for them.
+
+The obvious follow-up is to train Phase 7 on cold-start-shaped rows
+(augmentation), NOT to tune it. Recorded and deliberately not acted on:
+locating a mechanism is not the same as validating a fix.
+
+### CAVEAT: single fold, so the bootstrap is over PLAYERS, not seasons
+
+The intervals above resample players within 2025 only. They therefore contain
+no season-to-season variation, and the 11-fold history says that variation is
+the dominant term -- the Phase 7 vs Step 8A gap moved 22.4-30.0 MAE across
+seasons for an identical comparison. **The rookie gap is large enough
+(14-18 MAE) that it will likely survive, but this is not yet a
+production-grade result.** The multi-season rookie-inclusive run is required
+before acting.
