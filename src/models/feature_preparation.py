@@ -190,7 +190,20 @@ def prepare_features(data: pd.DataFrame, position: str = None,
     data = add_utilization_scores(data, weights=utilization_weights)
     print("Engineering features...")
     data = add_engineered_features(data, position=position)
-    return add_advanced_features(data)
+    data = add_advanced_features(data)
+
+    # Restore debut-week history NaN LAST, after every filler in the pipeline.
+    # There are at least five: the per-column fillna at creation sites, the
+    # blanket numeric fill in utilization_score, _impute_missing's median, the
+    # position-specific block, and advanced_rookie_injury -- which was measured
+    # wiping 959 restored NaNs straight back to 0. Restoring inside feature
+    # engineering is therefore not sufficient; only the end of the pipeline is
+    # past all of them.
+    from config.settings import PRESERVE_HISTORY_MISSINGNESS
+    if PRESERVE_HISTORY_MISSINGNESS:
+        from src.features.feature_engineering import FeatureEngineer
+        data = FeatureEngineer()._restore_debut_history_nan(data)
+    return data
 
 
 def _infer_bounded_columns(df: pd.DataFrame) -> List[str]:

@@ -11255,3 +11255,71 @@ rookies are ~22% of the scored population. A draft board built on Phase 7
 today would be reliably poor on exactly the players a draft is most uncertain
 about. That is an argument for the augmentation experiment, not for switching
 architectures: Step 8A and Candidate cannot do weekly at all.
+
+## Option A built: PRESERVE_HISTORY_MISSINGNESS (default OFF) — 2026-08-23
+
+### The diagnosis was wrong, then corrected
+
+First stated as "Phase 7 never trains on cold-start-shaped rows". That is the
+symptom. The cause: **a rookie's first-week row IS genuinely NaN, and the
+pipeline fills it.** Consequently **43 of the 46 columns a cold-start row
+blanks were NEVER NaN in training**, so LightGBM had no learned
+missing-direction for them and routed real NaN arbitrarily -- the -41.7 bias.
+
+Also corrected: rolling features group by `player_id` ALONE, not
+`(player_id, season)`, so a veteran's week 1 takes `shift(1)` from the prior
+season's week 17 -- deliberate cross-season continuity. Only a player's
+**first-ever NFL week** is genuinely undefined: 959 WR rows (2.4%), not the
+8.9% first-guessed.
+
+### Why zero-filling would be worse than the median
+
+Proposed as an alternative. Rejected on measurement: **0 is an occupied value**
+in these columns -- 59.4% of veteran `snap_share_y1` sits below 0.5 with a
+minimum of exactly 0.00, and `ppg_y1` reaches -0.01. A rookie set to 0 would
+land on top of marginal, barely-playing veterans and become structurally
+indistinguishable from them. "Trees can handle it" is the argument FOR NaN:
+LightGBM's missing-direction learning only engages on NaN; hand it 0 and there
+is nothing to handle.
+
+Confirmed Step 8A already does exactly this -- its rookie lag **NaN rate is
+1.000 and zero rate 0.000**, with veterans at 24.8% NaN, which is why it has a
+learned direction and posts rookie MAE 40.3.
+
+### FIVE fillers, found by bisection
+
+The restore had to move twice before it held:
+
+1. per-column `.fillna(0)` at creation sites
+2. the blanket numeric fill in `utilization_score`
+3. `_impute_missing`'s position-aware median
+4. **the position-specific block, which runs AFTER (3)** -- caught 11 columns
+   including `target_share_pct_roll3_mean` and `wopr_roll3`
+5. **`advanced_rookie_injury`, measured wiping 959 restored NaNs back to 0**
+
+So the restore runs ONCE at the end of `prepare_features`, past all of them.
+Exempting per-site was abandoned as both error-prone and fragile: a rolling
+feature added later would silently arrive pre-filled.
+
+### Verified
+
+| | flag OFF | flag ON |
+|---|---:|---:|
+| cold-start cols never NaN in training | 43 | **10** |
+| ...of those, HISTORY columns | 33 | **0** |
+| training rows carrying NaN history | 959 | **4,063** |
+
+The 10 remaining are correctly out of scope: weather, Vegas, contract, depth
+chart, `current_qb_epa_per_att`. Seven regression tests pin the behaviour,
+including that career-static columns (draft capital, combine, age) survive the
+blanking and that week 2 is NOT blanked -- blanking it would fabricate
+missingness rather than preserve it. Suite 494 passed, default OFF.
+
+### Pre-registered expectation
+
+If the distribution mismatch is the binding constraint, Phase 7's rookie bias
+should move sharply toward zero and its rookie MAE toward Step 8A's ~40. If
+rookie MAE stays near 50, the mismatch was NOT the constraint and the real
+limit is that draft capital alone cannot predict rookie production -- also a
+legitimate finding. Recorded BEFORE running so the result cannot be
+rationalised afterwards.

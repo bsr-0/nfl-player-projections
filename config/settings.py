@@ -739,6 +739,15 @@ FEATURE_VERSION = "35"  # v35: is_power5 from an era-aware college->conference m
 # filled, so this is staged as an attributable arm for the pending v34/v35
 # re-baseline rather than a silent default flip. See
 # src/features/utilization_score.py PERSONNEL_MISSINGNESS_COLS and GAPS.md.
+# Preserve NaN in rolling/lag HISTORY features instead of median-filling them.
+# A player-season's first week has no preceding weeks, so those features are
+# genuinely undefined (8.9% of training rows). Filling them teaches the model
+# that a rookie's week 1 looks like an average veteran, and leaves LightGBM
+# with no missing-direction to use when a real cold-start row arrives.
+# OFF by default: this is the third arm of the pending re-baseline, not a
+# silent default flip. See GAPS.md and feature_engineering.history_missingness_cols.
+PRESERVE_HISTORY_MISSINGNESS = False
+
 PRESERVE_PERSONNEL_MISSINGNESS = False
 
 FEATURE_VERSION_FILENAME = "feature_version.txt"

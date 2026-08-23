@@ -18,7 +18,9 @@ Features with >5%% missing are still used but may reduce model reliability.
 import pandas as pd
 import numpy as np
 import os
+import re
 import warnings
+from functools import lru_cache
 from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
 
@@ -80,6 +82,50 @@ _STRUCTURALLY_MISSING = frozenset({
 })
 
 
+# NaN in these means "no prior data to roll over", not an incidental gap. A
+# player-season's FIRST week has no preceding weeks, so every rolling/lag
+# feature is genuinely undefined there -- 8.9% of training rows, and 100% of a
+# rookie's cold-start row.
+#
+# Median-filling them tells the model that a rookie's week 1 looks like an
+# average veteran, which is what it currently learns. The cost shows up at
+# serve time: 47 of the 50 features a cold-start row blanks are NEVER NaN in
+# training, so LightGBM has no learned missing-direction for them and routes
+# them arbitrarily. Phase 7's rookie bias is -41.7 against Step 8A's -9.4, and
+# Step 8A differs precisely by leaving its lags NaN (measured: rookie lag NaN
+# rate 1.000, zero rate 0.000) so LightGBM learns a real direction.
+#
+# Zero-filling instead of NaN would be WORSE than the median: 0 is an occupied
+# value in these columns (59.4% of veteran snap_share_y1 sits below 0.5, min
+# exactly 0.00), so a rookie would land on top of marginal veterans and become
+# structurally indistinguishable from them.
+_HISTORY_MISSINGNESS_PATTERN = re.compile(
+    r"(_roll\d+_mean|_roll\d+$|_lag_?\d*$|_accel$|_season_prior$|_prior$"
+    r"|^prev_season|^bayesian_prior|^availability_|^career_year|^fp_late6"
+    r"|^fp_volatility|^wopr_roll)"
+)
+
+
+@lru_cache(maxsize=1)
+def history_missingness_cols() -> frozenset:
+    """Rolling/lag history features across every position's CAUSAL_FEATURES.
+
+    Derived from the declared feature set rather than hand-listed, so adding a
+    rolling feature cannot silently escape the exemption. Career-static columns
+    are excluded explicitly -- their NaN means something different.
+    """
+    from config.settings import CAUSAL_FEATURES
+    from src.models.single_week_ppr.season_projection import COLD_START_KEEP_FEATURES
+    from src.utils.leakage import filter_feature_columns
+
+    cols = set()
+    for pos in ("QB", "RB", "WR", "TE"):
+        for c in filter_feature_columns(CAUSAL_FEATURES.get(pos, [])):
+            if _HISTORY_MISSINGNESS_PATTERN.search(c) and c not in COLD_START_KEEP_FEATURES:
+                cols.add(c)
+    return frozenset(cols)
+
+
 def _structurally_missing_cols() -> frozenset:
     """Columns `_impute_missing` must leave alone, resolved at CALL time.
 
@@ -94,15 +140,20 @@ def _structurally_missing_cols() -> frozenset:
     from config.settings import PRESERVE_PERSONNEL_MISSINGNESS
     from src.features.utilization_score import PERSONNEL_MISSINGNESS_COLS
 
+    from config.settings import PRESERVE_HISTORY_MISSINGNESS
+
+    out = _STRUCTURALLY_MISSING
+    if PRESERVE_HISTORY_MISSINGNESS:
+        out = out | history_missingness_cols()
     if not PRESERVE_PERSONNEL_MISSINGNESS:
-        return _STRUCTURALLY_MISSING
+        return out
     # The roll3 DERIVATIVES must be exempted too, not just the base columns.
     # The model never sees team_pct_12_personnel; it sees
     # team_pct_12_personnel_roll3_mean, which is a different column name and so
     # was still median-filled -- the reason the flag read inert a second time.
     # (team_motion_rate survives today only because it happens to BE the
     # feature name rather than a base column behind one.)
-    return _STRUCTURALLY_MISSING | PERSONNEL_MISSINGNESS_COLS | frozenset(
+    return out | PERSONNEL_MISSINGNESS_COLS | frozenset(
         f"{c}_roll3_mean" for c in PERSONNEL_MISSINGNESS_COLS
     )
 
@@ -448,6 +499,9 @@ class FeatureEngineer:
 
         # Final imputation: no NaN/inf in numeric columns so pipelines are robust
         df = self._impute_missing(df)
+        from config.settings import PRESERVE_HISTORY_MISSINGNESS
+        if PRESERVE_HISTORY_MISSINGNESS:
+            df = self._restore_debut_history_nan(df)
         self.last_imputation_report = {
             "rates": policy_result.rates,
             "warn_features": policy_result.flagged_warn,
@@ -553,6 +607,9 @@ class FeatureEngineer:
 
         # Impute NaN/inf
         df = self._impute_missing(df)
+        from config.settings import PRESERVE_HISTORY_MISSINGNESS
+        if PRESERVE_HISTORY_MISSINGNESS:
+            df = self._restore_debut_history_nan(df)
 
         self._update_feature_columns(df)
         return df
@@ -4345,6 +4402,41 @@ class FeatureEngineer:
 
         return df
 
+    def _restore_debut_history_nan(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Re-blank history features on a player's FIRST-EVER NFL week.
+
+        Runs LAST, after every fill. That is deliberate: the fills that destroy
+        this missingness are scattered across many creation sites -- some are
+        `.fillna(0)` at the point the column is built, some are the blanket
+        numeric fill in utilization_score, some are `_impute_missing`'s median.
+        Exempting each one individually is both error-prone and fragile, since
+        a new rolling feature added later would silently arrive pre-filled.
+        Restoring once at the end is invariant to how many fillers exist.
+
+        Only the player's first NFL game is blanked, and only when that game is
+        actually in the frame (`season == first_nfl_season`). Week 2 genuinely
+        has one prior week, so blanking it would fabricate missingness rather
+        than preserve it. That makes these rows an exact shape-match for a
+        cold-start row, which is the point: without them LightGBM has no NaN in
+        these columns at training time and no learned direction to route a real
+        rookie into.
+        """
+        cols = [c for c in history_missingness_cols() if c in df.columns]
+        if not cols or "player_id" not in df.columns:
+            return df
+        if "first_nfl_season" not in df.columns or "week" not in df.columns:
+            return df
+        season = pd.to_numeric(df["season"], errors="coerce")
+        first_season = pd.to_numeric(df["first_nfl_season"], errors="coerce")
+        debut_season = season == first_season
+        if not debut_season.any():
+            return df
+        first_week = df.loc[debut_season].groupby("player_id")["week"].transform("min")
+        is_debut = pd.Series(False, index=df.index)
+        is_debut.loc[debut_season] = df.loc[debut_season, "week"] == first_week
+        df.loc[is_debut, cols] = np.nan
+        return df
+
     def _impute_missing(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Replace inf with nan and impute NaN in numeric columns so model never sees missing/inf.
@@ -4554,6 +4646,14 @@ class PositionFeatureEngineer(FeatureEngineer):
         elif self.position == "TE":
             df = self._create_te_features(df)
         
+        # Position-specific rolling features (target_share_pct_roll3_mean,
+        # wopr_roll3, the NGS rolls) are built AFTER the base pipeline's
+        # _impute_missing, so the restore there cannot reach them. Repeat it
+        # here or they stay silently filled -- 11 of the 46 columns a
+        # cold-start row blanks were exactly this case.
+        from config.settings import PRESERVE_HISTORY_MISSINGNESS
+        if PRESERVE_HISTORY_MISSINGNESS:
+            df = self._restore_debut_history_nan(df)
         return df
     
     def _create_qb_features(self, df: pd.DataFrame) -> pd.DataFrame:
