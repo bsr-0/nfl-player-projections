@@ -27,6 +27,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+from .availability import POSITION_AVG_FALLBACK
+
 logger = logging.getLogger(__name__)
 
 REGULAR_SEASON_MAX_WEEK = 18
@@ -205,13 +207,15 @@ def possible_weeks_for_player(
 
 
 def estimate_availability_rate(player_id: str, position: str, season: int, db,
-                                position_avg_fallback: float = 0.88) -> float:
+                                position_avg_fallback: float = POSITION_AVG_FALLBACK) -> float:
     """Non-circular P(plays)-per-week estimate: the player's own games-played
     rate in seasons STRICTLY BEFORE `season` (leakage-safe — never uses the
     season being evaluated, since that would leak exactly what's being
     forecast). Falls back to a fixed position-average prior for players with
     no prior-season history (rookies) — same "be honest, don't force a
-    number" spirit as tiers.py's 'rookie' tier fallback.
+    number" spirit as tiers.py's 'rookie' tier fallback. The fallback value
+    is shared with `availability.py` rather than duplicated, so the two can
+    never drift apart when either is tuned.
 
     Deliberately not built on GamesPlayedProjector (season_long_features.py)
     — that hardcodes a 17-game season regardless of actual length (18 weeks
