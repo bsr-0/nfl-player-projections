@@ -11391,3 +11391,95 @@ possible by construction. Production has no draft-capital features at all
 (`BASE_FEATURES_COMMON` only has age/years_exp/rookie_or_low_experience) --
 that's a real capability gap, not a wiring bug, consistent with Production's
 worst-of-the-four rookie bias already documented above.
+
+
+## The rookie availability fallback assumes 0.88, rookies realize 0.584
+## (measured 2026-08-25; value deliberately left unchanged for now)
+
+Audited two things that looked suspicious in the completed history-NaN
+cold-start run (`data/experiments/phase7_coldstart_histnan/`, 6,133
+player-seasons across 2015-2025).
+
+**Point 1 -- `weeks_synthetic == possible_weeks` on every row: not a bug.**
+`--preseason-mode` is supposed to make every week synthetic, and that is
+enforced rather than assumed: `season_projection.py` raises a `RuntimeError`
+if any week comes back real/snap-verified/pbp-confirmed under
+`preseason_mode`. The invariant exists precisely because the flag was once
+silently inert. Nothing to fix.
+
+**Point 2 -- the 0.88 fallback is applied correctly but is the wrong value.**
+Application is clean: 1,139 of 6,133 rows (18.6%) carry exactly 0.88, and
+those rows are a perfect 1:1 match with true rookies (min season in
+`player_weekly_stats` >= projected season). Zero veterans receive it, so the
+`prior.empty` branch is not silently catching veterans with unusable history.
+
+Realized availability for exactly those rookies:
+
+| Position | assumed | realized | n    |
+|----------|---------|----------|------|
+| QB       | 0.88    | 0.469    | 109  |
+| RB       | 0.88    | 0.578    | 315  |
+| TE       | 0.88    | 0.602    | 215  |
+| WR       | 0.88    | 0.606    | 500  |
+| **all**  | 0.88    | **0.584**| 1139 |
+
+A +0.296 over-assumption: the projection credits rookies with ~30% of a
+season they never play. **0.584 is the better estimate of rookie
+availability. That is not in dispute below.**
+
+**The tradeoff, stated honestly.** In cold-start/preseason mode every week is
+synthetic, so the season total scales exactly linearly with
+`availability_rate` -- the counterfactual is exact, not approximate:
+
+| rookie rate used         | mean bias | MAE  |
+|--------------------------|-----------|------|
+| 0.88 (current)           | -19.5     | 45.7 |
+| 0.584 (empirical mean)   | -31.2     | 45.4 |
+| per-position empirical   | -32.8     | 45.0 |
+
+The correction **improves MAE** (45.7 -> 45.0) and **worsens mean bias**
+(-19.5 -> -32.8). Rookie bias is already negative while availability is
+over-assumed, so 0.88 is currently offsetting a larger per-week
+under-prediction of rookie production; removing the offset exposes the full
+under-prediction.
+
+**Decision: leave 0.88 in place for now.** This is a choice to hold the bias
+baseline still while the per-week rookie cause is being chased, bought at a
+0.7-MAE cost. It is explicitly NOT a finding that 0.584 is wrong -- a future
+reader should not read "left unchanged" as "the empirical value is bad." Once
+the per-week rookie scale is fixed, 0.584 (or the per-position vector) should
+go in, and both numbers re-measured together. Changing it before then would
+move the baseline mid-experiment and make the rookie arm look worse for a
+reason unrelated to whatever is being tested.
+
+This corroborates rather than contradicts the 2026-08-18 finding that
+availability weighting is not the root cause of Phase 7's synthetic-week
+bias. The root cause is on the per-week rookie prediction side.
+
+**Denominator parity: verified, 0.584 is a genuine drop-in.** Checked before
+logging the number, because a rate measured over a different window than the
+one it replaces is a silent mismatch once it is in code. Both are on the same
+basis: `estimate_availability_rate` uses distinct weeks with a
+`player_weekly_stats` row over `possible_weeks_for_team` (team regular-season
+games); the realized measure uses `games_actually_played` over the run's
+`possible_weeks`, which in preseason mode is ungated by active roster
+(`require_active_roster=False`) and so is also team regular-season games.
+Numerators match exactly on all 1,139 rows (max abs diff 0), and recomputing
+realized rookie availability directly from the estimator's own formula gives
+0.5844 against the 0.584 above. Neither is an "all 17 weeks" or
+"active-roster weeks" denominator.
+
+**Follow-up, shippable independently: rename `position_avg_fallback`.** It
+never varies by position, in either module -- it is a single league-wide
+constant reached only by players with no prior history, i.e. rookies. The
+name misdescribes the behaviour, and the per-position spread above (QB 0.469
+vs WR 0.606) is exactly the variation the name promises and does not deliver.
+`no_history_fallback` or `rookie_fallback` is accurate. Behaviour-free and
+independent of the value decision above, so it does not need to wait for the
+per-week rookie fix.
+
+**Fixed in passing (behaviour-identical, separate commit):**
+`season_projection.py` hardcoded `0.88` as a default argument while
+`availability.py` defined `POSITION_AVG_FALLBACK = 0.88` for the same
+purpose, with no import between them. `season_projection.py` now imports the
+constant.
