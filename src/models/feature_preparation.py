@@ -341,6 +341,18 @@ def _prepare_training_data(
     """
     from config.settings import MODELS_DIR
 
+    # Conference FIRST, on the raw frame -- same rationale as prepare_features
+    # (which this path does NOT go through): add_utilization_scores fills
+    # draft_season NaN -> 0 below, and add_advanced_rookie_injury_features
+    # mode-fills draft_college. Calling this here, before either runs, is the
+    # fix for `is_power5`/`college_conference` being silently absent from
+    # Phase 7's real feature matrix -- it was only ever wired into
+    # prepare_features, which _prepare_training_data bypasses (same class of
+    # bug as PRESERVE_HISTORY_MISSINGNESS above).
+    from src.features.college_conference import add_conference_features
+    train_data = add_conference_features(train_data)
+    test_data = add_conference_features(test_data)
+
     # DVP
     try:
         from src.utils.database import DatabaseManager

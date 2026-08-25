@@ -11356,3 +11356,38 @@ Judged on the PER-WEEK production term, which isolates the half under test:
     position and combine measurables.
 
 Recorded BEFORE running so the result cannot be rationalised afterwards.
+
+## FOURTH inert-flag bug, same signature: `is_power5`/conference silently absent from Phase 7 (2026-08-24)
+
+Prompted by "ensure all models are properly wired with rookie data" after the
+PRESERVE_HISTORY_MISSINGNESS near-miss above. An Explore audit across all four
+arms (Phase 7, Step 8A, Candidate, Production) found one more of exactly that
+bug class.
+
+`add_conference_features` (`src/features/college_conference.py:228`, producing
+`is_power5`) was called in exactly one place: `prepare_features`
+(`feature_preparation.py`). `is_power5` is declared in `CAUSAL_FEATURES` for
+all four positions (`config/settings.py`), so it grepped as wired and looked
+present in config. But Phase 7's real training path is
+`_prepare_training_data`, which does not call `prepare_features` -- the same
+bypass already found and fixed for the history-NaN restore. `ensemble.py`
+silently drops any causal feature whose column doesn't exist
+(`[c for c in causal_cols if c in pos_data.columns]`), so the absence never
+errored -- Phase 7 just trained without a college-conference signal for every
+run to date, with no visible symptom.
+
+Fixed by calling `add_conference_features` at the top of
+`_prepare_training_data`, on the raw frame, before `calculate_all_scores`
+zeroes `draft_season` and `add_advanced_rookie_injury_features` mode-fills
+`draft_college` -- same ordering constraint documented in `prepare_features`.
+Verified: `draft_college`/`draft_season` are loaded straight from
+`draft_picks_v2` in `database.py`'s base query, so they're intact at function
+entry; 494/494 tests still pass.
+
+Audited the other three arms too: Candidate and Step 8A select features by
+"every numeric column not excluded," so anything `career_static_by_player`
+joins (including `is_power5`) reaches them automatically -- no bypass
+possible by construction. Production has no draft-capital features at all
+(`BASE_FEATURES_COMMON` only has age/years_exp/rookie_or_low_experience) --
+that's a real capability gap, not a wiring bug, consistent with Production's
+worst-of-the-four rookie bias already documented above.
