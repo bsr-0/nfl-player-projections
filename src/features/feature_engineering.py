@@ -91,6 +91,66 @@ INJURY_DATA_START_SEASON = 2013
 DEPTH_CHART_START_SEASON = 2013
 
 
+def _prior_season_group_stat(df: pd.DataFrame, value_col: str, group_col: str,
+                             how: str = "mean") -> pd.Series:
+    """`how` of `value_col` per `group_col`, computed over seasons STRICTLY
+    BEFORE each row's own season.
+
+    Any cross-sectional statistic used as a feature has to be built this way.
+    A plain `groupby(...).transform(...)` spans the whole frame, and since test
+    features are engineered on a train+test frame, that silently pulls the test
+    season -- and every future season -- into the value.
+
+    The earliest season in the frame has no prior, and falls back to its own
+    season's statistic. That season is always training data under a
+    chronological split, so it cannot leak forward; it is a self-reference
+    within train, not future information.
+    """
+    seasons = pd.to_numeric(df["season"], errors="coerce")
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    uniq = sorted(s for s in seasons.dropna().unique())
+    for s in uniq:
+        prior = df[seasons < s]
+        if prior.empty:
+            prior = df[seasons == s]          # earliest season only
+        stat = prior.groupby(group_col)[value_col].agg(how)
+        rows = seasons == s
+        out.loc[rows] = df.loc[rows, group_col].map(stat).to_numpy()
+    return out
+
+
+def _prior_season_fill(df: pd.DataFrame, col: str,
+                       mask: Optional[pd.Series] = None) -> pd.Series:
+    """Per-row median fill value for `col`, from seasons STRICTLY BEFORE the row's.
+
+    `df[col].median()` spans the whole frame. Test features are engineered on a
+    train+test frame, so that median is computed partly FROM THE TEST SEASON and
+    then written into test rows. Measured: perturbing one test player's late
+    weeks moved 39 early-week rows in each of target_share_pct_roll3_mean,
+    wopr_roll3 and team_target_concentration_roll3_mean -- and 100% of the moved
+    rows were rows this function had filled.
+
+    Returns a Series so the fill varies by row's season. Falls back to the
+    earliest season's own median when there is no prior season (always training
+    data under a chronological split), then to 0.0.
+    """
+    if "season" not in df.columns:
+        med = df.loc[mask, col].median() if mask is not None else df[col].median()
+        return pd.Series(0.0 if pd.isna(med) else med, index=df.index)
+
+    src = df[mask] if mask is not None else df
+    seasons = pd.to_numeric(df["season"], errors="coerce")
+    src_seasons = pd.to_numeric(src["season"], errors="coerce")
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    for s in sorted(seasons.dropna().unique()):
+        prior = src.loc[src_seasons < s, col]
+        if prior.dropna().empty:
+            prior = src.loc[src_seasons == s, col]   # earliest season only
+        med = prior.median()
+        out.loc[seasons == s] = 0.0 if pd.isna(med) else med
+    return out.fillna(0.0)
+
+
 def _mask_pre_era(df: pd.DataFrame, cols, start_season: int) -> pd.DataFrame:
     """NaN out `cols` for rows before `start_season`, leaving the in-era fill
     exactly as it was. No-op when the frame carries no season column."""
@@ -832,7 +892,17 @@ class FeatureEngineer:
             df["bayesian_prior_ppg"] = 0.0
             return df
 
-        pos_avg = df.groupby("position")["prev_season_ppg"].transform("mean")
+        # The shrinkage target must come from PRIOR SEASONS ONLY.
+        #
+        # This was `df.groupby("position")["prev_season_ppg"].transform("mean")`
+        # -- a mean over every row in the frame. Because test features are built
+        # on a train+test frame (_apply_with_temporal_context step 2), that mean
+        # included the test season, and every future season besides. Measured:
+        # perturbing one test player's LATE weeks moved 641 of 1,188 OTHER test
+        # players' rows at weeks <= 8, and 622 alpha==0 rows all carried one
+        # identical value. That is future information reaching a feature.
+        pos_avg = _prior_season_group_stat(df, "prev_season_ppg", "position", "mean")
+
         career_games = df.groupby("player_id").cumcount()
         alpha = (career_games / 34.0).clip(upper=1.0)
 
@@ -4658,16 +4728,12 @@ class FeatureEngineer:
             is_qb_col = any(tok in col.lower() for tok in qb_specific_tokens)
             if is_qb_col and has_position:
                 # QB-specific columns: fill with QB median for QBs, 0 for others
-                qb_med = df.loc[df["position"] == "QB", col].median()
-                if pd.isna(qb_med):
-                    qb_med = 0.0
-                df.loc[df["position"] == "QB", col] = df.loc[df["position"] == "QB", col].fillna(qb_med)
+                qb_med = _prior_season_fill(df, col, mask=df["position"] == "QB")
+                df.loc[df["position"] == "QB", col] = (
+                    df.loc[df["position"] == "QB", col].fillna(qb_med[df["position"] == "QB"]))
                 df[col] = df[col].fillna(0.0)
             else:
-                med = df[col].median()
-                if pd.isna(med):
-                    med = 0.0
-                df[col] = df[col].fillna(med)
+                df[col] = df[col].fillna(_prior_season_fill(df, col))
         return df
     
     def _update_feature_columns(self, df: pd.DataFrame):
