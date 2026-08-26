@@ -29,7 +29,7 @@ def main():
                          help="Validation seasons (default: 2023 2024 2025)")
     parser.add_argument("--windows", nargs="+", default=list(WINDOW_CANDIDATES),
                          choices=list(WINDOW_CANDIDATES),
-                         help="Training windows to test (default: all 5)")
+                         help="Training windows to test (default: every candidate)")
     parser.add_argument("--weightings", nargs="+", default=list(WEIGHTING_SCHEMES),
                          choices=list(WEIGHTING_SCHEMES),
                          help="Recency-weighting schemes to test (default: all 3)")
