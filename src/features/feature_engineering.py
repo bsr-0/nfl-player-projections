@@ -1918,10 +1918,18 @@ class FeatureEngineer:
             # an unknown snap share, discarding the NaN the calculator had
             # just preserved and leaving snap_share_pct_roll3_mean to be
             # averaged from fabricated zeros.
-            from src.features.utilization_score import snap_share_pct as _snap_share_pct
-            new_cols["snap_share_pct"] = _snap_share_pct(
-                df["snap_count"], df["team_snaps"]
+            from src.features.utilization_score import (
+                snap_share_pct as _snap_share_pct, SNAP_DATA_START_SEASON,
             )
+            _ssp = _snap_share_pct(df["snap_count"], df["team_snaps"])
+            # Pre-2013 there is no snap data at all, so safe_divide's 0.0 is a
+            # fabricated measurement rather than an informative one. Held NaN
+            # independently of SNAP_MISSINGNESS_MODE -- see that constant.
+            if "season" in df.columns:
+                _ssp = _ssp.where(
+                    pd.to_numeric(df["season"], errors="coerce") >= SNAP_DATA_START_SEASON
+                )
+            new_cols["snap_share_pct"] = _ssp
 
         df = df.assign(**new_cols)
         return df
@@ -3843,7 +3851,16 @@ class FeatureEngineer:
             df = df.drop(columns=existing)
         merged = df.merge(ngs[join_keys + ngs_cols], on=join_keys, how="left")
         for c in ngs_cols:
-            merged[c] = pd.to_numeric(merged[c], errors="coerce").fillna(0.0)
+            # Left as NaN, not filled with 0.0. NGS only starts in 2016, so a
+            # zero-fill asserted "0.0 yards of separation" for every player-week
+            # in 2006-2015 -- a confident physical falsehood the model can't
+            # distinguish from a real measurement, and one that passes any
+            # IS NOT NULL coverage audit. LightGBM's missing-aware splits route
+            # NaN correctly. (The sklearn GradientBoostingRegressor fallback in
+            # architectures.py does NOT accept NaN; it is not the active
+            # backend, but that is now a real constraint rather than a
+            # preference.) See GAPS.md.
+            merged[c] = pd.to_numeric(merged[c], errors="coerce")
         return merged
 
     def _create_ngs_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -3856,11 +3873,14 @@ class FeatureEngineer:
             return df
         for col in ngs_rolling_cols:
             roll_col = f"{col}_roll3_mean"
+            # min_periods=1 already yields a mean from whatever prior weeks
+            # exist, so NaN here means genuinely no prior NGS week at all --
+            # a rookie's debut, or any week before 2016. Same reasoning as
+            # _merge_ngs_data: leave it missing rather than assert 0.0.
             df[roll_col] = (
                 df.groupby("player_id")[col]
                 .transform(lambda s: s.shift(1).rolling(3, min_periods=1).mean())
             )
-            df[roll_col] = df[roll_col].fillna(0.0)
         return df
 
     # ------------------------------------------------------------------
@@ -4499,10 +4519,21 @@ class FeatureEngineer:
         # backtest time -- and would consume the missingness before the
         # owning step ever sees it. The `_missing` indicators above are still
         # emitted for them; only the fill is deferred.
+        # Hoisted: resolved at call time, but the answer can't change mid-loop.
+        structural = _structurally_missing_cols()
         for col in numeric_cols:
             if col not in df.columns or not df[col].isna().any():
                 continue
-            if col in _SNAP_IMPUTATION_OWNED or col in _structurally_missing_cols():
+            if col in _SNAP_IMPUTATION_OWNED or col in structural:
+                continue
+            # NGS begins in 2016, so every ngs_* column is structurally missing
+            # for 2006-2015. Matched by PREFIX, not by a literal set: these
+            # columns are built dynamically from whatever the ngs_* tables
+            # carry, and the model consumes the _roll3_mean derivatives rather
+            # than the base columns. A literal set would have to name both and
+            # would silently miss any new metric -- exactly how
+            # team_pct_12_personnel_roll3_mean escaped its own exemption twice.
+            if col.startswith("ngs_"):
                 continue
             is_qb_col = any(tok in col.lower() for tok in qb_specific_tokens)
             if is_qb_col and has_position:

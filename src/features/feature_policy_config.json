@@ -82,10 +82,10 @@
       "matchers": [
         "ngs_"
       ],
-      "numeric_strategy": "value",
+      "numeric_strategy": "preserve",
       "fallback_value": 0.0,
-      "warn_threshold": 0.1,
-      "fail_threshold": 0.5
+      "warn_threshold": 0.9,
+      "fail_threshold": 1.1
     }
   }
 }

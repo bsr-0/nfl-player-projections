@@ -46,6 +46,20 @@ from src.utils.helpers import safe_divide
 # deprecated branch. Flip via set_snap_missingness_mode().
 SNAP_MISSINGNESS_MODE = "zero"
 
+# First season with any snap data at all: `snap_counts` starts here, and
+# player_weekly_stats carries NULL (previously a fabricated 0.0) before it.
+#
+# This boundary is deliberately NOT governed by SNAP_MISSINGNESS_MODE, because
+# the two kinds of missingness are different populations and the A/B above only
+# settles one of them. For 2013+, a missing snap row is INFORMATIVE -- the
+# player is a low-usage player, 55-65% of a known player's usage -- which is
+# why the fabricated zero beat median imputation and why the mode stays "zero".
+# Before 2013 the sensor simply did not exist, so missingness is STRUCTURAL and
+# carries no signal about the player: zero understates every starter in seven
+# seasons and a median invents a measurement for an era that has none. Those
+# rows are held as NaN for LightGBM's missing-aware splits regardless of mode.
+SNAP_DATA_START_SEASON = 2013
+
 
 def set_snap_missingness_mode(mode: str) -> None:
     global SNAP_MISSINGNESS_MODE
@@ -249,6 +263,15 @@ def apply_snap_imputation(df: pd.DataFrame,
     if current.notna().all():
         return df
 
+    # Pre-2013 rows are exempt: there is no snap measurement for that era, so
+    # filling them from a position x era median invents one -- and `snap_era`
+    # splits at 2018, so the "pre2018" bucket would blend real 2013-2017
+    # behaviour into seasons that have none. Left NaN for the model to split on.
+    if "season" in df.columns:
+        pre_snap_era = pd.to_numeric(df["season"], errors="coerce") < SNAP_DATA_START_SEASON
+    else:
+        pre_snap_era = pd.Series(False, index=df.index)
+
     era = (snap_era(df["season"]) if "season" in df.columns
            else pd.Series(_ALL_ERAS, index=df.index))
     era.index = df.index
@@ -269,7 +292,8 @@ def apply_snap_imputation(df: pd.DataFrame,
         )
         for p, e in zip(position, era)
     ]
-    df[SNAP_ROLL3_COL] = current.fillna(pd.Series(fill, index=df.index))
+    filled = current.fillna(pd.Series(fill, index=df.index))
+    df[SNAP_ROLL3_COL] = filled.where(~pre_snap_era, current)
     return df
 
 
