@@ -178,6 +178,10 @@ _STRUCTURALLY_MISSING = frozenset({
     "team_sack_rate_allowed", "team_sack_rate_allowed_roll3_mean",
     "team_run_block_ybc_avg", "team_run_block_ybc_avg_roll3_mean",
     "injury_score", "depth_chart_rank",
+    # Combine measurables: a player with no combine record has no forty time.
+    # Filling that with the column median invents an athleticism measurement,
+    # and 0.0 (the previous default) asserts the worst athlete in the league.
+    "speed_score", "bmi",
     # Derived from snap_share_pct, which has no source before 2013. Its own
     # creation site already fills the ordinary "too few prior weeks" case with
     # 0.0, so by the time it reaches _impute_missing the only NaN left IS the
@@ -933,19 +937,42 @@ class FeatureEngineer:
                 c,
             )
             c.close()
-            # Match via draft picks parquet (pfr_id → gsis_id)
+            # pfr_id -> gsis_id, from EVERY available mapping rather than the
+            # draft-picks parquet alone. That single source is draft-only, so
+            # the inner join dropped 1,137 of 2,741 combine rows (41.5%: WR 483,
+            # RB 303, QB 189, TE 162) -- undrafted players by construction, and
+            # they then received a FABRICATED speed_score/bmi of 0.0 rather than
+            # a missing one. Unioning the draft parquet, draft_picks_v2 and the
+            # PFR->GSIS map cuts the loss to 751 (27.4%).
+            mapping: dict = {}
             dp_path = PROJECT_ROOT / "data" / "draft_picks.parquet"
             if dp_path.exists():
                 dp = pd.read_parquet(dp_path, columns=["pfr_player_id", "gsis_id"])
                 dp = dp.dropna(subset=["pfr_player_id", "gsis_id"])
-                combine = combine.merge(dp, left_on="pfr_id", right_on="pfr_player_id", how="inner")
-            else:
-                df["speed_score"] = 0.0
-                df["bmi"] = 0.0
+                mapping.update(dict(zip(dp.pfr_player_id, dp.gsis_id)))
+            try:
+                c2 = sqlite3.connect(str(DB_PATH))
+                dp2 = pd.read_sql(
+                    "SELECT pfr_player_id, player_id FROM draft_picks_v2 "
+                    "WHERE pfr_player_id IS NOT NULL AND player_id IS NOT NULL", c2)
+                c2.close()
+                mapping.update(dict(zip(dp2.pfr_player_id, dp2.player_id)))
+            except Exception:
+                pass
+            try:
+                from src.data.nfl_data_loader import get_pfr_to_gsis_map
+                mapping.update(get_pfr_to_gsis_map())
+            except Exception:
+                pass
+            if not mapping:
+                df["speed_score"] = np.nan
+                df["bmi"] = np.nan
                 return df
+            combine["gsis_id"] = combine["pfr_id"].map(mapping)
+            combine = combine.dropna(subset=["gsis_id"])
         except Exception:
-            df["speed_score"] = 0.0
-            df["bmi"] = 0.0
+            df["speed_score"] = np.nan
+            df["bmi"] = np.nan
             return df
 
         combine_map = {}
@@ -967,11 +994,15 @@ class FeatureEngineer:
                 pass
 
         if combine_map:
+            # NaN, not 0.0, for a player with no combine record. A speed score
+            # of 0.0 is not "unknown athleticism", it is the worst possible
+            # athlete -- and it landed on 40% of rows. speed_score/bmi are in
+            # _STRUCTURALLY_MISSING so the imputer leaves the NaN alone.
             df["speed_score"] = df["player_id"].map(
-                lambda pid: combine_map.get(pid, (0.0, 0.0))[0]
+                lambda pid: combine_map.get(pid, (np.nan, np.nan))[0]
             )
             df["bmi"] = df["player_id"].map(
-                lambda pid: combine_map.get(pid, (0.0, 0.0))[1]
+                lambda pid: combine_map.get(pid, (np.nan, np.nan))[1]
             )
         else:
             df["speed_score"] = 0.0
