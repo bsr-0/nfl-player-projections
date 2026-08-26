@@ -1036,6 +1036,21 @@ def _ensure_store_weekly_schema(df: pd.DataFrame) -> pd.DataFrame:
         df["passing_completions"] = df["completions"]
     for col, default in [("opponent", ""), ("home_away", "unknown"), ("fumbles_lost", 0)]:
         if col not in df.columns:
+            if col == "fumbles_lost":
+                # Not a neutral default: fumbles_lost feeds fantasy_points at
+                # -2 apiece, so a silent 0 overstates the target for everyone
+                # who fumbled. This is exactly how 2025 shipped with 0 fumbles
+                # league-wide against ~240/season everywhere else -- it reached
+                # the DB, the target, and every result read off it, without
+                # ever failing anything. Fix with
+                # scripts/backfill_fumbles_lost.py after ingest.
+                import warnings
+                warnings.warn(
+                    "PBP aggregation produced no fumbles_lost; defaulting to 0. "
+                    "fantasy_points will be overstated by 2 per lost fumble until "
+                    "scripts/backfill_fumbles_lost.py is run for these seasons.",
+                    RuntimeWarning, stacklevel=2,
+                )
             df[col] = default
     if "games_played" not in df.columns:
         df["games_played"] = 1
