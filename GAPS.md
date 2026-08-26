@@ -11827,3 +11827,61 @@ targets, snap_share <= 1, success rates in [0,1], games_played in {0,1}.
 Week coverage complete for every season. Leakage probe clean -- the highest
 |corr| between any causal feature and the SAME-week target is 0.56
 (targets_roll3_mean, WR), with nothing in the 0.85+ range a leak would show.
+
+
+## Audit of the remaining flat-18 sites (2026-08-25)
+
+The era-aware boundary fix landed in the Phase 7 projection path only. Every
+other site that uses a flat 18 was read in context and classified. Ten are
+semantic (they decide whether a week is regular season); three are bounds and
+are correct as written.
+
+### Semantic -- same bug, still live
+
+| site | what it corrupts | in the arm comparison? |
+|------|------------------|------------------------|
+| `preseason_features.py:71` | season-history aggregates for the preseason arms | YES |
+| `preseason_projector.py:578` | prior-season aggregates, `HAVING COUNT(*)>=MIN_GAMES` | YES |
+| `feature_engineering.py:4035,4042` | `team_prior_season_wins` | YES (all 4 positions) |
+| `season_availability.py:71,76,78,94` | `games_played`, `possible_games`, `rate` | availability track |
+| `run_track_b_exposure.py:80,109` | availability denominators | Track B |
+| `build_complete_player_game_panel.py:84` | panel opponent/home_away map | panel builds |
+| `compute_market_projections.py:67,99` | market season totals | market baseline |
+| `snake_draft_sim.py:461` | `actual_total` season totals | draft sim |
+| `audit_roster_eligibility_by_position.py:80` | audit history filter | diagnostics |
+| `utilization.py:396` | `get_season_phase` labels pre-2021 wild card as "Late" regular season | not causal |
+
+**`team_prior_season_wins` is the widest-reaching**: it is a CAUSAL_FEATURE
+for all four positions, and counting the wild-card round gives **62 of 480
+pre-2021 team-seasons an inflated win total** (4/season, 6 in 2020), which
+then propagates to every player on those teams the following year. 2021+ is
+unaffected, so this is another era-asymmetric feature.
+
+**The preseason pair matters most for interpretation.** `walk_forward_preseason.py`
+imports both, so with Phase 7 fixed and these not, the 11-fold arm comparison
+would be measuring arms against different definitions of "season" -- the
+comparison would move for a reason unrelated to the arms.
+
+**`run_track_b_exposure.py` already met the symptom** and mis-diagnosed the
+cause: its comment records that leaving playoff rows in gave 29 of 239
+player-seasons availability above 1.0, fixed with `week <= 18`. That only
+fixed 2021+. Pre-2021 the denominator is still 17 rather than 16, so a player
+who played every regular-season game but no playoff game scores 16/17 = 0.94
+instead of 1.0 -- under the `availability_gt_1 == 0` assert, which is why the
+guard never fired again.
+
+### Bounds -- correct as written, deliberately not changed
+
+- `schema_validator.py:136` -- input validation, and its own comment already
+  documents the era boundary and consciously accepts 18-22 for POST rather
+  than threading it. Permissive by design.
+- `run_track_b_exposure.py:190` -- `assert max_week <= REGULAR_SEASON_MAX_WEEK`,
+  an all-era upper bound.
+- `run_track_b_exposure.py:132` -- `range(1, MAX+1)` as a degenerate fallback
+  when a team has no schedule rows at all.
+
+### Not yet fixed
+
+Ten semantic sites across eight files, several of which write artifacts other
+analyses read. Fixing them is mechanical but touches more than 5 files, so it
+wants its own phase rather than being folded into the re-run prep.
