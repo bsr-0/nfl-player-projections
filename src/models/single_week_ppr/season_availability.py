@@ -42,7 +42,7 @@ import pandas as pd
 from src.models.single_week_ppr.population import (
     RECEIVING_CHARTING_MIN_SEASON, RECEIVING_DEPENDENT_POSITIONS, label_participation,
 )
-from src.models.single_week_ppr.season_projection import REGULAR_SEASON_MAX_WEEK
+from config.settings import regular_season_max_week, regular_season_week_sql
 
 # Weight on the player's own history is n_prior_games / (n_prior_games + K).
 # At K=16 (roughly one season), a player with one prior season gets ~50%
@@ -68,14 +68,14 @@ def load_player_seasons(db_path: Optional[str] = None) -> pd.DataFrame:
         FROM player_weekly_stats pws
         JOIN players p ON pws.player_id = p.player_id
         WHERE p.position IN ({','.join('?' * len(POSITIONS))})
-          AND pws.week <= {REGULAR_SEASON_MAX_WEEK}
+          AND {regular_season_week_sql('pws.week', 'pws.season')}
           AND pws.season >= {MIN_HISTORICAL_YEAR}
     """, conn, params=list(POSITIONS))
     sched = pd.read_sql(
         f"SELECT season, week, home_team AS team FROM schedule "
-        f"WHERE week <= {REGULAR_SEASON_MAX_WEEK} UNION ALL "
+        f"WHERE {regular_season_week_sql()} UNION ALL "
         f"SELECT season, week, away_team AS team FROM schedule "
-        f"WHERE week <= {REGULAR_SEASON_MAX_WEEK}", conn)
+        f"WHERE {regular_season_week_sql()}", conn)
     conn.close()
 
     df["participation_quality"] = label_participation(df)
@@ -91,7 +91,12 @@ def load_player_seasons(db_path: Optional[str] = None) -> pd.DataFrame:
     possible = (sched.groupby(["season", "team"])["week"].nunique()
                 .rename("possible_games").reset_index())
     played = played.merge(possible, on=["season", "team"], how="left")
-    played["possible_games"] = played["possible_games"].fillna(REGULAR_SEASON_MAX_WEEK)
+    # Fallback for a team with no schedule rows at all. Was a flat 18, wrong
+    # twice: 18 is a WEEK count and this column counts GAMES (one bye), and it
+    # ignored the era. Games = max regular-season week - 1, i.e. 16 through
+    # 2020 and 17 from 2021.
+    fallback = played["season"].map(lambda s: regular_season_max_week(s) - 1)
+    played["possible_games"] = played["possible_games"].fillna(fallback)
     played["rate"] = played["games_played"] / played["possible_games"]
     played["ppr_per_game"] = played["ppr"] / played["games_played"]
     return played

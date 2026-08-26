@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import numpy as np
 import pandas as pd
 
+from config.settings import regular_season_max_week
 from src.models.single_week_ppr.season_projection import REGULAR_SEASON_MAX_WEEK
 
 # weekly_rosters status in a MISSED week -> why he wasn't out there.
@@ -77,7 +78,13 @@ def main():
     # season_projection.py guards this for the same reason. Leaving them in
     # gave 29 of 239 player-seasons an availability above 1.0 (up to 1.24),
     # which is the regressor the whole Track B analysis turns on.
-    p = p[p.week <= REGULAR_SEASON_MAX_WEEK]
+    # Era-aware: 17 through 2020, 18 from 2021. The flat 18 this replaces
+    # only fixed 2021+ -- pre-2021 it left the wild-card week in, so the
+    # denominator was 17 against a true 16-game schedule and a player who
+    # played every regular-season game but no playoff game scored 16/17.
+    # That lands just under the availability_gt_1 assert below, which is
+    # why the guard never fired again after the first fix.
+    p = p[p.week <= p.season.map(regular_season_max_week)]
     ledger["excluded_playoff_weeks"] = ledger["rows_at_final_config"] - len(p)
     ledger["rows_regular_season"] = len(p)
     p["residual"] = p.prediction - p.actual
@@ -106,7 +113,7 @@ def main():
     sched["week"] = pd.to_numeric(sched.week, errors="coerce")
     sched = sched.dropna(subset=["week"])
     sched["week"] = sched.week.astype(int)
-    sched = sched[sched.week <= REGULAR_SEASON_MAX_WEEK]
+    sched = sched[sched.week <= sched.season.map(regular_season_max_week)]
     team_weeks = sched.groupby(["team", "season"])["week"].apply(set).to_dict()
 
     depth = pd.read_sql(
