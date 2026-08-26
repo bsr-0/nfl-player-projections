@@ -11604,3 +11604,85 @@ numbers mean anything.
 
 **Guardrail**: `tests/test_structural_missingness_pre_era.py` covers the
 policy collision, the `preserve` strategy, and the snap era exemption.
+
+
+## Corruption scan: seven more features carry fabricated pre-era constants,
+## and the EPA-per-play denominators are broken outright (2026-08-25)
+
+Ran the same audit that found the snap and NGS zeros across every column of
+`player_weekly_stats` and every declared CAUSAL_FEATURE for QB and WR,
+comparing 2008-2012 against 2019-2024. Detector: a column that is CONSTANT in
+the early window but varies in the late one.
+
+**Verified clean (this session's fixes, confirmed by the scan):** all
+`ngs_*_roll3_mean`, `snap_share_pct_roll3_mean`, `snap_share_accel`,
+`team_motion_rate`, `team_play_action_rate` now read 100% NaN in the early
+window rather than a fabricated constant.
+
+### A. `pass_plays` / `rush_plays` / `recv_targets` are zero in EVERY season
+### except 2025 -- and the fallback makes the bug frame-dependent
+
+These three columns are the denominators for `pass_epa_per_play`,
+`rush_epa_per_play` and `recv_epa_per_target`, whose roll3 means are declared
+CAUSAL_FEATURES for QB, RB and WR/TE respectively. They are 100% zero for
+2006-2024 and populated only for 2025.
+
+`_create_base_features` guards this with a WHOLE-FRAME fallback:
+
+    pass_plays = df.get("pass_plays", ...)
+    if pass_plays.sum() == 0 and "passing_attempts" in df.columns:
+        pass_plays = df["passing_attempts"]
+
+Because the test is `sum() == 0` across the entire frame, the presence of a
+single 2025 row disables the fallback for every other season. Measured on real
+QB rows, `pass_epa_per_play` % zero by season:
+
+    frame 2020-2025:  2020-2024 = 100.0%   2025 = 6.8%
+    frame 2020-2024:  2020-2024 = ~7%      (fallback active, real values)
+
+So the same seasons are either real or entirely fabricated depending on
+whether 2025 is in the frame. Any pipeline that engineers features on
+train+test concatenated trains on all-zero per-play EPA and tests on real
+values -- a train/test discontinuity located exactly at the test season.
+
+Even on the "good" path the denominators disagree: training rows are divided
+by `passing_attempts` while 2025 rows are divided by `pass_plays`, which are
+not the same quantity. Fixing this properly means backfilling the three
+columns from PBP for 2006-2024; the cheap interim fix is a per-ROW fallback
+(`where(plays > 0, attempts)`) so the frame's composition stops changing the
+result. NOT yet applied -- it changes a denominator, which is a modelling
+decision, and it should not land mid-experiment.
+
+### B. Seven causal features hold a constant fabricated value pre-era
+
+Same shape as the snap/NGS bug and the same reason it went unseen: 0% NaN, so
+every `IS NOT NULL` audit passes.
+
+| feature | constant through | value | source table starts |
+|---------|------------------|-------|---------------------|
+| `injury_score` | 2012 | 1.0 | player_injuries 2013 |
+| `qb_pressure_pct_roll3_mean` | 2017 | 0.0 | weekly_pfr 2018 |
+| `recv_drop_pct_roll3_mean` | 2017 | 0.0 | weekly_pfr 2018 |
+| `team_sack_rate_allowed_roll3_mean` | 2017 | 0.0 | weekly_pfr 2018 |
+| `qb_bad_throw_pct_prior` | 2018 | 0.0 | seasonal_pfr 2018 |
+| `qb_pocket_time_prior` | 2018 | 0.0 | seasonal_pfr 2018 |
+| `team_pct_11/12_personnel_roll3_mean` | 2015 | 0.633 | team_personnel_stats 2016 |
+
+The personnel pair is already known and held behind
+`PRESERVE_PERSONNEL_MISSINGNESS` (default OFF), documented above. The other
+five are not documented anywhere and are live in every run.
+
+`injury_score = 1.0` is the most misleading of these: it does not read as
+absent, it reads as a specific and confident health claim for every player in
+2006-2012.
+
+**Not fixed here.** Each needs the same multi-filler treatment the snap and
+NGS columns required, and together they change training data for every arm
+again. Worth doing as one attributable batch rather than piecemeal, and after
+the current re-baseline rather than during it.
+
+**Method note.** The detector that found all of these is three lines --
+per-season `nunique()` on the assembled feature matrix, flagging columns
+constant early and varying late. It is worth running as a test over a sampled
+frame, because every bug in this family has been invisible to coverage audits
+by construction: the fabricated value is never null.
