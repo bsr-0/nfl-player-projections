@@ -54,11 +54,32 @@ class FeaturePolicyRegistry:
         return cls(policies=policies)
 
     def resolve_group_for_feature(self, feature_name: str) -> Optional[str]:
+        """Most SPECIFIC matching group, not merely the first one declared.
+
+        Matchers are substrings, so they collide: 'epa' (pbp_advanced) is
+        inside 'ngs_avg_sEPAration', and because pbp_advanced is declared
+        before ngs, every NGS separation column -- including the
+        `_roll3_mean` derivative the model actually consumes -- was silently
+        governed by the pbp_advanced policy and median-filled, while its
+        sibling ngs_avg_cushion went to ngs. Declaration order is not a
+        specificity ordering, and nothing failed when it disagreed.
+
+        Ranked by (matches as a PREFIX, matcher length), so an anchored
+        family prefix like 'ngs_' beats an incidental mid-word hit like
+        'epa', while genuine pbp columns ('pass_epa') are unaffected.
+        """
         lname = feature_name.lower()
+        best_score = None
+        best_group = None
         for group, policy in self.policies.items():
-            if any(m.lower() in lname for m in policy.matchers):
-                return group
-        return None
+            for m in policy.matchers:
+                ml = m.lower()
+                if ml not in lname:
+                    continue
+                score = (lname.startswith(ml), len(ml))
+                if best_score is None or score > best_score:
+                    best_score, best_group = score, group
+        return best_group
 
     def apply(
         self,
@@ -91,6 +112,22 @@ class FeaturePolicyRegistry:
 
             missing_rate = float(missing_mask.mean())
             rates[col] = missing_rate
+
+            # "preserve": the group's missingness is STRUCTURAL -- the source
+            # does not exist for those rows at all -- so any fill invents a
+            # measurement. Rate and thresholds are still recorded so monitoring
+            # keeps working; only the fill and its `_imputed` indicator are
+            # skipped. Used by `ngs` (Next Gen Stats begin in 2016), where an
+            # `exclude` list would not do: the columns are built dynamically
+            # from whatever the ngs_* tables carry, and the model consumes the
+            # `_roll3_mean` derivatives under different names.
+            if policy.numeric_strategy == "preserve":
+                if missing_rate > policy.warn_threshold:
+                    flagged_warn.append(col)
+                    logger.warning("[%s] structural missingness preserved: feature=%s rate=%.3f", context, col, missing_rate)
+                if missing_rate > policy.fail_threshold:
+                    flagged_fail.append(col)
+                continue
 
             if pd.api.types.is_numeric_dtype(df[col]):
                 if policy.numeric_strategy == "median":
