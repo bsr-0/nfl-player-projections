@@ -11885,3 +11885,89 @@ guard never fired again.
 Ten semantic sites across eight files, several of which write artifacts other
 analyses read. Fixing them is mechanical but touches more than 5 files, so it
 wants its own phase rather than being folded into the re-run prep.
+
+
+## Data-quality audit round 2: two real leaks, two dead features, a 41% join
+## loss -- all fixed (2026-08-25)
+
+Executed audit across leakage, silent fills, constant features, joins and
+split integrity. Method note: every finding below came from perturbing inputs
+and re-running the pipeline, not from reading code. Two of my own initial
+readings were wrong and were corrected by the perturbation, which is the point
+of doing it that way.
+
+### Leak 1+2 (one root cause, presenting as four features)
+
+Two cross-sectional statistics were computed over the whole frame. Test
+features are engineered on a train+test frame (`_apply_with_temporal_context`
+step 2), so "whole frame" included the test season and every future season.
+
+    _add_bayesian_prior_ppg   groupby("position").transform("mean")
+    _impute_missing           df[col].median(), 20 causal features
+
+Probe: perturb ONE test player's weeks >= 12, measure OTHER players at weeks
+<= 8. Before, four features moved:
+
+    bayesian_prior_ppg                     641/1188
+    target_share_pct_roll3_mean             39/1188
+    wopr_roll3                              39/1188
+    team_target_concentration_roll3_mean    39/1188
+
+The three team-share features were NOT independent leaks: 100% of their moved
+rows were rows `_impute_missing` had filled. Fixing the imputer fixed all
+three. Both statistics now come from seasons strictly before each row's own
+(`_prior_season_group_stat`, `_prior_season_fill`); the earliest season falls
+back to itself, which is always train under a chronological split.
+
+After: the future-information probe moves ZERO features. The same-week
+perturbation leaves all 72 invariant (was 2). The 622 `alpha==0` rows carry 9
+season-appropriate values instead of one global constant (7.224403).
+
+### Dead features: the tables were empty, not the features wrong
+
+`coaching_change` (causal, all four positions) and
+`pbp_pass_play_participation_pct_roll3_mean` (WR/TE) were nunique=1 across
+25,964 rows because `team_coaching_staff` and `pbp_pass_participation` had
+**0 rows**. Backfill scripts existed and had never been run. Ran both:
+10,862 and 96,994 rows. nunique 1 -> 2 and 1 -> 23,082; `head_coach` all-NaN
+-> 95 distinct.
+
+Still dead: `weeks_since_oc_change` / `weeks_since_dc_change` (constant 99).
+games.csv carries head coach only, so the coordinator family has no source.
+
+### Combine join: 41.5% loss, fabricating athleticism on 40% of rows
+
+`pfr_id -> gsis_id` went through the draft-picks parquet alone with an INNER
+join -- a draft-only source, so it dropped 1,137 of 2,741 combine rows (WR
+483, RB 303, QB 189, TE 162), all undrafted by construction. Those players got
+`speed_score = 0.0`, which asserts the worst athlete in the league rather than
+an unknown one. Unioning three mappings cuts the loss to 27.4% (1,990
+matched), and unmatched players now get NaN with speed_score/bmi added to
+`_STRUCTURALLY_MISSING`. Measured: 0.0 share 40.0% -> 0.0%, replaced by 33.5%
+honest NaN; players with real combine data 322 -> 364.
+
+### Verified clean, not fixed because not broken
+
+- No causal feature is identical to a same-week raw column; max |corr| with
+  the same-week target is 0.559.
+- 35 of 38 merges preserve row count exactly; final matrix rows == raw input
+  rows. The two "duplicating" merges are `get_ngs_data`'s intentional outer
+  joins into a lookup table.
+- 0 player-weeks appear in both train and test; split is chronological
+  (train 2018-2023, test 2024); train is transformed alone.
+- `team_wr_target_share_roll3_mean = 100.0` looked like a third dead feature
+  and was an artifact of auditing a WR-only frame. On a multi-position frame
+  it is nunique=15,337, and production calls `add_engineered_features(d)` with
+  no position filter. Recorded because the false positive is instructive: a
+  position-filtered audit frame fabricates constants.
+
+### Residual, accepted with reason
+
+Four features still move when a teammate's WHOLE season is perturbed:
+`team_target_concentration_roll3_mean`, `target_share_pct_roll3_mean`,
+`wopr_roll3`, `target_share_accel`. These are lagged teammate aggregates -- a
+player's week-w share depends on teammates' weeks < w, which is knowable at
+week w. Legitimate for the weekly model. They would NOT be legitimate for a
+season-ahead projection, where no week of the target season is knowable;
+Phase 7's preseason mode already handles that by restricting carry-forward to
+prior seasons.
