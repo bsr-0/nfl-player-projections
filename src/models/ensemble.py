@@ -834,13 +834,28 @@ class ModelTrainer:
                     causal_cols = CAUSAL_FEATURES.get(position, [])
                     feature_cols = [c for c in causal_cols if c in pos_data.columns]
 
-                # Filter to rows with valid targets for at least one component
+                # Filter to rows with valid targets for at least one component.
+                #
+                # Deliberately NOT `& pos_data[feature_cols].notna().all(axis=1)`,
+                # which is what this was. That required EVERY feature to be
+                # present and so deleted any row touching a structurally missing
+                # column -- FTN charting (starts 2022), NGS (2016), PFR (2018),
+                # snaps/depth chart/injuries (2013). Measured on 2013-2024 it
+                # kept 10.8% of QB rows, 7.3% RB, 7.3% WR, 4.4% TE: the
+                # production models were training on ~850-2,200 rows instead of
+                # 7,900-30,200.
+                #
+                # The other two training paths in this file (fp at ~line 964,
+                # util at ~line 1154) drop on TARGET validity only and impute
+                # the features. Component mode was the outlier. NaN is now left
+                # for ComponentPredictor.fit to impute from train-fitted
+                # medians -- one imputation, in one place, fitted on train.
                 any_valid = pd.Series(False, index=pos_data.index)
                 for comp, y in y_components.items():
                     any_valid = any_valid | y.notna()
-                valid_mask = any_valid & pos_data[feature_cols].notna().all(axis=1)
+                valid_mask = any_valid
 
-                X = pos_data.loc[valid_mask, feature_cols].fillna(0)
+                X = pos_data.loc[valid_mask, feature_cols]
                 y_comp_valid = {k: v[valid_mask] for k, v in y_components.items()}
 
                 # Recency weighting (same as fp/util path)

@@ -53,9 +53,36 @@ class ComponentPredictor:
         self.components = COMPONENT_TARGETS.get(position, [])
         self.scoring_weights = PPR_SCORING_WEIGHTS
 
-    def _prepare_array(self, X_arr: np.ndarray) -> np.ndarray:
-        """Clean feature array: replace NaN/inf with 0."""
-        return np.nan_to_num(X_arr, nan=0.0, posinf=0.0, neginf=0.0)
+    def _median_vector(self) -> Optional[np.ndarray]:
+        """Train-fitted medians aligned to `feature_names`, or None if unfitted."""
+        if not self.feature_names or not self.feature_medians:
+            return None
+        return np.array([self.feature_medians.get(c, 0.0) for c in self.feature_names],
+                        dtype=np.float64)
+
+    def _prepare_array(self, X_arr: np.ndarray,
+                       medians: Optional[np.ndarray] = None) -> np.ndarray:
+        """Clean feature array: inf -> NaN, then impute NaN.
+
+        Ridge and StandardScaler cannot take NaN, so something has to fill it.
+        This used to be a flat 0.0, which is a fabricated observation in raw
+        units -- a 0.0 snap share or 0.0 separation is a confident wrong claim,
+        and it lands BEFORE scaling, so it sits far from the neutral point
+        rather than at it. Imputing the train-fitted median puts the value at
+        roughly the scaled mean, which is the neutral choice for a linear model.
+
+        Medians come from `fit` (train rows only) and are persisted in
+        to_dict/from_dict, so predict-time imputation cannot see test data.
+        Falls back to 0.0 only when called before fit.
+        """
+        X_arr = np.where(np.isfinite(X_arr), X_arr, np.nan)
+        if medians is None:
+            return np.nan_to_num(X_arr, nan=0.0)
+        bad = np.isnan(X_arr)
+        if bad.any():
+            X_arr = X_arr.copy()
+            X_arr[bad] = np.take(medians, np.where(bad)[1])
+        return X_arr
 
     def _fit_component_models(
         self,
@@ -127,7 +154,7 @@ class ComponentPredictor:
                                 if pd.api.types.is_numeric_dtype(X[c])}
 
         X_arr = X.values.astype(np.float64)
-        X_arr = self._prepare_array(X_arr)
+        X_arr = self._prepare_array(X_arr, self._median_vector())
         y_np = {k: v.values.astype(np.float64) for k, v in y_components.items()}
         self.models, self.scalers = self._fit_component_models(X_arr, y_np, sample_weight=sample_weight)
 
@@ -152,7 +179,7 @@ class ComponentPredictor:
             if col not in X_aligned.columns:
                 X_aligned[col] = self.feature_medians.get(col, 0)
         X_arr = X_aligned.values.astype(np.float64)
-        X_arr = self._prepare_array(X_arr)
+        X_arr = self._prepare_array(X_arr, self._median_vector())
         return self._predict_total_fp(X_arr)
 
     def predict_components(self, X: pd.DataFrame) -> Dict[str, np.ndarray]:
@@ -162,7 +189,7 @@ class ComponentPredictor:
 
         X_aligned = X.reindex(columns=self.feature_names, fill_value=0)
         X_arr = X_aligned.values.astype(np.float64)
-        X_arr = self._prepare_array(X_arr)
+        X_arr = self._prepare_array(X_arr, self._median_vector())
 
         result = {}
         for component, model in self.models.items():
