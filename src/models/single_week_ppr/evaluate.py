@@ -480,13 +480,27 @@ PHASE3_WINNER_ARCHITECTURE = {
     "QB": "F_yeojohnson_huber",
     "RB": "C_gbm_mae",
     "WR": "C_gbm_mae",
-    "TE": "B_gbm_huber",
+    # TE was B_gbm_huber here while FINAL_CONFIG had already moved to
+    # C_gbm_mae in the 2026-08-21 re-validation (2.900 -> 2.794 MAE). The two
+    # constants disagreed, so the window sweep tested TE on an architecture
+    # production does not use -- TE's window ranking was measured against the
+    # wrong model. Kept in sync deliberately; the assertion below makes a
+    # future divergence fail loudly instead of quietly mis-measuring.
+    "TE": "C_gbm_mae",
 }
 
 
 def _architectures_for_position(position: str) -> Dict[str, object]:
+    from src.models.single_week_ppr.final_config import FINAL_CONFIG
     all_arch = _architectures_for_fold()
     winner_name = PHASE3_WINNER_ARCHITECTURE[position]
+    production = FINAL_CONFIG[position]["architecture"]
+    if winner_name != production:
+        raise ValueError(
+            f"{position}: PHASE3_WINNER_ARCHITECTURE={winner_name!r} disagrees with "
+            f"FINAL_CONFIG architecture={production!r}. The sweep would measure a "
+            f"model production does not use. Reconcile both before running."
+        )
     selected = {"B_gbm_huber": all_arch["B_gbm_huber"]}
     if winner_name != "B_gbm_huber":
         selected[winner_name] = all_arch[winner_name]

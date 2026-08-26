@@ -54,11 +54,26 @@ class ComponentPredictor:
         self.scoring_weights = PPR_SCORING_WEIGHTS
 
     def _median_vector(self) -> Optional[np.ndarray]:
-        """Train-fitted medians aligned to `feature_names`, or None if unfitted."""
+        """Train-fitted medians aligned to `feature_names`, or None if unfitted.
+
+        A column that is entirely NaN across the training rows has a NaN
+        median, and imputing NaN with NaN leaves it NaN -- which then fails
+        `np.isfinite(X_arr).all(axis=1)` in _fit_component_models for EVERY
+        row, so the whole position silently falls back to fp mode. That is
+        what happened to all four positions at test_season=2023, where
+        team_motion_rate and team_play_action_rate are 100% NaN in train (FTN
+        charting is too recent for those windows).
+
+        Non-finite medians are coerced to 0.0. Such a column carries no
+        information either way -- it is constant across every training row --
+        so the value is arbitrary; what matters is that it is FINITE and
+        cannot poison every row.
+        """
         if not self.feature_names or not self.feature_medians:
             return None
-        return np.array([self.feature_medians.get(c, 0.0) for c in self.feature_names],
-                        dtype=np.float64)
+        vec = np.array([self.feature_medians.get(c, 0.0) for c in self.feature_names],
+                       dtype=np.float64)
+        return np.where(np.isfinite(vec), vec, 0.0)
 
     def _prepare_array(self, X_arr: np.ndarray,
                        medians: Optional[np.ndarray] = None) -> np.ndarray:
