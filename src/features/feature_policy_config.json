@@ -19,7 +19,9 @@
         "snap_share_pct",
         "snap_share",
         "snap_count",
-        "team_snaps"
+        "team_snaps",
+        "snap_share_accel",
+        "util_snap_share"
       ]
     },
     "matchup": {

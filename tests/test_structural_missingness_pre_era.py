@@ -94,3 +94,32 @@ class TestSnapImputationEraExemption:
 
     def test_boundary_matches_the_source_table(self):
         assert SNAP_DATA_START_SEASON == 2013
+
+
+class TestSnapAccelEraMask:
+    """snap_share_accel needed THREE separate exemptions before the era mask
+    survived: the mask itself, the utilization policy group's exclude list,
+    and _STRUCTURALLY_MISSING (whose median is ~0.0, so the fill was invisible
+    -- it put back exactly the value being removed)."""
+
+    def test_pre_era_rows_are_nan_not_flat(self):
+        from src.features.feature_engineering import FeatureEngineer
+        df = pd.DataFrame({
+            "player_id": ["p1"] * 8,
+            "season": [2011] * 4 + [2015] * 4,
+            "week": [1, 2, 3, 4, 1, 2, 3, 4],
+            "snap_share_pct": [np.nan] * 4 + [50.0, 55.0, 60.0, 52.0],
+        })
+        out = FeatureEngineer()._create_causal_rolling_features(df)
+        pre = out[out.season < SNAP_DATA_START_SEASON]["snap_share_accel"]
+        post = out[out.season >= SNAP_DATA_START_SEASON]["snap_share_accel"]
+        assert pre.isna().all(), "pre-2013 must not assert flat usage"
+        assert post.notna().all(), "2013+ keeps its 0.0 'too few prior weeks' default"
+
+    def test_exempt_from_both_downstream_fillers(self):
+        from src.features.feature_engineering import _STRUCTURALLY_MISSING
+        from src.features.feature_policy_registry import FeaturePolicyRegistry
+        assert "snap_share_accel" in _STRUCTURALLY_MISSING
+        r = FeaturePolicyRegistry.from_config()
+        group = r.resolve_group_for_feature("snap_share_accel")
+        assert "snap_share_accel" in r.policies[group].exclude

@@ -79,6 +79,13 @@ _SNAP_IMPUTATION_OWNED = frozenset({
 # on NaN natively, so leaving them missing is both honest and usable.
 _STRUCTURALLY_MISSING = frozenset({
     "team_motion_rate", "team_play_action_rate", "team_shotgun_rate",
+    # Derived from snap_share_pct, which has no source before 2013. Its own
+    # creation site already fills the ordinary "too few prior weeks" case with
+    # 0.0, so by the time it reaches _impute_missing the only NaN left IS the
+    # pre-2013 structural kind -- exempting the column wholesale therefore
+    # changes nothing for 2013+. Without this the median (which is ~0.0) put
+    # the fabricated zero straight back, silently undoing the era mask.
+    "snap_share_accel",
 })
 
 
@@ -1694,7 +1701,18 @@ class FeatureEngineer:
             _ss_roll4 = df.groupby("player_id")["snap_share_pct"].transform(
                 lambda x: x.shift(1).rolling(4, min_periods=2).mean()
             )
-            df["snap_share_accel"] = (_ss_lag1 - _ss_roll4).fillna(0)
+            _accel = _ss_lag1 - _ss_roll4
+            # fillna(0) reads "usage is flat", which is a fair default for a
+            # player with too few prior weeks. It is NOT fair before 2013,
+            # where there is no snap data at all: it would assert flat usage
+            # for every player in seven seasons. Structural rows stay NaN;
+            # the 2013+ default is unchanged. Same split as snap_share_pct.
+            from src.features.utilization_score import SNAP_DATA_START_SEASON
+            if "season" in df.columns:
+                _pre = pd.to_numeric(df["season"], errors="coerce") < SNAP_DATA_START_SEASON
+                df["snap_share_accel"] = _accel.fillna(0).where(~_pre, np.nan)
+            else:
+                df["snap_share_accel"] = _accel.fillna(0)
 
         return df
 
