@@ -11754,3 +11754,76 @@ Phase 2/3 selection, the 11-fold walk-forward -- predates all of it.
 
 The 11-fold set should be re-run as one batch at a single commit before any
 of its numbers are read again. Not started deliberately.
+
+
+## Training-data quality audit: one result-flawing bug, one target gap
+## (2026-08-25)
+
+Systematic sweep after the structural-missingness work: integrity, value
+ranges, target reconstruction, coverage, era boundaries, leakage.
+
+### CRITICAL -- `REGULAR_SEASON_MAX_WEEK = 18` counts the wild-card round as
+### regular season for 2006-2020
+
+The regular season was 17 weeks through 2020 and 18 from 2021. Week 18 is
+therefore a PLAYOFF week in the earlier era. From `schedule`, games per week:
+
+    week      2015  2018  2020  2021  2024
+    17          16    16    16    16    16
+    18           4     4     6    16    16     <- 4-6 games = wild card
+    19           4     4     4     6     6
+
+A single constant cannot express that boundary, and the `week <= 18` filter
+in `season_projection.py` -- added specifically to keep playoff production out
+of season totals -- lets exactly one playoff round through for every pre-2021
+season.
+
+Measured against the completed cold-start files: **480 of 3,339 pre-2021 rows
+(14.4%) have a wild-card game folded into `actual_season_total`**, worth 4,166
+fantasy points. Contaminated rows show mean bias -38.5 against -7.0 for clean
+rows in the same seasons. `possible_weeks` is inflated too (472 of the 480
+carry `possible_weeks = 17` against a true 16-game schedule), because
+`possible_weeks_for_player` counts any week the player actually played -- so
+the contamination is invisible to a `games_played > possible_weeks` check,
+which is why it survived the earlier playoff-week fix.
+
+This is era-asymmetric, so folds 2015-2020 and 2021-2025 in the 11-fold set
+are not measuring the same quantity. It lands hardest on playoff-team players,
+who are disproportionately veterans -- i.e. directly on the rookie-vs-veteran
+split the arm exists to measure.
+
+Fix: make the boundary a function of season (17 through 2020, 18 from 2021)
+rather than a constant. NOT applied -- it changes every season total and
+belongs in the same batched re-run as everything else today.
+
+### MODERATE -- `fumbles_lost` is entirely absent for 2025
+
+0 non-zero rows in 2025 against 241 in 2024 and 259 in 2023. It is the only
+column populated in 2023/2024 and empty in 2025.
+
+`fantasy_points` reconstructs to standard PPR within rounding (max diff 0.04)
+in every season INCLUDING 2025 -- meaning 2025's stored target was computed
+from the incomplete data and is overstated by 2 points per lost fumble. At
+2024 scale that is ~140 players and ~480 points league-wide, concentrated on
+fumble-prone RBs and QBs. 2025 is both the projection target and the most
+recent test fold, so this inflates actuals exactly where results are read.
+
+### Minor, recorded not fixed
+
+- `fumbles` is 0.0 in every season -- the column has never been populated
+  (only `fumbles_lost` ever was). Dead, but harmless while unused.
+- `opp_fpts_allowed_s2d_lag1` / `..._dvoa_adjusted_lag1` default to 0.0 on
+  5.7% / 11.7% of rows. That is weeks 1 and 1-2 (1/17, 2/17), uniform across
+  every season, so it creates no train/test skew -- but "0.0 = league-average
+  defence" is still a modelling claim. The builder already warns.
+
+### Verified clean
+
+No duplicate player-weeks in any season. Team vocabulary identical between
+`schedule` and `player_weekly_stats` (32 normalised codes, no STL/SD/OAK
+leakage). DST rows (2006-2013, 534/season) are excluded from training by the
+position filter. No impossible values: completions <= attempts, receptions <=
+targets, snap_share <= 1, success rates in [0,1], games_played in {0,1}.
+Week coverage complete for every season. Leakage probe clean -- the highest
+|corr| between any causal feature and the SAME-week target is 0.56
+(targets_roll3_mean, WR), with nothing in the 0.85+ range a leak would show.
