@@ -11542,3 +11542,65 @@ rookie.
 **Also noted**: the existing 11-fold set is already not feature-homogeneous.
 NGS tables start in 2016 (not 2018 as previously recorded), so the 2015 fold
 has no NGS features while 2016-2025 do.
+
+
+## Fixing the fabricated zeros took six fillers and exposed a seventh bug
+## (2026-08-25)
+
+Follow-up to the pre-2013 snap_share entry above. Recorded because the fix
+was five times larger than the diagnosis, and the reason generalises.
+
+**What was fabricated.** `snap_count`/`snap_share`/`team_snaps` were a literal
+0.0 for all 40,746 pre-2013 rows (snap_counts starts 2013); `ngs_*` columns
+were `fillna(0.0)` for everything before 2016 (NGS starts 2016). Both passed
+an `IS NOT NULL` audit at 100%.
+
+**Nulling the DB was inert on its own.** `SNAP_MISSINGNESS_MODE = "zero"`
+routes through `safe_divide`, which returns 0.0 when either operand is NaN --
+so `snap_share_pct` was 0.0 whether the database held 0 or NULL. Six fillers
+sit between the raw tables and the model:
+
+1. per-column `fillna` at creation sites (`_merge_ngs_data`, `_create_ngs_features`)
+2. `safe_divide` inside `snap_share_pct`
+3. the blanket numeric fill in `utilization_score.calculate_all_scores`
+4. `_impute_missing`'s position-aware median
+5. `apply_snap_imputation`'s position x era medians
+6. `feature_policy_registry.apply`'s per-group policy fill
+
+Exempting fewer than all of them leaves the change invisible -- the same
+inert-flag outcome already recorded for `PRESERVE_PERSONNEL_MISSINGNESS` and
+`PRESERVE_HISTORY_MISSINGNESS`. This was verified by tracing 20,154 real WR
+rows through the actual pipeline, not by reading the code; two rounds of code
+reading each concluded the fix was complete while it was not.
+
+**The seventh bug, found only because the sixth filler was inspected.** Policy
+matchers are substrings resolved in declaration order, and `'epa'` is inside
+`'ngs_avg_sEPAration'`. `pbp_advanced` is declared before `ngs`, so
+`ngs_avg_separation` and its `_roll3_mean` derivative -- a declared
+CAUSAL_FEATURE -- were governed by the pbp_advanced policy and median-filled,
+while the sibling `ngs_avg_cushion` from the same table went to `ngs` and was
+not. Nothing failed. The asymmetry was visible only as one column reading 0%
+NaN while its sibling read 100%. Resolution now ranks by (prefix match,
+matcher length); across all 102 causal features exactly two groups change,
+both corrections (`rookie_opportunity_score` was under `utilization` via
+`'opportun'`).
+
+**Deliberately not routed through SNAP_MISSINGNESS_MODE.** The 2026-08-19 A/B
+rejected `"preserve"` and that result stands -- but it only settles 2013+,
+where a missing snap row is INFORMATIVE (unknown-snap players run 55-65% of a
+known player's usage, so a median overstates them and the fabricated zero is
+the closer proxy). Pre-2013 missingness is STRUCTURAL: the sensor did not
+exist, so the same zero understates every starter for seven seasons and
+carries no signal about any player. Two different populations; the flag
+governs one, `SNAP_DATA_START_SEASON` the other. Pre-2013 is also exempted
+from `apply_snap_imputation`, whose `snap_era` buckets split at 2018 and would
+otherwise blend real 2013-2017 behaviour into seasons that have none.
+
+**Blast radius.** Training data changed for every arm. Every prior result --
+including the 2019-2025 Phase 7 cold-start files and the 2015-2018 re-run
+completed earlier the same day -- was produced with the fabricated values and
+is no longer comparable. The 11-fold set needs a full re-run before its
+numbers mean anything.
+
+**Guardrail**: `tests/test_structural_missingness_pre_era.py` covers the
+policy collision, the `preserve` strategy, and the snap era exemption.
