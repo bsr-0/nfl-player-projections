@@ -11483,3 +11483,62 @@ per-week rookie fix.
 `availability.py` defined `POSITION_AVG_FALLBACK = 0.88` for the same
 purpose, with no import between them. `season_projection.py` now imports the
 constant.
+
+
+## snap_share is a fabricated 0.0 for every player-week before 2013, and
+## `window='all'` folds train on it (found 2026-08-25)
+
+Found while costing out whether to extend the Phase 7 cold-start arm below
+2015. It is not a pre-2015 problem -- it contaminates folds already run.
+
+`player_weekly_stats.snap_share` and `.snap_count` are **0.0, not NULL**, for
+100% of rows in 2006-2012. The `snap_counts` source table simply starts in
+2013; the columns were populated with zeros rather than left missing.
+
+| season | rows | mean snap_share | % exactly 0 | distinct values |
+|--------|------|-----------------|-------------|-----------------|
+| 2009-2012 | ~6.0k/yr | 0.0000 | 100.0 | 1 |
+| 2013   | 6,897 | 0.4803 | 7.5 | 1,759 |
+| 2014+  | ~6.0k/yr | ~0.52 | ~0.1 | ~1,750 |
+
+**Why this is the bad kind of missing.** A NULL is handled correctly --
+LightGBM's missing-aware splits route it, and the history-NaN work in this
+same arm exists precisely to preserve honest NaN. A fabricated 0.0 is a
+confident wrong answer: it says "this player was on the field for none of his
+team's snaps" for every player in seven seasons. It also **passes any
+coverage audit** -- `snap_share IS NOT NULL` reports 100% for 2009-2012,
+higher than 2013's genuine 88.7%. Same bug class as the four inert-flag bugs
+above: greps as wired, audits as present, semantically empty.
+
+**Live exposure.** `snap_share_pct_roll3_mean` and `snap_share_accel` are
+declared in `CAUSAL_FEATURES` for all four positions, and
+`window_to_season_list("all", ...)` returns every season from
+`MIN_HISTORICAL_YEAR = 2006`, so folds using `window='all'` (QB and RB in the
+2015 config, among others) train on those zeros:
+
+| test season | train span | rows from 2006-2012 | % of training rows |
+|-------------|------------|---------------------|--------------------|
+| 2015 | 2006-2014 | 40,746 | **76.0%** |
+| 2018 | 2006-2017 | 40,746 | 57.0% |
+| 2021 | 2006-2020 | 40,746 | 45.4% |
+| 2025 | 2006-2024 | 40,746 | 35.0% |
+
+The `3y` windows are unaffected for recent test seasons but not for early
+ones (a 2015 `3y` fold is 2012-2014, still one-third fabricated).
+
+**Fix (not yet applied)**: set `snap_share`/`snap_count` to NULL for seasons
+< 2013 so the missing-aware paths handle them honestly, then re-measure. This
+is a training-data change affecting every arm, so it should not be folded
+into an in-flight experiment.
+
+**Consequence for extending the arm below 2015**: 2013-2014 are safe (real
+snaps, real depth charts -- `depth_charts` also starts 2013, same boundary).
+2007-2012 would feed the model seven seasons of fabricated zeros. 2006 is
+separately unusable: `MIN_HISTORICAL_YEAR = 2006` left-censors history, so
+548 players have 2006 as their first season against a ~130/yr steady state,
+and a cold-start rookie arm would treat every established veteran as a
+rookie.
+
+**Also noted**: the existing 11-fold set is already not feature-homogeneous.
+NGS tables start in 2016 (not 2018 as previously recorded), so the 2015 fold
+has no NGS features while 2016-2025 do.
