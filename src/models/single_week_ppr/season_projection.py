@@ -31,7 +31,30 @@ from .availability import POSITION_AVG_FALLBACK
 
 logger = logging.getLogger(__name__)
 
+# Absolute upper bound across all eras. Use this ONLY to size a loop or bound
+# an assertion -- never to decide whether a week is regular season. That
+# question is era-dependent and needs `regular_season_max_week(season)`.
 REGULAR_SEASON_MAX_WEEK = 18
+
+# The NFL played a 17-week regular season through 2020 and an 18-week one from
+# 2021. Week 18 is therefore the WILD CARD ROUND in the earlier era, not a
+# regular-season week.
+LAST_17_WEEK_SEASON = 2020
+
+
+def regular_season_max_week(season: int) -> int:
+    """Last regular-season week for `season`: 17 through 2020, 18 from 2021.
+
+    A single constant cannot express this, and using 18 everywhere admitted
+    one full playoff round into every pre-2021 season total -- measured at 480
+    of 3,339 cold-start rows (14.4%) carrying a wild-card game worth 4,166
+    fantasy points, with mean bias -38.5 against -7.0 for clean rows in the
+    same seasons. It hid from the obvious `games_played > possible_weeks`
+    check because `possible_weeks_for_player` counts any week the player
+    actually played, so the extra week inflated both sides at once. Verified
+    against `schedule`: week 18 has 4-6 games through 2020 and 16 from 2021.
+    """
+    return 17 if int(season) <= LAST_17_WEEK_SEASON else 18
 
 # Team-level roll3_mean columns that come from raw team_stats/team_personnel_stats
 # joins (get_all_players_for_training SQL) + _create_causal_rolling_features'
@@ -52,9 +75,10 @@ _TEAM_PERSONNEL_ROLL_COLS = {
 
 
 def possible_weeks_for_team(db, team: str, season: int) -> List[int]:
-    """Regular-season weeks (1-18) this team appears in the schedule —
-    correctly excludes bye weeks (team absent that week) and playoffs
-    (week > 18).
+    """Regular-season weeks this team appears in the schedule — correctly
+    excludes bye weeks (team absent that week) and playoffs (any week past
+    `regular_season_max_week(season)`, which is 17 through 2020 and 18 from
+    2021; a flat 18 counted the wild-card round as regular season).
 
     `season` is coerced to a plain int: sqlite3 does not bind numpy integers,
     so a numpy season silently matches no rows and returns [] — which reads
@@ -65,7 +89,8 @@ def possible_weeks_for_team(db, team: str, season: int) -> List[int]:
     sched = db.get_schedule(season=int(season), team=str(team))
     if sched is None or sched.empty:
         return []
-    weeks = sorted(int(w) for w in sched["week"].unique() if int(w) <= REGULAR_SEASON_MAX_WEEK)
+    max_week = regular_season_max_week(season)
+    weeks = sorted(int(w) for w in sched["week"].unique() if int(w) <= max_week)
     return weeks
 
 
@@ -179,7 +204,11 @@ def possible_weeks_for_player(
 
     weeks: List[int] = []
     team_by_week: Dict[int, str] = {}
-    for week in range(1, REGULAR_SEASON_MAX_WEEK + 1):
+    # Era-aware bound: iterating to a flat 18 let the "he demonstrably played"
+    # bypass below admit pre-2021 wild-card weeks even once the schedule
+    # lookup excluded them, which is what inflated possible_weeks to 17
+    # against a true 16-game schedule for playoff-team players.
+    for week in range(1, regular_season_max_week(season) + 1):
         prior = [w for w in known_weeks if w <= week]
         team = real_team_by_week[prior[-1]] if prior else first_team
         team_by_week[week] = team
@@ -926,14 +955,18 @@ def run_season_projection(
 
             for player_id, g_all in pos_test.groupby("player_id"):
                 # Regular season only -- player_weekly_stats also carries
-                # playoff-week rows (week > 18) for players whose team made
-                # the playoffs, which must never be folded into a "season"
-                # total: the model only ever predicts regular-season weeks
-                # (possible_weeks_for_team already caps at 18), so comparing
-                # against an actual that silently includes bonus playoff
-                # production is an apples-to-oranges inflation. Found via
-                # Phase 9 debugging -- see GAPS.md.
-                g = g_all[g_all["week"] <= REGULAR_SEASON_MAX_WEEK]
+                # playoff-week rows for players whose team made the playoffs,
+                # which must never be folded into a "season" total: the model
+                # only ever predicts regular-season weeks, so comparing against
+                # an actual that silently includes bonus playoff production is
+                # an apples-to-oranges inflation. Found via Phase 9 debugging.
+                #
+                # The cap is era-dependent. This originally used a flat 18,
+                # which is right only from 2021 -- through 2020 the regular
+                # season was 17 weeks, so week 18 IS the wild-card round and
+                # one full playoff round was admitted for every pre-2021
+                # season. See regular_season_max_week and GAPS.md.
+                g = g_all[g_all["week"] <= regular_season_max_week(season)]
                 if g.empty:
                     continue
                 g_by_week = {int(w): sub for w, sub in g.groupby(g["week"].astype(int))}

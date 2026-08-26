@@ -96,6 +96,90 @@ class TestSnapImputationEraExemption:
         assert SNAP_DATA_START_SEASON == 2013
 
 
+class TestRegularSeasonBoundary:
+    """The regular season was 17 weeks through 2020 and 18 from 2021, so a
+    flat cap of 18 counted the wild-card round as regular season for every
+    pre-2021 fold."""
+
+    def test_boundary_by_era(self):
+        from src.models.single_week_ppr.season_projection import regular_season_max_week
+        for s in (2006, 2015, 2019, 2020):
+            assert regular_season_max_week(s) == 17, s
+        for s in (2021, 2024, 2025):
+            assert regular_season_max_week(s) == 18, s
+
+    def test_boundary_matches_the_schedule(self):
+        """Derived from the schedule rather than asserted: a full slate is
+        13+ games, a playoff round is 2-6."""
+        import sqlite3
+        from config.settings import DB_PATH
+        from src.models.single_week_ppr.season_projection import regular_season_max_week
+        c = sqlite3.connect(str(DB_PATH))
+        try:
+            for season in (2015, 2018, 2020, 2021, 2024):
+                last = regular_season_max_week(season)
+                n_last = c.execute(
+                    "SELECT COUNT(*) FROM schedule WHERE season=? AND week=?",
+                    (season, last)).fetchone()[0]
+                n_next = c.execute(
+                    "SELECT COUNT(*) FROM schedule WHERE season=? AND week=?",
+                    (season, last + 1)).fetchone()[0]
+                assert n_last >= 13, f"{season} wk{last} has {n_last} games, not a full slate"
+                assert n_next <= 6, f"{season} wk{last+1} has {n_next} games, not a playoff round"
+        finally:
+            c.close()
+
+    def test_playoff_week_excluded_from_possible_weeks(self):
+        """A 2015 playoff team must get 16 game-weeks, same as a team that
+        missed the playoffs -- previously the playoff team got 17."""
+        from src.models.single_week_ppr.season_projection import possible_weeks_for_team
+        from src.utils.database import DatabaseManager
+        db = DatabaseManager()
+        playoff = possible_weeks_for_team(db, "NE", 2015)     # made the playoffs
+        missed = possible_weeks_for_team(db, "CLE", 2015)     # did not
+        assert len(playoff) == len(missed) == 16
+        assert max(playoff) <= 17
+
+
+class TestFumblesLostPopulated:
+    """2025 shipped with 0 fumbles lost league-wide because the PBP fallback
+    path does not produce the column and the schema helper defaulted it to 0.
+    fantasy_points is computed from it at -2 apiece, so the target was
+    overstated in the season used as both projection target and newest fold."""
+
+    def test_every_season_has_fumbles(self):
+        import sqlite3
+        from config.settings import DB_PATH
+        c = sqlite3.connect(str(DB_PATH))
+        try:
+            rows = c.execute(
+                "SELECT season, SUM(fumbles_lost) FROM player_weekly_stats "
+                "GROUP BY season HAVING SUM(fumbles_lost) < 100").fetchall()
+        finally:
+            c.close()
+        assert not rows, f"seasons with implausibly few fumbles lost: {rows}"
+
+    def test_fantasy_points_reconstructs_from_components(self):
+        """Catches a fumbles fix applied to the column but not to the target."""
+        import sqlite3
+        from config.settings import DB_PATH
+        c = sqlite3.connect(str(DB_PATH))
+        try:
+            d = pd.read_sql(
+                "SELECT season, passing_yards, passing_tds, interceptions, "
+                "rushing_yards, rushing_tds, receptions, receiving_yards, "
+                "receiving_tds, fumbles_lost, two_point_conversions, fantasy_points "
+                "FROM player_weekly_stats WHERE season >= 2019", c)
+        finally:
+            c.close()
+        ppr = (d.passing_yards / 25 + d.passing_tds * 4 - d.interceptions * 2
+               + d.rushing_yards / 10 + d.rushing_tds * 6
+               + d.receptions + d.receiving_yards / 10 + d.receiving_tds * 6
+               - d.fumbles_lost * 2 + d.two_point_conversions * 2)
+        worst = d.assign(diff=(d.fantasy_points - ppr).abs()).groupby("season")["diff"].max()
+        assert (worst < 0.05).all(), f"PPR reconstruction drifts: {worst[worst >= 0.05].to_dict()}"
+
+
 class TestEraStartConstants:
     """Each constant must match the season its source table actually begins,
     read from the DB rather than trusted. A boundary that drifts from its

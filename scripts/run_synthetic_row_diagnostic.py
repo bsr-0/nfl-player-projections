@@ -79,7 +79,7 @@ def main():
     from src.models.single_week_ppr.final_config import FINAL_CONFIG
     from src.models.single_week_ppr.season_projection import (
         possible_weeks_for_player, compute_player_week_predictions,
-        REGULAR_SEASON_MAX_WEEK, WeekSkipTracker,
+        REGULAR_SEASON_MAX_WEEK, regular_season_max_week, WeekSkipTracker,
     )
     from src.models.single_week_ppr.windows import window_to_season_list
     from src.utils.database import DatabaseManager
@@ -119,7 +119,7 @@ def main():
             full_history = pd.concat([pos_train, pos_test], ignore_index=True)
 
             for player_id, g_all in pos_test.groupby("player_id"):
-                g = g_all[g_all["week"] <= REGULAR_SEASON_MAX_WEEK]
+                g = g_all[g_all["week"] <= regular_season_max_week(season)]
                 if g.empty:
                     continue
                 g_by_week = {int(w): sub for w, sub in g.groupby(g["week"].astype(int))}

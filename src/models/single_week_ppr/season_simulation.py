@@ -220,7 +220,7 @@ def run_season_simulation(
     from src.models.single_week_ppr.final_config import FINAL_CONFIG
     from src.models.single_week_ppr.season_projection import (
         possible_weeks_for_player, estimate_availability_rate, compute_player_week_predictions,
-        REGULAR_SEASON_MAX_WEEK, WeekSkipTracker,
+        REGULAR_SEASON_MAX_WEEK, regular_season_max_week, WeekSkipTracker,
     )
     from src.models.single_week_ppr.windows import window_to_season_list
     from src.utils.database import DatabaseManager
@@ -290,9 +290,10 @@ def run_season_simulation(
 
             for player_id, g_all in pos_test.groupby("player_id"):
                 # Regular season only -- see season_projection.py's matching
-                # comment for why playoff-week rows (week > 18) must be
-                # excluded before computing a "season" total.
-                g = g_all[g_all["week"] <= REGULAR_SEASON_MAX_WEEK]
+                # comment for why playoff-week rows must be excluded before
+                # computing a "season" total, and why the cap is era-aware
+                # (17 through 2020, 18 from 2021) rather than a flat 18.
+                g = g_all[g_all["week"] <= regular_season_max_week(season)]
                 if g.empty:
                     continue
                 g_by_week = {int(w): sub for w, sub in g.groupby(g["week"].astype(int))}

@@ -110,7 +110,10 @@ class TestFallbackWhenRosterDataMissing:
         coverage. That must mean 'cannot check', not 'nobody is eligible'."""
         monkeypatch.setattr(sp, "active_roster_weeks", lambda pid, s: None)
         weeks, _ = possible_weeks_for_player(db, _played(5), 2010, player_id="p1")
-        assert len(weeks) == len(ALL_WEEKS)
+        # 2010 is a 17-week regular season -- the other tests here use 2023,
+        # which is 18. This asserted 18 for 2010 and so encoded the flat-cap
+        # bug: week 18 in 2010 is the wild-card round, not a playable week.
+        assert len(weeks) == sp.regular_season_max_week(2010) == 17
 
     def test_filter_can_be_disabled(self, db, monkeypatch):
         monkeypatch.setattr(sp, "active_roster_weeks", lambda pid, s: {1})
