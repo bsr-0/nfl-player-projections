@@ -77,8 +77,47 @@ _SNAP_IMPUTATION_OWNED = frozenset({
 # 2006-2022 and real values from 2023: a train/test discontinuity, not a
 # feature (GAPS.md 2026-08-20). FTN charting begins in 2022. LightGBM splits
 # on NaN natively, so leaving them missing is both honest and usable.
+# First season each advanced-stat source has any rows. Before these the
+# per-season median is a median of nothing, so the `fillna(0.0)` fallback at
+# the end of each builder wrote a single constant for every player in every
+# pre-era season -- 0.0 for the PFR families, 1.0 for injury_score. That is
+# not "no data": 0.0% pressure rate and injury_score 1.0 are confident claims,
+# and because they are never null they pass every coverage audit. Rows outside
+# a source's era are held NaN instead.
+WEEKLY_PFR_START_SEASON = 2018
+SEASONAL_PFR_START_SEASON = 2019   # seasonal_pfr starts 2018, shifted +1 to
+                                   # become PRIOR-season features
+INJURY_DATA_START_SEASON = 2013
+DEPTH_CHART_START_SEASON = 2013
+
+
+def _mask_pre_era(df: pd.DataFrame, cols, start_season: int) -> pd.DataFrame:
+    """NaN out `cols` for rows before `start_season`, leaving the in-era fill
+    exactly as it was. No-op when the frame carries no season column."""
+    if "season" not in df.columns:
+        return df
+    in_era = pd.to_numeric(df["season"], errors="coerce") >= start_season
+    for col in cols:
+        if col in df.columns:
+            df[col] = df[col].where(in_era)
+    return df
+
+
 _STRUCTURALLY_MISSING = frozenset({
     "team_motion_rate", "team_play_action_rate", "team_shotgun_rate",
+    # PFR advanced stats (weekly_pfr / seasonal_pfr both start 2018) and
+    # injury_score (player_injuries starts 2013). Their builders fill within
+    # the era; _impute_missing would otherwise median-fill the pre-era NaN
+    # straight back, exactly as it did for snap_share_accel.
+    "qb_pressure_pct_roll3_mean", "qb_blitz_rate_roll3_mean",
+    "qb_hurry_rate_roll3_mean", "qb_hit_rate_roll3_mean",
+    "qb_sack_rate_roll3_mean", "rb_ybc_avg_roll3_mean",
+    "rb_yac_avg_roll3_mean", "recv_drop_pct_roll3_mean",
+    "qb_bad_throw_pct_prior", "qb_pocket_time_prior",
+    "rb_broken_tackles_prior", "recv_drop_pct_season_prior",
+    "team_sack_rate_allowed", "team_sack_rate_allowed_roll3_mean",
+    "team_run_block_ybc_avg", "team_run_block_ybc_avg_roll3_mean",
+    "injury_score", "depth_chart_rank",
     # Derived from snap_share_pct, which has no source before 2013. Its own
     # creation site already fills the ordinary "too few prior weeks" case with
     # 0.0, so by the time it reaches _impute_missing the only NaN left IS the
@@ -1064,7 +1103,16 @@ class FeatureEngineer:
         stale_seasons = (merged["_key"] // 100) - (merged["_snap_key"] // 100)
         too_stale = stale_seasons > DEPTH_CHART_MAX_STALENESS_SEASONS
         ranks = merged["depth_chart_rank"].where(~too_stale)
-        df["depth_chart_rank"] = ranks.fillna(3).astype(int).values
+        # `depth_charts` starts in 2013. Before that the neutral default below
+        # is not a fallback for a few stale rows, it is the ONLY value: every
+        # player in 2006-2012 reads as third on his depth chart, starters
+        # included. Held NaN instead, which forces float dtype -- the previous
+        # .astype(int) is what made the fabricated 3 unavoidable.
+        filled = ranks.fillna(3).astype(float)
+        if "season" in df.columns:
+            in_era = pd.to_numeric(df["season"], errors="coerce").values >= DEPTH_CHART_START_SEASON
+            filled = filled.where(pd.Series(in_era, index=filled.index))
+        df["depth_chart_rank"] = filled.values
 
         n_stale = int(too_stale.sum())
         if n_stale:
@@ -1235,6 +1283,10 @@ class FeatureEngineer:
             for col in output_cols:
                 df[col] = df[col].fillna(0.0)
 
+            # Sourced from weekly_pfr, which starts 2018 -- the fill above
+            # otherwise claims a 0.0 sack rate allowed for every pre-2018 team.
+            df = _mask_pre_era(df, output_cols, WEEKLY_PFR_START_SEASON)
+
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"team_ol features skipped: {e}")
@@ -1389,6 +1441,10 @@ class FeatureEngineer:
                     )
                 df[dst] = df[dst].fillna(0.0)
 
+            # weekly_pfr has no rows before 2018, so the fill above just wrote
+            # 0.0 for every pre-2018 player. Undo it for those rows only.
+            df = _mask_pre_era(df, output_cols, WEEKLY_PFR_START_SEASON)
+
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"weekly_pfr features skipped: {e}")
@@ -1460,6 +1516,10 @@ class FeatureEngineer:
                         lambda x: x.fillna(x.median())
                     )
                 df[col] = df[col].fillna(0.0)
+
+            # These are PRIOR-season features off a table starting in 2018, so
+            # the first target season with real data is 2019.
+            df = _mask_pre_era(df, output_cols, SEASONAL_PFR_START_SEASON)
 
         except Exception as e:
             import logging
@@ -1735,15 +1795,26 @@ class FeatureEngineer:
         # Advanced PBP efficiency (EPA/WPA per opportunity)
         # Prefer pass_plays/rush_plays/recv_targets if populated; fall back to
         # passing_attempts/rushing_attempts/targets when the PBP columns are empty.
-        pass_plays = df.get("pass_plays", pd.Series(0, index=df.index))
-        if pass_plays.sum() == 0 and "passing_attempts" in df.columns:
-            pass_plays = df["passing_attempts"]
-        rush_plays = df.get("rush_plays", pd.Series(0, index=df.index))
-        if rush_plays.sum() == 0 and "rushing_attempts" in df.columns:
-            rush_plays = df["rushing_attempts"]
-        recv_targets = df.get("recv_targets", pd.Series(0, index=df.index))
-        if recv_targets.sum() == 0 and "targets" in df.columns:
-            recv_targets = df["targets"]
+        # Per-ROW fallback, deliberately not the whole-frame `sum() == 0` test
+        # this replaces. pass_plays/rush_plays/recv_targets were populated only
+        # for 2025, so a frame containing a single 2025 row made the sum
+        # non-zero and disabled the fallback for every other season at once --
+        # measured at 100% zero for 2020-2024 with 2025 present and ~7% without
+        # it. The same season was real or fabricated depending on what else was
+        # in the frame, which no per-column audit can see. The columns are now
+        # backfilled for all seasons (they equal the box-score columns, which
+        # is the definition 2025 already used), so this is defence in depth.
+        def _plays(col: str, fallback_col: str) -> pd.Series:
+            fallback = (df[fallback_col] if fallback_col in df.columns
+                        else pd.Series(0, index=df.index))
+            if col not in df.columns:
+                return fallback
+            plays = pd.to_numeric(df[col], errors="coerce")
+            return plays.where(plays > 0, fallback)
+
+        pass_plays = _plays("pass_plays", "passing_attempts")
+        rush_plays = _plays("rush_plays", "rushing_attempts")
+        recv_targets = _plays("recv_targets", "targets")
         if "pass_epa" in df.columns:
             new_cols["pass_epa_per_play"] = safe_divide(df["pass_epa"], pass_plays)
         if "rush_epa" in df.columns:
@@ -4263,6 +4334,15 @@ class FeatureEngineer:
             .clip(0, 1)
         )
 
+        # `player_injuries` has no rows before 2013, so the .fillna(1.0) above
+        # is not "no report, therefore healthy" for those seasons -- it is
+        # "nobody was ever asked", asserted as full health for every player.
+        # Masked here rather than in _ensure_injury_rookie_features because
+        # only this function is on BOTH create_features branches; the causal
+        # path never calls the other one, which is how the first attempt at
+        # this fix came out inert.
+        merged = _mask_pre_era(merged, ["injury_score"], INJURY_DATA_START_SEASON)
+
         return merged.drop(columns=[c for c in ("_injury_score", "_is_injured") if c in merged.columns])
 
     def _ensure_injury_rookie_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -4277,7 +4357,14 @@ class FeatureEngineer:
 
         injury_cols: dict = {}
 
-        # Injury: from external_data when available; else full availability
+        # Injury: from external_data when available; else full availability.
+        #
+        # In-era that default is meaningful -- a player absent from the injury
+        # report genuinely is unlisted, i.e. healthy. Before 2013 there is no
+        # `player_injuries` table at all, so the same 1.0 is not "healthy" but
+        # "never asked", asserted for every player in every season. Only the
+        # pre-era rows are masked; the in-era 1.0 default and the open
+        # `Probable` question above are deliberately left alone.
         injury_cols["injury_score"] = (
             df["injury_score"].fillna(1.0).clip(0.0, 1.0)
             if "injury_score" in df.columns else 1.0
@@ -4286,6 +4373,11 @@ class FeatureEngineer:
             df["is_injured"].fillna(0).astype(int).clip(0, 1)
             if "is_injured" in df.columns else 0
         )
+        if "season" in df.columns:
+            _pre_injury = pd.to_numeric(df["season"], errors="coerce") < INJURY_DATA_START_SEASON
+            injury_cols["injury_score"] = pd.Series(
+                injury_cols["injury_score"], index=df.index
+            ).where(~_pre_injury)
 
         # `is_rookie` deliberately NOT set here. This function used to define it
         # as `games_count <= 8`, which is not rookie status at all -- it labels

@@ -49,7 +49,10 @@
       "numeric_strategy": "value",
       "fallback_value": 0.0,
       "warn_threshold": 0.03,
-      "fail_threshold": 0.3
+      "fail_threshold": 0.3,
+      "exclude": [
+        "injury_score"
+      ]
     },
     "rookie": {
       "matchers": [

@@ -96,6 +96,100 @@ class TestSnapImputationEraExemption:
         assert SNAP_DATA_START_SEASON == 2013
 
 
+class TestEraStartConstants:
+    """Each constant must match the season its source table actually begins,
+    read from the DB rather than trusted. A boundary that drifts from its
+    source silently re-creates the bug it was added to fix."""
+
+    def test_boundaries_match_source_tables(self):
+        import sqlite3
+        from config.settings import DB_PATH
+        from src.features.feature_engineering import (
+            WEEKLY_PFR_START_SEASON, SEASONAL_PFR_START_SEASON,
+            INJURY_DATA_START_SEASON, DEPTH_CHART_START_SEASON,
+        )
+        c = sqlite3.connect(str(DB_PATH))
+        try:
+            def first(table):
+                return int(next(c.execute(f"SELECT MIN(season) FROM {table}"))[0])
+            assert WEEKLY_PFR_START_SEASON == first("weekly_pfr")
+            # seasonal_pfr is shifted +1 to become PRIOR-season features
+            assert SEASONAL_PFR_START_SEASON == first("seasonal_pfr") + 1
+            assert INJURY_DATA_START_SEASON == first("player_injuries")
+            assert DEPTH_CHART_START_SEASON == first("depth_charts")
+        finally:
+            c.close()
+
+    def test_masked_columns_are_exempt_from_the_median_imputer(self):
+        """Masking without exempting is inert -- _impute_missing puts the
+        constant straight back. Every masked column must be in the exempt set."""
+        from src.features.feature_engineering import _STRUCTURALLY_MISSING
+        for col in ("qb_pressure_pct_roll3_mean", "recv_drop_pct_roll3_mean",
+                    "team_sack_rate_allowed_roll3_mean", "qb_bad_throw_pct_prior",
+                    "qb_pocket_time_prior", "injury_score", "depth_chart_rank"):
+            assert col in _STRUCTURALLY_MISSING, col
+
+
+class TestPlayCountDenominators:
+    """pass_plays/rush_plays/recv_targets were populated only for 2025, and the
+    fallback tested the WHOLE frame, so one 2025 row silently zeroed every
+    other season's per-play EPA."""
+
+    def test_fallback_is_per_row_not_per_frame(self):
+        """Built from real rows: _create_base_features needs the full weekly
+        schema, and a hand-rolled fixture silently diverges from it."""
+        import sqlite3
+        from config.settings import DB_PATH
+        from src.features.feature_engineering import FeatureEngineer
+
+        c = sqlite3.connect(str(DB_PATH))
+        try:
+            df = pd.read_sql(
+                "SELECT * FROM player_weekly_stats "
+                "WHERE season IN (2015, 2025) AND passing_attempts > 5 "
+                "GROUP BY season LIMIT 2", c)
+        finally:
+            c.close()
+        if len(df) < 2:
+            pytest.skip("need one 2015 and one 2025 passing row")
+
+        # Reproduce the pre-fix state for the older row only.
+        df.loc[df.season == 2015, "pass_plays"] = 0
+        df.loc[:, "pass_epa"] = 10.0
+        df.loc[:, "passing_attempts"] = 20
+
+        # The invariant is frame-independence: the 2015 row must compute the
+        # same whether or not a populated 2025 row shares the frame. Comparing
+        # the two rows to each other would only compare their denominators.
+        both = FeatureEngineer()._create_base_features(df.copy())
+        alone = FeatureEngineer()._create_base_features(
+            df[df.season == 2015].copy())
+
+        v_both = both.loc[both.season == 2015, "pass_epa_per_play"].to_numpy()[0]
+        v_alone = alone["pass_epa_per_play"].to_numpy()[0]
+        assert v_both == v_alone, (
+            "a populated 2025 row changed how 2015 was computed "
+            f"({v_both} with it, {v_alone} without)"
+        )
+        assert v_both != 0, "2015 must not collapse to a fabricated 0.0"
+
+    def test_db_play_counts_are_populated_for_every_season(self):
+        import sqlite3
+        from config.settings import DB_PATH
+        c = sqlite3.connect(str(DB_PATH))
+        try:
+            bad = c.execute("""
+                SELECT season FROM player_weekly_stats
+                GROUP BY season
+                HAVING SUM(pass_plays = passing_attempts) <> COUNT(*)
+                    OR SUM(rush_plays = rushing_attempts) <> COUNT(*)
+                    OR SUM(recv_targets = targets) <> COUNT(*)
+            """).fetchall()
+        finally:
+            c.close()
+        assert not bad, f"play-count columns disagree with box score in: {bad}"
+
+
 class TestSnapAccelEraMask:
     """snap_share_accel needed THREE separate exemptions before the era mask
     survived: the mask itself, the utilization policy group's exclude list,
