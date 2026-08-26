@@ -11971,3 +11971,54 @@ week w. Legitimate for the weekly model. They would NOT be legitimate for a
 season-ahead projection, where no week of the target season is knowable;
 Phase 7's preseason mode already handles that by restricting carry-forward to
 prior seasons.
+
+
+## Phase 3 re-selection on corrected data: config unchanged, two bugs found
+## (2026-08-26)
+
+Re-ran the architecture/window/weighting comparison because every prior
+selection predated the training-data corrections. Artifacts and full detail:
+`data/experiments/phase3_rerun_20260826/` (read `phase3_MERGED.csv`).
+
+**Result: `FINAL_CONFIG` unchanged.** QB reproduces its current config
+exactly (delta 0.0000). RB and TE differ from their current setting by 0.05
+and 0.06 of a fold standard deviation. WR shows the only non-trivial delta
+(0.69 sd, `all` over `3y`) but `all` ranks fifth of six on WR's window mean
+and wins in exactly one of 36 architecture/weighting cells -- selection noise
+on 3 folds. Nothing here justifies a change.
+
+**The `since2013` candidate answered its question.** Added specifically to
+test cutting the pre-2013 measurement era, it ranks 2nd-3rd for every position
+and wins nothing outright. No floor, and it barely matters -- those seasons
+neither help nor hurt now that they carry honest NaN rather than fabricated
+zeros. Before the corrections the same comparison would have been measuring
+fabricated data against real data.
+
+**Two bugs the numbers did not show.** The run completed 72/72 with no
+crashes. Auditing it rather than reading it found:
+
+  - Component mode fell back to fp mode in 24 of 72 folds (every
+    `test_season=2023`, all positions, all windows). `team_motion_rate` and
+    `team_play_action_rate` are 100% NaN in those training sets, so their
+    median was NaN; imputing NaN with NaN left NaN, and
+    `np.isfinite(X_arr).all(axis=1)` then rejected every row. Half of this was
+    self-inflicted: the pre-fix run failed the same folds via the old notna
+    gate, and the median vector added the day before recreated the outcome
+    through a new path.
+  - `PHASE3_WINNER_ARCHITECTURE["TE"]` was still `B_gbm_huber` while
+    `FINAL_CONFIG` moved to `C_gbm_mae` on 2026-08-21. TE's window ranking was
+    measured against a model production does not use.
+
+Both fixed in 80bd866; `_architectures_for_position` now raises on divergence
+rather than quietly mis-measuring.
+
+**Method note.** The architecture rows survived both bugs because
+`_build_feature_matrices` passes NaN to LightGBM untouched. That was verified,
+not assumed: all 36 WR/2023 architecture rows present in both the main run and
+the repair are bit-identical. Salvaging 5 hours of compute rested on that
+check, not on the argument.
+
+**Still open**: 3 folds per position is thin. The caching discovery (~40 s per
+warm fold against 6.4 min cold) makes an 11-fold Phase 3 roughly 3 hours
+rather than a day, so the fold count is now cheap to raise if any of these
+deltas ever needs to be taken seriously.
