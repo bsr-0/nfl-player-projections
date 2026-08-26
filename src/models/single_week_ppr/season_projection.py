@@ -463,7 +463,10 @@ def _apply_august_legal_matchup(row, team, target_season, target_week, db, featu
 
     probe = row.copy()
     probe["season"] = target_season - 1
-    probe["week"] = REGULAR_SEASON_MAX_WEEK
+    # Last regular-season week OF THE PRIOR SEASON -- that is the era that
+    # matters here. A flat 18 probed the wild-card round for any prior season
+    # through 2020, reading opponent strength off a playoff week.
+    probe["week"] = regular_season_max_week(target_season - 1)
     probe = feature_engineer.refresh_matchup_features(probe)
     for col in _OPPONENT_STRENGTH_COLS:
         if col in probe.columns and col in row.columns:

@@ -49,6 +49,8 @@ def main():
     lo, hi = min(args.seasons), max(args.seasons)
 
     # Weeks each team actually played (excludes byes).
+    from config.settings import regular_season_max_week
+
     sched = pd.read_sql(
         f"""SELECT season, week, home_team AS team FROM schedule
             WHERE season BETWEEN {lo} AND {hi}
@@ -57,7 +59,11 @@ def main():
     sched["week"] = pd.to_numeric(sched.week, errors="coerce")
     sched = sched.dropna(subset=["week"])
     sched["week"] = sched.week.astype(int)
-    sched = sched[sched.week <= 18]
+    # Era-aware: 17 through 2020, 18 from 2021. A flat 18 marked the
+    # pre-2021 wild-card round as "team played this week", so playoff
+    # participants looked rostered-but-statless for a game that was
+    # never part of the regular season.
+    sched = sched[sched.week <= sched.season.map(regular_season_max_week)]
     sched["played_game"] = True
 
     # Universe: active-roster skill-position player-weeks whose team played.

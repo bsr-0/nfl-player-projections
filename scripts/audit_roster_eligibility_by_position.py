@@ -37,7 +37,7 @@ import numpy as np
 import pandas as pd
 
 from src.models.single_week_ppr.season_projection import (
-    possible_weeks_for_player, REGULAR_SEASON_MAX_WEEK,
+    possible_weeks_for_player, REGULAR_SEASON_MAX_WEEK, regular_season_max_week,
 )
 
 # weekly_rosters status in an excluded week -> why it was excluded.
@@ -77,7 +77,7 @@ def main():
     for position in args.positions:
         hist = db.get_all_players_for_training(position=position)
         hist = hist[hist.season.isin(args.seasons)]
-        hist = hist[hist.week <= REGULAR_SEASON_MAX_WEEK]
+        hist = hist[hist.week <= hist.season.map(regular_season_max_week)]
 
         ppg_season = hist.groupby(["player_id", "season"])["fantasy_points"].mean()
         pos_median = float(hist["fantasy_points"].median())

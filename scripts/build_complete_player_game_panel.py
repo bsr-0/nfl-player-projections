@@ -58,7 +58,11 @@ from config.settings import DB_PATH, POSITIONS
 # Lowering this promotes 2013-2017 from the weaker PBP-participation tier to
 # the precise snap-verified one.
 SNAP_COUNT_MIN_SEASON = 2013
-REGULAR_SEASON_MAX_WEEK = 18
+# Was a local `REGULAR_SEASON_MAX_WEEK = 18`, duplicating the shared
+# constant and flat across eras. The regular season is 17 weeks through
+# 2020, so a flat 18 put the wild-card round into this panel's
+# opponent/home_away map for every pre-2021 season.
+from config.settings import regular_season_week_sql  # noqa: E402
 
 # weekly_rosters uses era-specific team abbreviations; `schedule` normalizes
 # to current codes retroactively (confirmed: schedule has no 'OAK'/'SD'/'SL'
@@ -80,8 +84,9 @@ def _connect() -> sqlite3.Connection:
 def _team_opponent_home_away_map(conn: sqlite3.Connection) -> pd.DataFrame:
     """(season, week, team) -> (opponent, home_away) from schedule, regular season only."""
     sched = pd.read_sql(
-        "SELECT season, week, home_team, away_team FROM schedule WHERE week <= ?",
-        conn, params=[REGULAR_SEASON_MAX_WEEK],
+        f"SELECT season, week, home_team, away_team FROM schedule "
+        f"WHERE {regular_season_week_sql()}",
+        conn,
     )
     home = sched.rename(columns={"home_team": "team", "away_team": "opponent"})[["season", "week", "team", "opponent"]]
     home["home_away"] = "home"

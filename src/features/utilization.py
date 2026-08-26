@@ -387,18 +387,38 @@ def engineer_all_features(
     df['is_super_bowl'] = (df['week'] == 22).astype(int)
     
     # Season phase categorical (grouped weeks to avoid overfitting)
-    # Early (1-6), Mid (7-12), Late (13-18), Playoff (19+)
-    def get_season_phase(week):
+    # Early (1-6), Mid (7-12), Late (13 .. last regular week), Playoff (after).
+    #
+    # The Late/Playoff cut is era-dependent: the regular season ran 17 weeks
+    # through 2020, so a flat `week <= 18` labelled the pre-2021 wild-card
+    # round as "Late" regular season. season_phase is consumed by
+    # train_advanced.py, so the mislabel reached a model rather than just a
+    # report.
+    from config.settings import regular_season_max_week
+
+    def get_season_phase(week, season):
         if week <= 6:
             return 0  # Early
         elif week <= 12:
             return 1  # Mid
-        elif week <= 18:
+        elif week <= regular_season_max_week(season):
             return 2  # Late
         else:
             return 3  # Playoff
-    
-    df['season_phase'] = df['week'].apply(get_season_phase)
+
+    if 'season' in df.columns:
+        df['season_phase'] = [get_season_phase(w, s)
+                              for w, s in zip(df['week'], df['season'])]
+    else:
+        # No season column: fall back to the modern boundary rather than
+        # guessing, and say so instead of failing silently.
+        import warnings
+        warnings.warn(
+            "season_phase computed without a season column; using the 18-week "
+            "boundary, which mislabels pre-2021 wild-card rows as regular season.",
+            RuntimeWarning, stacklevel=2,
+        )
+        df['season_phase'] = df['week'].apply(lambda w: get_season_phase(w, 2021))
     
     # Week position within season (normalized 0-1)
     df['week_normalized'] = df['week'].clip(upper=18) / 18.0

@@ -446,10 +446,11 @@ def load_model_projections(
 def _load_season_actual_totals(season: int) -> pd.DataFrame:
     """Load regular-season fantasy-point totals for a completed season."""
     from src.utils.database import DatabaseManager
+    from config.settings import regular_season_week_sql
 
     with DatabaseManager()._get_connection() as conn:
         return pd.read_sql(
-            """
+            f"""
             SELECT pws.player_id,
                    p.name,
                    p.position,
@@ -458,7 +459,7 @@ def _load_season_actual_totals(season: int) -> pd.DataFrame:
               FROM player_weekly_stats pws
               JOIN players p ON pws.player_id = p.player_id
              WHERE pws.season = ?
-               AND pws.week <= 18
+               AND {regular_season_week_sql('pws.week', 'pws.season')}
                AND p.position IN ('QB', 'RB', 'WR', 'TE')
              GROUP BY pws.player_id, p.name, p.position
             """,

@@ -53,7 +53,9 @@ STAT_FIELDS = {
     "player_kicking_points":     "kicking_pts",
 }
 
-REGULAR_SEASON_MAX_WEEK = 18
+# Was a local `REGULAR_SEASON_MAX_WEEK = 18`, duplicating the shared
+# constant. 17 weeks through 2020, 18 from 2021.
+from config.settings import regular_season_week_sql  # noqa: E402
 
 
 def _load_props(season: int) -> dict[tuple[str, str, int], list[float]]:
@@ -64,7 +66,7 @@ def _load_props(season: int) -> dict[tuple[str, str, int], list[float]]:
         FROM player_props_odds
         WHERE season = ?
           AND description = 'Over'
-          AND week BETWEEN 1 AND {REGULAR_SEASON_MAX_WEEK}
+          AND {regular_season_week_sql()}
           AND point IS NOT NULL
           AND market IN ({markets_in})
     """
@@ -84,7 +86,7 @@ def _load_actual_tds(season: int) -> dict[str, dict]:
     Pass TDs are included for reference but NOT added to market_fp since prop data
     already captures them for QBs.
     """
-    query = """
+    query = f"""
         SELECT r.player_name, p.position,
                SUM(COALESCE(w.rushing_tds, 0)),
                SUM(COALESCE(w.receiving_tds, 0)),
@@ -96,7 +98,7 @@ def _load_actual_tds(season: int) -> dict[str, dict]:
            AND w.week = r.week
         JOIN players p ON w.player_id = p.player_id
         WHERE w.season = ?
-          AND w.week BETWEEN 1 AND 18
+          AND {regular_season_week_sql('w.week', 'w.season')}
           AND p.position IN ('QB', 'RB', 'WR', 'TE', 'K')
         GROUP BY w.player_id, r.player_name
     """
