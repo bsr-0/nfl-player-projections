@@ -4027,19 +4027,29 @@ class FeatureEngineer:
             import sqlite3
             from config.settings import DB_PATH
             conn = sqlite3.connect(str(DB_PATH))
-            rows = conn.execute("""
+            # Regular-season wins only, era-aware (17 weeks through 2020, 18
+            # from 2021). A flat 18 counted the wild-card round as a regular
+            # -season game, giving 62 of 480 pre-2021 team-seasons an inflated
+            # win total (4/season, 6 in 2020) -- and this is a CAUSAL_FEATURE
+            # for all four positions, so it reached every player on those
+            # teams the following year, in the earlier era only.
+            from config.settings import regular_season_week_sql
+            week_is_regular = regular_season_week_sql()
+            rows = conn.execute(f"""
                 SELECT
                     home_team AS team, season,
                     SUM(CASE WHEN home_score > away_score THEN 1 ELSE 0 END) AS wins
                 FROM schedule
-                WHERE home_score IS NOT NULL AND away_score IS NOT NULL AND week <= 18
+                WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+                  AND {week_is_regular}
                 GROUP BY home_team, season
                 UNION ALL
                 SELECT
                     away_team AS team, season,
                     SUM(CASE WHEN away_score > home_score THEN 1 ELSE 0 END) AS wins
                 FROM schedule
-                WHERE home_score IS NOT NULL AND away_score IS NOT NULL AND week <= 18
+                WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+                  AND {week_is_regular}
                 GROUP BY away_team, season
             """).fetchall()
             conn.close()

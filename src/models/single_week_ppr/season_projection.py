@@ -36,25 +36,21 @@ logger = logging.getLogger(__name__)
 # question is era-dependent and needs `regular_season_max_week(season)`.
 REGULAR_SEASON_MAX_WEEK = 18
 
-# The NFL played a 17-week regular season through 2020 and an 18-week one from
-# 2021. Week 18 is therefore the WILD CARD ROUND in the earlier era, not a
-# regular-season week.
-LAST_17_WEEK_SEASON = 2020
-
-
-def regular_season_max_week(season: int) -> int:
-    """Last regular-season week for `season`: 17 through 2020, 18 from 2021.
-
-    A single constant cannot express this, and using 18 everywhere admitted
-    one full playoff round into every pre-2021 season total -- measured at 480
-    of 3,339 cold-start rows (14.4%) carrying a wild-card game worth 4,166
-    fantasy points, with mean bias -38.5 against -7.0 for clean rows in the
-    same seasons. It hid from the obvious `games_played > possible_weeks`
-    check because `possible_weeks_for_player` counts any week the player
-    actually played, so the extra week inflated both sides at once. Verified
-    against `schedule`: week 18 has 4-6 games through 2020 and 16 from 2021.
-    """
-    return 17 if int(season) <= LAST_17_WEEK_SEASON else 18
+# Canonical definition lives in config.settings so the feature layer, the
+# preseason models and the scripts can all reach it without importing this
+# module. Re-exported here because several callers already import it from
+# season_projection.
+#
+# Using a flat 18 admitted one full playoff round into every pre-2021 season
+# total -- measured at 480 of 3,339 cold-start rows (14.4%) carrying a
+# wild-card game worth 4,166 fantasy points, with mean bias -38.5 against
+# -7.0 for clean rows in the same seasons. It hid from the obvious
+# `games_played > possible_weeks` check because `possible_weeks_for_player`
+# counts any week the player actually played, so the extra week inflated both
+# sides at once.
+from config.settings import (  # noqa: E402
+    LAST_17_WEEK_SEASON, regular_season_max_week, regular_season_week_sql,
+)
 
 # Team-level roll3_mean columns that come from raw team_stats/team_personnel_stats
 # joins (get_all_players_for_training SQL) + _create_causal_rolling_features'

@@ -57,6 +57,37 @@ CURRENT_NFL_SEASON = _current_nfl_season()
 SEASONS_TO_SCRAPE = list(range(MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON + 1))
 
 # -----------------------------------------------------------------------------
+# Regular-season length. The NFL played 17 weeks through 2020 and 18 from 2021,
+# so week 18 is the WILD CARD ROUND in the earlier era, not a regular-season
+# week. A flat 18 therefore folds one full playoff round into anything that
+# means "the season" -- season totals, availability denominators, prior-season
+# win counts. Measured cost when this was flat: 480 of 3,339 pre-2021
+# cold-start rows carried a wild-card game (4,166 fantasy points), and 62 of
+# 480 pre-2021 team-seasons had an inflated win total.
+#
+# Lives here rather than in season_projection.py because feature_engineering,
+# the preseason models and several scripts all need it, and importing the
+# projection module into the feature layer would invert the dependency.
+LAST_17_WEEK_SEASON = 2020
+
+
+def regular_season_max_week(season) -> int:
+    """Last regular-season week for `season`: 17 through 2020, 18 from 2021."""
+    return 17 if int(season) <= LAST_17_WEEK_SEASON else 18
+
+
+def regular_season_week_sql(week_col: str = "week", season_col: str = "season") -> str:
+    """SQL predicate for "this row is a regular-season week".
+
+    Written as a fragment rather than a parameter so callers that aggregate
+    across many seasons in one query stay correct per-row. Interpolating table
+    aliases is safe here: both arguments are column names supplied by the
+    calling module, never user input.
+    """
+    return (f"{week_col} <= (CASE WHEN {season_col} <= {LAST_17_WEEK_SEASON} "
+            f"THEN 17 ELSE 18 END)")
+
+# -----------------------------------------------------------------------------
 # PBP ADVANCED FEATURE SETTINGS
 # -----------------------------------------------------------------------------
 # Enable advanced PBP-derived features (EPA/WPA/success, neutral pass rate, drive metrics).

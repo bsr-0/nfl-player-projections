@@ -528,6 +528,8 @@ class PreseasonProjector:
     @staticmethod
     def _build_season_pairs(db, seasons: List[int]) -> pd.DataFrame:
         """Build (prior season features, current season target) pairs."""
+        from config.settings import regular_season_week_sql
+
         frames = []
         season_list = sorted(seasons)
         for i in range(len(season_list) - 1):
@@ -536,7 +538,7 @@ class PreseasonProjector:
 
             with db._get_connection() as conn:
                 prior_df = pd.read_sql_query(
-                    """
+                    f"""
                     SELECT
                         pws.player_id,
                         p.name AS player_name,
@@ -575,7 +577,11 @@ class PreseasonProjector:
                      AND r.season = ?
                     WHERE pws.season = ?
                       AND p.position IN ('QB', 'RB', 'WR', 'TE')
-                      AND pws.week <= 18
+                      -- Era-aware: 17 through 2020, 18 from 2021. A flat 18
+                      -- folded the wild-card round into these prior-season
+                      -- per-game rates and into the COUNT(*) >= MIN_GAMES
+                      -- eligibility test below.
+                      AND {regular_season_week_sql('pws.week', 'pws.season')}
                     GROUP BY pws.player_id, p.name, p.position, p.birth_date, r.years_exp
                     HAVING COUNT(*) >= ?
                     """,

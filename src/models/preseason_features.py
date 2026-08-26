@@ -50,10 +50,18 @@ LOOKBACK_YEARS = 3
 
 
 def _load_full_history(db) -> pd.DataFrame:
-    """All player-weeks for offensive skill positions, full history."""
+    """All REGULAR-SEASON player-weeks for offensive skill positions.
+
+    The week filter is era-aware: 17 through 2020, 18 from 2021. A flat 18
+    folded the wild-card round into every pre-2021 season aggregate here,
+    while the Phase 7 arm excludes it -- so the two arms were being compared
+    against different definitions of "season".
+    """
+    from config.settings import regular_season_week_sql
+
     with db._get_connection() as conn:
         return pd.read_sql_query(
-            """
+            f"""
             SELECT pws.player_id, p.name AS player_name, p.position,
                    p.birth_date, pws.team, pws.season, pws.week,
                    pws.fantasy_points, pws.passing_yards, pws.passing_tds,
@@ -68,7 +76,8 @@ def _load_full_history(db) -> pd.DataFrame:
             LEFT JOIN utilization_scores us
               ON pws.player_id = us.player_id
              AND pws.season = us.season AND pws.week = us.week
-            WHERE p.position IN ('QB', 'RB', 'WR', 'TE') AND pws.week <= 18
+            WHERE p.position IN ('QB', 'RB', 'WR', 'TE')
+              AND {regular_season_week_sql('pws.week', 'pws.season')}
             """,
             conn,
         )
