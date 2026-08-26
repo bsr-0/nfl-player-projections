@@ -15,7 +15,21 @@ import pandas as pd
 
 from config.settings import MIN_HISTORICAL_YEAR, MODEL_CONFIG
 
-WINDOW_CANDIDATES = ("3y", "5y", "7y", "10y", "all")
+# The measurement-era floor, as a candidate rather than an imposed rule.
+#
+# snap_counts, depth_charts and player_injuries all begin in 2013. Before that,
+# 12 of WR's 71 causal features are entirely absent and mean missingness is
+# 17.3% against 4.5% from 2018 (measured 2026-08-25). The question of whether
+# those seasons help is empirical, and this file already exists to answer that
+# kind of question, so it competes against the relative windows instead of
+# being hardcoded.
+#
+# Note this is an ABSOLUTE floor, unlike 3y/5y/7y/10y which are relative to the
+# test season -- "since2013" spans 12 seasons for a 2025 fold and 5 for a 2018
+# one. It is deliberately NOT expressed as a year count for that reason.
+SEASON_FLOOR_WINDOWS = {"since2013": 2013}
+
+WINDOW_CANDIDATES = ("3y", "5y", "7y", "10y", "since2013", "all")
 WEIGHTING_SCHEMES = ("none", "linear", "exponential")
 
 _WINDOW_YEARS = {"3y": 3, "5y": 5, "7y": 7, "10y": 10}
@@ -29,6 +43,9 @@ def window_to_season_list(window: str, test_season: int, available_seasons: Sequ
     prior_seasons = sorted(s for s in available_seasons if MIN_HISTORICAL_YEAR <= s < test_season)
     if window == "all":
         return prior_seasons
+    if window in SEASON_FLOOR_WINDOWS:
+        floor = SEASON_FLOOR_WINDOWS[window]
+        return [s for s in prior_seasons if s >= floor]
     if window not in _WINDOW_YEARS:
         raise ValueError(f"Unknown window: {window!r} (expected one of {WINDOW_CANDIDATES})")
     n_years = _WINDOW_YEARS[window]

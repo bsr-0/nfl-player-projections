@@ -64,6 +64,43 @@ class TestWindowToSeasonList:
         assert min(seasons) >= MIN_HISTORICAL_YEAR
 
 
+class TestSeasonFloorWindow:
+    """`since2013` is an ABSOLUTE floor, not a relative year count: it spans a
+    different number of seasons per test season. It exists so the
+    measurement-era question (snap_counts/depth_charts/player_injuries all
+    start 2013) is decided by the window comparison rather than hardcoded."""
+
+    def test_floor_is_absolute_not_relative(self):
+        a = window_to_season_list("since2013", 2018, AVAILABLE_2006_2024)
+        b = window_to_season_list("since2013", 2025, AVAILABLE_2006_2024)
+        assert a == list(range(2013, 2018))
+        assert b == list(range(2013, 2025))
+        assert len(a) != len(b), "an absolute floor must not span a fixed count"
+
+    def test_excludes_every_pre_2013_season(self):
+        for ts in (2015, 2018, 2021, 2025):
+            seasons = window_to_season_list("since2013", ts, AVAILABLE_2006_2024)
+            assert seasons, ts
+            assert min(seasons) >= 2013, (ts, min(seasons))
+
+    def test_is_a_strict_subset_of_all(self):
+        floor = window_to_season_list("since2013", 2025, AVAILABLE_2006_2024)
+        every = window_to_season_list("all", 2025, AVAILABLE_2006_2024)
+        assert set(floor) < set(every)
+
+    def test_empty_at_or_before_the_floor_season(self):
+        """A fold whose test season is 2013 has no prior season at/after the
+        floor. Documented rather than special-cased: the caller's fold tracker
+        already reports skipped folds, and silently substituting a different
+        window would make the comparison dishonest."""
+        assert window_to_season_list("since2013", 2013, AVAILABLE_2006_2024) == []
+        assert window_to_season_list("since2013", 2014, AVAILABLE_2006_2024) == [2013]
+
+    def test_is_offered_as_a_candidate(self):
+        from src.models.single_week_ppr.windows import WINDOW_CANDIDATES
+        assert "since2013" in WINDOW_CANDIDATES
+
+
 class TestComputeRecencyWeights:
     @pytest.fixture
     def seasons(self):

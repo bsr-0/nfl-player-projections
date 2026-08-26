@@ -75,6 +75,31 @@ class PositionConfig(TypedDict):
     weighting: str      # key into windows.WEIGHTING_SCHEMES
 
 
+# STALENESS WARNING (2026-08-25): every selection below predates a day of
+# training-data corrections and has NOT been re-derived. It is retained as the
+# current production setting and as the baseline to measure against -- not as a
+# validated choice.
+#
+# What changed underneath these selections:
+#   - pre-2013 snap_count/share/team_snaps were a fabricated 0.0, now NULL.
+#     QB and RB use window="all", so 76% of a 2015 fold's training rows carried
+#     that fabricated value when "all" was chosen over the shorter windows.
+#   - pass_plays/rush_plays/recv_targets existed only for 2025; the per-play
+#     EPA features were frame-dependent (100% zero for 2020-2024 with a 2025
+#     row present, ~7% without).
+#   - the regular-season week cap was a flat 18, admitting the wild-card round
+#     into every pre-2021 season total, availability denominator and
+#     prior-season win count.
+#   - two full-dataset statistics (bayesian_prior_ppg's position mean and
+#     _impute_missing's median) wrote the test season into test features.
+#   - coaching_change and pbp_pass_play_participation were constant because
+#     their source tables were empty; combine speed_score/bmi were a
+#     fabricated 0.0 on 40% of rows.
+#
+# The architecture/window/weighting comparison must be re-run before these are
+# trusted. `since2013` is now a window candidate specifically so the
+# measurement-era question competes here rather than being hardcoded -- QB and
+# RB are the only positions whose current window reaches pre-2013 at all.
 FINAL_CONFIG: Dict[str, PositionConfig] = {
     "QB": {"architecture": "F_yeojohnson_huber", "window": "all", "weighting": "none"},
     "RB": {"architecture": "C_gbm_mae", "window": "all", "weighting": "linear"},
