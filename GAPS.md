@@ -11686,3 +11686,71 @@ per-season `nunique()` on the assembled feature matrix, flagging columns
 constant early and varying late. It is worth running as a test over a sampled
 frame, because every bug in this family has been invisible to coverage audits
 by construction: the fabricated value is never null.
+
+
+## Both fabricated-value families fixed; re-run deliberately NOT started
+## (2026-08-25)
+
+Closes the two items logged in the scan entry above.
+
+### EPA denominators: fixed at source, not with a fallback tweak
+
+`pass_plays`/`rush_plays`/`recv_targets` now hold
+`passing_attempts`/`rushing_attempts`/`targets` for all 116,490 pre-2025 rows.
+That is not a substitution -- 2025 already stored exactly those values
+(verified 6,764/6,764 rows), so this makes every season agree with the
+definition production was already using, and removes the train/test
+denominator mismatch where training divided by attempts and 2025 by plays.
+
+The whole-frame `sum() == 0` fallback is now per-ROW. Measured before and
+after, `pass_epa_per_play` % zero for QB:
+
+    before, frame 2020-2025:  2020-2024 = 100.0%,  2025 = 6.8%
+    before, frame 2020-2024:  2020-2024 = ~7%
+    after,  either frame:     identical (7.9 / 8.4 / 5.2 / 7.5 / 8.3 / 6.8)
+
+Backup: `data/nfl_data.db.bak-preplaycounts-20260825211855`.
+
+### Pre-era constants: all masked
+
+| source | starts | features | old constant |
+|--------|--------|----------|--------------|
+| weekly_pfr | 2018 | qb_pressure/blitz/hurry/hit/sack, rb_ybc/yac, recv_drop_pct, team_sack_rate_allowed | 0.0 |
+| seasonal_pfr | 2019 (shifted +1) | qb_bad_throw_pct, qb_pocket_time, rb_broken_tackles, recv_drop_pct_season | 0.0 |
+| player_injuries | 2013 | injury_score | 1.0 |
+| depth_charts | 2013 | depth_chart_rank | 3 |
+
+In-era defaults are untouched. An unlisted player really is healthy, and the
+open `Probable` remap question is left exactly as it was -- only rows before a
+source exists are masked.
+
+`depth_chart_rank` needed `.astype(int)` dropped; an int column cannot hold
+NaN, which is what made the fabricated 3 structurally unavoidable rather than
+merely chosen.
+
+**Two traps worth remembering.** `injury_score` had to be masked in
+`_merge_injury_data_from_cache`, not `_ensure_injury_rookie_features`: only
+the former is on BOTH `create_features` branches and the causal path never
+calls the latter, so the first attempt was inert. And every masked column
+also needs adding to `_STRUCTURALLY_MISSING` (plus any matching policy
+group's `exclude`) -- masking without exempting is inert, which
+`snap_share_accel` had already demonstrated twice.
+
+### Remaining, deliberately
+
+`team_pct_{11,12,13,21}_personnel_roll3_mean` still carry a pre-2016 constant
+(0.633 etc.). That is the existing `PRESERVE_PERSONNEL_MISSINGNESS` decision
+-- default OFF so prior results stay attributable -- not an oversight. It is
+now the ONLY causal feature family still constant-and-filled before its
+source begins, across all four positions.
+
+### Status: paused before re-running
+
+Training data has now changed several times over in one day: pre-2013 snaps
+nulled, NGS preserved, play counts backfilled, seven feature families masked.
+Nothing has been re-run against any of it. Every existing result -- the
+2019-2025 Phase 7 cold-start files, the 2015-2018 re-run, FINAL_CONFIG,
+Phase 2/3 selection, the 11-fold walk-forward -- predates all of it.
+
+The 11-fold set should be re-run as one batch at a single commit before any
+of its numbers are read again. Not started deliberately.
