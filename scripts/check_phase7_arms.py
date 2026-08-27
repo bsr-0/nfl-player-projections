@@ -67,7 +67,8 @@ def _dose(d: Path, season: int) -> pd.DataFrame:
     return g
 
 
-def check_season(d: Path, season: int, verbose: bool = True) -> list[str]:
+def check_season(d: Path, season: int, verbose: bool = True,
+                 placebo: bool = False) -> list[str]:
     fails: list[str] = []
     off = pd.read_csv(d / "arm_off" / f"phase7_{season}.csv")
     on = pd.read_csv(d / "arm_on" / f"phase7_{season}.csv")
@@ -105,23 +106,36 @@ def check_season(d: Path, season: int, verbose: bool = True) -> list[str]:
     if j.dose.isna().any():
         fails.append(f"{season}: {int(j.dose.isna().sum())} rows have no dose "
                      f"(feature capture does not cover the scored population)")
-    zero = j[j.dose == 0]
-    dmae = np.nan
-    if len(zero):
-        e_off = (zero.predicted_season_total_off - zero.actual_season_total_off).abs().mean()
-        e_on = (zero.predicted_season_total_on - zero.actual_season_total_on).abs().mean()
-        dmae = e_on - e_off
-        ident = int(np.isclose(zero.predicted_season_total_off,
-                               zero.predicted_season_total_on, atol=1e-9).sum())
-        if abs(dmae) >= 0.05:
-            fails.append(f"{season}: ZERO-DOSE dMAE={dmae:+.4f} (>=0.05). Rows whose "
-                         f"scored features are identical must predict identically; "
-                         f"{ident}/{len(zero)} do. Comparison is void.")
+    # Paired primary outcome, reported per season (not gated -- this is the
+    # thing being measured, not an integrity condition).
+    d = ((j.predicted_season_total_on - j.actual_season_total_on).abs()
+         - (j.predicted_season_total_off - j.actual_season_total_off).abs())
+    ident_pred = int(np.isclose(j.predicted_season_total_off,
+                                j.predicted_season_total_on, atol=1e-9).sum())
+
+    # Mechanism note: how much of the effect could possibly be row-level.
+    # NOT a gate. A near-100% identical-feature share with ~0% identical
+    # predictions is the expected signature of a GLOBAL (model-level)
+    # treatment -- the flag changes the training matrix, so both arms fit
+    # different models. There is deliberately no zero-dose gate here: v1
+    # gated on one and it failed on every run because no null stratum can
+    # exist in this design. See PRE_REGISTRATION.md.
+    zero_dose = int((j.dose == 0).sum())
+
+    if placebo:
+        # Placebo pair: two identical arms. This is the falsification check,
+        # and unlike a null stratum it CAN pass.
+        if ident_pred != len(j):
+            fails.append(f"{season}: PLACEBO mismatch -- {len(j) - ident_pred} of "
+                         f"{len(j)} predictions differ between two identical arms. "
+                         f"max|diff|={d.abs().max():.6g}. Pipeline is nondeterministic; "
+                         f"no ON-OFF difference is interpretable.")
 
     if verbose:
-        print(f"  {season}: n={len(j):4d}  zero-dose={len(zero):4d}  "
-              f"dose(mean)={j.dose.mean():.3f}  zero-dose dMAE="
-              f"{'n/a' if np.isnan(dmae) else f'{dmae:+.4f}'}  "
+        print(f"  {season}: n={len(j):4d}  paired dMAE={d.mean():+.4f}  "
+              f"identical_preds={ident_pred}/{len(j)}  "
+              f"zero_dose_rows={zero_dose}  "
+              f"identical_feature_rows={100 * (1 - j.dose.gt(0).mean()):.1f}%  "
               f"{'OK' if not fails else 'FAIL'}")
     return fails
 
@@ -130,6 +144,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dir", type=Path, required=True)
+    ap.add_argument("--placebo", action="store_true",
+                    help="both arms are the SAME configuration; require exact agreement")
     ap.add_argument("--season", type=int, default=None,
                     help="check one season (default: every season with both arms ready)")
     args = ap.parse_args()
@@ -142,7 +158,7 @@ def main() -> None:
     print(f"checking {len(seasons)} season(s) with both arms present: {seasons}")
     fails: list[str] = []
     for s in seasons:
-        fails += check_season(args.dir, s)
+        fails += check_season(args.dir, s, placebo=args.placebo)
 
     if fails:
         print("\n" + "!" * 70)
