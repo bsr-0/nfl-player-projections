@@ -31,6 +31,12 @@ def main():
                               "inferred_pbp_confirmed_zero tier as absent, falling back "
                               "to synthetic estimation for those weeks instead (default: off)")
     parser.add_argument(
+        "--feature-rows-output", type=Path, default=None,
+        help="Also dump the EXACT feature rows the model scored, to parquet. In "
+             "cold-start preseason mode every scored row is synthetic and built "
+             "per week, so a stratum derived from real historical rows describes "
+             "a different population -- this is how to compare arms honestly.")
+    parser.add_argument(
         "--preseason-mode", action="store_true",
         help="Score as a TRUE preseason (August) forecast, information-matched "
              "to the three arms in walk_forward_preseason.py: no week is treated "
@@ -53,6 +59,7 @@ def main():
     result = run_season_projection(
         positions=args.positions, seasons=args.seasons, output_path=args.output,
         exclude_pbp_confirmed_zeros=args.exclude_pbp_confirmed_zeros,
+        feature_row_output_path=args.feature_rows_output,
         preseason_mode=args.preseason_mode, cold_start=args.cold_start,
     )
     if result.empty:

@@ -829,6 +829,7 @@ def run_season_projection(
     exclude_pbp_confirmed_zeros: bool = False,
     architecture_override: Optional[dict] = None,
     week_output_path=None,
+    feature_row_output_path=None,
     preseason_mode: bool = False,
     cold_start: bool = False,
 ) -> pd.DataFrame:
@@ -898,6 +899,12 @@ def run_season_projection(
     # metrics on identical folds -- Phase 7C compares the two levels and they
     # must come from the same fit, not from separate runs.
     week_rows: Optional[List[dict]] = [] if week_output_path is not None else None
+    # The exact feature rows the model scored. Needed because in cold-start
+    # preseason mode every scored row is SYNTHETIC -- built here per week --
+    # so a dose/stratum derived from real historical rows describes a
+    # different population than the one being predicted, which is how the
+    # 2026-08-26 strata came to misclassify 202 player-seasons as zero-dose.
+    feature_rows: Optional[List[dict]] = [] if feature_row_output_path is not None else None
     db = DatabaseManager()
 
     tracker = FoldFailureTracker("Phase 7 (season projection)")
@@ -996,6 +1003,7 @@ def run_season_projection(
                     feature_cols, full_history, db, feature_engineer, season,
                     exclude_pbp_confirmed_zeros, skip_tracker=week_skips,
                     preseason_mode=preseason_mode, cold_start=cold_start,
+                    capture_rows=feature_rows is not None,
                 )
 
                 predicted_total = 0.0
@@ -1006,6 +1014,11 @@ def run_season_projection(
                 weeks_synthetic = 0
                 for wp in week_predictions:
                     rate = 1.0 if wp["is_real"] else availability_rate
+                    if feature_rows is not None and "feature_row" in wp:
+                        fr = dict(wp["feature_row"])
+                        fr.update({"player": player_id, "position": position,
+                                   "season": season, "week": int(wp["week"])})
+                        feature_rows.append(fr)
                     if week_rows is not None:
                         week_rows.append({
                             "player": player_id, "position": position, "season": season,
@@ -1067,6 +1080,10 @@ def run_season_projection(
                 all_rows.append(result_row)
                 _append_df_to_csv(pd.DataFrame([result_row]), output_path)
 
+    if feature_rows is not None:
+        fdf = pd.DataFrame(feature_rows)
+        fdf.to_parquet(feature_row_output_path, index=False)
+        print(f"{len(fdf)} scored feature rows written to {feature_row_output_path}")
     if week_rows is not None:
         pd.DataFrame(week_rows).to_csv(week_output_path, index=False)
         print(f"{len(week_rows)} per-week rows written to {week_output_path}")
