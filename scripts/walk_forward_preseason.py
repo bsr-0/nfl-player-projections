@@ -198,6 +198,12 @@ def _step8_arm(train_pairs, test_pairs, panel, test_season, pos):
         fit_conditional_production, predict_conditional_production,
     )
 
+    # Delegates to the extracted production model so the evaluated arm and the
+    # shipped model are the same code. The eval path keeps its dropna(TARGET):
+    # here the target is known and is what we score against. Inference cannot
+    # do that -- see Step8SeasonModel.predict.
+    from src.models.season_step8 import Step8SeasonModel
+
     train = attach_conditional_target(train_pairs, panel).dropna(subset=[TARGET])
     test = attach_conditional_target(test_pairs, panel).dropna(subset=[TARGET])
     if len(train) < MIN_SAMPLES or test.empty:
@@ -207,12 +213,10 @@ def _step8_arm(train_pairs, test_pairs, panel, test_season, pos):
     if not feats:
         return None, None, None
 
-    # Production half.
-    model = fit_conditional_production(train, feats)
-    rate_pred = predict_conditional_production(model, test, feats)
-
-    # Exposure half -- strictly prior seasons, enforced by fit().
-    est = SeasonAvailabilityEstimator().fit(panel, before_season=test_season)
+    step8 = Step8SeasonModel().fit(train_pairs, panel, before_season=test_season)
+    step8.features = feats            # keep the harness's train/test intersection
+    rate_pred = predict_conditional_production(step8.production_model, test, feats)
+    est = step8.availability
     games_pred = est.predict_games(test)
 
     season_pred = (games_pred * rate_pred).to_numpy(dtype=float)
