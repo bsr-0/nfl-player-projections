@@ -241,6 +241,16 @@ def main():
         help="Minimum prior seasons required before a season can be a test fold",
     )
     parser.add_argument(
+        "--arms", nargs="+", default=None,
+        help="Subset of arms to compare (default: all four). Use e.g. "
+             "`--arms phase7 step8` to compare two arms that share a population "
+             "on the FULL set including rookies, which the intersected four-arm "
+             "run cannot do.")
+    parser.add_argument(
+        "--require-all-arms", action=argparse.BooleanOptionalAction, default=True,
+        help="Fail loudly if any arm's input is missing or does not cover every "
+             "fold, instead of silently reporting a partial comparison (default: on)")
+    parser.add_argument(
         "--phase7-csv", type=Path,
         default=Path("data/experiments/phase7_season_projection.csv"),
         help="Phase 7 (summed-weekly) season projection output CSV -- loaded "
@@ -270,13 +280,28 @@ def main():
     cand_pairs = build_multiyear_season_pairs(db, all_seasons)
     print(f"  {len(cand_pairs)} rows")
 
+    # A missing or short phase7 CSV used to silently drop that arm: the run
+    # still printed four VARIANTS and still wrote a results table, so a
+    # three-arm comparison was indistinguishable from a four-arm one. The
+    # default path does not currently exist on disk, so the silent path was
+    # the DEFAULT path. --require-all-arms (on by default) makes that fatal.
     if args.phase7_csv.exists():
         phase7_df = pd.read_csv(args.phase7_csv)
+        have = sorted(int(s) for s in phase7_df["season"].unique())
         print(f"Loaded phase7 (summed-weekly) projections: {len(phase7_df)} rows "
-              f"from {args.phase7_csv} (seasons {sorted(phase7_df['season'].unique())})")
+              f"from {args.phase7_csv} (seasons {have})")
     else:
         phase7_df = pd.DataFrame()
-        print(f"No phase7 CSV found at {args.phase7_csv} -- that arm will be skipped.")
+        have = []
+        msg = f"No phase7 CSV found at {args.phase7_csv}"
+        if args.require_all_arms:
+            raise SystemExit(
+                f"FATAL: {msg}. The 'phase7' arm cannot be evaluated, and a "
+                f"3-arm result would be reported under a 4-arm label. Pass "
+                f"--phase7-csv <path>, or --no-require-all-arms to accept a "
+                f"partial comparison deliberately."
+            )
+        print(f"{msg} -- that arm will be skipped.")
 
     if args.test_seasons:
         test_seasons = args.test_seasons
@@ -289,7 +314,31 @@ def main():
         ]
     print(f"\nTest seasons (walk-forward folds): {test_seasons}")
 
-    VARIANTS = ("production", "candidate", "phase7", "step8")
+    if args.require_all_arms and not phase7_df.empty:
+        missing = sorted(set(test_seasons) - set(have))
+        if missing:
+            raise SystemExit(
+                f"FATAL: phase7 CSV covers {have} but the fold set needs "
+                f"{sorted(test_seasons)}; missing {missing}. Those folds would "
+                f"score phase7 on an EMPTY frame and quietly report it as a "
+                f"loss. Regenerate the CSV for every fold, restrict "
+                f"--test-seasons, or pass --no-require-all-arms."
+            )
+
+    # Selectable so a PAIR of arms sharing a population can be compared on the
+    # full set, rookies included. candidate/production require a prior season
+    # with >= MIN_GAMES (6) games; phase7 in cold-start mode does not. For 2024
+    # that filter drops 24-35% of each position, and 55-62% of the dropped are
+    # rookies -- so the intersected 4-arm comparison structurally excludes the
+    # players cold-start exists to project. phase7 and step8 DO share a
+    # population (2024 QB: 79 vs 80, differing by one rookie), so those two can
+    # be compared honestly without intersecting.
+    ALL_VARIANTS = ("production", "candidate", "phase7", "step8")
+    VARIANTS = tuple(args.arms) if args.arms else ALL_VARIANTS
+    unknown = set(VARIANTS) - set(ALL_VARIANTS)
+    if unknown:
+        raise SystemExit(f"unknown arm(s): {sorted(unknown)}; choose from {ALL_VARIANTS}")
+    print(f"Arms in this comparison: {VARIANTS}")
     fold_records = {v: {p: [] for p in POSITIONS} for v in VARIANTS}
     decomp_records = []
     # Per-player predictions, so results can be stratified by experience.
@@ -358,7 +407,7 @@ def main():
                 print(f"  [{pos}] intersected population: {len(common_ids)} players")
 
             # --- Production ---
-            if proj is not None and pos in proj.models and not pos_test_p.empty:
+            if "production" in VARIANTS and proj is not None and pos in proj.models and not pos_test_p.empty:
                 preds = proj.predict(pos_test_p, pos)
                 actual = pos_test_p["season_total"].to_numpy(dtype=float)
                 m = _metrics(actual, preds)
@@ -369,7 +418,7 @@ def main():
                 print(f"  production {pos}: n={m['n']} R2={m['r2']} MAE={m['mae']}")
 
             # --- Candidate ---
-            if len(pos_train_c) >= MIN_SAMPLES and not pos_test_c.empty:
+            if "candidate" in VARIANTS and len(pos_train_c) >= MIN_SAMPLES and not pos_test_c.empty:
                 model, scaler, features, imputer = _fit_candidate(
                     pos_train_c, RIDGE_ALPHA_BY_POSITION[pos])
                 preds = _predict_candidate(model, scaler, features, imputer, pos_test_c)
@@ -386,7 +435,7 @@ def main():
             pos_test_s8 = test_c[test_c["position"] == pos] if not test_c.empty else test_c
             if args.intersect_populations and not pos_test_s8.empty:
                 pos_test_s8 = pos_test_s8[pos_test_s8["player_id"].isin(common_ids)]
-            if not pos_train_s8.empty and not pos_test_s8.empty:
+            if "step8" in VARIANTS and not pos_train_s8.empty and not pos_test_s8.empty:
                 m8, d8, p8 = _step8_arm(pos_train_s8, pos_test_s8, step8_panel, test_season, pos)
                 if m8 is not None:
                     fold_records["step8"][pos].append(m8)
@@ -399,7 +448,7 @@ def main():
                           f"{d8['contrib_rate']:+.1f}/{d8['contrib_interaction']:+.1f}]")
 
             # --- Phase 7 (summed-weekly) -- loaded, not retrained ---
-            if not pos_test_p7.empty:
+            if "phase7" in VARIANTS and not pos_test_p7.empty:
                 actual = pos_test_p7["actual_season_total"].to_numpy(dtype=float)
                 preds = pos_test_p7["predicted_season_total"].to_numpy(dtype=float)
                 m = _metrics(actual, preds)
