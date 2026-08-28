@@ -775,9 +775,32 @@ FEATURE_VERSION = "35"  # v35: is_power5 from an era-aware college->conference m
 # genuinely undefined (8.9% of training rows). Filling them teaches the model
 # that a rookie's week 1 looks like an average veteran, and leaves LightGBM
 # with no missing-direction to use when a real cold-start row arrives.
-# OFF by default: this is the third arm of the pending re-baseline, not a
-# silent default flip. See GAPS.md and feature_engineering.history_missingness_cols.
-PRESERVE_HISTORY_MISSINGNESS = os.getenv("NFL_PRESERVE_HISTORY_MISSINGNESS", "0") == "1"
+#
+# DEFAULT FLIPPED TO ON, 2026-08-28, on a pre-registered 11-fold paired
+# experiment. Full write-up:
+#   data/experiments/phase7_histnan_v3_20260827/RESULTS.md
+#   PRE_REGISTRATION.md (v2) in data/experiments/phase7_histnan_20260826/
+#
+#   falsification  placebo (OFF vs OFF) 538/538 identical -- noise floor zero
+#   primary        9 of 11 folds favour ON; mean paired dMAE -0.658, t = -3.03
+#   rule           >=8/11 folds AND mean <= -0.25, fixed before the run: MET
+#
+# READ THE EFFECT CORRECTLY. Pooled it is -1.55% of a 43-point MAE, and ON is
+# closer on exactly 50.0% of individual player-seasons -- a coin flip per
+# player. The entire gain is ROOKIES:
+#
+#   rookie   n=1188  dMAE -3.2596  10/11 folds  MAE 44.4 -> 41.1  (-7.3%)
+#   veteran  n=5107  dMAE -0.0649   8/11 folds  MAE 42.7 -> 42.6  (nil)
+#
+# So this is "~7% better rookie season projections, no veteran effect", not a
+# general accuracy improvement. Describing it as the latter overstates it by
+# roughly 5x, which is the dilution factor of a 19%-rookie population.
+#
+# Mechanism caveat: 96.5% of scored feature rows are byte-identical between
+# arms, so the gain is MODEL-level (the flag also changes the training matrix)
+# rather than coming from debut rows being scored differently. The design
+# cannot separate those two channels and does not claim to.
+PRESERVE_HISTORY_MISSINGNESS = os.getenv("NFL_PRESERVE_HISTORY_MISSINGNESS", "1") == "1"
 
 PRESERVE_PERSONNEL_MISSINGNESS = os.getenv("NFL_PRESERVE_PERSONNEL_MISSINGNESS", "0") == "1"
 

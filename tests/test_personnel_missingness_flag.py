@@ -34,6 +34,20 @@ from src.features.utilization_score import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_history_flag(monkeypatch):
+    """Pin PRESERVE_HISTORY_MISSINGNESS OFF for this module.
+
+    `_structurally_missing_cols()` unions BOTH flags' column sets. Since the
+    history flag was flipped to default ON (2026-08-28), leaving it at its
+    default made these assertions depend on a flag they are not testing --
+    `test_off_matches_historical_behaviour` failed with the history rolling
+    columns present. The personnel flag is what is under test here, so the
+    other one is held fixed rather than the expectation being widened.
+    """
+    monkeypatch.setattr(settings, "PRESERVE_HISTORY_MISSINGNESS", False)
+
+
 @pytest.fixture
 def flag(monkeypatch):
     def _set(value):

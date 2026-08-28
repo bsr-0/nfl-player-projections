@@ -12022,3 +12022,51 @@ check, not on the argument.
 warm fold against 6.4 min cold) makes an 11-fold Phase 3 roughly 3 hours
 rather than a day, so the fold count is now cheap to raise if any of these
 deltas ever needs to be taken seriously.
+
+
+## PRESERVE_HISTORY_MISSINGNESS flipped to default ON — rookie-only effect
+## (2026-08-28)
+
+Pre-registered 11-fold paired experiment. Full write-up:
+`data/experiments/phase7_histnan_v3_20260827/RESULTS.md`; plan committed
+before the run at `data/experiments/phase7_histnan_20260826/PRE_REGISTRATION.md`.
+
+**Falsification passed first.** Placebo pair (OFF vs OFF) gave 538/538
+identical predictions -- noise floor exactly zero, so every ON-OFF difference
+is attributable to the flag.
+
+**Rule met.** 9 of 11 folds favour ON; mean paired dMAE -0.6580, SE 0.2170,
+t = -3.03. The rule (>=8/11 folds AND mean <= -0.25) was fixed before the run.
+
+**The effect is entirely rookies, and the pooled number is misleading:**
+
+    pooled   -1.55% of a 43-point MAE; ON closer on exactly 50.0% of
+             6,295 player-seasons -- a coin flip per player
+    rookie   n=1188  dMAE -3.2596  10/11 folds  MAE 44.4 -> 41.1  (-7.3%)
+    veteran  n=5107  dMAE -0.0649   8/11 folds  MAE 42.7 -> 42.6  (nil)
+
+Describe as "~7% better rookie season projections, no veteran effect". The
+pooled -1.55% is a rookie-only effect diluted ~5x by a 19%-rookie population,
+and quoting it invites the reader to think every projection improved. Per
+position RB carries most of it (-1.73, 9/11); QB shows nothing (-0.03, 5/11).
+
+**Mechanism caveat.** 96.5% of scored feature rows are byte-identical between
+arms, so the gain is MODEL-level -- the flag also changes the training matrix
+-- not the debut rows being scored differently. "Training on honest debut-week
+NaN produces a model better at rookies" is supported; "preserving NaN on a
+rookie's row improves that row" is not, and this design cannot separate them.
+
+**Two failed attempts, kept because the failure mode generalises.** v1
+stratified by a dose computed from REAL weekly rows while cold-start scores
+SYNTHETIC ones -- different populations, 12 hours to detect. v2 fixed the
+population and failed again because no null stratum can exist at all: the flag
+changes the training matrix, so every prediction moves regardless of its own
+features. v3 replaced the null stratum with a placebo pair, which can actually
+pass. `scripts/check_phase7_arms.py` now gates each season pair and aborts the
+run -- that turned a 12-hour failure into a 1-hour one.
+
+**Test coupling found by the flip.** `test_personnel_missingness_flag` asserts
+`_structurally_missing_cols() == _STRUCTURALLY_MISSING` with the personnel flag
+off, but that function unions BOTH flags' column sets, so it started failing on
+a flag it does not test. Fixed by pinning the history flag off for that module
+rather than widening the expectation.
