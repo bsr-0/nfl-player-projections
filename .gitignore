@@ -105,3 +105,13 @@ data/experiments/*.weekskips.json
 !data/experiments/phase4_row_level_predictions_v2_corrected_2020_2022.csv
 
 # experiment_log.jsonl is a small provenance log, not a CSV output — keep it.
+
+# Superseded / aborted experiment runs, 2026-08. Kept on disk for provenance
+# but not in git: phase7_coldstart_histnan is the 2026-08-25 arm, superseded
+# twice (pre-datafix AND pre-component-mode-fix); phase7_histnan_v2 aborted on
+# a strata bug after one season. Neither is comparable to anything current.
+# The runs that ARE cited by GAPS.md are committed.
+data/experiments/phase7_coldstart_histnan/
+data/experiments/phase7_histnan_v2_20260827/
+data/experiments/backups/
+data/experiments/phase7_histnan_v3_20260827/joined_all.csv

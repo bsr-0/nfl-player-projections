@@ -1,0 +1,9 @@
+position,group,n,rookie_pct,phase7_MAE,mean_actual
+QB,comparable (other arms can score),431,0.0,69.64,173.1
+QB,EXCLUDED by other arms,398,27.4,49.57,53.8
+RB,comparable (other arms can score),976,0.0,52.87,102.0
+RB,EXCLUDED by other arms,588,53.6,41.7,52.1
+WR,comparable (other arms can score),1596,0.0,44.99,98.6
+WR,EXCLUDED by other arms,870,57.5,33.49,42.0
+TE,comparable (other arms can score),972,0.0,30.6,61.3
+TE,EXCLUDED by other arms,464,56.9,21.74,26.4
