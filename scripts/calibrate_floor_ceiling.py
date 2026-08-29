@@ -44,7 +44,18 @@ FIT_SEASONS = list(range(2019, 2023))    # projection_season 2019-2022
 TEST_SEASONS = list(range(2023, 2026))   # projection_season 2023-2025
 ALL_SEASONS = list(range(2018, 2026))    # needs prior season too -> train from 2018
 
-TARGET_COVERAGE = 0.866
+# Two-sided coverage the bands aim for. 0.866 matches the original
+# z=1.5-implied target; --target-coverage overrides it.
+#
+# The 86.6% bands are correctly calibrated (89.1% measured on holdout) and
+# simultaneously uninformative: measured on the live 2026 board their median
+# width is 206% of the projection (p90 326%), e.g. proj 330 -> floor 123,
+# ceiling 490. That width is not a defect in the interval, it is an honest
+# statement about a season-total model whose MAE is ~43 on a mean actual near
+# 100. A narrower target trades coverage for decision-usefulness; it does NOT
+# make the projection more certain.
+DEFAULT_TARGET_COVERAGE = 0.866
+TARGET_COVERAGE = DEFAULT_TARGET_COVERAGE
 TAIL = (1 - TARGET_COVERAGE) / 2  # ~0.067
 
 POSITIONS = ["QB", "RB", "WR", "TE"]
@@ -134,7 +145,26 @@ def coverage_report(df: pd.DataFrame, floor_col: str, ceiling_col: str, label: s
     return within.mean(), below.mean(), above.mean()
 
 
+def _configure_coverage(target: float) -> None:
+    """Set the module-level coverage target and derived tail."""
+    global TARGET_COVERAGE, TAIL
+    if not 0.0 < target < 1.0:
+        raise SystemExit(f"--target-coverage must be in (0,1), got {target}")
+    TARGET_COVERAGE = float(target)
+    TAIL = (1 - TARGET_COVERAGE) / 2
+
+
 def main():
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--target-coverage", type=float, default=DEFAULT_TARGET_COVERAGE,
+                    help="Two-sided coverage the bands aim for (default %(default)s). "
+                         "0.50 gives a much narrower, more decision-useful band at "
+                         "the cost of containing the outcome half the time.")
+    args = ap.parse_args()
+    _configure_coverage(args.target_coverage)
+    print(f"Target coverage: {TARGET_COVERAGE:.1%}  (floor q={TAIL:.3f}, ceiling q={1-TAIL:.3f})")
+
     print("Building real prediction-vs-actual dataset (PreseasonProjector, 2018-2025)...")
     df = build_dataset()
     print(f"  {len(df)} player-seasons across {df['position'].nunique()} positions")

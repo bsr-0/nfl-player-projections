@@ -181,3 +181,141 @@ def possible_games_for_players(players: pd.DataFrame, season: int,
     teams = (players[team_col] if team_col in players.columns
              else pd.Series(index=players.index, dtype=object))
     return teams.map(counts).fillna(default).astype(float)
+
+
+# ---------------------------------------------------------------------------
+# Board metadata: confidence_score / support_class
+# ---------------------------------------------------------------------------
+# scripts/generate_draft_data.py sizes the board's asymmetric floor/ceiling
+# bands from PreseasonProjector.predict_with_details()'s confidence_score and
+# support_class. Swapping the projection model without supplying these would
+# silently break the uncertainty bands rather than error.
+#
+# The thresholds and weights below are COPIED EXACTLY from
+# PreseasonProjector._assign_support_class / _prepare_feature_frame, not
+# re-derived. That is deliberate: FLOOR_CEILING_COEF in generate_draft_data.py
+# was regression-FIT against that confidence_score's distribution
+# (coefficients like confidence_score: 0.072483), so changing the formula
+# would silently miscalibrate coefficients nobody would think to refit.
+# Same inputs, same scale, same coefficients stay valid.
+#
+# The inputs are all PRIOR-season aggregates, which step8's pairs frame already
+# carries as `*_y1`. This is a column mapping, not a new model.
+
+SUPPORT_CLASS_ORDER = ("starter", "committee", "backup", "rotational")
+
+_Y1 = {
+    "snap_share": "snap_share_y1",
+    "carries_pg": "carries_pg_y1",
+    "targets_pg": "targets_pg_y1",
+    "passing_yards_pg": "passing_yards_pg_y1",
+    "ppg": "ppg_y1",
+    "games_played": "games_played_y1",
+}
+
+
+def _num(df: pd.DataFrame, col: str) -> pd.Series:
+    """Prior-season column as float, NaN-safe, 0.0 when absent entirely.
+
+    `snap_share` is clipped to [0, 1] to match
+    PreseasonProjector._prepare_feature_frame line ~271, which does the same
+    before computing support_class and confidence_score.
+
+    That clip is arguably wrong at source -- snap_share is stored 0-100
+    (median ~40), so clipping to 1.0 collapses almost every rostered player to
+    the same value and discards the signal. It is replicated here ANYWAY and
+    deliberately: FLOOR_CEILING_COEF in generate_draft_data.py was
+    regression-fit against the resulting distribution, so "fixing" the clip
+    here would silently shift confidence_score under coefficients nobody would
+    think to refit. Without it, measured, veterans sat at 0.927 mean against
+    the reference 0.511 -- a 0.42 shift straight into the board's bands.
+    Logged in GAPS.md as a separate issue to fix at source, with the
+    coefficients refit at the same time.
+    """
+    src = _Y1.get(col, col)
+    if src not in df.columns:
+        return pd.Series(0.0, index=df.index, dtype=float)
+    out = pd.to_numeric(df[src], errors="coerce").fillna(0.0)
+    if col == "snap_share":
+        out = out.clip(0.0, 1.0)
+    return out
+
+
+def assign_support_class(pairs: pd.DataFrame) -> pd.Series:
+    """starter / committee / backup / rotational, from prior-season usage.
+
+    Thresholds identical to PreseasonProjector._assign_support_class.
+
+    Cold-start rows have every `*_y1` NaN, which `_num` reads as 0.0, so a
+    rookie falls to "backup" on the low-usage branches. That is the honest
+    answer from THIS signal -- it says "no prior usage evidence", not "bad
+    player". Draft capital carries the rookie signal and is already in the
+    model's own features; it deliberately does not leak into this label.
+    """
+    position = pairs["position"].fillna("") if "position" in pairs.columns else pd.Series("", index=pairs.index)
+    snap, carries = _num(pairs, "snap_share"), _num(pairs, "carries_pg")
+    targets, passing = _num(pairs, "targets_pg"), _num(pairs, "passing_yards_pg")
+    ppg = _num(pairs, "ppg")
+
+    support = pd.Series("rotational", index=pairs.index, dtype=object)
+
+    qb_starter = (position == "QB") & ((passing >= 220.0) | (ppg >= 16.0))
+    qb_backup = (position == "QB") & (passing < 150.0) & (ppg < 12.0)
+    rb_starter = (position == "RB") & ((carries >= 15.0) | (snap >= 0.60))
+    rb_committee = (position == "RB") & ~rb_starter & (
+        (carries >= 8.0) | (targets >= 3.0) | (snap >= 0.38))
+    rb_backup = (position == "RB") & (carries < 6.0) & (snap < 0.30) & (targets < 2.5)
+    wr_starter = (position == "WR") & ((targets >= 7.0) | (snap >= 0.78))
+    wr_committee = (position == "WR") & ~wr_starter & ((targets >= 5.0) | (snap >= 0.60))
+    wr_backup = (position == "WR") & (targets < 3.5) & (snap < 0.45)
+    te_starter = (position == "TE") & ((targets >= 6.0) | (snap >= 0.72))
+    te_committee = (position == "TE") & ~te_starter & ((targets >= 4.0) | (snap >= 0.55))
+    te_backup = (position == "TE") & (targets < 2.8) & (snap < 0.45)
+
+    support.loc[qb_starter | rb_starter | wr_starter | te_starter] = "starter"
+    support.loc[rb_committee | wr_committee | te_committee] = "committee"
+    support.loc[qb_backup | rb_backup | wr_backup | te_backup] = "backup"
+    return support
+
+
+def confidence_score(pairs: pd.DataFrame,
+                     support: Optional[pd.Series] = None) -> pd.Series:
+    """0.05-1.0 confidence in the projection, from prior-season evidence.
+
+    Weights identical to PreseasonProjector._prepare_feature_frame. Low for a
+    player with little prior usage -- including rookies, correctly: the board
+    should widen their bands, and a rookie's genuine signal (draft capital)
+    belongs in the projection, not in the confidence in it.
+    """
+    position = pairs["position"].fillna("") if "position" in pairs.columns else pd.Series("", index=pairs.index)
+    if support is None:
+        support = assign_support_class(pairs)
+
+    workload_norm = np.where(
+        position.eq("QB"), _num(pairs, "passing_yards_pg").clip(0.0, 300.0) / 300.0,
+        np.where(position.eq("RB"), _num(pairs, "carries_pg").clip(0.0, 20.0) / 20.0,
+                 _num(pairs, "targets_pg").clip(0.0, 10.0) / 10.0))
+    experience_norm = _num(pairs, "years_exp").clip(0.0, 5.0) / 5.0
+    support_bonus = (0.20 * (support == "starter").astype(float)
+                     + 0.10 * (support == "committee").astype(float)
+                     + 0.02 * (support == "rotational").astype(float))
+    return pd.Series(np.clip(
+        0.30 * (_num(pairs, "games_played").clip(0.0, 17.0) / 17.0)
+        + 0.25 * _num(pairs, "snap_share")
+        + 0.20 * workload_norm
+        + 0.15 * experience_norm
+        + support_bonus, 0.05, 1.0), index=pairs.index)
+
+
+def with_board_metadata(pairs: pd.DataFrame, predictions: pd.Series) -> pd.DataFrame:
+    """Projection plus the columns the draft board needs, in its column names."""
+    support = assign_support_class(pairs)
+    out = pd.DataFrame({
+        "player_id": pairs["player_id"].to_numpy(),
+        "predicted_total": np.asarray(predictions, dtype=float),
+        "support_class": support.to_numpy(),
+        "confidence_score": confidence_score(pairs, support).to_numpy(),
+    }, index=pairs.index)
+    if "position" in pairs.columns:
+        out["position"] = pairs["position"].to_numpy()
+    return out

@@ -99,11 +99,39 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 # -- expected and acceptable, since the symmetric formula's 89.9% was
 # itself an artifact of over-covering on the floor side while under-
 # covering on the ceiling side, not a real calibration win.
+# --- Refit to a 50% interval, 2026-08-28 ---
+#
+# The 86.6% bands were correctly calibrated (89.1% holdout coverage) and
+# simultaneously useless: measured on the live 2026 board their median width
+# was 206% of the projection, p90 326% -- e.g. Stafford proj 330, floor 123,
+# ceiling 490. A band spanning 4x contains the outcome precisely because it
+# says almost nothing.
+#
+# Narrowed to a 50% two-sided interval (floor q=0.25, ceiling q=0.75) via
+# `python scripts/calibrate_floor_ceiling.py --target-coverage 0.50`.
+# Holdout (fit 2019-2022, test 2023-2025): floor breached 26.6%, ceiling
+# breached 23.8% against a 25% target; per-side miscalibration 0.029.
+#
+# This does NOT make the projection more certain -- it reports a narrower
+# quantile of the same distribution. The band now means "half the time the
+# outcome lands in here", and the old 86.6% width remains the honest picture
+# of how uncertain a season-total projection actually is (MAE ~43 on a mean
+# actual near 100). The previous coefficients are preserved below.
 FLOOR_ASYM_COEF = {
+    "const": -1.464328, "log_pred": 0.172331, "confidence_score": 0.347607,
+    "pos_RB": -0.073935, "pos_WR": -0.050796, "pos_TE": -0.032941,
+}
+CEILING_ASYM_COEF = {
+    "const": 1.493868, "log_pred": -0.238032, "confidence_score": 0.187379,
+    "pos_RB": -0.179821, "pos_WR": -0.122886, "pos_TE": -0.274811,
+}
+# Superseded 86.6%-coverage coefficients, kept so the wider interval can be
+# restored or compared without re-running the fit.
+FLOOR_ASYM_COEF_866 = {
     "const": -1.307583, "log_pred": 0.108491, "confidence_score": 0.072483,
     "pos_RB": -0.071201, "pos_WR": -0.017547, "pos_TE": 0.033451,
 }
-CEILING_ASYM_COEF = {
+CEILING_ASYM_COEF_866 = {
     "const": 4.383422, "log_pred": -0.662733, "confidence_score": -0.081698,
     "pos_RB": -0.126647, "pos_WR": -0.306856, "pos_TE": -0.369531,
 }
