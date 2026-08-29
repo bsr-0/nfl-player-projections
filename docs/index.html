@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2025 Model Validation &amp; 2026 Projections</title>
+<title>2026 Season Projections</title>
 <style>
   :root {
     color-scheme: light;
@@ -213,28 +213,6 @@
     border-color: var(--series-1);
     font-weight: 600;
   }
-
-  .main-tabs {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-  }
-  .main-tab-btn {
-    border: 1px solid var(--border);
-    background: var(--surface-1);
-    color: var(--text-secondary);
-    padding: 9px 18px;
-    border-radius: 9px;
-    font-size: 0.92rem;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  .main-tab-btn.active {
-    color: var(--text-primary);
-    border-color: var(--series-1);
-    background: color-mix(in srgb, var(--series-1) 12%, var(--surface-1));
-    font-weight: 600;
-  }
   .panel[hidden] { display: none; }
 
   .filter-row {
@@ -266,64 +244,13 @@
 <body>
 
 <header>
-  <h1>2025 Model Validation &amp; 2026 Projections</h1>
+  <h1>2026 Season Projections</h1>
   <p id="source-line">Loading&hellip;</p>
-  <div class="main-tabs" id="main-tabs">
-    <button class="main-tab-btn active" data-panel="panel-backtest">Backtest Validation</button>
-    <button class="main-tab-btn" data-panel="panel-2026">2026 Predictions</button>
-  </div>
 </header>
 
 <main>
 
-<div class="panel" id="panel-backtest">
-
-  <section id="section-overall">
-    <h2>2025 walk-forward accuracy</h2>
-    <p class="subtitle">Out-of-sample weekly fantasy-point predictions, expanding-window backtest across the full 2025 season.</p>
-    <div class="tile-row" id="overall-tiles"></div>
-  </section>
-
-  <section id="section-baselines">
-    <h2>Model vs. baseline heuristics</h2>
-    <p class="subtitle">Mean absolute error (points) &mdash; lower is better.</p>
-    <div class="card">
-      <div class="bars" id="baseline-bars"></div>
-    </div>
-  </section>
-
-  <section id="section-by-position">
-    <h2>Accuracy by position</h2>
-    <p class="subtitle">Mean absolute error (points) &mdash; lower is better.</p>
-    <div class="card">
-      <div class="bars" id="position-bars"></div>
-    </div>
-  </section>
-
-  <section id="section-decision">
-    <h2>Lineup decision quality</h2>
-    <p class="subtitle">Win rate of model-optimal lineups across 22 weeks of the 2025 season, vs. three benchmarks.</p>
-    <div class="tile-row" id="decision-tiles"></div>
-  </section>
-
-  <section id="section-misses">
-    <h2>2025 season-total misses</h2>
-    <p class="subtitle">Predicted vs. actual full-season fantasy points, players with 8+ games. Biggest under- and over-estimates.</p>
-    <div class="two-col">
-      <div>
-        <h3 style="font-size:0.9rem;color:var(--text-secondary);margin:0 0 8px;">Model underestimated</h3>
-        <div class="table-wrap"><table id="table-under"></table></div>
-      </div>
-      <div>
-        <h3 style="font-size:0.9rem;color:var(--text-secondary);margin:0 0 8px;">Model overestimated</h3>
-        <div class="table-wrap"><table id="table-over"></table></div>
-      </div>
-    </div>
-  </section>
-
-</div>
-
-<div class="panel" id="panel-2026" hidden>
+<div class="panel" id="panel-2026">
 
   <section id="section-2026">
     <h2>2026 season projections</h2>
@@ -368,42 +295,6 @@ function renderBars(containerId, rows, valueKey, maxValue, formatter = fmt) {
     `;
     el.appendChild(div);
   });
-}
-
-function renderTiles(containerId, tiles) {
-  const el = document.getElementById(containerId);
-  el.innerHTML = '';
-  tiles.forEach(t => {
-    const div = document.createElement('div');
-    div.className = 'tile';
-    div.innerHTML = `
-      <div class="label">${t.label}</div>
-      <div class="value">${t.value}</div>
-      ${t.sub ? `<div class="sub">${t.sub}</div>` : ''}
-    `;
-    el.appendChild(div);
-  });
-}
-
-function renderMissTable(tableId, rows) {
-  const el = document.getElementById(tableId);
-  const cls = tableId === 'table-under' ? 'error-neg' : 'error-pos';
-  el.innerHTML = `
-    <thead><tr>
-      <th>Player</th><th>Pos</th><th class="num">Pred</th><th class="num">Actual</th><th class="num">Diff</th>
-    </tr></thead>
-    <tbody>
-      ${rows.map(r => `
-        <tr>
-          <td>${r.name} <span style="color:var(--text-muted)">${r.team || ''}</span></td>
-          <td>${r.position}</td>
-          <td class="num">${fmt(r.predicted_total, 0)}</td>
-          <td class="num">${fmt(r.actual_total, 0)}</td>
-          <td class="num ${cls}">${r.error > 0 ? '+' : ''}${fmt(r.error, 0)}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  `;
 }
 
 let projectionsData = [];
@@ -474,64 +365,14 @@ function renderProjectionsTable() {
 }
 
 async function main() {
-  const [backtest, projections] = await Promise.all([
-    fetch('data/backtest_2025.json').then(r => r.json()),
-    fetch('data/projections_2026.json').then(r => r.json()),
-  ]);
+  // Backtest-validation rendering was removed with its panel; only the 2026
+  // projections remain. backtest_2025.json is still generated and still read
+  // by scripts/audit_2025_backtest.py and friends -- it is simply no longer
+  // surfaced here.
+  const projections = await fetch('data/projections_2026.json').then(r => r.json());
 
   document.getElementById('source-line').textContent =
-    `Backtest: ${backtest.source_file} (run ${new Date(backtest.backtest_date).toLocaleDateString()}) · ` +
-    `${backtest.n_predictions.toLocaleString()} predictions · ${projections.length} players projected for 2026`;
-
-  // Overall tiles
-  renderTiles('overall-tiles', [
-    { label: 'MAE', value: fmt(backtest.overall.mae), sub: 'points/week' },
-    { label: 'RMSE', value: fmt(backtest.overall.rmse), sub: 'points/week' },
-    { label: 'R²', value: fmt(backtest.overall.r2, 3), sub: 'variance explained' },
-    { label: 'Predictions', value: backtest.n_predictions.toLocaleString(), sub: '2025 season' },
-  ]);
-
-  // Baseline comparison bars
-  const baselineLabels = {
-    model: 'Model', trailing_avg_3w: 'Trailing 3-wk avg',
-    season_avg: 'Season avg', blended_heuristic: 'Blended heuristic',
-  };
-  const baselineOrder = ['model', 'trailing_avg_3w', 'season_avg', 'blended_heuristic'];
-  const baselineRows = baselineOrder
-    .filter(k => backtest.baselines[k])
-    .map(k => ({ label: baselineLabels[k], mae: backtest.baselines[k].mae }));
-  const maxBaseline = Math.max(...baselineRows.map(r => r.mae));
-  renderBars('baseline-bars', baselineRows, 'mae', maxBaseline);
-
-  // By-position bars
-  const posOrder = ['QB', 'RB', 'WR', 'TE'];
-  const posRows = posOrder
-    .filter(p => backtest.by_position[p])
-    .map(p => ({ label: p, mae: backtest.by_position[p].mae }));
-  const maxPos = Math.max(...posRows.map(r => r.mae));
-  renderBars('position-bars', posRows, 'mae', maxPos);
-
-  // Decision quality tiles
-  const dq = backtest.decision_quality;
-  renderTiles('decision-tiles', [
-    {
-      label: 'vs. replacement lineup', value: pct(dq.vs_replacement.win_rate),
-      sub: `${dq.vs_replacement.wins}-${dq.vs_replacement.losses}, avg margin ${fmt(dq.vs_replacement.avg_margin)} pts`,
-    },
-    {
-      label: 'vs. hindsight-optimal', value: pct(dq.vs_hindsight.win_rate),
-      sub: `${dq.vs_hindsight.wins}-${dq.vs_hindsight.losses}, p=${fmt(dq.vs_hindsight.p_value, 3)}`,
-    },
-    {
-      label: 'vs. season oracle', value: pct(dq.vs_oracle.win_rate),
-      sub: `${dq.vs_oracle.wins}-${dq.vs_oracle.losses} (oracle = best possible lineup)`,
-    },
-  ]);
-
-  // Miss tables
-  const acc = backtest.prediction_accuracy;
-  renderMissTable('table-under', acc.biggest_underestimates);
-  renderMissTable('table-over', acc.biggest_overestimates);
+    `${projections.length} players projected for 2026 · Step 8 season model`;
 
   // 2026 projections
   projectionsData = projections;
@@ -551,14 +392,6 @@ async function main() {
   document.getElementById('player-filter').addEventListener('input', renderProjectionsTable);
   renderProjectionsTable();
 }
-
-document.getElementById('main-tabs').addEventListener('click', (e) => {
-  const btn = e.target.closest('.main-tab-btn');
-  if (!btn) return;
-  document.querySelectorAll('.main-tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('main > .panel').forEach(p => p.hidden = p.id !== btn.dataset.panel);
-});
 
 main();
 </script>
