@@ -21,6 +21,25 @@ DATA_DIR = PROJECT_ROOT / "data"
 BACKTEST_DIR = DATA_DIR / "backtest_results"
 DOCS_DATA_DIR = PROJECT_ROOT / "docs" / "data"
 
+
+def copy_board_data() -> None:
+    """Copy players_{POS}.json into docs/data/.
+
+    docs/draft.html fetches these, and GitHub Pages publishes only the docs/
+    tree -- a relative ../data/ path resolves outside the publish root and
+    404s in production while working fine locally. Copying is deliberate over
+    rewriting the path: data/players_*.json stays the canonical artifact that
+    scripts read, and docs/data/ is the published mirror.
+    """
+    import shutil
+    DOCS_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    for pos in POSITIONS:
+        src = DATA_DIR / f"players_{pos}.json"
+        if src.exists():
+            shutil.copy2(src, DOCS_DATA_DIR / src.name)
+            print(f"Copied {src.name} -> docs/data/")
+
+
 POSITIONS = ["QB", "RB", "WR", "TE"]
 
 
@@ -110,6 +129,7 @@ def build_2026_projections() -> list[dict]:
 
 
 def main() -> None:
+    copy_board_data()
     DOCS_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     backtest_summary = build_backtest_summary()

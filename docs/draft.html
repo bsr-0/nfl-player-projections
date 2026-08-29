@@ -157,7 +157,7 @@ function render() {
 }
 
 Promise.all(POS.map(p =>
-  fetch(`../data/players_${p}.json`).then(r => r.ok ? r.json() : [])
+  fetch(`data/players_${p}.json`).then(r => r.ok ? r.json() : [])
 )).then(all => {
   RAW = all.flatMap(d => Array.isArray(d) ? d : Object.values(d).flat())
            .filter(r => r && r.projection_points_total != null);
