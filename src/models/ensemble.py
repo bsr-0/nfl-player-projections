@@ -59,26 +59,51 @@ except ImportError:
     HAS_ARIMA = False
 
 
+class FeatureVersionMismatch(RuntimeError):
+    """Persisted models were trained on a different feature set than the code builds."""
+
+
 def _warn_if_feature_version_mismatch() -> None:
-    """If saved feature version differs from current, warn to retrain so new features are used."""
+    """FATAL on mismatch. Serving predictions from a model whose feature set
+    does not match the one being built is not a warning-level problem.
+
+    This warned and continued until 2026-08-29, and the cost was measured:
+    artifacts trained at FEATURE_VERSION 33 were served v35 features, and
+    `predict()` returned a median of 55.00 for WR week predictions against
+    actuals averaging 6.12 -- MAE 43.24, where the same model measured 4.07 on
+    a proper evaluation two days earlier. The output saturated at a cap rather
+    than predicting, and nothing failed. Nobody noticed because
+    predict_next_week() has no consumer.
+
+    Set NFL_ALLOW_FEATURE_VERSION_MISMATCH=1 to downgrade to a warning, for
+    the deliberate case of inspecting old artifacts. It should never be set in
+    anything that serves numbers to a person.
+    """
+    import os
+
+    allow = os.getenv("NFL_ALLOW_FEATURE_VERSION_MISMATCH") == "1"
     version_path = MODELS_DIR / FEATURE_VERSION_FILENAME
+
+    def _fail(msg: str) -> None:
+        full = (f"{msg}\n  Retrain:  python -m src.models.train\n"
+                f"  Override (inspection only): NFL_ALLOW_FEATURE_VERSION_MISMATCH=1")
+        if allow:
+            print(f"\n*** WARNING (override set): {full}\n")
+            return
+        raise FeatureVersionMismatch(full)
+
     if not version_path.exists():
-        print(
-            "\n*** WARNING: No feature version file found. Models may have been trained with an "
-            "older feature set. To use new features (injury/rookie, matchup, imputation), run:\n"
-            "  python -m src.models.train\n"
-        )
+        _fail("No feature version file found, so the persisted models cannot be "
+              "matched to the current feature set.")
         return
     try:
         saved = version_path.read_text(encoding="utf-8").strip()
-    except Exception:
+    except Exception as e:
+        _fail(f"Could not read the feature version file ({e!r}).")
         return
     if saved != FEATURE_VERSION.strip():
-        print(
-            f"\n*** WARNING: Feature set version mismatch (saved={saved!r}, current={FEATURE_VERSION!r}). "
-            "Models were trained with a different feature set. To use the current features, retrain:\n"
-            "  python -m src.models.train\n"
-        )
+        _fail(f"Feature set version mismatch: models were trained at "
+              f"{saved!r}, the code builds {FEATURE_VERSION.strip()!r}.")
 
 
 def _multi_week_ci_scale(n_weeks: int, position: Optional[str] = None) -> float:
