@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>2026 Draft Board</title>
+<!--
+  Draft board over data/players_{POS}.json (Step 8 season projections).
+
+  NEW FILE. docs/index.html is frozen under CLAUDE.md section 9 and is a
+  results page, not a board -- nothing in the repo consumed the players_*.json
+  artifacts before this.
+
+  Ranks by VALUE OVER REPLACEMENT, not raw projected points. Raw points put
+  six quarterbacks in the top ten, which is accurate scoring and terrible draft
+  advice: you start one QB, so the 13th-best QB is nearly as good as the 5th,
+  while the 25th-best RB is far worse than the 5th. VOR is computed in the
+  browser because replacement level depends on league size and starters, which
+  the reader sets below.
+-->
+<style>
+  :root { --bg:#0f1216; --panel:#171b21; --line:#252b33; --fg:#e6e9ee; --dim:#98a2b0;
+          --qb:#c084fc; --rb:#4ade80; --wr:#60a5fa; --te:#fbbf24; --warn:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { padding:20px 24px 12px; border-bottom:1px solid var(--line); }
+  h1 { margin:0 0 4px; font-size:20px; font-weight:600; }
+  .sub { color:var(--dim); font-size:13px; }
+  .controls { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end;
+              padding:14px 24px; border-bottom:1px solid var(--line); background:var(--panel); }
+  .ctl label { display:block; font-size:11px; text-transform:uppercase;
+               letter-spacing:.04em; color:var(--dim); margin-bottom:4px; }
+  input,select { background:#0d1014; color:var(--fg); border:1px solid var(--line);
+                 border-radius:6px; padding:6px 8px; font-size:13px; }
+  input[type=number] { width:64px; }
+  table { border-collapse:collapse; width:100%; }
+  th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line);
+          white-space:nowrap; }
+  th { position:sticky; top:0; background:var(--panel); font-size:11px;
+       text-transform:uppercase; letter-spacing:.04em; color:var(--dim);
+       cursor:pointer; user-select:none; }
+  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr:hover td { background:#1b2027; }
+  .pos { font-weight:600; padding:1px 6px; border-radius:4px; font-size:12px; }
+  .pos.QB{color:var(--qb)} .pos.RB{color:var(--rb)}
+  .pos.WR{color:var(--wr)} .pos.TE{color:var(--te)}
+  .band { color:var(--dim); font-size:12px; }
+  .flag { color:var(--warn); font-size:12px; }
+  .note { padding:14px 24px; color:var(--dim); font-size:12px; max-width:900px; }
+  .note strong { color:var(--fg); }
+  #tbl-wrap { max-height:70vh; overflow:auto; }
+</style>
+
+<header>
+  <h1>2026 Draft Board</h1>
+  <div class="sub" id="meta">loading…</div>
+</header>
+
+<div class="controls">
+  <div class="ctl"><label>Teams</label><input type="number" id="teams" value="12" min="4" max="20"></div>
+  <div class="ctl"><label>QB</label><input type="number" id="sQB" value="1" min="0" max="3"></div>
+  <div class="ctl"><label>RB</label><input type="number" id="sRB" value="2" min="0" max="5"></div>
+  <div class="ctl"><label>WR</label><input type="number" id="sWR" value="3" min="0" max="6"></div>
+  <div class="ctl"><label>TE</label><input type="number" id="sTE" value="1" min="0" max="3"></div>
+  <div class="ctl"><label>Position</label>
+    <select id="filter"><option value="ALL">All</option><option>QB</option>
+    <option>RB</option><option>WR</option><option>TE</option></select></div>
+  <div class="ctl"><label>Sort</label>
+    <select id="sort"><option value="vor">Value over replacement</option>
+    <option value="projection_points_total">Raw projected points</option></select></div>
+</div>
+
+<div id="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th class="num">#</th><th>Player</th><th>Pos</th><th>Team</th>
+      <th class="num">VOR</th><th class="num">Proj</th><th class="num">PPG</th>
+      <th>Range (50%)</th><th class="num">Pos ADP</th><th class="num">Bye</th>
+      <th class="num">Risk</th><th>Role</th><th></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<div class="note">
+  <p><strong>Ranked by value over replacement.</strong> Replacement level is the
+  last starter at each position given your settings (teams × starters), taken
+  from these same projections. Sorting by raw points instead puts six
+  quarterbacks in the top ten — accurate scoring, poor draft advice, because
+  you start one QB and the 13th-best is nearly as good as the 5th.</p>
+  <p><strong>Range is a 50% interval</strong>, not a floor and ceiling in the
+  usual sense: the outcome lands inside it about half the time. It was widened
+  from a ~87% interval whose median width was 206% of the projection — wide
+  enough to be uninformative. Season projection is genuinely uncertain; MAE is
+  roughly 43 points against a mean near 100.</p>
+  <p><strong>Players without a projection are omitted.</strong> Anyone whose
+  prior season had fewer than 6 games is excluded deliberately: measured over
+  849 such player-seasons, no baseline beats predicting zero, and the obvious
+  fix (per-game rate × 17) is worse than predicting zero. A number here would
+  read as a claim the data cannot support.</p>
+  <p>Projections from the Step 8 season model, first of four arms on an 11-fold
+  walk-forward. Source: <code>data/players_{POS}.json</code>.</p>
+</div>
+
+<script>
+const POS = ["QB","RB","WR","TE"];
+let RAW = [];
+
+function replacementLevels(rows, teams, starters) {
+  // Replacement = the projection of the last startable player at that position.
+  // Computed from the projections themselves so the board is internally
+  // consistent; using last season's actuals would mix two different things.
+  const out = {};
+  for (const p of POS) {
+    const v = rows.filter(r => r.position === p)
+                  .map(r => r.projection_points_total)
+                  .sort((a,b) => b-a);
+    const idx = Math.max(0, Math.round(teams * starters[p]) - 1);
+    out[p] = v.length ? (v[Math.min(idx, v.length-1)] ?? 0) : 0;
+  }
+  return out;
+}
+
+function render() {
+  const teams = +document.getElementById("teams").value || 12;
+  const starters = {QB:+sQB.value||0, RB:+sRB.value||0, WR:+sWR.value||0, TE:+sTE.value||0};
+  const repl = replacementLevels(RAW, teams, starters);
+  const filter = document.getElementById("filter").value;
+  const sortKey = document.getElementById("sort").value;
+
+  let rows = RAW.map(r => ({...r, vor: r.projection_points_total - repl[r.position]}));
+  if (filter !== "ALL") rows = rows.filter(r => r.position === filter);
+  rows.sort((a,b) => (b[sortKey] ?? -1e9) - (a[sortKey] ?? -1e9));
+
+  document.getElementById("rows").innerHTML = rows.map((r,i) => {
+    const band = (r.projection_floor != null && r.projection_ceiling != null)
+      ? `${Math.round(r.projection_floor)}–${Math.round(r.projection_ceiling)}` : "—";
+    const flag = r.injury_flag ? '<span class="flag" title="injury flag">injury</span>' : "";
+    return `<tr>
+      <td class="num">${i+1}</td>
+      <td>${r.name ?? ""}</td>
+      <td><span class="pos ${r.position}">${r.position}</span></td>
+      <td>${r.team ?? ""}</td>
+      <td class="num">${r.vor.toFixed(1)}</td>
+      <td class="num">${(r.projection_points_total ?? 0).toFixed(0)}</td>
+      <td class="num">${(r.projection_points_per_game ?? 0).toFixed(1)}</td>
+      <td class="band">${band}</td>
+      <td class="num">${r.adp ?? "—"}</td>
+      <td class="num">${r.bye_week ?? "—"}</td>
+      <td class="num">${r.risk_score ?? "—"}</td>
+      <td>${r.support_class ?? "—"}</td>
+      <td>${flag}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("meta").textContent =
+    `${rows.length} players with a projection · replacement level: ` +
+    POS.map(p => `${p} ${repl[p].toFixed(0)}`).join(" · ");
+}
+
+Promise.all(POS.map(p =>
+  fetch(`../data/players_${p}.json`).then(r => r.ok ? r.json() : [])
+)).then(all => {
+  RAW = all.flatMap(d => Array.isArray(d) ? d : Object.values(d).flat())
+           .filter(r => r && r.projection_points_total != null);
+  if (!RAW.length) {
+    document.getElementById("meta").textContent =
+      "No projections found — check data/players_{POS}.json";
+    return;
+  }
+  render();
+}).catch(e => {
+  document.getElementById("meta").textContent = "Failed to load: " + e;
+});
+
+for (const id of ["teams","sQB","sRB","sWR","sTE","filter","sort"])
+  document.getElementById(id).addEventListener("input", render);
+</script>
