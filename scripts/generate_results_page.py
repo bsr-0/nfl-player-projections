@@ -124,8 +124,46 @@ def build_2026_projections() -> list[dict]:
                 "risk_score": p.get("risk_score"),
                 "prev_season_ppg": p.get("prev_season_ppg"),
             })
-    combined.sort(key=lambda p: p["projection_total"] or 0, reverse=True)
+    _attach_vor(combined)
+    combined.sort(key=lambda p: p["vor"] if p["vor"] is not None else -1e9, reverse=True)
     return combined
+
+
+# Standard 12-team league with 1 QB / 2 RB / 3 WR / 1 TE. These defaults must
+# match docs/draft.html's initial control values, or the two pages disagree
+# about who is best at first load.
+VOR_TEAMS = 12
+VOR_STARTERS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1}
+
+
+def _attach_vor(rows: list[dict]) -> None:
+    """Value over replacement, computed once in the data.
+
+    Ranking a draft board by raw projected points puts six quarterbacks in the
+    top ten. That is accurate scoring and bad advice: you start one QB, so the
+    13th-best is nearly as good as the 5th, while the 25th-best RB is far
+    worse. Replacement level is the last startable player at each position.
+
+    Computed HERE rather than in each page so the projections table and the
+    draft board cannot drift apart -- two copies of the same logic kept in sync
+    by hand is the failure mode that produced the is_power5 and TE-architecture
+    bugs. docs/draft.html recomputes it client-side only because its league
+    settings are adjustable; at the defaults above it must agree with this.
+    """
+    repl: dict[str, float] = {}
+    for pos, n_start in VOR_STARTERS.items():
+        vals = sorted((r["projection_total"] for r in rows
+                       if r["position"] == pos and r["projection_total"] is not None),
+                      reverse=True)
+        if not vals:
+            repl[pos] = 0.0
+            continue
+        idx = min(max(VOR_TEAMS * n_start - 1, 0), len(vals) - 1)
+        repl[pos] = vals[idx]
+    for r in rows:
+        tot = r["projection_total"]
+        r["vor"] = None if tot is None else round(tot - repl.get(r["position"], 0.0), 1)
+    return None
 
 
 def main() -> None:

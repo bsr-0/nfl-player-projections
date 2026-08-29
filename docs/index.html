@@ -299,7 +299,11 @@ function renderBars(containerId, rows, valueKey, maxValue, formatter = fmt) {
 
 let projectionsData = [];
 let currentPos = 'ALL';
-let sortKey = 'projection_total';
+// VOR, not raw points: raw points rank six QBs in the top ten, which is
+// accurate scoring and poor draft advice. Computed in
+// scripts/generate_results_page.py so this table and docs/draft.html cannot
+// disagree about who is best.
+let sortKey = 'vor';
 let sortDir = -1;
 
 function renderProjectionsTable() {
@@ -321,10 +325,10 @@ function renderProjectionsTable() {
 
   const columns = [
     ['name', 'Player'], ['team', 'Team'], ['position', 'Pos'], ['adp', 'ADP'],
-    ['projection_total', 'Proj Total'], ['projection_ppg', 'Proj PPG'],
+    ['vor', 'VOR'], ['projection_total', 'Proj Total'], ['projection_ppg', 'Proj PPG'],
     ['floor', 'Floor'], ['ceiling', 'Ceiling'], ['risk_score', 'Risk'],
   ];
-  const numCols = new Set(['adp', 'projection_total', 'projection_ppg', 'floor', 'ceiling', 'risk_score']);
+  const numCols = new Set(['adp', 'vor', 'projection_total', 'projection_ppg', 'floor', 'ceiling', 'risk_score']);
 
   const table = document.getElementById('table-2026');
   table.innerHTML = `
@@ -340,6 +344,7 @@ function renderProjectionsTable() {
           <td>${p.team || ''}</td>
           <td>${p.position}</td>
           <td class="num">${p.adp ?? '—'}</td>
+          <td class="num">${fmt(p.vor, 1)}</td>
           <td class="num">${fmt(p.projection_total, 0)}</td>
           <td class="num">${fmt(p.projection_ppg, 1)}</td>
           <td class="num">${fmt(p.floor, 0)}</td>
