@@ -1,4 +1,37 @@
-"""Season-total preseason projector.
+"""Season-total preseason projector. DEMOTED 2026-08-28 -- NOT the production
+model. Superseded by `src.models.season_step8.Step8SeasonModel`.
+
+    DO NOT ADOPT THIS FOR NEW WORK. It is retained as a comparison baseline
+    and because scripts/generate_draft_data.py still consumes it pending the
+    UI cutover. It is LAST of four arms, at every position.
+
+Corrected 11-fold walk-forward, 2026-08-28 (data/experiments/four_arm_20260828,
+4,630 player-seasons scored identically by all four arms):
+
+    mean MAE rank   step8 1.25 | candidate 1.75 | phase7 3.00 | production 4.00
+
+    season MAE      QB      RB      WR      TE
+      step8       68.5    51.9    43.7    29.2
+      candidate   68.8    51.7    44.2    30.3
+      phase7      69.8    52.8    45.2    30.6
+      production  76.2    57.5    49.5    33.5     <- this module
+
+    rookies (n=1012)  step8 39.81 | candidate 40.56 | phase7 44.96
+                      production 53.29             <- this module, worst by 13.5
+
+That is 4.3-7.7 MAE worse than step8 at every position, and 33% worse than
+step8 on rookies. The gap is not attributable to the training-data defects
+fixed 2026-08-25/26: this comparison was run AFTER all of them, including the
+component-mode fix that had been training production on 4-11% of available
+rows. Production was expected to improve and did not.
+
+Kept, not deleted, for three reasons: it is the fourth arm in the standing
+comparison; `predict_with_details()` supplies confidence_score/support_class
+that scripts/generate_draft_data.py uses for floor/ceiling sizing and which
+Step8SeasonModel does not yet reproduce; and deleting a measured baseline
+makes future regressions harder to detect, not easier.
+
+See GAPS.md 2026-08-28 and data/experiments/four_arm_20260828/.
 
 A position-specific Ridge model trained on prior-season aggregate stat
 rates plus age/experience/support-role context. No calibration layer:

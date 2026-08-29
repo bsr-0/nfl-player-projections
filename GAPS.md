@@ -12070,3 +12070,67 @@ run -- that turned a 12-hour failure into a 1-hour one.
 off, but that function unions BOTH flags' column sets, so it started failing on
 a flag it does not test. Fixed by pinning the history flag off for that module
 rather than widening the expectation.
+
+
+## Production model designated: Step 8. PreseasonProjector demoted (2026-08-28)
+
+First four-arm comparison run entirely on corrected data. All four arms scored
+the SAME 4,630 player-seasons (21.9% rookies) -- verified from the run output,
+not assumed. Artifacts: `data/experiments/four_arm_20260828/`.
+
+    mean MAE rank   step8 1.25 | candidate 1.75 | phase7 3.00 | production 4.00
+
+    season MAE      QB      RB      WR      TE
+      step8       68.5    51.9    43.7    29.2
+      candidate   68.8    51.7    44.2    30.3
+      phase7      69.8    52.8    45.2    30.6
+      production  76.2    57.5    49.5    33.5
+
+    rookies only (n=1012, mean actual 61.2)
+      step8 39.81 | candidate 40.56 | phase7 44.96 | production 53.29
+
+**Step 8 wins outright**, and wins on rookies -- beating phase7, the arm built
+for cold start, by 5.15 MAE there. It is also better on rookies (39.81) than on
+veterans (45.96).
+
+**PreseasonProjector is last at every position** by 4.3-7.7 MAE, and worst on
+rookies by 13.5. Critically this is AFTER the component-mode fix that had it
+training on 4-11% of available rows; it was expected to improve and did not.
+It is what the UI currently ships.
+
+**Extracted to production** (`src/models/season_step8.py`, commit f5df997).
+It had existed only inside `_step8_arm`, an evaluation harness that required
+target-season actuals and so could not project an unplayed season. No
+cold-start mechanism was needed -- pairs already carry rookie rows with NaN
+lags, LightGBM routes them, and the exposure half falls back to position-mean
+rate. What production needed was `possible_games` from the SCHEDULE rather
+than the panel, era-aware so it cannot re-admit the wild-card week. Extraction
+verified byte-identical: 4,630/4,630 predictions, max |diff| 0.
+
+### Corrections to earlier claims in this session, recorded deliberately
+
+Three things I asserted and then measured to be false. All three came from
+reasoning about code paths instead of measuring populations:
+
+1. "Rookies are structurally excluded from candidate/production/step8." False.
+   `_cold_start_rows` already appends rookie rows. My "comparable population"
+   split used my own eligibility proxy (prior season >= MIN_GAMES), which
+   excludes rookies BY DEFINITION -- so reporting 0% rookies in it was
+   circular.
+2. "step8 shares a population with phase7." False. step8 is scored on the
+   candidate frame. No arm shares phase7's population.
+3. "phase7's value is covering rookies the others cannot." False. The 1,665
+   phase7-only player-seasons are 10.6% rookies (LOWER than the compared
+   group's 21.9%), median 3 games played, mean actual 25.0 points, and phase7's
+   error on them is 130% of the quantity predicted. They are injured/cut/
+   practice-squad players, not draft-relevant rookies.
+
+### Still open
+
+- The UI (`docs/data/projections_2026.json` -> `docs/index.html`) is served by
+  PreseasonProjector from data generated 2026-08-08, predating every fix. Both
+  the model and the data are stale.
+- `Step8SeasonModel` does not reproduce `predict_with_details()`'s
+  confidence_score/support_class, which generate_draft_data.py uses for
+  floor/ceiling sizing. That gap must close before the UI cutover.
+- Step 8 is season-level only. phase7 remains the only weekly arm.
