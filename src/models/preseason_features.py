@@ -35,7 +35,7 @@ this project actually has.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -240,8 +240,45 @@ def _cold_start_rows(curr_totals: pd.DataFrame, season_agg: pd.DataFrame,
     return out
 
 
+def _cold_start_rows_from_draft(db, target: int, history: pd.DataFrame) -> pd.DataFrame:
+    """Incoming rookies for an UNPLAYED season, from the draft class.
+
+    `_cold_start_rows` identifies rookies as "players with target-season stats
+    and no prior history" -- impossible before the season is played. For
+    inference the equivalent population is that season's draft class, minus
+    anyone who somehow already has NFL history.
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        draft = pd.read_sql(
+            "SELECT player_id, position FROM draft_picks_v2 "
+            "WHERE draft_season = ? AND position IN ('QB','RB','WR','TE') "
+            "AND player_id IS NOT NULL", conn, params=[int(target)])
+    finally:
+        conn.close()
+    if draft.empty:
+        return pd.DataFrame()
+
+    prior_ids = set(history.loc[history["season"] < target, "player_id"])
+    draft = draft[~draft["player_id"].isin(prior_ids)].drop_duplicates("player_id")
+    if draft.empty:
+        return pd.DataFrame()
+
+    out = draft.copy()
+    out["player_name"] = pd.NA
+    out["season"] = target - 1          # matches the anchor convention
+    out["target_season"] = target
+    out["years_exp"] = 0
+    out["is_cold_start"] = 1
+    return out
+
+
 def build_multiyear_season_pairs(db, seasons: List[int],
-                                  lookback_years: int = LOOKBACK_YEARS) -> pd.DataFrame:
+                                  lookback_years: int = LOOKBACK_YEARS,
+                                  inference_season: Optional[int] = None) -> pd.DataFrame:
     """Build (multi-year features, next-season target) pairs with real
     destination-team context. One row per (player, target season)."""
     history = _load_full_history(db)
@@ -259,12 +296,23 @@ def build_multiyear_season_pairs(db, seasons: List[int],
     season_agg["years_exp"] = season_agg.groupby("player_id").cumcount()
 
     season_list = sorted(seasons)
+    # Targets to build. `inference_season` adds one whose actuals do not exist
+    # yet -- the same feature construction, without the label. Kept in THIS
+    # function rather than given its own loader so that what is evaluated and
+    # what is shipped cannot drift apart; PreseasonProjector maintains a second
+    # hand-written copy of its feature query for exactly this purpose, and that
+    # is the divergence class that produced the is_power5 and TE-architecture
+    # bugs (GAPS.md 2026-08-25/28).
+    targets = [(season_list[i + 1], True) for i in range(len(season_list) - 1)]
+    if inference_season is not None:
+        targets = [t for t in targets if t[0] != inference_season]
+        targets.append((int(inference_season), False))
+
     frames = []
-    for i in range(len(season_list) - 1):
-        target = season_list[i + 1]
+    for target, has_label in targets:
         curr_totals = history[history["season"] == target].groupby("player_id")["fantasy_points"].sum()
         curr_totals = curr_totals.rename("season_total").reset_index()
-        if curr_totals.empty:
+        if has_label and curr_totals.empty:
             continue
 
         # Season N (immediately prior to target) is the anchor row --
@@ -341,7 +389,8 @@ def build_multiyear_season_pairs(db, seasons: List[int],
         # Rookies, appended AFTER the veteran path so every derived column
         # above already exists on `row` and concat aligns them as NaN rather
         # than silently inventing values.
-        cold = _cold_start_rows(curr_totals, season_agg, history, target)
+        cold = (_cold_start_rows(curr_totals, season_agg, history, target) if has_label
+                else _cold_start_rows_from_draft(db, target, history))
         if not cold.empty:
             cold = cold.merge(dest_team, on="player_id", how="left")
             cold["prior_team"] = pd.NA
@@ -355,7 +404,12 @@ def build_multiyear_season_pairs(db, seasons: List[int],
             cold["years_of_history"] = 0
             row = pd.concat([row, cold], ignore_index=True)
 
-        row = row.merge(curr_totals, on="player_id", how="inner")
+        if has_label:
+            row = row.merge(curr_totals, on="player_id", how="inner")
+        else:
+            # No outcome exists yet. season_total stays NaN rather than 0.0 --
+            # a zero would be indistinguishable from a real scoreless season.
+            row["season_total"] = np.nan
         frames.append(row)
 
     if not frames:
