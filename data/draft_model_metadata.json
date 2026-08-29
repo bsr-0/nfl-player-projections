@@ -12,14 +12,13 @@
   "prev_season": 2025,
   "has_ml_predictions": false,
   "version": "v2.0.0",
-  "last_updated": "2026-08-05T12:54:58.608335",
-  "training_date": "2026-08-05T12:54:58.608335",
+  "last_updated": "2026-08-19T13:49:33.201155",
+  "training_date": "2026-08-19T13:49:33.201155",
   "test_season": 2026,
   "n_features_per_position": {
-    "QB": 55,
-    "RB": 61,
-    "WR": 62,
-    "TE": 61
+    "RB": 64,
+    "WR": 67,
+    "TE": 65
   },
   "training_metrics": {},
   "backtest_results": {

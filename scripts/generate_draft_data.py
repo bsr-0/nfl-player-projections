@@ -20,6 +20,7 @@ Usage:
 """
 import json
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -560,8 +561,69 @@ def _load_ml_predictions(upcoming_season: int):
         return None
 
 
+PRESEASON_MODEL = os.getenv("NFL_PRESEASON_MODEL", "step8")
+
+
+def _load_step8_projections(upcoming_season: int):
+    """Step 8 season totals for `upcoming_season`, with board metadata.
+
+    Step 8 is the production season model as of 2026-08-28: first of four arms
+    on the corrected 11-fold walk-forward (mean MAE rank 1.25 vs candidate
+    1.75, phase7 3.00, production 4.00) and best on rookies (39.81 vs 53.29 for
+    PreseasonProjector, which is what this replaced).
+
+    Uses the SAME feature builder as training via `inference_season=`, rather
+    than the parallel hand-written query PreseasonProjector needs. Returns the
+    identical shape the caller already consumes -- player_id, pred_total,
+    confidence_score, support_class -- so the swap is contained here.
+    """
+    import pandas as pd
+    from src.utils.database import DatabaseManager
+    from src.models.preseason_features import build_multiyear_season_pairs
+    from src.models.single_week_ppr.season_availability import load_player_seasons
+    from src.models.season_step8 import (
+        Step8SeasonModel, possible_games_for_players, with_board_metadata,
+    )
+
+    db = DatabaseManager()
+    panel = load_player_seasons()
+    seasons = list(range(2019, upcoming_season))
+    pairs = build_multiyear_season_pairs(db, seasons, inference_season=upcoming_season)
+    train = pairs[pairs["target_season"] < upcoming_season]
+    infer = pairs[pairs["target_season"] == upcoming_season].copy()
+    if train.empty or infer.empty:
+        return None
+
+    model = Step8SeasonModel().fit(train, panel, before_season=upcoming_season)
+    pg = possible_games_for_players(infer, upcoming_season)
+    preds = model.predict(infer, possible_games=pg)
+    out = with_board_metadata(infer, preds)
+    return out.rename(columns={"predicted_total": "pred_total"})[
+        ["player_id", "pred_total", "confidence_score", "support_class"]
+    ]
+
+
 def _load_preseason_projections(upcoming_season: int, prev_season: int):
+    """Season-total projections for the draft board.
+
+    Dispatches on PRESEASON_MODEL (env NFL_PRESEASON_MODEL, default "step8").
+    The PreseasonProjector path below is retained for comparison and rollback;
+    it is DEMOTED and last of four arms -- see that module's docstring.
+    """
+    if PRESEASON_MODEL == "step8":
+        try:
+            df = _load_step8_projections(upcoming_season)
+        except Exception:
+            return None
+        return df if df is not None and not df.empty else None
+    return _load_preseason_projector_projections(upcoming_season, prev_season)
+
+
+def _load_preseason_projector_projections(upcoming_season: int, prev_season: int):
     """Load PreseasonProjector season-total predictions for upcoming_season.
+
+    DEMOTED 2026-08-28 -- retained for rollback/comparison only. Reachable via
+    NFL_PRESEASON_MODEL=preseason_projector.
 
     Reuses scripts/snake_draft_sim.py's load_preseason_projections() rather
     than re-deriving the DB query it depends on — that function's feature
