@@ -346,17 +346,28 @@ class NFLPredictor:
                 if ci_col in results.columns:
                     results[ci_col] = results[ci_col] * availability
 
-        # Get utilization tier from predicted utilization
-        if "predicted_utilization" in results.columns:
+        # Utilization tier, from utilization_score -- NOT predicted_utilization.
+        #
+        # get_utilization_tier's thresholds are a 0-100 utilization index
+        # (>=80 Elite, >=70 Strong, >=60 Average, >=50 Below Average). In
+        # component mode -- which is production -- ensemble.py sets
+        # `predicted_utilization` to the FANTASY POINT prediction, the same
+        # value as predicted_points. Tiering that graded weekly points against
+        # index thresholds: a realistic weekly projection is 3-15 points, which
+        # is below every cut, so the column read "Low" for essentially every
+        # player regardless of role. Measured before the fix, J.Higgins had
+        # utilization_score 78.0 ("Strong") and was labelled "Low" off a 47.7
+        # point prediction, with the correct value sitting unused in the next
+        # column.
+        #
+        # No fallback to a points column: tiering the wrong unit is worse than
+        # not tiering, because "Low" reads as a judgement rather than a
+        # missing value.
+        if "utilization_score" in results.columns:
             results["util_tier"] = results.apply(
                 lambda row: self.utilization_calculator.get_utilization_tier(
-                    row.get("predicted_utilization", row.get("predicted_points", 50)),
-                    row.get("position", "RB")
+                    row["utilization_score"], row.get("position", "RB")
                 ), axis=1
-            )
-        elif "utilization_score" in results.columns:
-            results["util_tier"] = results["utilization_score"].apply(
-                lambda x: self.utilization_calculator.get_utilization_tier(x, "RB")
             )
         
         # Sort and rank by predicted utilization (primary) then predicted_points
