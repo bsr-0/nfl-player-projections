@@ -12134,3 +12134,48 @@ reasoning about code paths instead of measuring populations:
   confidence_score/support_class, which generate_draft_data.py uses for
   floor/ceiling sizing. That gap must close before the UI cutover.
 - Step 8 is season-level only. phase7 remains the only weekly arm.
+
+
+## MIN_GAMES = 6 is measured-correct, not an arbitrary threshold (2026-08-28)
+
+Recorded because the exclusion looks like a coverage bug and keeps getting
+re-litigated. It was questioned again when the Step 8 board swap dropped 120
+players' projections, so it was finally measured rather than argued.
+
+**Population**: player-seasons whose PRIOR season had 1-5 games -- exactly what
+`_season_aggregates`' `games_played >= MIN_GAMES` filter removes. n=849,
+2015-2025.
+
+    mean actual 35.0   median 11.8   sd 56.2
+    59% score under 20 points across a whole season; 78% under 50
+
+    baseline                MAE    % of mean actual
+    naive_ppg17           49.81       142%
+    naive_prior_total     31.01        89%
+    naive_posmedian       31.08        89%
+    naive_zero            35.08       100%
+
+**Nothing works here.** The best baseline (prior-season total, 31.01) beats
+"always predict zero" (35.08) by 4 points against a target sd of 56.2 -- noise.
+There is no headroom for a model to be useful.
+
+**The intuitive approach is the WORST.** `ppg x 17` -- take the per-game rate
+from those few games and extrapolate -- scores 49.81, worse than predicting
+zero. That is what MIN_GAMES protects against: a 4-game per-game rate is
+unstable and multiplying by 17 amplifies it. The concrete case that prompted
+this: a WR with 57.1 points in 4 games of 2025 would project to 242 by that
+logic, near the top of the board.
+
+**Consequence.** Excluding these players is correct behaviour, not a gap. They
+ship as `pending` with no number, deliberately, and the draft board swap
+(a5a780b) was shipped with NO fallback on this basis. 52% of them are the same
+player_ids as the phase7-only group, where the best available model's error is
+130% of the quantity predicted.
+
+If they are ever surfaced in the UI it should be as "insufficient data" with no
+projection attached -- a number on a draft board reads as a claim.
+
+**What would change this**: a signal that separates the thin tail of genuine
+breakouts from the 59% who never establish a role. Prior-season box score does
+not contain it. Draft capital, depth-chart movement or offseason role news
+might; none has been tested on this population.
