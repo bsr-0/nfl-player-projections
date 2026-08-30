@@ -310,22 +310,35 @@ class NFLPredictor:
         
         # Cold-start handling deliberately does NOT live here any more.
         #
-        # _apply_cold_start_fallback replaced sub-MIN_GAMES predictions with a
-        # position average. It had never once run: its first statement was
-        # `if "games_count" not in latest_data.columns: return results`, and no
-        # code in this repo produces `games_count` -- the column is
-        # `games_played`. A one-word name mismatch had disabled it silently.
+        # `_apply_cold_start_fallback` replaced every sub-MIN_GAMES_FOR_PREDICTION
+        # prediction with the position average. It was REMOVED on purpose, and
+        # it was LIVE when removed -- `games_count` is built ~50 lines above
+        # from `player_data.groupby("player_id").size()` and merged into
+        # latest_data, so the guard fired for real.
         #
-        # Not repaired, removed. Its behaviour was worse than the model it was
-        # overriding: every rookie at a position received the SAME number, which
-        # discards draft capital, depth chart and combine score -- the only real
-        # signal a week-1 rookie has, and the 33 of 72 causal features that are
-        # genuinely populated for him.
+        # (An earlier revision of this comment, and the commit that introduced
+        # it, claimed the function was dead code. That was wrong: the check was
+        # made against `get_all_players_for_training`'s output rather than
+        # against `latest_data`, and games_count is constructed here rather than
+        # returned by that query. The removal stands on its own merits below,
+        # not on the function being unreachable.)
+        #
+        # Why it is gone: it assigned every rookie at a position an IDENTICAL
+        # number, discarding draft capital, depth chart and combine score --
+        # the only real signal a week-1 rookie has, and the 33 of 72 causal
+        # features that are genuinely populated for him.
         #
         # Cold start is handled where the information is instead: the fitted
         # position x draft-round prior in data/rookie_priors.json now reaches
         # prev_season_ppg (see add_advanced_features), so a first-round back and
-        # a seventh-round back no longer start from the same place.
+        # a seventh-round back no longer start from the same place. That prior
+        # had itself never reached a model before 2026-08-30, which is why the
+        # override looked necessary.
+        #
+        # NOTE: the confidence-interval widening further down (rookie 1.5x,
+        # volatile 1.25x, injury-prone 1.4x) gates on the same `games_count` and
+        # is LIVE. Rookie uncertainty is still expressed; only the point-estimate
+        # override was removed.
 
         # Carry through matchup columns for downstream consumers (generate_app_data)
         for matchup_col in ["opponent", "home_away"]:

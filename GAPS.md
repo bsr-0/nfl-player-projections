@@ -12654,7 +12654,7 @@ Every model artifact now predates the data it was trained on. The 2026-08-29
 21:58 retrain used fabricated team_stats and PFR columns. A retrain is required
 before any accuracy number is quotable.
 
-## The rookie cold-start fallback is DEAD CODE (2026-08-29)
+## The rookie cold-start fallback (2026-08-29) — HEADLINE RETRACTED, see correction 2026-08-30
 
 `predict.py::_apply_cold_start_fallback` is intended to replace ML predictions
 with a position average for players below `MIN_GAMES_FOR_PREDICTION = 4`, on
@@ -12798,9 +12798,11 @@ Three defects, all in machinery that already existed.
    filler cannot silently defeat it") and still blanks 64 of 65 columns; the
    one column where a fitted, draft-conditioned estimate exists gets it back.
 
-3. `_apply_cold_start_fallback` DELETED (option (a) folded in). It had never
-   run -- `if "games_count" not in latest_data.columns: return results`, and
-   nothing in the repo produces `games_count`; the column is `games_played`.
+3. `_apply_cold_start_fallback` DELETED (option (a) folded in). NOTE: the
+   original text here said it "had never run" because nothing produces
+   `games_count`. That was WRONG -- games_count is built inside predict.py and
+   the function was LIVE. See the 2026-08-30 correction below. The deletion
+   stands on the argument that follows, which never depended on it.
    Not repaired, because its behaviour was worse than the model it overrode:
    every rookie at a position got the SAME number, discarding draft capital,
    depth chart and combine score, i.e. the 33 of 72 causal features that ARE
@@ -12938,3 +12940,53 @@ absent from BOTH arms, so the comparison is still controlled and its
 conclusion (no measurable effect) stands. But the absolute per-week MAE values
 were measured on a pipeline that no longer matches production, and should be
 re-measured before being quoted as current model performance.
+
+## CORRECTION: the cold-start fallback and the CI widening were LIVE, not dead (2026-08-30)
+
+Retracts two claims made on 2026-08-29 and repeated in commit 7f635b3.
+
+CLAIMED: `predict.py::_apply_cold_start_fallback` had never run, because its
+first statement is `if "games_count" not in latest_data.columns: return
+results` and nothing in the repo produces `games_count`. The same was claimed
+of the confidence-interval widening block, which gates on the same column.
+
+BOTH WERE FALSE. `games_count` IS built, in predict.py itself:
+
+    games_per_player = player_data.groupby("player_id").size() \
+                          .reset_index(name="games_count")     # ~line 264
+    latest_data = latest_data.merge(games_per_player, on="player_id")
+
+Verified it reaches the call site with sane values (min 1, median 14, max 39)
+and survives `refresh_matchup_features`.
+
+HOW THE ERROR HAPPENED: the check was run against
+`get_all_players_for_training`'s output, which indeed has `games_played` and no
+`games_count`. But that is the INPUT to the prediction pipeline, not the frame
+passed to the guard -- `games_count` is derived afterwards, inside predict.py.
+The wrong frame was measured, and the measurement looked conclusive. This is
+the second time in this audit that a confident conclusion came from evaluating
+the wrong population (cf. the qb_bad_throw_pct_prior correction, where a
+QB-only feature was measured across all positions).
+
+GUARDRAIL: when asserting a column is absent, measure the frame at the USE
+SITE, not the frame that feeds the function that builds it.
+
+### What this changes
+
+- The CI widening (rookie 1.5x, volatile 1.25x, injury-prone 1.4x) needs no
+  work. It has been functioning all along. The GAPS entry proposing a fix for
+  it is withdrawn.
+- `_apply_cold_start_fallback` was LIVE production behaviour when deleted in
+  7f635b3, not dead code. Sub-4-game players previously received the position
+  average; they now receive the model's prediction.
+
+### The deletion stands (user decision, 2026-08-30)
+
+Confirmed after the correction was surfaced. The justification is the second
+argument from the original entry, which never depended on the function being
+unreachable: it assigned every rookie at a position an IDENTICAL number,
+discarding draft capital, depth chart and combine score. That argument is
+stronger now that the rookie prior actually reaches the model -- the prediction
+it would override is draft-conditioned rather than veteran-median.
+
+Rookie uncertainty is still expressed: the CI widening is live and untouched.
