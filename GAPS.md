@@ -12823,3 +12823,88 @@ cumulative count), so `games_played < MIN_GAMES_FOR_PREDICTION` would be TRUE
 for every player and widen every interval 1.5x -- worse than the dead code.
 A correct fix needs a real career-game count or `is_rookie` plumbed to the
 serving frame; neither is present there today.
+
+## A/B: the prior-week fix produced no measurable accuracy gain (2026-08-30)
+
+Controlled comparison, both arms identical except the flag:
+
+    harness      scripts/error_by_week.py --season 2025
+    train        2018-2024,  test 2025 (held out)
+    arm ON       PRESERVE_PRIOR_WEEK_MISSINGNESS=1 (week-1 absence -> NaN,
+                 then median-imputed)
+    arm OFF      NFL_PRESERVE_PRIOR_WEEK_MISSINGNESS=0 (week-1 absence -> 0,
+                 the pre-fix behaviour)
+    outputs      data/experiments/error_by_week_2025_flag{ON,OFF}.csv
+
+Validity checked before trusting it: env=0 makes the flag read False and
+leaves PRIOR_WEEK_JOIN_COLS unpreserved. The `ts.week >= 1` join guard is not
+flag-controlled and is active in both arms, but that does not confound the
+comparison -- with the guard on, week 1 joins to NULL and the OFF arm
+zero-fills it, reproducing exactly the 0 the pre-fix code produced via the
+week-0 placeholder rows.
+
+MAE delta (ON minus OFF), negative = fix helped:
+
+    bucket        QB       RB       TE       WR
+    wk 1       +0.053   -0.033   -0.019   -0.033
+    wk 2-4     -0.018   -0.009   -0.003   +0.003
+    wk 5-8     +0.024   +0.022   -0.016   -0.001
+    wk 9-13    -0.021   -0.001   +0.006   -0.010
+    wk 14-18   +0.015   +0.020   -0.006   +0.004
+
+Largest single change anywhere: 0.053 MAE, on QB week 1, n=33, in the WRONG
+direction.
+
+There is a faint pattern in the expected shape -- three of four positions
+improve in the targeted buckets (wk 1, wk 2-4) while untargeted buckets
+(wk 9-13, wk 14-18) stay flat:
+
+    RB targeted -0.021 / untargeted +0.010
+    WR targeted -0.015 / untargeted -0.003
+    TE targeted -0.011 / untargeted +0.000
+    QB targeted +0.018 / untargeted -0.003
+
+NOT claimed as an effect. ~0.02 MAE on a base of 4-6, QB runs the other way,
+one season, no repeats. Fully consistent with noise. Establishing it would
+need multiple held-out seasons and repeated runs.
+
+### Conclusion for the whole audit
+
+Six retrains and one controlled A/B: the 2026-08-29/30 work bought
+CORRECTNESS, NOT ACCURACY. Aggregate weekly MAE is unchanged from where it
+started (QB 6.04 / RB 4.49 / WR 4.23 / TE 2.87).
+
+That is a result, not a disappointment. The most likely reading is that the
+models had already routed around features that were constant or nonsensical,
+so removing the fabrication freed capacity they were not using. Two things
+follow:
+
+  - The ceiling here is NOT data hygiene. It is the feature set and the model.
+    Further data-cleaning work should not be expected to move accuracy.
+  - These features are now genuinely available to future work. team pace,
+    neutral pass rate over expected, PFR broken tackles and drop rate, and the
+    rookie priors were all noise-wearing-a-name before; they now carry signal
+    a better model could use.
+
+What DID change is the epistemic status of the numbers. Before: computed on
+91%-fabricated labels, reported in log space for 10 of 12 models, over
+features that were constant zero for 19 seasons. After: the same numbers,
+measuring what they claim to.
+
+### Per-week error, current models (arm ON, 2025 held out)
+
+MAE as % of mean actual points, which is comparable across buckets in a way
+raw MAE is not:
+
+    bucket       QB     RB     TE     WR
+    wk 1       38.6   60.1   69.3   59.3
+    wk 2-4     42.1   51.8   66.4   59.1
+    wk 5-8     48.8   58.7   66.5   63.2
+    wk 9-13    53.1   52.2   65.6   66.2
+    wk 14-18   46.3   57.2   68.1   65.2
+
+Early season is NOT the weak spot: QB is 9.4pp BETTER early than late, WR
+6.5pp better, RB and TE flat within ~1pp. This contradicts the standing
+project note that QB early-season is the biggest gap -- that note predates
+this audit, and whatever it measured may have been the corruption now removed.
+Caveat: QB wk 1 is n=33.
