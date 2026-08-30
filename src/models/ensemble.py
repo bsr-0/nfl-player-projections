@@ -1367,10 +1367,18 @@ class ModelTrainer:
                 continue
             oof = getattr(pos_model, "_oof_metrics", None)
             if oof is not None:
+                # Report in the target's ORIGINAL units (fantasy points), not
+                # model space. PositionModel.fit applies log1p when the target is
+                # skewed, which fires for 10 of 12 position/horizon models -- so
+                # reporting model space put most of this table in log points and
+                # two entries in fantasy points, with nothing marking which.
+                # *_original is populated either way; target_space says which
+                # scale the model trained on.
                 metrics[f"{n_weeks}w"] = {
-                    "rmse": oof["rmse"],
-                    "mae": oof["mae"],
-                    "r2": oof["r2"],
+                    "rmse": oof.get("rmse_original", oof["rmse"]),
+                    "mae": oof.get("mae_original", oof["mae"]),
+                    "r2": oof.get("r2_original", oof["r2"]),
+                    "target_space": oof.get("target_space", "unknown"),
                 }
 
         return metrics

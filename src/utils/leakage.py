@@ -25,6 +25,18 @@ logger = logging.getLogger(__name__)
 # Only match true ML targets (avoid collisions like target_share).
 _TARGET_COL_RE = re.compile(r"^target(_util)?_\d+w$|^target$")
 
+
+def is_label_column(col: str) -> bool:
+    """True if `col` is a training LABEL rather than a feature.
+
+    Exposed because imputation code also needs this distinction, not just
+    feature filtering. The naming is a trap: `target_1w` is a label while
+    `target_share_rolling_3` is a legitimate feature, so a `startswith
+    ("target_")` test silently destroys the target-share family. Match on the
+    same compiled pattern the leakage filter uses so the two can never drift.
+    """
+    return bool(_TARGET_COL_RE.match(col)) or col == "actual_for_backtest"
+
 # Model-output columns that should never be used as features.
 _MODEL_OUTPUT_PREFIXES: Tuple[str, ...] = (
     "predicted_",

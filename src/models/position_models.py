@@ -390,6 +390,34 @@ class PositionModel:
                 "evaluation_method": "held_out_30pct" if len(eval_indices) >= 10 else "full_oof_optimistic",
             }
 
+            # The metrics above are in MODEL space, which is log1p space whenever
+            # TargetTransformer activated. They have to stay that way: the
+            # isotonic gate below and the overfit ratio further down both compare
+            # them against quantities computed on y_train_inner, which is also
+            # transformed. Reporting them as-is is what made model_metadata.json
+            # unreadable -- a 2026-08-29 run showed QB 1w MAE 5.99 (fantasy
+            # points, transform inactive) beside RB 1w MAE 0.50 (log points,
+            # transform active), which invites the conclusion that RB is 12x more
+            # accurate than QB. It is the same model measured on two scales.
+            # So: add the original-space numbers rather than overwrite, and let
+            # _evaluate_model report these.
+            tt = getattr(self, "target_transformer", None)
+            self._oof_metrics["target_space"] = "log1p" if (tt and tt.active) else "original"
+            if tt is not None and tt.active:
+                y_orig = tt.inverse_transform(np.asarray(oof_y_eval, dtype=float))
+                pred_orig = tt.inverse_transform(np.asarray(oof_ensemble_eval, dtype=float))
+                self._oof_metrics.update({
+                    "rmse_original": float(np.sqrt(mean_squared_error(y_orig, pred_orig))),
+                    "mae_original": float(mean_absolute_error(y_orig, pred_orig)),
+                    "r2_original": float(r2_score(y_orig, pred_orig)),
+                })
+            else:
+                self._oof_metrics.update({
+                    "rmse_original": self._oof_metrics["rmse"],
+                    "mae_original": self._oof_metrics["mae"],
+                    "r2_original": self._oof_metrics["r2"],
+                })
+
             # For calibration, use full OOF predictions from the production meta-learner
             if self.meta_learner is not None:
                 oof_ensemble = self.meta_learner.predict(oof_preds[oof_valid])
@@ -1360,8 +1388,40 @@ class MultiWeekModel:
 
             model = PositionModel(self.position, n_weeks=n_weeks)
             sw = _horizon_recency_weights(n_weeks)
-            model.fit(X, y_dict[n_weeks], tune_hyperparameters=tune_hyperparameters,
-                      sample_weight=sw, seasons=seasons)
+
+            # Drop rows this horizon has no label for. Each horizon has its own
+            # coverage: a 4-week forward sum needs more future games than a
+            # 1-week one, so on 2018-2025 target_1w is defined on 90.6% of rows
+            # and target_4w on only 73.8%. The caller filters on the 1-week
+            # target alone, which leaves ~18% of surviving rows with a NaN
+            # 4-week label.
+            #
+            # This never surfaced before because _impute_missing was
+            # median-filling the labels, so every horizon looked fully covered
+            # (GAPS.md 2026-08-29). With the fill gone the 4-week model got NaN
+            # in y and sklearn raised "Input y contains NaN". Filtering per
+            # horizon is the honest fix: train each horizon on exactly the rows
+            # where its own target exists.
+            y_h = y_dict[n_weeks]
+            keep = np.asarray(pd.notna(y_h))
+            n_drop = int((~keep).sum())
+            if n_drop:
+                print(f"  {n_weeks}w: dropping {n_drop} of {len(keep)} rows "
+                      f"with no {n_weeks}-week label "
+                      f"({100 * keep.mean():.1f}% usable)")
+            X_h = X[keep]
+            y_h = y_h[keep]
+            sw_h = sw[keep] if sw is not None and len(sw) == len(keep) else sw
+            seasons_h = (np.asarray(seasons)[keep]
+                         if seasons is not None and len(seasons) == len(keep)
+                         else seasons)
+            if len(X_h) < 50:
+                print(f"  {n_weeks}w: only {len(X_h)} labelled rows, skipping "
+                      f"this horizon rather than fitting on too little data")
+                continue
+
+            model.fit(X_h, y_h, tune_hyperparameters=tune_hyperparameters,
+                      sample_weight=sw_h, seasons=seasons_h)
 
             # Use this model for all weeks in the horizon group
             for week in self.horizon_groups[horizon]:
