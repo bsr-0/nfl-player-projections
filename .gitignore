@@ -115,3 +115,11 @@ data/experiments/phase7_coldstart_histnan/
 data/experiments/phase7_histnan_v2_20260827/
 data/experiments/backups/
 data/experiments/phase7_histnan_v3_20260827/joined_all.csv
+
+# Model-artifact snapshots taken before a risky retrain (217-258MB each).
+# Rollback aids for one session, not project history.
+/data/models_backup_*/
+
+# Play-by-play download cache, re-fetchable from nfl_data_py on demand.
+/data/raw/pbp_advanced_*.parquet
+/data/raw/pbp_team_advanced_*.parquet
