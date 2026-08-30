@@ -13034,3 +13034,48 @@ or cold, so removing the fabrication freed capacity they were not using.
 CONCLUSION FOR PLANNING: the ceiling here is not data hygiene. It is the
 feature set and the model. Further cleaning should not be expected to move
 accuracy, and should be justified on correctness grounds alone.
+
+## NEGATIVE RESULT: there is no QB in-season degradation (2026-08-30)
+
+Recorded so the next reader does not re-chase it from the same table.
+
+The per-week baseline shows QB error rising from 38.8% of mean actual points in
+week 1 to 52.9% by weeks 9-13. That was flagged as the one structural pattern
+worth pursuing. It is an artifact of the normalisation, not a finding.
+
+Decomposed:
+
+    bucket      MAE   mean_actual   MAE vs wk1   actual vs wk1
+    wk 1       6.26      16.11          0.0%           0.0%
+    wk 2-4     5.85      13.81         -6.6%         -14.2%
+    wk 5-8     6.66      13.74         +6.4%         -14.7%
+    wk 9-13    6.71      12.68         +7.3%         -21.3%
+    wk 14-18   6.32      13.73         +1.0%         -14.8%
+
+QB MAE is flat: 6.26 in week 1, 6.32 in weeks 14-18, oscillating 5.85-6.71 in
+between and non-monotonic (weeks 2-4 are BETTER than week 1). Roughly
+three-quarters of the apparent degradation is the denominator shrinking.
+
+Why the denominator shrinks, from raw 2025 data rather than model output:
+
+    bucket      QBs/week   mean FP   share under 5 FP
+    wk 1          34.0      16.24         11.8%
+    wk 2-4        41.0      12.88         25.2%
+    wk 5-8        36.3      13.44         26.2%
+    wk 9-13       36.2      12.66         25.4%
+    wk 14-18      26.2      12.34         28.8%
+
+The share of QBs scoring under 5 points MORE THAN DOUBLES after week 1 and
+stays there. Week 1 is the one week where nearly every team starts its intended
+starter; from week 2 the pool fills with backups, injury replacements and
+benchings. Mean scoring drops ~20% for roster reasons and never recovers.
+
+METHOD NOTE, which is the transferable part: dividing MAE by a bucket's mean
+actual makes error appear to grow whenever scoring shrinks. It is the right
+normalisation for comparing positions (a 3-point TE error is not a 3-point QB
+error), and the wrong one for comparing weeks within a position when the
+player pool changes composition. Report raw MAE alongside it, and check the
+denominator before treating a trend as a model property.
+
+This also contradicts, again, the standing note that QB early-season accuracy
+is the biggest gap: week 1 is QB's BEST bucket on raw MAE.
