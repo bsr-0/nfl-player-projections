@@ -140,6 +140,52 @@ PERSONNEL_MISSINGNESS_COLS = frozenset({
     "team_pct_13_personnel", "team_pct_21_personnel",
 })
 
+# Columns joined from the PRIOR week, which therefore cannot exist in week 1.
+#
+# get_all_players_for_training joins team and opponent stats on
+# `ts.week = pws.week - 1` to avoid leaking the current week's outcome. There is
+# no week 0, so week 1 always yields NULL -- and the blanket fill below turned
+# that into a measured zero for 100% of week-1 rows.
+#
+# Measured 2026-08-29: `opp_fpts_allowed` is a DIRECT causal feature for all
+# four positions with a mid-season median of 21.6, and it read 0.0 for every
+# week-1 row. That states the opponent allows zero fantasy points -- the best
+# defence possible, identical for all 32 teams -- in precisely the week where
+# form data is weakest and matchup should carry the most weight.
+#
+# The zero also propagates: it sits inside the 3-game rolling means for weeks
+# 2-4, where 25-33% of team_pace_sec_per_play_roll3_mean rows came out below
+# 20 s/play against a true p1 of 24.75.
+#
+# DEFAULT ON, unlike PERSONNEL_MISSINGNESS_COLS above. That set is gated off to
+# stay comparable with earlier results, and 0% personnel usage is at least an
+# arguable reading. Neither applies here: "allows 0.0 fantasy points" is a join
+# miss with no defensible reading, and the results it would stay comparable with
+# were already superseded by the label, horizon and backfill fixes of the same
+# day. Set PRESERVE_PRIOR_WEEK_MISSINGNESS=0 to restore the old behaviour.
+PRIOR_WEEK_JOIN_COLS = frozenset({
+    "opp_fpts_allowed",
+    "team_pace_sec_per_play",
+    "team_neutral_pass_rate",
+    "team_neutral_pass_rate_oe",
+    "team_plays",
+    # The SOURCE columns behind opp_fpts_allowed. It is assembled in
+    # feature_engineering (`df.loc[mask, "opp_fpts_allowed"] = ...` per
+    # position) from these four, so exempting only the assembled name left the
+    # inputs to be zero-filled and the output was still 0 on 100% of week-1
+    # rows. Verified: straight out of SQL these are 100% NaN at week 1, so the
+    # zeros were entirely the blanket fill's doing.
+    #
+    # This is the scoping trap in this codebase: a column can feed a causal
+    # feature under a DIFFERENT NAME, so checking CAUSAL_FEATURES membership by
+    # name (or by `<name>_*` prefix) misses it. Same shape as the
+    # team_pct_12_personnel -> ..._roll3_mean case already recorded above.
+    "fantasy_points_allowed_qb",
+    "fantasy_points_allowed_rb",
+    "fantasy_points_allowed_wr",
+    "fantasy_points_allowed_te",
+})
+
 
 def missingness_preserved_cols() -> frozenset:
     """Columns exempt from the blanket numeric fill, resolved at CALL time.
@@ -148,11 +194,17 @@ def missingness_preserved_cols() -> frozenset:
     monkeypatching module-level constants in this codebase is unreliable, so a
     module-level union would make the toggle untestable and easy to mis-set.
     """
-    from config.settings import PRESERVE_PERSONNEL_MISSINGNESS
+    from config.settings import (
+        PRESERVE_PERSONNEL_MISSINGNESS,
+        PRESERVE_PRIOR_WEEK_MISSINGNESS,
+    )
 
+    out = MISSINGNESS_PRESERVED_COLS
     if PRESERVE_PERSONNEL_MISSINGNESS:
-        return MISSINGNESS_PRESERVED_COLS | PERSONNEL_MISSINGNESS_COLS
-    return MISSINGNESS_PRESERVED_COLS
+        out = out | PERSONNEL_MISSINGNESS_COLS
+    if PRESERVE_PRIOR_WEEK_MISSINGNESS:
+        out = out | PRIOR_WEEK_JOIN_COLS
+    return out
 
 # Fallback keys, used when a fold's training data has no rows for a given
 # position/era combination.

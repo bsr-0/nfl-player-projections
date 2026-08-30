@@ -863,13 +863,21 @@ class FeatureEngineer:
         gp["seasons_3yr"] = gp.groupby("player_id")["gp"].transform(
             lambda x: x.shift(1).rolling(3, min_periods=1).count()
         )
+        # No .fillna(1.0) and no 1.0 map default. A player with no prior season
+        # has UNKNOWN availability, and 1.0 is the most optimistic value in the
+        # range -- so the old defaults asserted perfect durability exactly where
+        # nothing was known. Measured on the 2018-2025 window before pre-window
+        # context was supplied, that default covered 98% of 2018 rows.
+        #
+        # NaN is correct and survives: models handle missing natively, and the
+        # `_missing` indicator machinery in _impute_missing can flag it.
         gp["availability_3yr"] = (
             gp["gp_3yr"] / (gp["seasons_3yr"] * 17)
-        ).clip(0, 1.0).fillna(1.0)
+        ).clip(0, 1.0)
 
         avail_map = gp.set_index(["player_id", "season"])["availability_3yr"].to_dict()
         df["availability_3yr"] = df.apply(
-            lambda r: avail_map.get((r.get("player_id"), r.get("season")), 1.0), axis=1
+            lambda r: avail_map.get((r.get("player_id"), r.get("season")), np.nan), axis=1
         )
         return df
 
@@ -1563,9 +1571,13 @@ class FeatureEngineer:
             "rb_broken_tackles_prior",
             "recv_drop_pct_season_prior",
         ]
+        # NaN, not 0.0. All four of these are listed in _STRUCTURALLY_MISSING so
+        # _impute_missing deliberately leaves them alone -- but this builder ran
+        # first and filled them with 0.0, which made that exemption inert. Same
+        # inert-flag pattern as the snap and personnel columns.
         if "player_id" not in df.columns or "season" not in df.columns:
             for col in output_cols:
-                df[col] = 0.0
+                df[col] = np.nan
             return df
 
         try:
@@ -1607,16 +1619,23 @@ class FeatureEngineer:
             df = df.merge(rush_pfr, on=["player_id", "season"], how="left")
             df = df.merge(recv_pfr, on=["player_id", "season"], how="left")
 
-            # Fill NaN with positional median per season
-            pos_col = "position" if "position" in df.columns else None
+            # A player with no PFR record has an UNKNOWN drop rate, not a drop
+            # rate of zero. The previous code filled the (position, season)
+            # median and then `.fillna(0.0)` behind it -- and when an entire
+            # group was missing the median was itself NaN, so the 0.0 fired for
+            # every row.
+            #
+            # That is what made these read ~98% zero for 2019-2024: the source
+            # table only ever had broken_tackles_per_att and rec_drop_pct for
+            # 2024, and the zero-fill turned that gap into a confident
+            # measurement. A perfect drop rate of 0.0% is the BEST possible
+            # value, asserted for every receiver with no record.
+            #
+            # These columns are in _STRUCTURALLY_MISSING, so leaving NaN here is
+            # what lets that exemption actually do something.
             for col in output_cols:
                 if col not in df.columns:
-                    df[col] = 0.0
-                elif pos_col:
-                    df[col] = df.groupby([pos_col, "season"])[col].transform(
-                        lambda x: x.fillna(x.median())
-                    )
-                df[col] = df[col].fillna(0.0)
+                    df[col] = np.nan
 
             # These are PRIOR-season features off a table starting in 2018, so
             # the first target season with real data is 2019.
@@ -1627,7 +1646,7 @@ class FeatureEngineer:
             logging.getLogger(__name__).warning(f"seasonal_pfr features skipped: {e}")
             for col in output_cols:
                 if col not in df.columns:
-                    df[col] = 0.0
+                    df[col] = np.nan
 
         return df
 
@@ -1662,7 +1681,11 @@ class FeatureEngineer:
             season_ratio[["player_id", "season", "fp_late6_vs_season"]],
             on=["player_id", "season"], how="left",
         )
-        df["fp_late6_vs_season"] = merged["fp_late6_vs_season"].fillna(1.0).to_numpy()
+        # Left as NaN rather than 1.0. This is a late-season-vs-season ratio, so
+        # 1.0 means "finished exactly at his own average" -- a real, specific
+        # claim about a player, asserted here for anyone with no prior season.
+        # Before pre-window context was supplied it covered 98% of 2018 rows.
+        df["fp_late6_vs_season"] = merged["fp_late6_vs_season"].to_numpy()
         return df
 
     # Module-level caches for the rookie-prior fill.  Loaded on first
@@ -1696,9 +1719,17 @@ class FeatureEngineer:
         if not db_path.exists():
             cls._DRAFT_ROUND_CACHE = {}
             return cls._DRAFT_ROUND_CACHE
+        # draft_picks_v2, not draft_picks. The legacy `draft_picks` table is
+        # EMPTY (0 rows); draft_picks_v2 holds 12,927 rows, 11,054 with both
+        # player_id and draft_round. Querying the empty one returned {}, so
+        # `round_lookup.get(pid)` was always None and _round_bucket_for mapped
+        # every rookie to "UDFA" -- a first-round RB drew the UDFA prior of
+        # 5.20 instead of 13.13, a 2.5x understatement on exactly the players
+        # draft capital identifies best. The rest of the pipeline already reads
+        # draft_picks_v2 (see get_all_players_for_training's dp join).
         with sqlite3.connect(db_path) as conn:
             rows = conn.execute(
-                "SELECT player_id, draft_round FROM draft_picks "
+                "SELECT player_id, draft_round FROM draft_picks_v2 "
                 "WHERE player_id IS NOT NULL AND draft_round IS NOT NULL"
             ).fetchall()
         cls._DRAFT_ROUND_CACHE = {pid: int(r) for pid, r in rows}
@@ -4742,10 +4773,32 @@ class FeatureEngineer:
         # emitted for them; only the fill is deferred.
         # Hoisted: resolved at call time, but the answer can't change mid-loop.
         structural = _structurally_missing_cols()
+        from src.utils.leakage import is_label_column
         for col in numeric_cols:
             if col not in df.columns or not df[col].isna().any():
                 continue
             if col in _SNAP_IMPUTATION_OWNED or col in structural:
+                continue
+            # LABELS ARE NOT FEATURES. This loop walked every numeric column,
+            # and the horizon targets are numeric columns sitting in the same
+            # frame, so target_1w/4w/18w were median-filled like any predictor.
+            # A NaN target means "this row has no future to predict" -- the
+            # player's season ended, or the forward window ran off the end. The
+            # training paths all guard on `valid_mask = ~y_dict[1].isna()`, and
+            # this fill defeated that guard entirely: instead of dropping the
+            # row, it handed the model a fabricated label.
+            #
+            # Measured 2018-2025 (30,065 rows), coverage before -> after:
+            #   target_1w    90.6% -> 100%   ( 9.4% of labels invented)
+            #   target_4w    73.8% -> 100%   (26.2% invented)
+            #   target_18w    9.3% -> 100%   (90.7% invented)
+            # The 18w case is the visible one: an 18-game forward sum needs 14
+            # future games, which only the first few rows of a ~17-row
+            # player-season can have, so nearly the whole column was filler.
+            # Six values covered 90% of it and the quartiles were IDENTICAL
+            # across all four positions -- QB and TE alike sat at p25 127.55 /
+            # p75 134.20, which is not a thing real per-player targets do.
+            if is_label_column(col):
                 continue
             # NGS begins in 2016, so every ngs_* column is structurally missing
             # for 2006-2015. Matched by PREFIX, not by a literal set: these

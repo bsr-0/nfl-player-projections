@@ -36,16 +36,23 @@ from src.features.utilization_score import (
 
 @pytest.fixture(autouse=True)
 def _isolate_history_flag(monkeypatch):
-    """Pin PRESERVE_HISTORY_MISSINGNESS OFF for this module.
+    """Pin the OTHER missingness flags OFF for this module.
 
-    `_structurally_missing_cols()` unions BOTH flags' column sets. Since the
-    history flag was flipped to default ON (2026-08-28), leaving it at its
-    default made these assertions depend on a flag they are not testing --
-    `test_off_matches_historical_behaviour` failed with the history rolling
-    columns present. The personnel flag is what is under test here, so the
-    other one is held fixed rather than the expectation being widened.
+    `_structurally_missing_cols()` and `missingness_preserved_cols()` union
+    several flags' column sets. Since the history flag was flipped to default ON
+    (2026-08-28), leaving it at its default made these assertions depend on a
+    flag they are not testing -- `test_off_matches_historical_behaviour` failed
+    with the history rolling columns present. The personnel flag is what is
+    under test here, so the others are held fixed rather than the expectation
+    being widened.
+
+    PRESERVE_PRIOR_WEEK_MISSINGNESS joined the same union on 2026-08-29, also
+    defaulting ON, and broke the same assertion for the same reason. Pinned here
+    for the same reason; it has its own coverage in
+    tests/test_prior_week_missingness_flag.py.
     """
     monkeypatch.setattr(settings, "PRESERVE_HISTORY_MISSINGNESS", False)
+    monkeypatch.setattr(settings, "PRESERVE_PRIOR_WEEK_MISSINGNESS", False)
 
 
 @pytest.fixture

@@ -197,18 +197,21 @@ class DatabaseManager:
                     rush_attempts INTEGER DEFAULT 0,
                     redzone_attempts INTEGER DEFAULT 0,
                     redzone_scores INTEGER DEFAULT 0,
-                    third_down_conv REAL DEFAULT 0,
+                    third_down_conv REAL,
                     sacks_allowed INTEGER DEFAULT 0,
-                    neutral_pass_plays INTEGER DEFAULT 0,
-                    neutral_run_plays INTEGER DEFAULT 0,
-                    neutral_pass_rate REAL DEFAULT 0,
-                    neutral_pass_rate_lg REAL DEFAULT 0,
-                    neutral_pass_rate_oe REAL DEFAULT 0,
-                    drive_count INTEGER DEFAULT 0,
-                    drive_success_rate REAL DEFAULT 0,
-                    avg_drive_epa REAL DEFAULT 0,
-                    points_per_drive REAL DEFAULT 0,
-                    pace_sec_per_play REAL DEFAULT 0,
+                    -- PBP-derived: no DEFAULT, so "not computed" stays NULL
+                    -- rather than becoming a measured zero. See the insert
+                    -- site for the measurement that motivated this.
+                    neutral_pass_plays INTEGER,
+                    neutral_run_plays INTEGER,
+                    neutral_pass_rate REAL,
+                    neutral_pass_rate_lg REAL,
+                    neutral_pass_rate_oe REAL,
+                    drive_count INTEGER,
+                    drive_success_rate REAL,
+                    avg_drive_epa REAL,
+                    points_per_drive REAL,
+                    pace_sec_per_play REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(team, season, week)
                 )
@@ -218,17 +221,21 @@ class DatabaseManager:
             try:
                 cursor.execute("PRAGMA table_info(team_stats)")
                 existing_team_cols = {row[1] for row in cursor.fetchall()}
+                # No DEFAULT 0 here either: ALTER TABLE ADD COLUMN with a
+                # default backfills every existing row with that default, which
+                # is precisely how these columns became a fabricated zero for
+                # 2006-2024 on databases that predate them.
                 add_team_cols = {
-                    "neutral_pass_plays": "INTEGER DEFAULT 0",
-                    "neutral_run_plays": "INTEGER DEFAULT 0",
-                    "neutral_pass_rate": "REAL DEFAULT 0",
-                    "neutral_pass_rate_lg": "REAL DEFAULT 0",
-                    "neutral_pass_rate_oe": "REAL DEFAULT 0",
-                    "drive_count": "INTEGER DEFAULT 0",
-                    "drive_success_rate": "REAL DEFAULT 0",
-                    "avg_drive_epa": "REAL DEFAULT 0",
-                    "points_per_drive": "REAL DEFAULT 0",
-                    "pace_sec_per_play": "REAL DEFAULT 0",
+                    "neutral_pass_plays": "INTEGER",
+                    "neutral_run_plays": "INTEGER",
+                    "neutral_pass_rate": "REAL",
+                    "neutral_pass_rate_lg": "REAL",
+                    "neutral_pass_rate_oe": "REAL",
+                    "drive_count": "INTEGER",
+                    "drive_success_rate": "REAL",
+                    "avg_drive_epa": "REAL",
+                    "points_per_drive": "REAL",
+                    "pace_sec_per_play": "REAL",
                 }
                 for col, ddl in add_team_cols.items():
                     if col not in existing_team_cols:
@@ -947,30 +954,64 @@ class DatabaseManager:
                 stats.get("week"),
                 stats.get("opponent"),
                 stats.get("home_away"),
-                stats.get("points_scored", 0),
-                stats.get("points_allowed", 0),
-                stats.get("total_yards", 0),
-                stats.get("passing_yards", 0),
-                stats.get("rushing_yards", 0),
-                stats.get("turnovers", 0),
-                stats.get("time_of_possession", 0),
-                stats.get("total_plays", 0),
-                stats.get("pass_attempts", 0),
-                stats.get("rush_attempts", 0),
-                stats.get("redzone_attempts", 0),
-                stats.get("redzone_scores", 0),
-                stats.get("third_down_conv", 0),
-                stats.get("sacks_allowed", 0),
-                stats.get("neutral_pass_plays", 0),
-                stats.get("neutral_run_plays", 0),
-                stats.get("neutral_pass_rate", 0.0),
-                stats.get("neutral_pass_rate_lg", 0.0),
-                stats.get("neutral_pass_rate_oe", 0.0),
-                stats.get("drive_count", 0),
-                stats.get("drive_success_rate", 0.0),
-                stats.get("avg_drive_epa", 0.0),
-                stats.get("points_per_drive", 0.0),
-                stats.get("pace_sec_per_play", 0.0),
+                # Every column below is written through
+                # `COALESCE(excluded.<col>, team_stats.<col>)`, which reads as
+                # "keep the existing value when the incoming one is absent".
+                # A `.get(col, 0)` default made that guarantee false: the
+                # incoming value was NEVER absent, it was 0, and COALESCE(0, x)
+                # is 0. So a caller passing a partial dict -- exactly what a
+                # targeted backfill does -- silently ZEROED points_scored,
+                # total_yards, turnovers and the rest on every row it touched.
+                #
+                # Binding None restores the intended semantics: absent stays
+                # absent, COALESCE keeps what is already stored, and a genuinely
+                # new row records NULL ("not supplied") instead of a fabricated
+                # zero. team/season/week are NOT NULL keys and stay required.
+                stats.get("points_scored"),
+                stats.get("points_allowed"),
+                stats.get("total_yards"),
+                stats.get("passing_yards"),
+                stats.get("rushing_yards"),
+                stats.get("turnovers"),
+                stats.get("time_of_possession"),
+                stats.get("total_plays"),
+                stats.get("pass_attempts"),
+                stats.get("rush_attempts"),
+                stats.get("redzone_attempts"),
+                stats.get("redzone_scores"),
+                stats.get("third_down_conv"),
+                stats.get("sacks_allowed"),
+                # PBP-derived block: default to None (SQL NULL), NOT 0.
+                #
+                # These are computed from play-by-play by pbp_stats_aggregator.
+                # When that has not run for a season the columns were written as
+                # 0, which is a measurement, not an absence -- and 0 is
+                # impossible for most of them. pace_sec_per_play = 0 means a
+                # team snapped the ball in zero seconds; real values run
+                # 7.7-37.4s, median 30.3.
+                #
+                # Measured 2026-08-29: all eleven of these columns were EXACTLY
+                # ZERO for 100% of rows in every season 2006-2024, with zero
+                # NULLs, because only load_current_season_stats_from_pbp() ever
+                # ran and it does just the current season. They passed every
+                # IS NOT NULL audit at 100%. Two of them
+                # (pace_sec_per_play, neutral_pass_rate_oe) feed CAUSAL_FEATURES
+                # for all four positions, so the models saw a constant across
+                # the whole training window and live values only in 2025 --
+                # a perfect season indicator and a train/serve discontinuity.
+                #
+                # NULL lets the absence survive to the model, which handles
+                # missing natively. Same resolution as the pre-2013 snap counts.
+                stats.get("neutral_pass_plays"),
+                stats.get("neutral_run_plays"),
+                stats.get("neutral_pass_rate"),
+                stats.get("neutral_pass_rate_lg"),
+                stats.get("neutral_pass_rate_oe"),
+                stats.get("drive_count"),
+                stats.get("drive_success_rate"),
+                stats.get("avg_drive_epa"),
+                stats.get("points_per_drive"),
+                stats.get("pace_sec_per_play"),
             ))
             conn.commit()
             return True
@@ -2160,10 +2201,21 @@ class DatabaseManager:
             ) fns ON pws.player_id = fns.player_id
             LEFT JOIN utilization_scores us ON pws.player_id = us.player_id
                 AND pws.season = us.season AND pws.week = us.week
+            -- `ts.week >= 1` is not redundant. team_stats carries 186 WEEK-0
+            -- placeholder rows (31 per season, 2020-2025), every one with
+            -- total_plays = 0. There is no week 0 in the NFL, but `week - 1`
+            -- resolves to 0 for every week-1 player row, so those rows joined
+            -- to a fabricated record and came out of SQL with team_plays = 0
+            -- rather than NULL -- 73% of week-1 RB rows, measured 2026-08-29.
+            -- Week 1 has no prior week; the join must find nothing and yield
+            -- NULL, which PRIOR_WEEK_JOIN_COLS then protects from the blanket
+            -- fill downstream.
             LEFT JOIN team_stats ts ON pws.team = ts.team
                 AND pws.season = ts.season AND ts.week = pws.week - 1
+                AND ts.week >= 1
             LEFT JOIN team_defense_stats tds ON pws.opponent = tds.team
                 AND tds.season = pws.season AND tds.week = pws.week - 1
+                AND tds.week >= 1
             LEFT JOIN team_coaching_staff tcs ON pws.team = tcs.team
                 AND pws.season = tcs.season AND pws.week = tcs.week
             LEFT JOIN team_personnel_stats tps ON pws.team = tps.team
