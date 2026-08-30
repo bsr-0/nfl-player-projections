@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-from config.settings import POSITIONS, MODELS_DIR, MODEL_CONFIG
+from config.settings import POSITIONS, MODELS_DIR, MODEL_CONFIG, TRAINING_HORIZONS
 from src.features.feature_engineering import FeatureEngineer, PositionFeatureEngineer
 from src.features.utilization_score import (
     calculate_utilization_scores,
@@ -92,52 +92,95 @@ def _create_horizon_targets(df: pd.DataFrame, n_weeks: List[int] = None) -> pd.D
     return out
 
 
+_SPLIT_COL = "__split_context_marker__"
+
+
+def _transform_keeping(frames, keep_marker, transform_fn, label, **kwargs):
+    """Transform `frames` together, return only the rows marked `keep_marker`.
+
+    `frames` is a list of (marker, DataFrame). Everything is concatenated and
+    sorted chronologically so rolling/expanding windows see the full history,
+    then the rows that were not asked for are dropped.
+    """
+    parts = []
+    for marker, frame in frames:
+        if frame is None or frame.empty:
+            continue
+        f = frame.copy()
+        f[_SPLIT_COL] = marker
+        parts.append(f)
+    if not parts:
+        return None
+
+    combined = pd.concat(parts, ignore_index=True, sort=False)
+    sort_cols = [c for c in ["season", "week", "player_id"] if c in combined.columns]
+    if sort_cols:
+        combined = combined.sort_values(sort_cols).reset_index(drop=True)
+
+    transformed = transform_fn(combined, **kwargs)
+    if _SPLIT_COL not in transformed.columns:
+        raise ValueError(f"{label}: split marker missing after transform")
+    return (transformed[transformed[_SPLIT_COL] == keep_marker]
+            .drop(columns=[_SPLIT_COL])
+            .reset_index(drop=True))
+
+
 def _apply_with_temporal_context(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
     transform_fn,
     label: str,
+    context_df: pd.DataFrame = None,
     **kwargs,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Apply a transformation so test rows can use historical context from prior
-    train seasons, but train rows are NEVER influenced by test data.
+    Apply a transformation so each split can use earlier history as context,
+    while never seeing anything from its own future.
 
-    Strategy: transform train alone first, then transform train+test combined
-    and keep only the test rows from the combined result. This ensures:
-    - Train features are computed using train data only (no test leakage)
-    - Test features can see train-season history (expanding/rolling windows)
+    Three tiers, oldest first:
+      context_df  seasons BEFORE the training window. Used only to warm up
+                  lookback features; never returned, never trained on.
+      train_df    the training window.
+      test_df     the held-out season.
+
+    Train rows are computed from context+train, test rows from
+    context+train+test. Test data therefore never influences train features.
+
+    Why context_df exists: without it every lookback feature starts cold at the
+    first training season and silently falls back to a default. Measured on the
+    2018-2025 window, `availability_3yr` sat at its 1.0 default for 98% of 2018
+    rows -- i.e. every player with no prior season was recorded as having
+    PERFECT availability, the most optimistic value possible, precisely where
+    nothing was known. The history was never missing: load_training_data pulls
+    2006+ and discarded 57.6% of it one line before this. See GAPS.md
+    2026-08-29.
+
+    Context is dropped immediately on return, so it warms up rolling windows
+    without reaching anything fitted on train (percentile bounds, utilization
+    weights, winsorisation) or the models themselves.
     """
     if train_df.empty and test_df.empty:
         return train_df, test_df
 
-    # Step 1: Transform train data alone — train features see only train data
-    train_out = transform_fn(train_df.copy(), **kwargs)
+    has_context = context_df is not None and not context_df.empty
 
-    # Step 2: Transform combined (train + test) — test rows benefit from
-    # train-season historical context in expanding/rolling windows
+    if has_context:
+        train_out = _transform_keeping(
+            [(-1, context_df), (0, train_df)], 0, transform_fn, label, **kwargs)
+    else:
+        # No context: transform train alone, byte-identical to the original path.
+        train_out = transform_fn(train_df.copy(), **kwargs)
+
     if test_df.empty:
         test_out = test_df.copy()
     else:
-        split_col = "__split_context_marker__"
-        train_in = train_df.copy()
-        test_in = test_df.copy()
-        train_in[split_col] = 0
-        test_in[split_col] = 1
-        combined = pd.concat([train_in, test_in], ignore_index=True, sort=False)
+        test_out = _transform_keeping(
+            [(-1, context_df), (0, train_df), (1, test_df)],
+            1, transform_fn, label, **kwargs)
 
-        sort_cols = [c for c in ["season", "week", "player_id"] if c in combined.columns]
-        if sort_cols:
-            combined = combined.sort_values(sort_cols).reset_index(drop=True)
-
-        transformed = transform_fn(combined, **kwargs)
-        if split_col not in transformed.columns:
-            raise ValueError(f"{label}: split marker missing after transform")
-
-        # Only keep test rows from the combined result
-        test_out = transformed[transformed[split_col] == 1].drop(columns=[split_col]).reset_index(drop=True)
-
-    print(f"  Applied {label} (train-only features, test with context): train={len(train_out)}, test={len(test_out)}")
+    ctx_note = f", context={len(context_df)}" if has_context else ""
+    print(f"  Applied {label} (train-only features, test with context): "
+          f"train={len(train_out)}, test={len(test_out)}{ctx_note}")
     return train_out, test_out
 
 
@@ -188,6 +231,28 @@ def add_advanced_features(data: pd.DataFrame) -> pd.DataFrame:
     if PRESERVE_HISTORY_MISSINGNESS:
         from src.features.feature_engineering import FeatureEngineer
         out = FeatureEngineer()._restore_debut_history_nan(out)
+
+        # Re-apply the fitted rookie prior AFTER the restore, not before.
+        #
+        # These two mechanisms were in direct conflict and the restore won.
+        # `_apply_rookie_prior` fills a debut player's prev_season_ppg from
+        # data/rookie_priors.json (position x draft-round PPG, fitted on 1,676
+        # rookies over 2006-2023), but it runs inside _add_prev_season_ppg,
+        # early. The restore then blanks all 65 history columns on a debut
+        # week -- prev_season_ppg among them -- so the prior was written and
+        # immediately erased. Measured: prev_season_ppg was 100% NaN for
+        # week-1 rookies, i.e. the priors artifact had never once reached a
+        # model.
+        #
+        # The restore is right to run last and is left intact: its job is to
+        # stop FABRICATED history (zeros, veteran medians) from making a debut
+        # row look like a veteran's, and 64 of the 65 columns still get blanked.
+        # But it cannot tell a fabricated fill from a fitted prior, and
+        # prev_season_ppg is the one column where we have a real,
+        # draft-conditioned estimate. Restoring first and re-filling here keeps
+        # both properties: the cold-start row still reads as cold-start
+        # everywhere we know nothing, and carries genuine signal where we do.
+        out = FeatureEngineer()._apply_rookie_prior(out)
     return out
 
 
@@ -327,6 +392,7 @@ def _prepare_training_data(
     tune_hyperparameters: bool,
     n_trials: int,
     fast: bool = False,
+    context_data: pd.DataFrame = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, "ModelTrainer"]:
     """Shared preprocessing pipeline used by both train_models() and _run_one_fold().
 
@@ -336,6 +402,13 @@ def _prepare_training_data(
 
     When fast=True, skips QB dual-target selection by not passing test_data to
     the model trainer (QB defaults to utilization or FP fallback path).
+
+    `context_data` holds seasons BEFORE the training window. It warms up
+    lookback features (rolling windows, prior-season stats, 3-year
+    availability) and is dropped before anything is fitted or trained -- so it
+    never reaches the percentile bounds, utilization weights, winsorisation
+    bounds or the models. Passing None reproduces the previous behaviour
+    exactly. See _apply_with_temporal_context.
 
     Returns (train_data, test_data, trainer).
     """
@@ -386,7 +459,7 @@ def _prepare_training_data(
         all_seasons = sorted(set(train_data["season"].dropna().astype(int)) | set(test_data["season"].dropna().astype(int)))
         train_data, test_data = _apply_with_temporal_context(
             train_data, test_data, add_external_features, "external features",
-            seasons=all_seasons,
+            context_df=context_data, seasons=all_seasons,
         )
     except Exception as e:
         logger.warning("External features (weather/injury/Vegas) skipped: %s", e)
@@ -396,6 +469,7 @@ def _prepare_training_data(
         from src.features.season_long_features import add_season_long_features
         train_data, test_data = _apply_with_temporal_context(
             train_data, test_data, add_season_long_features, "season-long features",
+            context_df=context_data,
         )
     except Exception as e:
         logger.warning("Season-long features skipped: %s", e)
@@ -427,16 +501,27 @@ def _prepare_training_data(
             "refusing to use bounds not fit on the current training seasons."
         )
     test_data = calculate_utilization_scores(test_data, team_df=team_df, weights=None, percentile_bounds=loaded_bounds)
+    # Context gets exactly what test gets: train-fitted bounds applied, never
+    # fitted on. It has to reach feature engineering with the same columns as
+    # train, or the rolling windows it exists to warm up would see NaN for
+    # every context row and be worse than no context at all.
+    has_ctx = context_data is not None and not context_data.empty
+    if has_ctx:
+        context_data = calculate_utilization_scores(
+            context_data, team_df=team_df, weights=None,
+            percentile_bounds=loaded_bounds)
 
     # Compute raw (unnormalized) utilization scores for target derivation
     # to decouple targets from percentile normalization parameters.
     from src.features.utilization_score import compute_raw_utilization_score
     train_data = compute_raw_utilization_score(train_data)
     test_data = compute_raw_utilization_score(test_data)
+    if has_ctx:
+        context_data = compute_raw_utilization_score(context_data)
 
     # Horizon targets (season-bounded) — uses utilization_score_raw when available
-    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
-    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
+    train_data = _create_horizon_targets(train_data, n_weeks=TRAINING_HORIZONS)
+    test_data = _create_horizon_targets(test_data, n_weeks=TRAINING_HORIZONS)
 
     # Data-driven utilization weight optimization
     util_weights = fit_utilization_weights(
@@ -449,16 +534,22 @@ def _prepare_training_data(
     # Recompute raw scores with optimized weights and rebuild targets
     train_data = compute_raw_utilization_score(train_data, weights=util_weights)
     test_data = compute_raw_utilization_score(test_data, weights=util_weights)
-    train_data = _create_horizon_targets(train_data, n_weeks=[1, 4, 18])
-    test_data = _create_horizon_targets(test_data, n_weeks=[1, 4, 18])
+    train_data = _create_horizon_targets(train_data, n_weeks=TRAINING_HORIZONS)
+    test_data = _create_horizon_targets(test_data, n_weeks=TRAINING_HORIZONS)
+    if has_ctx:
+        context_data = recalculate_utilization_with_weights(context_data, util_weights)
+        context_data = compute_raw_utilization_score(context_data, weights=util_weights)
     with open(MODELS_DIR / "utilization_weights.json", "w") as f:
         json.dump(util_weights, f, indent=2)
 
-    # Feature engineering
+    # Feature engineering. This is the step that owns the cold-start defect --
+    # availability_3yr, fp_late6_vs_season and every rolling/lag window are
+    # built here, so this is where pre-window history actually pays off.
     train_data, test_data = _apply_with_temporal_context(
         train_data, test_data,
         lambda d: add_advanced_features(add_engineered_features(d)),
         "feature engineering",
+        context_df=context_data,
     )
 
     # Snap-share imputation. Placed here because feature engineering is where
@@ -549,7 +640,7 @@ def _prepare_training_data(
     trainer = ModelTrainer()
     trainer.train_all_positions(
         train_data, positions=positions, tune_hyperparameters=tune_hyperparameters,
-        n_weeks_list=[1, 4, 18], test_data=None if fast else test_data,
+        n_weeks_list=TRAINING_HORIZONS, test_data=None if fast else test_data,
     )
 
     # Utilization -> FP conversion (only for positions trained on util targets)

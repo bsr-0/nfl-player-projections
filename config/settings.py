@@ -254,12 +254,47 @@ MODEL_CONFIG = {
     # Per-position target override: "fp" trains directly on fantasy points (no util conversion),
     # "util" trains on utilization score then converts to FP (original two-stage approach).
     # Target type per position: "fp" (direct), "util" (two-stage), "component" (predict stats, assemble FP).
-    # Component mode predicts individual stat lines (yards, TDs, receptions) then assembles fantasy points.
-    # Council Phase 2: component prediction has higher per-component autocorrelation and lower TD noise.
-    "position_target_type": {"QB": "component", "RB": "component", "WR": "component", "TE": "component"},
+    #
+    # SWITCHED TO "fp" 2026-08-29. Component mode was measured WORSE at every
+    # position, in 12 of 12 folds, on identical frames:
+    #
+    #     mean weekly MAE   component   direct(fp)   direct better by
+    #       QB                 6.530       6.091          0.439
+    #       RB                 4.474       4.391          0.083
+    #       TE                 3.147       2.831          0.316
+    #       WR                 4.373       4.103          0.270
+    #
+    # and the comparison favoured component (its artifact was trained on the
+    # full set; the direct arm got 3 seasons per fold) and it still lost.
+    #
+    # Component mode was also the root of three defects found the same week:
+    # the train/serve feature skew that produced 808-point weekly predictions
+    # masked by a [0,55] clamp; `predicted_utilization` holding fantasy points,
+    # which made every util_tier read "Low"; and the notna row gate that trained
+    # it on 4-11% of available rows until 2026-08-28.
+    #
+    # The original rationale in component_predictor.py -- "GBT produced negative
+    # R2 for WR/TE/RB" on direct FP -- was true when written and is superseded,
+    # not contradicted: that predates the data corrections, the row-gate fix,
+    # causal features and C_gbm_mae. See GAPS.md 2026-08-29.
+    "position_target_type": {"QB": "fp", "RB": "fp", "WR": "fp", "TE": "fp"},
     # Horizon-specific models (per requirements): 4w LSTM+ARIMA, 18w deep feedforward
     "use_4w_hybrid": True,   # Use Hybrid4WeekModel for n_weeks in 4w band when TF available
-    "use_18w_deep": True,   # Use DeepSeasonLongModel for long horizon when TF available
+    # 18w RETIRED 2026-08-29. Two independent reasons:
+    #
+    # 1. The target is undefined on 90.7% of rows. An 18-game forward sum needs
+    #    18 future games; a season is 17, so only the first weeks of a season
+    #    can carry a real label. True coverage is 9.3% (2,806 rows across all
+    #    four positions). It read as 100% only because _impute_missing was
+    #    median-filling the label -- see GAPS.md 2026-08-29.
+    # 2. Nothing consumes it. All 620 rows on the shipped draft board come from
+    #    the season model (projection_model == "step8" for every one).
+    #
+    # The season model already answers "how will this player do over a long
+    # stretch", and answers it without this data problem. Long horizons are
+    # otherwise obtained by predicting N single weeks and summing them, which
+    # needs no separately trained long-horizon model.
+    "use_18w_deep": False,
     "horizon_4w_weeks": (4, 5, 6, 7, 8),   # n_weeks that use 4-week hybrid model
     "horizon_long_threshold": 9,   # n_weeks >= this use 18-week deep model when available
     
@@ -688,6 +723,15 @@ TRAINING_YEARS = {
 # Requirement-derived minimum training seasons per horizon (see docs/fantasy requirements)
 MIN_TRAINING_SEASONS_1W = 3   # 1-week model: min 3, optimal 5+
 MIN_TRAINING_SEASONS_18W = 5  # 18-week model: min 5 (adjusted for 2018+ window)
+
+# Horizons the weekly model is TRAINED on. Multi-week projections are built by
+# predicting N single weeks and summing them, so a horizon only belongs here if
+# it is trained directly rather than derived.
+#
+# 18 was removed 2026-08-29: its label is undefined on 90.7% of rows (an
+# 18-game forward sum needs more future games than a 17-game season leaves) and
+# nothing consumed its output. See MODEL_CONFIG["use_18w_deep"].
+TRAINING_HORIZONS = [1, 4]
 MIN_TRAINING_SEASONS_4W = 4   # 4-week horizon (LSTM+ARIMA): min 4
 # Per-position minimum players for training (requirements: ~30 QB, 60 RB, 70 WR, 30 TE)
 MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30}
@@ -803,6 +847,14 @@ FEATURE_VERSION = "35"  # v35: is_power5 from an era-aware college->conference m
 PRESERVE_HISTORY_MISSINGNESS = os.getenv("NFL_PRESERVE_HISTORY_MISSINGNESS", "1") == "1"
 
 PRESERVE_PERSONNEL_MISSINGNESS = os.getenv("NFL_PRESERVE_PERSONNEL_MISSINGNESS", "0") == "1"
+
+# Prior-week team/opponent joins cannot resolve in week 1 (no week 0), and the
+# blanket numeric fill turned that NULL into a measured 0 for 100% of week-1
+# rows. Default ON: `opp_fpts_allowed = 0` claims the opponent allows zero
+# fantasy points, uniformly for all 32 teams, in the week where matchup matters
+# most. See PRIOR_WEEK_JOIN_COLS in src/features/utilization_score.py and
+# GAPS.md 2026-08-29.
+PRESERVE_PRIOR_WEEK_MISSINGNESS = os.getenv("NFL_PRESERVE_PRIOR_WEEK_MISSINGNESS", "1") == "1"
 
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 

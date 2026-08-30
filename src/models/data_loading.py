@@ -23,7 +23,8 @@ def load_training_data(positions: list = None, min_games: int = 4,
                        n_train_seasons: int = None,
                        optimize_training_years: bool = False,
                        strict_requirements: bool = False,
-                       _explicit_test_season: bool = False) -> tuple:
+                       _explicit_test_season: bool = False,
+                       return_context: bool = False) -> tuple:
     """
     Load and prepare training data with automatic train/test split.
 
@@ -117,6 +118,22 @@ def load_training_data(positions: list = None, min_games: int = 4,
     train_data = combined[combined['season'].isin(train_seasons)]
     test_data = combined[combined['season'] == auto_test_season]
 
+    # Seasons older than the training window. Not training data -- returned
+    # separately so feature engineering can warm up lookback windows with them.
+    #
+    # Without this, every lookback feature starts cold at the first training
+    # season and falls back to a default: availability_3yr sat at its 1.0
+    # default for 98% of 2018 rows, recording every player with no prior season
+    # as having PERFECT availability. The history was never missing. For RB,
+    # get_all_players_for_training returns 28,402 rows of which 16,348 (57.6%)
+    # are pre-window, and the line above discarded all of them. See GAPS.md
+    # 2026-08-29 "Family B".
+    min_train_season = min(train_seasons) if train_seasons else None
+    if min_train_season is not None:
+        context_data = combined[combined['season'] < min_train_season]
+    else:
+        context_data = combined.iloc[0:0]
+
     # In-season: pipeline requires current season as test and non-empty test set.
     # Skip when caller explicitly set test_season (e.g. LOYO backtest iterating folds).
     from src.utils.nfl_calendar import (
@@ -182,6 +199,10 @@ def load_training_data(positions: list = None, min_games: int = 4,
     if strict_requirements and requirement_failures:
         joined = "; ".join(requirement_failures)
         raise ValueError(f"Strict requirements check failed: {joined}")
+    # Additive: seven call sites unpack a 4-tuple, so the context frame is
+    # opt-in rather than a signature break.
+    if return_context:
+        return train_data, test_data, train_seasons, auto_test_season, context_data
     return train_data, test_data, train_seasons, auto_test_season
 
 

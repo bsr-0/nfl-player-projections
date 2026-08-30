@@ -308,11 +308,25 @@ class NFLPredictor:
                     stacklevel=2,
                 )
         
-        # Cold-start: use position-average projection for rookies (high uncertainty)
-        results = self._apply_cold_start_fallback(
-            results, latest_data, n_weeks, MIN_GAMES_FOR_PREDICTION
-        )
-        
+        # Cold-start handling deliberately does NOT live here any more.
+        #
+        # _apply_cold_start_fallback replaced sub-MIN_GAMES predictions with a
+        # position average. It had never once run: its first statement was
+        # `if "games_count" not in latest_data.columns: return results`, and no
+        # code in this repo produces `games_count` -- the column is
+        # `games_played`. A one-word name mismatch had disabled it silently.
+        #
+        # Not repaired, removed. Its behaviour was worse than the model it was
+        # overriding: every rookie at a position received the SAME number, which
+        # discards draft capital, depth chart and combine score -- the only real
+        # signal a week-1 rookie has, and the 33 of 72 causal features that are
+        # genuinely populated for him.
+        #
+        # Cold start is handled where the information is instead: the fitted
+        # position x draft-round prior in data/rookie_priors.json now reaches
+        # prev_season_ppg (see add_advanced_features), so a first-round back and
+        # a seventh-round back no longer start from the same place.
+
         # Carry through matchup columns for downstream consumers (generate_app_data)
         for matchup_col in ["opponent", "home_away"]:
             if matchup_col in latest_data.columns and matchup_col not in results.columns:
@@ -585,45 +599,6 @@ class NFLPredictor:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
     
-    def _apply_cold_start_fallback(self, results: pd.DataFrame, latest_data: pd.DataFrame,
-                                    n_weeks: int, min_games: int) -> pd.DataFrame:
-        """Replace ML predictions with position-average for rookies (high uncertainty)."""
-        if "games_count" not in latest_data.columns:
-            return results
-        # Merge may produce games_count_y if results already had games_count
-        results = results.merge(
-            latest_data[["player_id", "games_count"]], on="player_id", how="left", suffixes=("", "_from_latest")
-        )
-        gc_col = "games_count_from_latest" if "games_count_from_latest" in results.columns else "games_count"
-        cold_start_mask = results[gc_col] < min_games
-        if not cold_start_mask.any():
-            results = results.drop(columns=[c for c in ["games_count", "games_count_from_latest"] if c in results.columns], errors="ignore")
-            return results
-        
-        # Position-average from players with sufficient history
-        sufficient = results[~cold_start_mask]
-        if sufficient.empty:
-            results = results.drop(columns=[c for c in ["games_count", "games_count_from_latest"] if c in results.columns], errors="ignore")
-            return results
-        
-        pred_col = "predicted_utilization" if "predicted_utilization" in sufficient.columns else "predicted_points"
-        pos_avg = sufficient.groupby("position")[pred_col].mean().to_dict()
-        pos_std = sufficient.groupby("position")[pred_col].std().to_dict()
-        
-        for idx in results[cold_start_mask].index:
-            pos = results.loc[idx, "position"]
-            avg = pos_avg.get(pos, 50.0)
-            std = pos_std.get(pos, 10.0)
-            results.loc[idx, "predicted_points"] = avg
-            if "predicted_utilization" in results.columns:
-                results.loc[idx, "predicted_utilization"] = avg
-            if "prediction_std" in results.columns:
-                results.loc[idx, "prediction_std"] = max(std * 2, 3.0 * n_weeks) if pd.notna(std) else 5.0 * n_weeks
-        
-        results = results.drop(columns=[c for c in ["games_count", "games_count_from_latest"] if c in results.columns], errors="ignore")
-        return results
-    
-    @staticmethod
     def _apply_snap_imputation(data: pd.DataFrame) -> pd.DataFrame:
         """Apply the train-fitted snap imputation, for serving parity with
         training -- the same contract as the bounded scaler.

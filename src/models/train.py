@@ -978,14 +978,20 @@ def train_models(positions: list = None,
     
     # Load data with automatic train/test split (test = latest season)
     print("\n[1/5] Loading training data...")
-    train_data, test_data, train_seasons, actual_test_season = load_training_data(
+    train_data, test_data, train_seasons, actual_test_season, context_data = load_training_data(
         positions,
         test_season=test_season,
         n_train_seasons=None,  # Use all available by default
         optimize_training_years=optimize_training_years,
         strict_requirements=strict_requirements,
+        return_context=True,
     )
     print(f"Training records: {len(train_data)}")
+    if context_data is not None and not context_data.empty:
+        ctx_seasons = sorted({int(s) for s in context_data["season"].dropna().unique()})
+        print(f"Pre-window context: {len(context_data)} records from "
+              f"{min(ctx_seasons)}-{max(ctx_seasons)} "
+              f"(warms up lookback features; not trained on)")
     if test_data.empty:
         from src.utils.nfl_calendar import is_draft_prep_window
         if is_draft_prep_window():
@@ -1089,7 +1095,7 @@ def train_models(positions: list = None,
     print("\n[2/5] Preparing features, engineering, and training...")
     train_data, test_data, trainer = _prepare_training_data(
         train_data, test_data, positions, tune_hyperparameters, n_trials,
-        fast=fast,
+        fast=fast, context_data=context_data,
     )
 
     # Data quality checks (train_models-only, not needed in walk-forward folds)
@@ -1099,7 +1105,7 @@ def train_models(positions: list = None,
     train_outliers = _report_outliers_3sigma(
         train_data,
         "train",
-        cols=["fantasy_points", "target_1w", "target_4w", "target_18w", "target_util_1w", "utilization_score"],
+        cols=["fantasy_points", "target_1w", "target_4w", "target_util_1w", "utilization_score"],
     )
     if test_data.empty:
         # Draft prep mode: test set is the future season with no actuals yet.
