@@ -1,44 +1,76 @@
 {
-  "generated_at": "2026-08-19T13:49:32.817583",
+  "generated_at": "2026-08-30T01:27:37.655265",
   "strict_requirements": false,
   "distribution_shift": {
     "skipped": "draft_prep_mode_no_test_actuals"
   },
   "missingness_above_5pct": {
     "train": {
-      "head_coach": 1.0
+      "ngs_avg_time_to_throw": 0.9139532172831831,
+      "ngs_completion_percentage_above_expectation": 0.9139532172831831,
+      "ngs_aggressiveness": 0.9139532172831831,
+      "ngs_avg_air_yards_to_sticks": 0.9139532172831831,
+      "ngs_rush_yards_over_expected_per_att": 0.9133120920111906,
+      "ngs_efficiency": 0.9133120920111906,
+      "ngs_percent_attempts_gte_eight_defenders": 0.9133120920111906,
+      "ngs_completion_percentage_above_expectation_roll3_mean": 0.9059294373640038,
+      "ngs_aggressiveness_roll3_mean": 0.9059294373640038,
+      "ngs_avg_air_yards_to_sticks_roll3_mean": 0.9059294373640038,
+      "ngs_avg_time_to_throw_roll3_mean": 0.9059294373640038,
+      "qb_pocket_time_prior": 0.8831403481504507,
+      "qb_bad_throw_pct_prior": 0.882479794839913,
+      "ngs_rush_yards_over_expected_per_att_roll3_mean": 0.8768650917003419,
+      "ngs_percent_attempts_gte_eight_defenders_roll3_mean": 0.8748445756916382,
+      "ngs_efficiency_roll3_mean": 0.8748445756916382,
+      "ngs_avg_yac_above_expectation": 0.7937130867267641,
+      "ngs_avg_cushion": 0.7928971091078645,
+      "ngs_catch_percentage": 0.7928582530307741,
+      "ngs_avg_intended_air_yards": 0.7928582530307741,
+      "ngs_avg_separation": 0.7928582530307741,
+      "ngs_avg_yac_above_expectation_roll3_mean": 0.6837503885607709,
+      "ngs_avg_cushion_roll3_mean": 0.6830898352502331,
+      "ngs_avg_separation_roll3_mean": 0.6830121230960522,
+      "ngs_avg_intended_air_yards_roll3_mean": 0.6830121230960522,
+      "ngs_catch_percentage_roll3_mean": 0.6830121230960522,
+      "team_motion_rate": 0.611478085172521,
+      "team_shotgun_rate": 0.611478085172521,
+      "team_play_action_rate": 0.611478085172521,
+      "rb_broken_tackles_prior": 0.5794023935343487,
+      "recv_drop_pct_season_prior": 0.3714640969847684,
+      "bmi": 0.3281201429903637,
+      "speed_score": 0.3281201429903637,
+      "target_4w": 0.25854833695990054,
+      "fp_late6_vs_season": 0.1975831520049736,
+      "availability_3yr": 0.1697622008082064,
+      "target_1w": 0.09100093254585018,
+      "prev_season_ppg": 0.07337970158532794
     },
     "test": {}
   },
   "train_outliers_3sigma": {
     "fantasy_points": {
-      "n_outliers": 672,
-      "n_samples": 44614,
-      "pct_outliers": 1.506
+      "n_outliers": 606,
+      "n_samples": 51472,
+      "pct_outliers": 1.177
     },
     "target_1w": {
-      "n_outliers": 780,
-      "n_samples": 44614,
-      "pct_outliers": 1.748
+      "n_outliers": 585,
+      "n_samples": 46788,
+      "pct_outliers": 1.25
     },
     "target_4w": {
-      "n_outliers": 669,
-      "n_samples": 44614,
-      "pct_outliers": 1.5
-    },
-    "target_18w": {
-      "n_outliers": 1812,
-      "n_samples": 44614,
-      "pct_outliers": 4.062
+      "n_outliers": 102,
+      "n_samples": 38164,
+      "pct_outliers": 0.267
     },
     "target_util_1w": {
       "n_outliers": 0,
-      "n_samples": 44614,
+      "n_samples": 51472,
       "pct_outliers": 0.0
     },
     "utilization_score": {
       "n_outliers": 0,
-      "n_samples": 44614,
+      "n_samples": 51472,
       "pct_outliers": 0.0
     }
   }

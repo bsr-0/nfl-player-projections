@@ -2,44 +2,44 @@
   "position": "QB",
   "top_shap_features": [
     {
-      "feature": "player_emb_4",
-      "mean_abs_shap": 1.5308991609829505
+      "feature": "rushing_attempts_roll3_mean",
+      "mean_abs_shap": 0.9550247787420965
     },
     {
-      "feature": "team_b_points_scored",
-      "mean_abs_shap": 0.20737685348331794
+      "feature": "depth_chart_rank",
+      "mean_abs_shap": 0.8328163047974306
     },
     {
-      "feature": "yards_per_carry",
-      "mean_abs_shap": 0.1778967287094641
+      "feature": "spread",
+      "mean_abs_shap": 0.3742371716102907
     },
     {
-      "feature": "player_emb_0",
-      "mean_abs_shap": 0.17221130507228316
+      "feature": "ngs_avg_air_yards_to_sticks_roll3_mean",
+      "mean_abs_shap": 0.36461381929448244
     },
     {
-      "feature": "total_yards",
-      "mean_abs_shap": 0.16171244383617
+      "feature": "opp_fpts_allowed_dvoa_adjusted_lag1",
+      "mean_abs_shap": 0.3447064290551917
     },
     {
-      "feature": "player_emb_1",
-      "mean_abs_shap": 0.150619892877492
+      "feature": "ngs_completion_percentage_above_expectation_roll3_mean",
+      "mean_abs_shap": 0.15342184264991174
     },
     {
-      "feature": "opp_defense_week",
-      "mean_abs_shap": 0.13530007299077515
+      "feature": "qb_pocket_time_prior",
+      "mean_abs_shap": 0.0965784548320458
     },
     {
-      "feature": "ngs_avg_air_yards_to_sticks",
-      "mean_abs_shap": 0.12775273095454145
+      "feature": "team_motion_rate",
+      "mean_abs_shap": 0.0938566706479064
     },
     {
-      "feature": "rush_epa_per_play",
-      "mean_abs_shap": 0.11135591717825091
+      "feature": "pass_epa_per_play_roll3_mean",
+      "mean_abs_shap": 0.08412700502878653
     },
     {
-      "feature": "yards_per_td",
-      "mean_abs_shap": 0.0994829593474668
+      "feature": "ngs_aggressiveness_roll3_mean",
+      "mean_abs_shap": 0.08376737772987931
     }
   ]
 }

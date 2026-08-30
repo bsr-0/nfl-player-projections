@@ -1,0 +1,45 @@
+{
+  "position": "RB",
+  "top_shap_features": [
+    {
+      "feature": "contract_apy_rank",
+      "mean_abs_shap": 0.07989029340687828
+    },
+    {
+      "feature": "snap_share_pct_roll3_mean",
+      "mean_abs_shap": 0.04029393199844576
+    },
+    {
+      "feature": "prev_season_ppg",
+      "mean_abs_shap": 0.014959362767858433
+    },
+    {
+      "feature": "rush_share_pct_roll3_mean",
+      "mean_abs_shap": 0.009932888001813302
+    },
+    {
+      "feature": "snap_share_accel",
+      "mean_abs_shap": 0.007327220365969001
+    },
+    {
+      "feature": "fp_volatility_roll5",
+      "mean_abs_shap": 0.00701124227358335
+    },
+    {
+      "feature": "fp_late6_vs_season",
+      "mean_abs_shap": 0.006242529320607926
+    },
+    {
+      "feature": "spread",
+      "mean_abs_shap": 0.006046572687372402
+    },
+    {
+      "feature": "bayesian_prior_ppg",
+      "mean_abs_shap": 0.0058735287091598145
+    },
+    {
+      "feature": "wind_speed_mph",
+      "mean_abs_shap": 0.005297799900591853
+    }
+  ]
+}

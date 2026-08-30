@@ -1,10 +1,5 @@
 {
   "qb_target": "fp",
-  "selection_method": "holdout_owner_fp_objective",
-  "rmse_fp_model": 7.329041413638252,
-  "rmse_util_model_as_fp": 8.648099777267216,
-  "mae_fp_model": 5.878934280121284,
-  "mae_util_model_as_fp": 7.077423488187189,
-  "r2_fp_model": 0.2585911855752069,
-  "r2_util_model_as_fp": -0.032297265099232364
+  "selection_method": "fallback_no_qb_holdout",
+  "reason": "Insufficient QB holdout rows for dual-target selection; using fantasy points for owner-facing objective."
 }

@@ -1,1 +1,170 @@
-{}
+{
+  "QB": [
+    {
+      "feature": "yards_per_attempt_roll3_mean",
+      "importance": 53.75794677176748
+    },
+    {
+      "feature": "ngs_aggressiveness_roll3_mean",
+      "importance": 47.00824350737296
+    },
+    {
+      "feature": "team_neutral_pass_rate_oe_roll3_mean",
+      "importance": 45.25725455679345
+    },
+    {
+      "feature": "team_pace_sec_per_play_roll3_mean",
+      "importance": 45.00738486455445
+    },
+    {
+      "feature": "opp_fpts_allowed",
+      "importance": 44.506781542559274
+    },
+    {
+      "feature": "bayesian_prior_ppg",
+      "importance": 43.26522133138669
+    },
+    {
+      "feature": "spread",
+      "importance": 41.76054346903087
+    },
+    {
+      "feature": "contract_apy_rank",
+      "importance": 39.525350717459894
+    },
+    {
+      "feature": "prev_season_ppg",
+      "importance": 39.511953319852324
+    },
+    {
+      "feature": "ngs_avg_air_yards_to_sticks_roll3_mean",
+      "importance": 38.00746473177917
+    }
+  ],
+  "RB": [
+    {
+      "feature": "contract_apy_rank",
+      "importance": 39.27765924473517
+    },
+    {
+      "feature": "team_motion_rate",
+      "importance": 27.757590772924342
+    },
+    {
+      "feature": "rush_epa_per_play_roll3_mean",
+      "importance": 27.25624355846722
+    },
+    {
+      "feature": "snap_share_accel",
+      "importance": 25.75807303148705
+    },
+    {
+      "feature": "team_pace_sec_per_play_roll3_mean",
+      "importance": 25.257062947024025
+    },
+    {
+      "feature": "rush_share_pct_roll3_mean",
+      "importance": 24.53895038355016
+    },
+    {
+      "feature": "bayesian_prior_ppg",
+      "importance": 24.25888179616626
+    },
+    {
+      "feature": "snap_share_pct_roll3_mean",
+      "importance": 23.62740372264709
+    },
+    {
+      "feature": "team_play_action_rate",
+      "importance": 22.256280264629183
+    },
+    {
+      "feature": "prev_season_ppg",
+      "importance": 21.26088666212206
+    }
+  ],
+  "WR": [
+    {
+      "feature": "contract_apy_rank",
+      "importance": 43.5266238650073
+    },
+    {
+      "feature": "prev_season_ppg",
+      "importance": 31.512375245215487
+    },
+    {
+      "feature": "snap_share_accel",
+      "importance": 27.25616581748881
+    },
+    {
+      "feature": "pbp_pass_play_participation_pct_roll3_mean",
+      "importance": 24.007891389076427
+    },
+    {
+      "feature": "fp_volatility_roll5",
+      "importance": 22.00587984555151
+    },
+    {
+      "feature": "bayesian_prior_ppg",
+      "importance": 21.756437679912203
+    },
+    {
+      "feature": "snap_share_pct_roll3_mean",
+      "importance": 21.510082231518524
+    },
+    {
+      "feature": "team_neutral_pass_rate_oe_roll3_mean",
+      "importance": 21.254965752267466
+    },
+    {
+      "feature": "team_motion_rate",
+      "importance": 20.00465634824061
+    },
+    {
+      "feature": "wopr_roll3",
+      "importance": 19.879178545571044
+    }
+  ],
+  "TE": [
+    {
+      "feature": "snap_share_accel",
+      "importance": 30.256381658452764
+    },
+    {
+      "feature": "recv_epa_per_target_roll3_mean",
+      "importance": 28.256100185672658
+    },
+    {
+      "feature": "pbp_pass_play_participation_pct_roll3_mean",
+      "importance": 28.081696729640335
+    },
+    {
+      "feature": "contract_apy_rank",
+      "importance": 28.01525861750007
+    },
+    {
+      "feature": "prev_season_ppg",
+      "importance": 28.01426841141778
+    },
+    {
+      "feature": "team_neutral_pass_rate_oe_roll3_mean",
+      "importance": 26.7555306738247
+    },
+    {
+      "feature": "team_pace_sec_per_play_roll3_mean",
+      "importance": 26.50526978949461
+    },
+    {
+      "feature": "opp_fpts_allowed",
+      "importance": 26.00608786187217
+    },
+    {
+      "feature": "wopr_roll3",
+      "importance": 25.585277875416423
+    },
+    {
+      "feature": "team_target_concentration_roll3_mean",
+      "importance": 25.00617172483439
+    }
+  ]
+}

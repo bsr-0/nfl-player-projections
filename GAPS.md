@@ -12179,3 +12179,647 @@ projection attached -- a number on a draft board reads as a claim.
 breakouts from the 59% who never establish a role. Prior-season box score does
 not contain it. Draft capital, depth-chart movement or offseason role news
 might; none has been tested on this population.
+
+## OOF metrics were reported in log1p space for 10 of 12 models (2026-08-29)
+
+`model_metadata.json` reported `oof_metrics` in MODEL space. `PositionModel.fit`
+applies `TargetTransformer` (log1p) whenever the target's |skew| >= 0.5, and
+`_oof_metrics` was computed on the transformed `y_train_inner`. On the
+2026-08-29 `fp` retrain the transform fired for 10 of 12 position/horizon
+models -- everything except QB 1w and TE 18w -- so the published table read:
+
+    QB 1w  MAE 5.99   (fantasy points -- transform inactive)
+    RB 1w  MAE 0.50   (log points     -- transform active)
+    WR 1w  MAE 0.55   (log points)
+    TE 1w  MAE 0.50   (log points)
+
+Two scales in one table, with nothing recording which was which. The obvious
+reading -- that RB is ~12x more accurate than QB -- is wrong; it is the same
+kind of model measured in different units. This silently invalidates any
+cross-position comparison, and any component-vs-fp comparison drawn from this
+file.
+
+NOT a training or serving defect: `predict()` inverse-transforms
+(position_models.py ~637/~679), so shipped predictions were always in fantasy
+points. The defect is confined to reported metrics.
+
+Fix: `_oof_metrics` now also carries `rmse_original` / `mae_original` /
+`r2_original` plus a `target_space` label, and `_evaluate_model` reports the
+original-space values. The model-space `rmse` key is deliberately preserved
+because two internal comparisons depend on it being in the same space as
+`y_train_inner` -- the isotonic calibration gate (position_models.py ~437) and
+the overfit ratio (~466). Overwriting it would have quietly broken both.
+
+Why it survived: nothing compared these metrics across positions. Any check
+that had would have found a 12x gap immediately. Guardrail worth adding: a
+test asserting reported MAE is within a plausible fantasy-point band per
+position (e.g. 1-20), which fails loudly on log-space values.
+
+Follow-up: the 18w metrics look wrong independently of this (target_18w means
+~125-144 across all four positions, i.e. the horizon target is near-constant).
+Not investigated yet.
+
+## Horizon targets were median-imputed: 91% of 18w labels were fabricated (2026-08-29)
+
+Found while investigating the 18w metrics flagged in the entry above.
+
+`FeatureEngineer._impute_missing` iterates every numeric column and median-fills
+it. The horizon targets are numeric columns in the same frame, so `target_1w`,
+`target_4w`, `target_18w` and `target_util_*` were filled like predictors. The
+function already exempts snap-owned columns, structurally-missing columns and
+the `ngs_*` prefix; labels were simply never considered.
+
+Coverage measured 2018-2025 (30,065 rows), immediately after
+`_create_horizon_targets` vs. after `add_engineered_features`:
+
+    target_1w    90.6% -> 100%   ( 9.4% of labels invented)
+    target_4w    73.8% -> 100%   (26.2% invented)
+    target_18w    9.3% -> 100%   (90.7% invented)
+
+Why it matters more than a normal fill: every training path already guards with
+`valid_mask = ~y_dict[1].isna()` and drops label-less rows. The fill ran BEFORE
+that guard and defeated it -- the row was not dropped, it was kept with a
+manufactured label. The guard looked correct and did nothing.
+
+How it stayed hidden: 100% label coverage reads as a clean dataset. It is the
+opposite. A forward-looking target CANNOT be defined on the last rows of a
+player-season, so full coverage is proof of fabrication. Every audit that
+checked for NaN saw none and passed.
+
+The 18w column was the giveaway. Six values covered 90% of it, and the
+quartiles were identical across all four positions -- QB and TE both at p25
+127.55 / med 129.90 / p75 134.20. After the fix the per-position medians
+separate the way scoring implies: QB 278.3, RB 181.8, WR 172.5, TE 142.2.
+
+Fix: `_impute_missing` now skips label columns, using a new shared predicate
+`src.utils.leakage.is_label_column`. It reuses the existing `_TARGET_COL_RE`
+rather than a `startswith("target_")` test, because the latter would destroy
+the legitimate `target_share*` feature family. Regression test:
+`tests/test_labels_not_imputed.py` (4 tests; verified non-vacuous by disabling
+the exemption and reproducing the 100%-coverage signature).
+
+### What this invalidates -- and what it does NOT
+
+Invalidated: the WEEKLY models (`ensemble.py` / `PositionModel`), including the
+2026-08-29 `fp` retrain. 1w least affected (9.4% of labels invented), 18w most
+(90.7%) -- the 18w models were largely fitting a near-constant. The
+component-vs-fp comparison has to be redone; both arms were measured on
+fabricated labels.
+
+NOT invalidated: the four-arm season comparison (production / candidate /
+phase7 / step8). Verified, not assumed:
+
+  - No `target_*` reference exists anywhere in `season_step8.py`,
+    `preseason_projector.py`, `preseason_features.py`, `single_week_ppr/`, or
+    `check_phase7_arms.py`.
+  - Ground truth is `actual_total = float(g["fantasy_points"].sum())`
+    (season_projection.py:1064) -- summed from observed rows at scoring time.
+  - The phase7 arm's weekly model fits `y_train = pos_train["fantasy_points"]`
+    (season_projection.py:948) -- the observed column, row-aligned.
+  - `fantasy_points` carries 0 NaN before and after feature engineering across
+    2018-2025 (30,065 rows), mean 9.6616 both sides, so the blanket imputer
+    never touched it.
+
+The structural reason is worth stating because it generalises: the season path
+never puts labels in the same DataFrame as features. It takes
+`df["fantasy_points"]` at fit time and scores against a freshly computed sum.
+The weekly path materialises `target_*` columns INTO the training frame, which
+then flows through a generic "fill every numeric column" pass. Labels living
+beside features + a blanket numeric imputer is what manufactures labels.
+
+### Why it surfaced now
+
+It did not appear now; it has been present since `src/` entered version
+control (4c30bc7, 2026-08-04) and the call ordering predates that. Nothing in
+the component-removal work caused it.
+
+It surfaced because the log1p metrics defect (entry above) forced an inspection
+of what scale the targets were actually on -- and that was the first time
+anyone had looked at the target DISTRIBUTIONS rather than their null counts.
+Null-count audits could never find this: the fill drove coverage to 100%, which
+is exactly what a clean dataset looks like.
+
+### Open consequence, NOT yet addressed
+
+With the fill removed, `target_18w` has only 2,806 valid rows across all four
+positions (QB 447, RB 720, WR 1,187, TE 452). That may be too thin to train an
+18-week model at all. `min_periods` for an 18-game sum is 14, and a
+player-season is ~17 rows, so only the first few weeks of each season can carry
+the label. Options: shorten the horizon, relax min_periods and accept the
+magnitude bias the current comment warns about, or let the target span season
+boundaries. Not decided.
+
+## Fill-value scan: 7 causal features are fabricated across most of the training window (2026-08-29)
+
+Scan run after the label-imputation fix, using the same method that found it:
+look at value DISTRIBUTIONS, not null counts. Detector = a single value
+dominating a continuous feature, measured per season on the real training
+frame (silver artifact, 51,472 rows, 2018-2025).
+
+61 of 273 (position, feature) pairs have one value covering >30% of rows.
+Seven causal features additionally show a TRAIN/SERVE DISCONTINUITY -- near
+constant in older seasons, live in recent ones. % of rows at the dominant
+value:
+
+    feature                             2018 2019 2020 2021 2022 2023 2024 2025
+    rb_broken_tackles_prior                0%  98%  98%  98%  98%  98%  99%   0%
+    recv_drop_pct_season_prior             0%  98%  98%  98%  98%  98%  99%  31%
+    qb_bad_throw_pct_prior                 0%  63%  87%  86%  62%  87%  62%  88%
+    team_pace_sec_per_play_roll3_mean     91%  98%  98%  98%  98%  98%  99%  13%
+    team_neutral_pass_rate_oe_roll3_mean  98%  98%  98%  98%  98%  98%  99%  13%
+    availability_3yr                      98%  34%  20%  17%  22%  25%  30%  30%
+    fp_late6_vs_season                    98%  28%  27%  27%  24%  27%  22%  25%
+
+Three distinct families.
+
+### A. Storage-layer DEFAULT 0 (team_pace_sec_per_play, neutral_pass_rate_oe)
+
+Root cause is NOT a fillna and would be missed by any fillna audit:
+
+    database.py:206   neutral_pass_rate_oe REAL DEFAULT 0
+    database.py:968   stats.get("neutral_pass_rate_oe", 0.0)
+
+Confirmed against the DB. In `team_stats`, both columns are 100% zero with
+ZERO nulls for 2006-2024; only 2025 is genuinely populated (38 nulls, ~5%
+zeros). So 19 seasons of "never computed" are stored as measured zero and pass
+an IS NOT NULL audit at 100%.
+
+`pace_sec_per_play = 0.0` is physically impossible -- real values run 7.7 to
+37.4 seconds, median 30.3. A team cannot snap a play in zero seconds.
+
+Both features are in CAUSAL_FEATURES for ALL FOUR positions. Consequences:
+  - They carry no signal across the training window (constant).
+  - They are a perfect 2025 indicator. CV is season-aware
+    (SeasonAwareTimeSeriesSplit), so the final fold is exactly where the
+    feature stops being constant.
+  - At 2026 serving time the model receives live values it effectively never
+    saw in training.
+
+Same signature as the pre-2013 snap-count bug (GAPS.md 2026-08-25): a
+fabricated constant that is not NULL.
+
+### B. First-season warm-up defaults (availability_3yr, fp_late6_vs_season)
+
+Both default to 1.0 and both sit at 98% in 2018, then drop to 17-34%. 2018 is
+the first training season, so a 3-year lookback has nothing to look back at
+and every player is handed a fabricated perfect 1.0. The pipeline claims to
+load 2006+ for feature-engineering context (MIN_HISTORICAL_YEAR = 2006), so
+either that context is not reaching these two features or they are computed
+after the window is trimmed. NOT yet diagnosed.
+
+### C. PFR-derived prior-season features (three columns)
+
+rb_broken_tackles_prior and recv_drop_pct_season_prior are ~98% zero for
+2019-2024 but fully populated in 2018 and 2025, which is not an era boundary
+-- an era boundary is monotonic. Looks like a join that succeeds only at the
+window edges. NOT yet diagnosed.
+
+### Status
+
+None fixed. All seven are baked into the retrain running at the time of
+writing, which was started to validate the label fix. That run is still
+worth having -- it is the first on non-fabricated LABELS, and these are
+feature defects -- but its absolute accuracy numbers should not be read as
+the model's ceiling.
+
+### Family A fix (2026-08-29): all eleven PBP-derived team_stats columns
+
+Scope was larger than the two features first flagged. Measured across the whole
+table: `third_down_conv`, `neutral_pass_plays`, `neutral_run_plays`,
+`neutral_pass_rate`, `neutral_pass_rate_lg`, `neutral_pass_rate_oe`,
+`drive_count`, `drive_success_rate`, `avg_drive_epa`, `points_per_drive` and
+`pace_sec_per_play` are EXACTLY ZERO for 100% of the 10,447 rows in 2006-2024,
+with zero NULLs. Only 2025 is genuinely populated. Cause: nothing but
+`load_current_season_stats_from_pbp()` ever ran, and it does one season.
+
+Code fixed (does not touch existing rows):
+  - `team_stats` DDL: `REAL DEFAULT 0` -> `REAL` for the PBP block.
+  - The ALTER TABLE migration map likewise. `ADD COLUMN ... DEFAULT 0`
+    backfills every pre-existing row with that default, which is how these
+    columns became a fabricated zero on databases predating them.
+  - `insert_team_stats` bindings: `stats.get(col, 0.0)` -> `stats.get(col)`,
+    so an uncomputed column reaches SQL as NULL.
+
+Data fix: `scripts/backfill_team_pbp_stats.py` recomputes 2006-2024 from
+play-by-play via `get_team_stats_from_pbp` and UPDATEs the eleven columns,
+then NULLs any row still matching the all-zero signature. Verified on 2019-2021
+before writing: pace medians 31.0 / 30.7 / 31.2 s, neutral_pass_rate ~0.57,
+neutral_pass_rate_oe centred near 0 -- all sane, and the script refuses to
+write a season whose values fall outside physical bounds.
+
+The all-ten-zero signature is specific: it matches 100% of 2006-2024 rows and
+only 31 of 639 rows in 2025 (unplayed/bye weeks), so it cannot null a real
+team-week.
+
+### Latent hazard found while fixing this: partial upserts to team_stats destroy data
+
+NOT fixed, and it is a landmine for any future backfill.
+`DatabaseManager.insert_team_stats` combines
+
+    points_scored = COALESCE(excluded.points_scored, team_stats.points_scored)
+
+with a binding of `stats.get("points_scored", 0)`. A caller passing a partial
+dict therefore binds 0, and `COALESCE(0, existing)` returns 0 -- so a
+partial upsert silently ZEROES points_scored, total_yards, turnovers and every
+other non-PBP column for each row it touches. COALESCE reads as "keep the old
+value if the new one is absent", but the binding guarantees the new value is
+never absent.
+
+This is why the backfill script uses a targeted UPDATE of ten named columns
+instead of the upsert. Proper fix is to bind None for absent keys throughout,
+matching what was just done for the PBP block; deferred so it does not ride
+along inside a data-migration change.
+
+## Family B diagnosed: lookback history is loaded, then discarded before feature engineering (2026-08-29)
+
+`availability_3yr` and `fp_late6_vs_season` both sit at ~98% of their default
+value (1.0) in 2018 and 17-34% thereafter. 2018 is the first training season.
+
+Mechanism, `_add_availability_3yr` (feature_engineering.py:846):
+
+    gp["gp_3yr"] = gp.groupby("player_id")["gp"].transform(
+        lambda x: x.shift(1).rolling(3, min_periods=1).sum())
+    ... .clip(0, 1.0).fillna(1.0)
+    df["availability_3yr"] = df.apply(
+        lambda r: avail_map.get((...), 1.0), axis=1)
+
+`shift(1)` is NaN for a player's first season IN THE FRAME, and there are two
+separate 1.0 defaults behind it. So a player with no history is recorded as
+having PERFECT availability -- the most optimistic possible value, assigned
+precisely when nothing is known. Same shape in `fp_late6_vs_season`
+(feature_engineering.py:1665, `.fillna(1.0)`).
+
+Root cause is upstream and broader than these two features.
+`data_loading.load_training_data` does:
+
+    train_data = combined[combined['season'].isin(train_seasons)]   # line 117
+
+`get_all_players_for_training` returns 2006-2025 -- for RB, 28,402 rows of
+which 16,348 (57.6%) are pre-2018. All of it is discarded HERE, before feature
+engineering runs. So every lookback feature (3-year availability, prior-season
+stats, rolling windows) starts cold at the training window's first season and
+falls back to a default.
+
+NOTE: this contradicts the standing project note that the pipeline "loads 2006+
+for feature engineering context". That is not true on this path. The history is
+loaded from the database and thrown away one line before it would be useful.
+
+Fix direction (NOT yet implemented): keep pre-window seasons through feature
+engineering as context and trim to `train_seasons` afterwards -- the same
+train/test pattern `_apply_with_temporal_context` already implements for the
+test frame. Separately, the 1.0 defaults should be NaN: "no history" is not
+"perfect availability".
+
+## Family C diagnosed: PFR seasonal source columns exist for one season only (2026-08-29)
+
+`rb_broken_tackles_prior` and `recv_drop_pct_season_prior` are ~98% zero for
+2019-2024, but populated in 2025 and NaN in 2018. Not an era boundary -- era
+boundaries are monotonic.
+
+Cause is the source table. In `seasonal_pfr`:
+
+    broken_tackles_per_att   non-null: 2024 only (152 rows)
+    rec_drop_pct             non-null: 2024 only (494 rows)
+    bad_throw_pct            non-null: every season
+    (no 2025 rows at all)
+
+`_add_seasonal_pfr_features` shifts season +1 (year N predicts N+1), so the
+only populated source year, 2024, lands on target season 2025. That is exactly
+the observed pattern. 2018 reads NaN because `_mask_pre_era` correctly masks
+pre-2019.
+
+Two separate defects:
+  1. Loader gap: the PFR seasonal loader only ever populated broken tackles and
+     drop rate for 2024. Everything else is NULL.
+  2. Zero-fill masking it (feature_engineering.py:1612-1619): missing values are
+     filled with the (position, season) median and then `fillna(0.0)`. When the
+     whole group is missing the median is itself NaN, so the fallback fires and
+     every row becomes a fabricated 0.0 -- indistinguishable from "this RB broke
+     zero tackles".
+
+`qb_bad_throw_pct_prior` has source data for all seasons yet still reads 62-88%
+zero, so its loss is in the PFR->GSIS id mapping or the same zero-fill, not in
+source coverage. Not yet isolated.
+
+Neither family is fixed.
+
+### Family B FIXED (2026-08-29)
+
+Two changes.
+
+1. Pre-window history now reaches feature engineering.
+   `load_training_data(return_context=True)` returns seasons older than the
+   training window as a separate `context_data` frame;
+   `_prepare_training_data(context_data=...)` threads it into
+   `_apply_with_temporal_context`, which now takes three tiers:
+
+       context (-1)  seasons before the window: warms up lookback windows,
+                     never returned, never trained on
+       train    (0)  computed from context+train
+       test     (1)  computed from context+train+test
+
+   Context receives the same treatment test does -- train-fitted percentile
+   bounds and utilization weights applied, never fitted on -- because it has to
+   reach feature engineering with the same columns as train, or the rolling
+   windows it exists to warm up would see NaN for every context row and be
+   worse than no context.
+
+   Context is dropped on return, so it never touches the percentile bounds,
+   utilization weights, winsorisation bounds, or the models.
+
+   Additive by design: `return_context` defaults False and `context_data`
+   defaults None, so the seven existing `load_training_data` call sites and the
+   four `_prepare_training_data` call sites are unaffected and reproduce the
+   previous behaviour exactly.
+
+   Measured on RB `availability_3yr`, % of rows with no value:
+
+       season   no context   with context
+         2018       100.0%          22.3%
+         2019        21.1%          18.9%
+         2020        17.9%          16.7%
+         2021+     unchanged      unchanged
+       overall       28.3%          18.7%
+
+   2018 recovers real values for 78% of rows; 2021+ is untouched because those
+   lookbacks already sat inside the window. The residual is genuine rookies.
+
+2. The optimistic defaults are gone.
+   `availability_3yr` dropped `.fillna(1.0)` and its `avail_map.get(..., 1.0)`
+   default; `fp_late6_vs_season` dropped `.fillna(1.0)`. Both now yield NaN
+   when there is no history. 1.0 is the top of the availability range and
+   "finished exactly at his own average" for the ratio -- specific, optimistic
+   claims asserted precisely where nothing was known.
+
+HONEST LIMIT: under FEATURE_MODE="causal" the surviving NaN does not reach the
+model as NaN -- ensemble.py median-fills every remaining NaN before fitting,
+and its `_missing` indicators are only emitted for columns matching
+_roll/_lag/_ewm/_trend, which these two do not. So the gain is (a) real history
+for most previously-cold rows and (b) an unknown now falls back to the
+population median instead of a fabricated perfect score. Making missingness
+itself visible to the model is a separate, larger change.
+
+### Family C FIXED (2026-08-29)
+
+Two defects, both addressed.
+
+1. Loader gap. Nothing in this repo ever populated `seasonal_pfr`; the table
+   was loaded ad hoc and `broken_tackles_per_att` / `rec_drop_pct` existed for
+   2024 only. The data was always available upstream --
+   `nfl_data_py.import_seasonal_pfr` carries `brk_tkl`/`att` (rush) and
+   `drop_percent` (rec) at ~100% coverage from 2018.
+   `scripts/backfill_seasonal_pfr.py` backfilled 2018-2024: 2,470 rush rows and
+   3,593 rec rows updated, bounds-checked before writing.
+
+2. Zero-fill. `_add_seasonal_pfr_features` filled the (position, season) median
+   and then `.fillna(0.0)` behind it; when a whole group was missing the median
+   was itself NaN so the 0.0 fired for every row. All four columns are listed
+   in `_STRUCTURALLY_MISSING`, so `_impute_missing` was already exempting them
+   -- the builder's own zero-fill ran first and made that exemption INERT.
+   Same pattern as the snap and personnel columns. Now leaves NaN (three sites:
+   the early return, the main loop, and the exception handler).
+
+Result, % of rows carrying a real value:
+
+    season   rb_broken_tackles_prior   recv_drop_pct_season_prior
+      2018            0.0%  (masked)          0.0%  (masked)
+      2019           75.6%                   75.8%
+      2020           78.6%                   76.6%
+      2021           79.4%                   78.5%
+      2022           75.3%                   79.8%
+      2023           80.9%                   77.2%
+      2024           79.5%                   79.6%
+      2025           75.5%                   78.5%
+
+Was ~2% real / 98% fabricated zero for 2019-2024. 2018 correctly reads 0%:
+`_mask_pre_era` masks it because PFR starts 2018 and these are prior-season
+features. Remaining zeros among present values (48.7% broken tackles, 29.1%
+drop rate) are genuine measurements -- backs who really broke no tackles.
+
+### CORRECTION: qb_bad_throw_pct_prior was never broken (2026-08-29)
+
+An earlier entry claimed `qb_bad_throw_pct_prior` "reads 62-88% zero" and
+blamed the PFR->GSIS id mapping. Both halves are wrong.
+
+Measured: the mapping succeeds for 748 of 748 pass rows (100%), and
+`bad_throw_pct` is 99.6% non-null. On QB ROWS the feature was already healthy
+before any fix -- 0-3% zeros, median 17.2, 1.4% NaN.
+
+The error was in the detector, not the data. The discontinuity scan computed
+each feature's dominant value across the WHOLE frame, all positions together.
+`qb_bad_throw_pct_prior` is populated only for QBs; on RB/WR/TE rows it was
+0.0, and those rows are ~87% of the frame. So the scan reported a QB feature's
+health using mostly non-QB rows.
+
+Those zeros never reached a model: CAUSAL_FEATURES assigns
+qb_bad_throw_pct_prior and qb_pocket_time_prior to QB only,
+rb_broken_tackles_prior to RB only, recv_drop_pct_season_prior to WR/TE only,
+and training splits by position first.
+
+LESSON: a position-specific feature must be measured on its consuming position.
+Measuring it frame-wide reports the fill rate of the positions that never use it.
+
+Re-measured on consuming positions only, the other two Family C features were
+REAL defects and the backfill was warranted:
+
+    rb_broken_tackles_prior (RB rows)      2019-2024: 97.8-98.6% zero,
+                                           and NO non-zero values at all
+    recv_drop_pct_season_prior (WR/TE)     2019-2024: 97.9-98.5% zero,
+                                           and NO non-zero values at all
+
+Only 2025 carried real values, matching the 2024-only source coverage.
+
+### Family A backfill DONE (2026-08-29)
+
+`scripts/backfill_team_pbp_stats.py` ran for 2006-2024: 10,292 team-weeks
+aggregated from play-by-play, 10,292 rows updated, then 155 rows the aggregator
+could not produce were NULLed. A further 31 all-zero rows in 2025 (all
+`week = 0` placeholders, not real games) were NULLed separately.
+
+Verification: `pace_sec_per_play` now has zero fabricated zeros in any season,
+with means running 32.0s in 2006-2008 down to ~31.0s by 2013 -- the real
+leaguewide trend toward faster offences, which a constant 0.0 obviously could
+not show. `neutral_pass_rate_oe` means sit near 0 across all seasons, as an
+"over expected" measure should.
+
+Rows still matching the all-ten-zero fabrication signature anywhere in
+team_stats: 0.
+
+DB backups: `nfl_data.prepfr_20260829_220233.db`,
+`nfl_data.prebackfill_20260829_220426.db` (500 MB each).
+
+### Consequence
+
+Every model artifact now predates the data it was trained on. The 2026-08-29
+21:58 retrain used fabricated team_stats and PFR columns. A retrain is required
+before any accuracy number is quotable.
+
+## The rookie cold-start fallback is DEAD CODE (2026-08-29)
+
+`predict.py::_apply_cold_start_fallback` is intended to replace ML predictions
+with a position average for players below `MIN_GAMES_FOR_PREDICTION = 4`, on
+the grounds that a near-rookie's model output is too uncertain to serve.
+
+It never fires. Its first statement is:
+
+    if "games_count" not in latest_data.columns:
+        return results
+
+and `games_count` does not exist. `get_all_players_for_training` returns
+`games_played`. Nothing in src/ produces a `games_count` column at all (the
+only occurrence is an unrelated local in scripts/diagnose_outliers.py). So the
+guard returns immediately on every call and `MIN_GAMES_FOR_PREDICTION` is
+inert.
+
+Consequence: rookies receive real ML predictions from week 1, built on
+median-imputed history. Measured share of causal features present for TRUE
+rookies (is_rookie == 1):
+
+    week   all features   rolling-form features
+      1        50.0%              0.0%
+      2        87.5%             77.4%
+      3        91.0%             84.7%
+      4        96.0%             95.1%
+
+At week 1 a rookie has NO form history; every rolling feature is filled with a
+veteran-derived median, so the model effectively sees "a league-average player
+who happens to have this draft capital". From week 2 the prediction is
+genuinely informed, because one played game satisfies min_periods=1.
+
+NOT fixed, deliberately. Enabling the guard would switch on behaviour that has
+never been validated and that is questionable on its own terms: it assigns
+every rookie at a position an IDENTICAL prediction (the position mean), which
+discards draft capital, depth chart and combine score -- the only real signal a
+week-1 rookie has. Options: (a) leave dead and delete it, (b) fix the column
+name and measure whether the override beats the model, (c) replace it with a
+rookie-specific model. Needs a decision, not a rename.
+
+Related: veterans are unaffected -- 97.6% feature availability at week 1,
+indistinguishable from week 10, because rolling features group by player_id
+only and carry across the offseason.
+
+## The prior-week join + blanket zero-fill re-fabricates data downstream of the DB fix (2026-08-29)
+
+Found while verifying why the post-backfill retrain moved MAE by <=0.01.
+
+`get_all_players_for_training` joins team and opponent stats from the PRIOR
+week to avoid leakage:
+
+    LEFT JOIN team_stats ts ON pws.team = ts.team
+        AND pws.season = ts.season AND ts.week = pws.week - 1
+
+Week 1 therefore never matches -- there is no week 0 -- and the join yields
+NULL. `utilization_score.py:431` then blanket-fills every numeric column with
+0, excluding only `missingness_preserved_cols()`, which does not cover these.
+So week-1 absence becomes a measured zero.
+
+23 columns carry the signature (100% zero at week 1, ~6% mid-season). Five
+reach models:
+
+    column                      reaches model as                    positions
+    team_pace_sec_per_play      team_pace_sec_per_play_roll3_mean   all 4
+    team_neutral_pass_rate_oe   team_neutral_pass_rate_oe_roll3_mean all 4
+    team_neutral_pass_rate      feeds the _oe calculation           all 4
+    team_plays                  team_plays_roll3_mean               all 4
+    opp_fpts_allowed            DIRECT + _s2d_lag1 + _dvoa_adj_lag1 all 4
+
+`opp_fpts_allowed` is the worst case: a direct causal feature, zero on 100% of
+week-1 rows against a mid-season median of 21.6. Every week-1 matchup is
+presented to the model as an opponent that allows ZERO fantasy points -- the
+best possible defence, identical for all 32 teams, which erases matchup
+discrimination in exactly the week where form data is weakest.
+
+The zero also propagates forward through the 3-game rolling means:
+
+    week 2: 25.9% of team_pace roll3 rows implausible (<20s), mean 18.3
+    week 3: 33.0%, mean 20.9
+    week 4: 25.3%, mean 22.1
+    week 5:  3.8%, mean 29.7   <- the zero ages out of the window
+
+Distribution vs source, whole frame: raw team_stats pace is mean 31.23 /
+std 2.71 / p1 24.75; the model-facing roll3 is mean 27.20 / std 5.98 /
+p1 9.65, with 10.3% of rows between 0 and 20 s/play. A team cannot snap the
+ball in under 20 seconds; the rolling mean of plausible values cannot be 9.65.
+
+THIS IS WHY THE 2006-2024 BACKFILL BOUGHT NO ACCURACY. The database is now
+correct and the fabrication is reintroduced downstream. Third instance today of
+the same shape: a correct-looking guard defeated by a filler running earlier in
+the chain (cf. the label imputation and the seasonal_pfr zero-fill).
+
+NOT fixed pending a decision on the default -- see below.
+
+### The prior-week fix took TWO more passes (2026-08-29)
+
+The first attempt (PRIOR_WEEK_JOIN_COLS, 5 columns) fixed
+team_pace_sec_per_play -- roll3 rows below 20 s/play went 25-33% -> 0.0% in
+weeks 2-4, mean 31.2 against a raw 31.23 -- but left two holes.
+
+1. WRONG SCOPE. `opp_fpts_allowed` is ASSEMBLED in feature_engineering from
+   `fantasy_points_allowed_{qb,rb,wr,te}`, so exempting only the assembled name
+   left the inputs zero-filled and the output was still 0 on 100% of week-1
+   rows. The four source columns appeared in the original 23-column scan and
+   were filtered out because they are not causal features BY NAME -- the scan
+   checked CAUSAL_FEATURES membership and `<name>_*` prefixes, and a column
+   feeding a feature under a DIFFERENT name passes both tests. Now added.
+
+2. WEEK-0 PLACEHOLDER ROWS. `team_plays` came out of SQL 73% ZERO at week 1 --
+   not a Python fill at all. team_stats holds 186 week-0 rows (31 per season,
+   2020-2025), every one with total_plays = 0, and `ts.week = pws.week - 1`
+   resolves to 0 for week-1 rows, so they matched a fabricated record instead
+   of finding nothing. Fixed with `AND ts.week >= 1` on both the team_stats and
+   team_defense_stats joins. Verified: week-1 team_plays went 73% zero -> 100%
+   NULL, week 5 unchanged (median 61.0 plays, 31.2 s pace).
+
+Lesson recorded with the fix: in this pipeline a column can feed a causal
+feature under a different name, so name-based scoping is not sufficient. Trace
+the assembly, not the identifier.
+
+## Rookie cold start: option (c) implemented (2026-08-30)
+
+Three defects, all in machinery that already existed.
+
+1. `_load_draft_rounds` queried the WRONG TABLE. `draft_picks` holds 0 rows;
+   the live table is `draft_picks_v2` (12,927 rows, 11,054 with player_id and
+   draft_round). The lookup returned {}, so `_round_bucket_for(None)` mapped
+   every rookie to "UDFA" -- a first-round RB would have drawn 5.20 instead of
+   13.13, a 2.5x understatement on exactly the players draft capital
+   identifies best. The rest of the pipeline already reads draft_picks_v2.
+
+2. The rookie prior was written and then ERASED. `_apply_rookie_prior` fills
+   prev_season_ppg from data/rookie_priors.json (position x draft-round PPG,
+   fitted on 1,676 rookies 2006-2023) but runs inside `_add_prev_season_ppg`,
+   early. `_restore_debut_history_nan` runs LAST by design and blanks all 65
+   history columns on a debut week -- prev_season_ppg included. Measured:
+   prev_season_ppg was 100% NaN for week-1 rookies, so the priors artifact had
+   never once reached a model.
+
+   Fixed by re-applying the prior AFTER the restore rather than exempting the
+   column. The restore keeps its invariant ("runs after every filler, so a new
+   filler cannot silently defeat it") and still blanks 64 of 65 columns; the
+   one column where a fitted, draft-conditioned estimate exists gets it back.
+
+3. `_apply_cold_start_fallback` DELETED (option (a) folded in). It had never
+   run -- `if "games_count" not in latest_data.columns: return results`, and
+   nothing in the repo produces `games_count`; the column is `games_played`.
+   Not repaired, because its behaviour was worse than the model it overrode:
+   every rookie at a position got the SAME number, discarding draft capital,
+   depth chart and combine score, i.e. the 33 of 72 causal features that ARE
+   populated at week 1.
+
+Verified end to end: 369 true week-1 rookies (debut 2019+), prev_season_ppg
+100% populated, 15 distinct values, every one a rookie-prior constant --
+13.13 (RB rd1) through 3.33 (TE rd4_7). Was 100% NaN.
+
+Draft-round match rate is 67.3% of players in frame; the unmatched fall to the
+UDFA bucket, which is the correct default for an undrafted player but will also
+catch anyone missing from draft_picks_v2. Not investigated further.
+
+### NOT fixed: the rookie CI-widening block
+
+predict.py still gates 1.5x confidence-interval widening on `games_count`, so
+it is dead for the same reason. Deliberately NOT repaired by renaming to
+`games_played`: that column is a constant 1 (a per-row "played" flag, not a
+cumulative count), so `games_played < MIN_GAMES_FOR_PREDICTION` would be TRUE
+for every player and widen every interval 1.5x -- worse than the dead code.
+A correct fix needs a real career-game count or `is_rookie` plumbed to the
+serving frame; neither is present there today.

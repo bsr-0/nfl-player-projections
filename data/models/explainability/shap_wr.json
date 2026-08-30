@@ -1,0 +1,45 @@
+{
+  "position": "WR",
+  "top_shap_features": [
+    {
+      "feature": "contract_apy_rank",
+      "mean_abs_shap": 0.06580113844274034
+    },
+    {
+      "feature": "prev_season_ppg",
+      "mean_abs_shap": 0.049452732839079874
+    },
+    {
+      "feature": "ngs_avg_intended_air_yards_roll3_mean",
+      "mean_abs_shap": 0.047230674640201496
+    },
+    {
+      "feature": "wopr_roll3",
+      "mean_abs_shap": 0.020857663157060443
+    },
+    {
+      "feature": "availability_3yr",
+      "mean_abs_shap": 0.01749501989795197
+    },
+    {
+      "feature": "targets_roll3_mean",
+      "mean_abs_shap": 0.0148024235958885
+    },
+    {
+      "feature": "snap_share_accel",
+      "mean_abs_shap": 0.014142093003260667
+    },
+    {
+      "feature": "receptions_roll3_mean",
+      "mean_abs_shap": 0.013841274335502318
+    },
+    {
+      "feature": "spread",
+      "mean_abs_shap": 0.013144345767586225
+    },
+    {
+      "feature": "yards_per_target_roll3_mean",
+      "mean_abs_shap": 0.007874013355161667
+    }
+  ]
+}

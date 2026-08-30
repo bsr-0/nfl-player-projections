@@ -1,0 +1,45 @@
+{
+  "position": "TE",
+  "top_shap_features": [
+    {
+      "feature": "prev_season_ppg",
+      "mean_abs_shap": 0.042174329370578204
+    },
+    {
+      "feature": "contract_apy_rank",
+      "mean_abs_shap": 0.03744770449266336
+    },
+    {
+      "feature": "snap_share_accel",
+      "mean_abs_shap": 0.032613595230667286
+    },
+    {
+      "feature": "pbp_pass_play_participation_pct_roll3_mean",
+      "mean_abs_shap": 0.027668672506648978
+    },
+    {
+      "feature": "wopr_roll3",
+      "mean_abs_shap": 0.02301282660923501
+    },
+    {
+      "feature": "opp_fpts_allowed_dvoa_adjusted_lag1",
+      "mean_abs_shap": 0.020377303561625693
+    },
+    {
+      "feature": "receptions_roll3_mean",
+      "mean_abs_shap": 0.011965808232184778
+    },
+    {
+      "feature": "ngs_avg_intended_air_yards_roll3_mean",
+      "mean_abs_shap": 0.00971821110029741
+    },
+    {
+      "feature": "snap_share_pct_roll3_mean",
+      "mean_abs_shap": 0.008399278051610578
+    },
+    {
+      "feature": "team_motion_rate",
+      "mean_abs_shap": 0.008079544501333082
+    }
+  ]
+}
