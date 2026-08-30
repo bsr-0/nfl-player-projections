@@ -12908,3 +12908,33 @@ Early season is NOT the weak spot: QB is 9.4pp BETTER early than late, WR
 project note that QB early-season is the biggest gap -- that note predates
 this audit, and whatever it measured may have been the corruption now removed.
 Caveat: QB wk 1 is n=33.
+
+## The fold harness did not match production (2026-08-30)
+
+`run_fold` -- the basis of every walk-forward comparison in this project --
+called `_prepare_training_data` WITHOUT `context_data`, while `train_models()`
+passed it from earlier the same day. So the harness and production trained
+different pipelines: lookback features (rolling windows, availability_3yr,
+prior-season stats) started cold at the training window's first season in the
+harness and did not in production.
+
+No error, no warning; the harness simply measured something other than what
+ships. Same class of defect as the fabricated values this audit was chasing.
+
+Fixed in both of run_fold's loading paths. The held-out season is excluded
+from context in each, so warming up lookback windows cannot reach the fold's
+own test data -- verified for test_season=2024: context 2006-2017, strictly
+before the 2018-2023 training window, held-out season absent.
+
+Tests: tests/test_fold_harness_matches_production.py (2). The second is the
+one that matters -- context carrying the held-out season would mean a fold
+training on its own test data.
+
+### Provenance note on the A/B above
+
+The prior-week A/B and the per-week error table were produced BEFORE this fix,
+i.e. by the no-context harness. That does not invalidate them: context was
+absent from BOTH arms, so the comparison is still controlled and its
+conclusion (no measurable effect) stands. But the absolute per-week MAE values
+were measured on a pipeline that no longer matches production, and should be
+re-measured before being quoted as current model performance.

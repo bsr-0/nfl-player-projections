@@ -296,6 +296,11 @@ def run_fold(
     also writes under data/) in _protect_data_dir() as the real safety net
     (the redirection alone is not reliable — see module docstring).
 
+    Passes pre-window seasons to _prepare_training_data as `context_data`,
+    matching what train_models() does in production. The held-out season is
+    excluded from that context in both paths, so warming up lookback windows
+    can never reach the fold's own test season.
+
     Returns (train_df, test_df, existing_methodology_pred, train_seasons).
     """
     import config.settings as settings
@@ -305,17 +310,35 @@ def run_fold(
     with _protect_data_dir(), tempfile.TemporaryDirectory() as tmp:
         settings.MODELS_DIR = Path(tmp)
         try:
+            # context_data: seasons older than the training window, used to warm
+            # up lookback features and then dropped. Production passes it (see
+            # train_models -> load_training_data(return_context=True)); this
+            # harness did not, so every fold measured a pipeline that differed
+            # from the one that ships -- lookback features started cold at the
+            # window's first season here and did not there. An evaluation
+            # harness that silently diverges from production is the same class
+            # of defect as the fabricated values this audit was chasing.
             if train_seasons_override is not None:
                 from src.utils.database import DatabaseManager
                 train_seasons = list(train_seasons_override)
                 combined = DatabaseManager().get_all_players_for_training(position=position)
                 train_data = combined[combined["season"].isin(train_seasons)]
                 test_data = combined[combined["season"] == test_season]
+                # Explicit-override path: everything before the earliest
+                # training season, excluding the held-out season itself so a
+                # fold testing an EARLY season cannot warm up on it.
+                context_data = combined[
+                    (combined["season"] < min(train_seasons))
+                    & (combined["season"] != test_season)
+                ] if train_seasons else combined.iloc[0:0]
             else:
                 from src.models.data_loading import load_training_data
-                train_data, test_data, train_seasons, _ = load_training_data(
+                train_data, test_data, train_seasons, _, context_data = load_training_data(
                     [position], test_season=test_season, optimize_training_years=False,
+                    return_context=True,
                 )
+                if context_data is not None and not context_data.empty:
+                    context_data = context_data[context_data["season"] != test_season]
 
             if len(test_data) < 20:
                 raise ValueError(f"Not enough test rows for {position} season {test_season}: {len(test_data)}")
@@ -324,6 +347,7 @@ def run_fold(
 
             train_df, test_df, trainer = _prepare_training_data(
                 train_data, test_data, [position], tune_hyperparameters, n_trials, fast=True,
+                context_data=context_data,
             )
             existing_pred = _existing_methodology_predictions(trainer, test_df, position)
         finally:
