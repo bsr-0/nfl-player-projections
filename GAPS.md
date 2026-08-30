@@ -12990,3 +12990,47 @@ stronger now that the rookie prior actually reaches the model -- the prediction
 it would override is draft-conditioned rather than veteran-median.
 
 Rookie uncertainty is still expressed: the CI widening is live and untouched.
+
+## Per-week baseline on the corrected harness; context fix also shows no effect (2026-08-30)
+
+Re-run of scripts/error_by_week.py after run_fold was fixed to pass
+context_data. Supersedes the earlier table, which was measured on a harness
+that did not match production.
+
+Current per-week error, MAE as % of that bucket's mean actual points
+(2025 held out, trained 2018-2024):
+
+    bucket       QB     RB     TE     WR
+    wk 1       38.8   60.3   69.3   59.5
+    wk 2-4     42.3   52.0   66.5   59.2
+    wk 5-8     48.5   58.8   66.7   63.3
+    wk 9-13    52.9   52.1   65.5   66.2
+    wk 14-18   46.0   57.2   68.2   65.2
+
+Delta vs the no-context harness (negative = context helped):
+
+    bucket       QB       RB       TE       WR
+    wk 1      +0.035   +0.011   +0.001   +0.014
+    wk 2-4    +0.036   +0.019   +0.006   +0.009
+    wk 5-8    -0.041   +0.005   +0.010   +0.009
+    wk 9-13   -0.022   -0.007   -0.004   +0.001
+    wk 14-18  -0.036   -0.001   +0.003   +0.003
+
+Largest change anywhere 0.041 MAE, signs mixed, and the early buckets -- where
+cold lookback windows were the whole problem -- are marginally WORSE for all
+four positions. Noise.
+
+### All four fix families are now measured, and none moved accuracy
+
+  labels / OOF metric space        aggregate retrain, no change
+  team_stats + PFR backfills       aggregate retrain, no change
+  prior-week zero-fill             controlled A/B, no change
+  pre-window lookback context      this comparison, no change
+
+Each was verified to have reached the models. The consistent reading is that
+the models had already routed around features that were constant, fabricated
+or cold, so removing the fabrication freed capacity they were not using.
+
+CONCLUSION FOR PLANNING: the ceiling here is not data hygiene. It is the
+feature set and the model. Further cleaning should not be expected to move
+accuracy, and should be justified on correctness grounds alone.
