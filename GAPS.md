@@ -13079,3 +13079,62 @@ denominator before treating a trend as a model property.
 
 This also contradicts, again, the standing note that QB early-season accuracy
 is the biggest gap: week 1 is QB's BEST bucket on raw MAE.
+
+## The weekly serving path was dead, then ~8x wrong (2026-08-30)
+
+Found only when the weekly model was proposed for the UI. Both defects lived
+in the SERVING path, which nothing in this audit had measured -- every
+verification up to this point compared TRAINING frames against each other.
+
+### 1. Serving path raised TypeError on every call (self-inflicted)
+
+The regex used to delete `_apply_cold_start_fallback` in commit 7f635b3,
+`\n    def _apply_cold_start_fallback\(self.*?\n(?=    def )`, matched up to
+the next `    def ` -- and the `@staticmethod` decorator of the FOLLOWING
+method sits on the line above its `def`, so it was swallowed.
+`_apply_snap_imputation` became an instance method and
+`self._apply_snap_imputation(data)` raised
+"takes 1 positional argument but 2 were given".
+
+predict_next_week() was completely dead, committed and merged, with 550 tests
+passing. Lesson: do not delete Python blocks with a regex that terminates on
+the next definition; decorators bind upward.
+
+### 2. Serving computed team shares on a position-filtered frame (older, worse)
+
+`predict()` called `_load_player_data(position)` and then ran feature
+engineering on that single-position frame, so every team-relative denominator
+was position-local. Measured, serve vs train medians for RB:
+
+    team_rb_target_share_roll3_mean   100.000  vs  18.395
+    target_share_pct_roll3_mean        25.417  vs   5.829
+
+100% is definitional: with only RBs in the frame, the share of team targets
+going to RBs is all of them. Fed to a model trained on real shares:
+
+    RB weekly projection   median   mean    max
+    before                  42.3    ~42     48.0
+    after                    3.6      4.9   17.1
+    actual RB weekly         5.5      8.2   ~56
+
+Every weekly prediction this system ever served was roughly 8x too high, and
+the top ten RBs came back within 0.58 points of each other. Training was never
+affected -- _prepare_training_data engineers features on all positions at once
+and splits by position inside the trainer.
+
+Fix: load all positions, engineer features, then narrow to the requested
+position. After the fix the board reads as football: B.Robinson 17.1,
+A.Jeanty 16.0, J.Gibbs 14.7, C.McCaffrey 13.2.
+
+### Coverage gap that let both through
+
+Nothing called predict_next_week() end to end. tests/test_serving_path_smoke.py
+now does: the path must run, must produce fantasy-point-scale medians per
+position, must discriminate between players, and team shares must not be
+position-local. Verified non-vacuous -- the share assertion (`< 50`) sits
+against a pre-fix serve value of 100.0 and a current value of 0.33.
+
+Honest limit: the "discriminates between players" test would NOT have caught
+defect 2 on its own. Across 200 players the broken predictions still had
+std 11.76; only the top of the board was flat. The scale and share assertions
+are what catch it.

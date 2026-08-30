@@ -237,9 +237,31 @@ class NFLPredictor:
         except Exception:
             pass  # Non-fatal; predictions proceed with neutral matchup if no schedule
         
-        # Load player data (min_games=1 to include rookies for cold-start handling)
-        player_data = self._load_player_data(position, min_games=1)
-        
+        # Load ALL positions, even when only one was requested, and narrow AFTER
+        # feature engineering.
+        #
+        # Team-relative features are computed from whatever rows are in the
+        # frame. Loading `position` alone made every share denominator
+        # position-local, so the shares came out inflated by construction --
+        # measured on RB, serve vs train medians:
+        #
+        #   team_rb_target_share_roll3_mean   100.000  vs  18.395
+        #   target_share_pct_roll3_mean        25.417  vs   5.829
+        #
+        # 100% is the giveaway: with only RBs loaded, the share of team targets
+        # going to RBs is 100% by definition. Feeding those into a model trained
+        # on real shares produced a median RB week-1 projection of 42 points
+        # against an actual median of 5.5, compressed against a ceiling near 48.
+        #
+        # Training never had this problem: _prepare_training_data runs feature
+        # engineering on all positions at once and splits by position only
+        # inside the trainer. This is the train/serve skew that made the weekly
+        # model unusable for serving. See GAPS.md 2026-08-30.
+        #
+        # min_games=1 to include rookies for cold-start handling.
+        player_data = self._load_player_data(None, min_games=1)
+        requested_position = position
+
         if player_data.empty:
             from config.settings import MIN_HISTORICAL_YEAR, CURRENT_NFL_SEASON
             raise ValueError(
@@ -257,9 +279,19 @@ class NFLPredictor:
                 print(f"No player found matching '{player_name}'")
                 return pd.DataFrame()
         
-        # Prepare features
+        # Prepare features on the FULL multi-position frame, so team-relative
+        # denominators are the real ones.
         player_data = self._prepare_features(player_data)
-        
+
+        # Only now narrow to what the caller asked for. Doing this earlier is
+        # what broke the shares; doing it here costs one extra filter and keeps
+        # serving features distributionally identical to training.
+        if requested_position and "position" in player_data.columns:
+            player_data = player_data[player_data["position"] == requested_position]
+            if player_data.empty:
+                print(f"No {requested_position} data available after feature preparation")
+                return pd.DataFrame()
+
         # Get most recent data per player and game count for cold-start detection
         games_per_player = player_data.groupby("player_id").size().reset_index(name="games_count")
         latest_data = player_data.groupby("player_id").last().reset_index()
@@ -612,6 +644,7 @@ class NFLPredictor:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
     
+    @staticmethod
     def _apply_snap_imputation(data: pd.DataFrame) -> pd.DataFrame:
         """Apply the train-fitted snap imputation, for serving parity with
         training -- the same contract as the bounded scaler.
