@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Weekly Projections</title>
+<!--
+  Weekly projections from the weekly ensemble model (1w horizon).
+
+  NEW FILE. docs/index.html and the other files named in CLAUDE.md section 9
+  are frozen and untouched; this follows docs/draft.html's pattern of adding a
+  page rather than editing one.
+
+  Source: docs/data/weekly_{POS}.json via scripts/generate_weekly_data.py,
+  which calls NFLPredictor -- the serving path validated against real 2025
+  outcomes on 2026-08-31. NOT generate_weekly_projections.py, which is a
+  dormant season-projection-times-multiplier approach.
+
+  Design point: the range leads, not the number. Measured prediction spread is
+  roughly half the spread of real outcomes (QB predictions std 4.27 vs actual
+  9.00), so point estimates systematically understate ceilings. Showing a bare
+  number would imply a precision the model does not have.
+-->
+<style>
+  :root { --bg:#0f1216; --panel:#171b21; --line:#252b33; --fg:#e6e9ee; --dim:#98a2b0;
+          --qb:#c084fc; --rb:#4ade80; --wr:#60a5fa; --te:#fbbf24;
+          --warn:#f87171; --bar:#2b3a4a; --bar-fill:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { padding:20px 24px 12px; border-bottom:1px solid var(--line); }
+  h1 { margin:0 0 4px; font-size:20px; font-weight:600; }
+  .sub { color:var(--dim); font-size:13px; }
+  .banner { margin:12px 24px 0; padding:10px 14px; border-radius:6px;
+            background:#2a2113; border:1px solid #5a4520; color:#f0d9a0;
+            font-size:13px; max-width:900px; }
+  .controls { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end;
+              padding:14px 24px; border-bottom:1px solid var(--line); background:var(--panel); }
+  .ctl label { display:block; font-size:11px; text-transform:uppercase;
+               letter-spacing:.04em; color:var(--dim); margin-bottom:4px; }
+  select,input { background:#0d1014; color:var(--fg); border:1px solid var(--line);
+                 border-radius:6px; padding:6px 8px; font-size:13px; }
+  table { border-collapse:collapse; width:100%; }
+  th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line);
+          white-space:nowrap; }
+  th { position:sticky; top:0; background:var(--panel); font-size:11px;
+       text-transform:uppercase; letter-spacing:.04em; color:var(--dim); }
+  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr:hover td { background:#1b2027; }
+  .pos { font-weight:600; padding:1px 6px; border-radius:4px; font-size:12px; }
+  .pos.QB{color:var(--qb)} .pos.RB{color:var(--rb)}
+  .pos.WR{color:var(--wr)} .pos.TE{color:var(--te)}
+  .rangecell { width:190px; }
+  .track { position:relative; height:16px; background:var(--bar);
+           border-radius:3px; overflow:hidden; }
+  .fill { position:absolute; top:0; bottom:0; background:var(--bar-fill); opacity:.55; }
+  .point { position:absolute; top:-2px; bottom:-2px; width:2px; background:#e6e9ee; }
+  .rangetext { color:var(--dim); font-size:11px; margin-top:2px;
+               font-variant-numeric:tabular-nums; }
+  .note { padding:16px 24px 40px; color:var(--dim); font-size:12px; max-width:900px; }
+  .note strong { color:var(--fg); }
+  .note code { background:#0d1014; padding:1px 4px; border-radius:3px; }
+  #tbl-wrap { max-height:68vh; overflow:auto; }
+</style>
+
+<header>
+  <h1>Weekly Projections</h1>
+  <div class="sub" id="meta">loading…</div>
+</header>
+<div id="banner"></div>
+
+<div class="controls">
+  <div class="ctl"><label>Position</label>
+    <select id="filter"><option value="ALL">All</option><option>QB</option>
+    <option>RB</option><option>WR</option><option>TE</option></select></div>
+  <div class="ctl"><label>Search</label><input id="q" placeholder="player or team"></div>
+  <div class="ctl"><label>Show</label>
+    <select id="limit"><option value="50">Top 50</option>
+    <option value="100">Top 100</option><option value="9999">All</option></select></div>
+</div>
+
+<div id="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th class="num">#</th><th>Player</th><th>Pos</th><th>Team</th><th>Opp</th>
+      <th class="num">Proj</th><th class="rangecell">Likely range (80%)</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<div class="note">
+  <p><strong>The range matters more than the number.</strong> The bar shows the
+  80% interval: the outcome lands inside it about four times in five. The white
+  tick is the point projection. Measured prediction spread is roughly half the
+  spread of real outcomes, so a single number understates how high a good week
+  can go — two players with the same projection and different ranges are not
+  the same bet.</p>
+
+  <p><strong>Projections run low, by a known amount.</strong> Measured against
+  real 2025 results using a model that never saw that season
+  (weeks 6/10/14): mean error <span id="biasline">—</span>. Some of this is
+  inherent — the model minimises average error, which pulls estimates toward
+  the middle of a right-skewed distribution — and a log-transform correction
+  already removes roughly 40% of it. Treat projections as conservative,
+  especially at the top.</p>
+
+  <p><strong>Accuracy.</strong> Average absolute error per player-week on that
+  same held-out test: <span id="maeline">—</span>. Ranking is more reliable
+  than the absolute values.</p>
+
+  <p>Source: weekly ensemble, 1-week horizon, from
+  <code>docs/data/weekly_{POS}.json</code>. Season-long projections live on the
+  <a href="draft.html" style="color:#60a5fa">draft board</a>, which uses a
+  different model.</p>
+</div>
+
+<script>
+const POS = ["QB","RB","WR","TE"];
+let RAW = [], META = null;
+
+function render() {
+  const filter = document.getElementById("filter").value;
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const limit = +document.getElementById("limit").value;
+
+  let rows = RAW.slice();
+  if (filter !== "ALL") rows = rows.filter(r => r.position === filter);
+  if (q) rows = rows.filter(r =>
+    (r.name||"").toLowerCase().includes(q) || (r.team||"").toLowerCase().includes(q));
+  rows.sort((a,b) => (b.predicted_points ?? -1) - (a.predicted_points ?? -1));
+  rows = rows.slice(0, limit);
+
+  // One shared scale so bars are comparable down the column.
+  const hi = Math.max(1, ...rows.map(r => r.prediction_ci80_upper ?? r.predicted_points ?? 0));
+
+  document.getElementById("rows").innerHTML = rows.map((r,i) => {
+    const lo = r.prediction_ci80_lower ?? null, up = r.prediction_ci80_upper ?? null;
+    const pt = r.predicted_points ?? 0;
+    let bar = '<span class="rangetext">—</span>';
+    if (lo != null && up != null && up > lo) {
+      const l = 100*lo/hi, w = 100*(up-lo)/hi, p = 100*pt/hi;
+      bar = `<div class="track">
+               <div class="fill" style="left:${l}%;width:${w}%"></div>
+               <div class="point" style="left:${p}%"></div>
+             </div>
+             <div class="rangetext">${lo.toFixed(1)} – ${up.toFixed(1)}</div>`;
+    }
+    return `<tr>
+      <td class="num">${i+1}</td>
+      <td>${r.name ?? ""}</td>
+      <td><span class="pos ${r.position}">${r.position}</span></td>
+      <td>${r.team ?? ""}</td>
+      <td>${r.home_away === "away" ? "@" : ""}${r.opponent ?? ""}</td>
+      <td class="num">${pt.toFixed(1)}</td>
+      <td class="rangecell">${bar}</td>
+    </tr>`;
+  }).join("");
+}
+
+Promise.all([
+  ...POS.map(p => fetch(`data/weekly_${p}.json`).then(r => r.ok ? r.json() : [])),
+  fetch("data/weekly_meta.json").then(r => r.ok ? r.json() : null),
+]).then(all => {
+  META = all.pop();
+  RAW = all.flat().filter(r => r && r.predicted_points != null);
+  if (!RAW.length) {
+    document.getElementById("meta").textContent =
+      "No projections found — run scripts/generate_weekly_data.py";
+    return;
+  }
+  if (META) {
+    document.getElementById("meta").textContent =
+      `${META.season} Week ${META.week} · ${RAW.length} players · generated ${META.generated_at.slice(0,10)}`;
+    if (META.cold_start) {
+      document.getElementById("banner").innerHTML =
+        `<div class="banner"><strong>Week 1 — cold start.</strong> No games have
+         been played this season, so these rest on last season's closing form,
+         depth chart and draft capital rather than current-season usage. This is
+         the least informed week of the year; expect the ordering to shift once
+         real snaps exist.</div>`;
+    }
+    if (META.measured) {
+      document.getElementById("biasline").textContent =
+        POS.filter(p => META.measured[p])
+           .map(p => `${p} ${META.measured[p].bias.toFixed(1)}`).join(", ") + " points";
+      document.getElementById("maeline").textContent =
+        POS.filter(p => META.measured[p])
+           .map(p => `${p} ${META.measured[p].mae.toFixed(1)}`).join(", ") + " points";
+    }
+  }
+  render();
+}).catch(e => {
+  document.getElementById("meta").textContent = "Failed to load: " + e;
+});
+
+for (const id of ["filter","q","limit"])
+  document.getElementById(id).addEventListener("input", render);
+</script>
