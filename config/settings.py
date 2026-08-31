@@ -856,6 +856,22 @@ PRESERVE_PERSONNEL_MISSINGNESS = os.getenv("NFL_PRESERVE_PERSONNEL_MISSINGNESS",
 # GAPS.md 2026-08-29.
 PRESERVE_PRIOR_WEEK_MISSINGNESS = os.getenv("NFL_PRESERVE_PRIOR_WEEK_MISSINGNESS", "1") == "1"
 
+# How the log1p target transform is handled. Training on log1p(y) and inverting
+# with expm1 estimates a conditional GEOMETRIC mean, which sits below the
+# arithmetic mean by Jensen's inequality -- so predictions come out low, and
+# most so where outcomes are most volatile.
+#
+# Measured on the 2026-08-30 serving backtest: QB -19% relative bias, RB -37%,
+# WR -40%, TE -39%. QB is the only position whose 1-week model does NOT use the
+# transform, and it has roughly half the bias of the others.
+#
+#   "on"        transform, invert with expm1 (historical behaviour)
+#   "smearing"  transform, invert with expm1 x Duan smearing factor fitted on
+#               out-of-fold residuals -- corrects the retransformation bias
+#               without assuming a residual distribution
+#   "off"       never transform
+TARGET_TRANSFORM_MODE = os.getenv("NFL_TARGET_TRANSFORM_MODE", "smearing")
+
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

@@ -13138,3 +13138,82 @@ Honest limit: the "discriminates between players" test would NOT have caught
 defect 2 on its own. Across 200 players the broken predictions still had
 std 11.76; only the top of the board was flat. The scale and share assertions
 are what catch it.
+
+## Weekly predictions were biased low; log1p retransformation was most of it (2026-08-31)
+
+### The bias
+
+The serving backtest showed every position predicting well under actual:
+
+    pos   bias   pred_mean   actual_mean   relative
+    QB   -2.51     10.54        13.05        -19%
+    RB   -2.95      5.10         8.05        -37%
+    WR   -2.42      3.68         6.09        -40%
+    TE   -1.70      2.62         4.32        -39%
+
+### Diagnosis
+
+Training on log1p(y) and inverting with expm1 estimates a conditional GEOMETRIC
+mean, which by Jensen's inequality sits below the arithmetic mean the
+prediction is meant to be. The gap grows with residual variance.
+
+The tell was the relative column: QB, the only position whose SAVED 1-week
+model carries no transform, had roughly half the relative bias of the other
+three. This also explains GAPS.md 7.11, where a 100-trial Optuna search could
+not move the bias -- no hyperparameter can undo a retransformation error,
+because it is arithmetic rather than fit quality.
+
+### Fix
+
+Duan (1983) smearing: multiply the back-transformed prediction by the mean of
+exp(residual) in log space, fitted on OUT-OF-FOLD residuals. Non-parametric,
+which matters because fantasy scoring is not lognormal, so a closed-form
+sigma^2/2 correction would be wrong. Clipped to [1.0, 3.0]: a correction should
+be a nudge, and a factor outside that means something else is broken.
+
+Behind TARGET_TRANSFORM_MODE ("on" | "smearing" | "off"), now defaulting to
+"smearing".
+
+### Validation, on a season the model never saw
+
+Trained 2018-2024 with --test-season 2025, then backtested serving on 2025
+weeks 6/10/14. Same window, same holdout, transform mode the only difference:
+
+    pos   MAE base  MAE smear    dMAE  |  bias base  bias smear  bias cut
+    QB      7.089     7.089    +0.000  |    -1.295     -1.295         0%
+    RB      4.637     4.430    -0.207  |    -2.977     -1.623        45%
+    WR      4.102     4.029    -0.073  |    -2.555     -1.454        43%
+    TE      3.061     2.998    -0.063  |    -1.903     -1.215        36%
+
+Both calibration AND accuracy improved for all three transformed positions --
+MAE was expected to worsen slightly, since correcting toward the mean usually
+costs on a skewed target, and it did not. QB was BIT-IDENTICAL across arms
+(same MAE, bias and pred_mean to three decimals), which is the control: its
+saved model has active=False, so there was nothing to correct.
+
+The effect also replicated: an earlier leaked run (2025 inside training) gave
+45/47/44% bias cuts against 45/43/36% here.
+
+### METHODOLOGICAL NOTE on the earlier backtest
+
+The first serving backtests scored models trained on 2018-2025 against 2025.
+`as_of` truncation removes the target week from PLAYER HISTORY but not from the
+MODEL's training data, so those absolute numbers were optimistic. The A/B
+comparison stayed valid (both arms leaked identically), and re-running clean
+moved RB/WR/TE MAE by <0.08 -- so the leak was doing little work -- but QB
+degraded 6.66 -> 7.09, its largest discrepancy.
+
+### NOT FIXED: transform activation is unstable across training windows
+
+Whether a position gets log-transformed depends on the measured skewness of
+that window's targets, so it flips between retrains. QB 1w was transformed on
+some builds and not others. Nothing surfaces this, and it silently changes bias
+behaviour from one retrain to the next. Worth pinning per position rather than
+re-deciding it from data each time.
+
+### Residual bias remains
+
+Smearing corrects the retransformation component only. Bias is still -1.2 to
+-1.6 for RB/WR/TE and -1.30 for QB, which has no transform at all. The likely
+remaining cause is the MAE/Huber objective targeting a conditional median on a
+right-skewed target (7.11). Not addressed.

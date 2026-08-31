@@ -45,8 +45,13 @@ class TargetTransformer:
     def __init__(self):
         self.shift = 0.0
         self.active = False  # Whether transformation is actually applied
+        self.smearing = 1.0  # Duan smearing factor, 1.0 = no correction
 
     def fit_transform(self, y: np.ndarray) -> np.ndarray:
+        from config.settings import TARGET_TRANSFORM_MODE
+        if TARGET_TRANSFORM_MODE == "off":
+            self.active = False
+            return y.copy()
         skewness = float(np.nanmean(((y - np.nanmean(y)) / max(np.nanstd(y), 1e-8)) ** 3))
         if abs(skewness) < 0.5:
             self.active = False
@@ -55,10 +60,39 @@ class TargetTransformer:
         self.shift = max(0.0, -np.nanmin(y) + 1.0)
         return np.log1p(y + self.shift)
 
+    def fit_smearing(self, y_true_log: np.ndarray, y_pred_log: np.ndarray) -> None:
+        """Duan's smearing estimator, fitted on out-of-fold residuals.
+
+        Training on log1p(y) and inverting with expm1 estimates a CONDITIONAL
+        GEOMETRIC MEAN, which by Jensen's inequality lies below the arithmetic
+        mean the prediction is supposed to be. The gap grows with residual
+        variance, so it is largest exactly where outcomes are most volatile.
+
+        Measured on the 2026-08-30 serving backtest, relative bias by position:
+        QB -19%, RB -37%, WR -40%, TE -39% -- and QB is the ONLY position whose
+        1-week model does not use this transform. That is the signature.
+
+        Duan (1983) corrects it non-parametrically: multiply the back-
+        transformed prediction by the mean of exp(residual) in log space, which
+        needs no distributional assumption about the residuals.
+        """
+        from config.settings import TARGET_TRANSFORM_MODE
+        if not self.active or TARGET_TRANSFORM_MODE != "smearing":
+            self.smearing = 1.0
+            return
+        resid = np.asarray(y_true_log, dtype=float) - np.asarray(y_pred_log, dtype=float)
+        resid = resid[np.isfinite(resid)]
+        if len(resid) < 20:
+            self.smearing = 1.0
+            return
+        factor = float(np.mean(np.exp(resid)))
+        # Guard against a pathological fit; a correction should be a nudge.
+        self.smearing = float(np.clip(factor, 1.0, 3.0))
+
     def inverse_transform(self, y_transformed: np.ndarray) -> np.ndarray:
         if not self.active:
             return y_transformed
-        return np.expm1(y_transformed) - self.shift
+        return np.expm1(y_transformed) * self.smearing - self.shift
 # Ensemble weights: 4-model when LightGBM available, else original 3-model
 if HAS_LIGHTGBM:
     ENSEMBLE_WEIGHTS_1W = {"random_forest": 0.20, "xgboost": 0.30, "lightgbm": 0.25, "ridge": 0.25}
@@ -426,6 +460,18 @@ class PositionModel:
                 weights = [ENSEMBLE_WEIGHTS_1W.get(k, 1.0 / n_base) for k in base_keys[:n_base]]
                 oof_ensemble = np.average(oof_preds[oof_valid], axis=1, weights=weights)
             oof_y = y_train_inner[oof_valid]
+
+            # Fit the smearing factor here: oof_y and oof_ensemble are both in
+            # MODEL space (log1p when the transform is active), which is where
+            # the residuals have to be measured. Out-of-fold rather than
+            # in-sample, so the factor is not fitted on predictions the model
+            # has already seen.
+            tt_fit = getattr(self, "target_transformer", None)
+            if tt_fit is not None:
+                tt_fit.fit_smearing(oof_y, oof_ensemble)
+                if getattr(tt_fit, "smearing", 1.0) != 1.0:
+                    print(f"  Target smearing factor: {tt_fit.smearing:.4f} "
+                          f"(corrects log1p retransformation bias)")
 
             # Isotonic calibration: correct systematic biases in OOF predictions
             try:
