@@ -120,3 +120,57 @@ def test_smearing_factor_is_clipped(mode):
     y_log = tt.fit_transform(_skewed())
     tt.fit_smearing(y_log, y_log - 5.0)   # absurd residuals
     assert 1.0 <= tt.smearing <= 3.0
+
+
+# ---------------------------------------------------------------------------
+# Activation pinning
+#
+# Activation used to be decided from measured target skewness, which made it
+# data-dependent: QB 1w was transformed when trained on 2018-2024 and not on
+# 2018-2025. Since the transform carries a ~20-25% smearing correction, a
+# position could silently gain or lose that correction between retrains.
+# ---------------------------------------------------------------------------
+
+def _symmetric(n=4000, seed=3):
+    return np.random.default_rng(seed).normal(10, 2, n)
+
+
+def test_pin_overrides_skew_in_both_directions(mode, monkeypatch):
+    mode("smearing")
+    monkeypatch.setattr(settings, "TARGET_TRANSFORM_POSITIONS",
+                        {"QB": False, "RB": True})
+
+    off = TargetTransformer()
+    off.fit_transform(_skewed(), position="QB")
+    assert not off.active, "pinned OFF must win against a skewed target"
+
+    on = TargetTransformer()
+    on.fit_transform(_symmetric(), position="RB")
+    assert on.active, "pinned ON must win against a symmetric target"
+
+
+def test_unlisted_position_falls_back_to_skew(mode, monkeypatch):
+    mode("smearing")
+    monkeypatch.setattr(settings, "TARGET_TRANSFORM_POSITIONS", {"QB": False})
+
+    t1 = TargetTransformer(); t1.fit_transform(_skewed(), position="K")
+    t2 = TargetTransformer(); t2.fit_transform(_symmetric(), position="K")
+    assert t1.active and not t2.active
+
+
+def test_production_pin_matches_the_validated_build():
+    """The shipped pin must encode what the validated models actually do.
+
+    Measured on the 2026-08-31 production build (2018-2025, smearing):
+    QB inactive on both horizons, RB/WR/TE active on both.
+    """
+    assert settings.TARGET_TRANSFORM_POSITIONS == {
+        "QB": False, "RB": True, "WR": True, "TE": True}
+
+
+def test_no_pin_configured_restores_skew_behaviour(mode, monkeypatch):
+    mode("smearing")
+    monkeypatch.setattr(settings, "TARGET_TRANSFORM_POSITIONS", None)
+    t = TargetTransformer()
+    t.fit_transform(_skewed(), position="QB")
+    assert t.active, "with no pin, a skewed QB target should activate"

@@ -13217,3 +13217,33 @@ Smearing corrects the retransformation component only. Bias is still -1.2 to
 -1.6 for RB/WR/TE and -1.30 for QB, which has no transform at all. The likely
 remaining cause is the MAE/Huber objective targeting a conditional median on a
 right-skewed target (7.11). Not addressed.
+
+### Transform activation is now PINNED per position (2026-08-31)
+
+Previously listed above as "NOT FIXED". Now fixed.
+
+`TARGET_TRANSFORM_POSITIONS = {"QB": False, "RB": True, "WR": True, "TE": True}`
+encodes what the validated production build settled on, verified per position
+AND horizon (QB inactive on both 1w and 4w, RB/WR/TE active on both, so
+per-position granularity suffices).
+
+The skew check still runs, purely so a disagreement is REPORTED:
+
+    NOTE: QB target skew=3.22 would activate the log1p transform, but it is
+    pinned OFF (TARGET_TRANSFORM_POSITIONS). Honouring the pin so the decision
+    cannot drift between training windows.
+
+Pinning alone would have made the flip impossible AND invisible. This makes it
+impossible but visible: if the data starts genuinely disagreeing with the pin,
+that is worth knowing, and it is exactly what nobody could see before.
+
+Why it mattered: the transform carries a 20-25% smearing correction, so a
+position could silently gain or lose that correction between retrains purely
+because a new season shifted measured skewness. That is what happened to QB
+between the 2018-2024 and 2018-2025 windows -- a 20% swing in prediction scale
+from a decision nobody made and nothing logged.
+
+Verified end to end: a full retrain under the pin reproduced the transform
+state and smearing factors bit-identically (1.2246 / 1.2554 / 1.2149) with no
+disagreements reported. Setting the dict to None restores skew-based behaviour;
+unlisted positions fall back to it.

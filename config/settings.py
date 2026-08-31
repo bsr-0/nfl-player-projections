@@ -872,6 +872,25 @@ PRESERVE_PRIOR_WEEK_MISSINGNESS = os.getenv("NFL_PRESERVE_PRIOR_WEEK_MISSINGNESS
 #   "off"       never transform
 TARGET_TRANSFORM_MODE = os.getenv("NFL_TARGET_TRANSFORM_MODE", "smearing")
 
+# Which positions get the log1p target transform, PINNED rather than re-decided
+# from data on every training run.
+#
+# TargetTransformer originally activated on measured target skewness
+# (|skew| >= 0.5). That is data-dependent, so the decision flipped between
+# training windows: QB 1w was transformed when trained on 2018-2024 and not on
+# 2018-2025. Since the transform (and therefore the smearing correction that
+# offsets its bias) changes prediction scale, a position could silently gain or
+# lose a ~20% calibration correction from one retrain to the next, with nothing
+# reporting it.
+#
+# Values below are what the validated 2026-08-31 production build settled on,
+# consistent across both windows for the SAVED models:
+#     QB inactive (both horizons), RB/WR/TE active (both horizons)
+#
+# Set to None to restore the old behaviour of deciding from skewness. A
+# position absent from this dict also falls back to the skew check.
+TARGET_TRANSFORM_POSITIONS = {"QB": False, "RB": True, "WR": True, "TE": True}
+
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

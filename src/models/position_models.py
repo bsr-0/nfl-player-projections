@@ -47,13 +47,47 @@ class TargetTransformer:
         self.active = False  # Whether transformation is actually applied
         self.smearing = 1.0  # Duan smearing factor, 1.0 = no correction
 
-    def fit_transform(self, y: np.ndarray) -> np.ndarray:
-        from config.settings import TARGET_TRANSFORM_MODE
+    def fit_transform(self, y: np.ndarray, position: str = None) -> np.ndarray:
+        """Transform the target, using the PINNED per-position decision.
+
+        Deciding activation from measured skewness makes it data-dependent, so
+        it flipped between training windows: QB 1w was transformed when trained
+        on 2018-2024 and not on 2018-2025. Because the transform carries a
+        ~20-25% smearing correction to offset its retransformation bias, a
+        position could silently gain or lose that correction from one retrain to
+        the next, with nothing reporting it.
+
+        The pin is authoritative when the position is listed. The skew check
+        still runs, purely so a disagreement is REPORTED rather than silently
+        resolved -- if the data starts disagreeing with the pin, that is worth
+        knowing, and it is exactly what nobody could see before.
+        """
+        from config.settings import TARGET_TRANSFORM_MODE, TARGET_TRANSFORM_POSITIONS
         if TARGET_TRANSFORM_MODE == "off":
             self.active = False
             return y.copy()
+
         skewness = float(np.nanmean(((y - np.nanmean(y)) / max(np.nanstd(y), 1e-8)) ** 3))
-        if abs(skewness) < 0.5:
+        skew_says = abs(skewness) >= 0.5
+
+        pinned = None
+        if TARGET_TRANSFORM_POSITIONS and position:
+            pinned = TARGET_TRANSFORM_POSITIONS.get(position)
+
+        if pinned is None:
+            use = skew_says
+        else:
+            use = bool(pinned)
+            if use != skew_says:
+                print(
+                    f"  NOTE: {position} target skew={skewness:.2f} would "
+                    f"{'activate' if skew_says else 'skip'} the log1p transform, "
+                    f"but it is pinned {'ON' if use else 'OFF'} "
+                    f"(TARGET_TRANSFORM_POSITIONS). Honouring the pin so the "
+                    f"decision cannot drift between training windows."
+                )
+
+        if not use:
             self.active = False
             return y.copy()
         self.active = True
@@ -272,7 +306,7 @@ class PositionModel:
 
         # Apply target transformation for right-skewed distributions
         self.target_transformer = TargetTransformer()
-        y_np = self.target_transformer.fit_transform(y_np)
+        y_np = self.target_transformer.fit_transform(y_np, position=self.position)
         if self.target_transformer.active:
             print(f"  Target transformation: log1p applied (skewed distribution)")
 
