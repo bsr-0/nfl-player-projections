@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -92,6 +93,37 @@ def _protect_data_dir():
         return snap
 
     before = _snapshot()
+
+    # Content backup for PRE-EXISTING untracked files.
+    #
+    # Restoring an untracked file by deleting it is only correct when the file
+    # did not exist beforehand. The original code deleted every untracked file
+    # in `touched`, and `touched` includes files that existed before and were
+    # merely MODIFIED. Model .joblib artifacts are gitignored, therefore
+    # untracked -- so on 2026-08-30 a fold run leaked writes into the real
+    # MODELS_DIR and this "restore" DESTROYED every weekly model
+    # (multiweek_*.joblib, model_*_1w.joblib). load_models() then fell back to
+    # stale component predictors while still reporting success, and a serving
+    # backtest was run against the wrong models and reported as validation.
+    #
+    # Pre-existing untracked files are now copied aside and copied back.
+    # git checkout still handles tracked files; deletion is now reserved for
+    # files that genuinely did not exist before.
+    _backup_dir = Path(tempfile.mkdtemp(prefix="protect_data_dir_"))
+    _backed_up: Dict[Path, Path] = {}
+    for _p in before:
+        rel = _p.relative_to(Path.cwd()) if _p.is_absolute() else _p
+        if subprocess.run(["git", "ls-files", "--error-unmatch", str(rel)],
+                          capture_output=True, cwd=Path.cwd()).returncode == 0:
+            continue  # tracked: git can restore it
+        dest = _backup_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(_p, dest)
+            _backed_up[rel] = dest
+        except OSError as e:
+            logger.warning("could not back up %s (%s); it is at risk", _p, e)
+
     try:
         yield
     finally:
@@ -100,7 +132,7 @@ def _protect_data_dir():
         if touched:
             logger.warning(
                 "%d allowlisted model-artifact file(s) were written despite "
-                "MODELS_DIR redirection — restoring via git: %s",
+                "MODELS_DIR redirection — restoring: %s",
                 len(touched), [str(p) for p in touched],
             )
             tracked, untracked = [], []
@@ -115,7 +147,18 @@ def _protect_data_dir():
                 subprocess.run(["git", "checkout", "--", *[str(p) for p in tracked]],
                                 check=True, cwd=Path.cwd())
             for p in untracked:
-                (Path.cwd() / p).unlink(missing_ok=True)
+                # `p` is repo-relative here, and _backed_up is keyed the same
+                # way. Keying the backup map by absolute path and looking it up
+                # by relative path (or vice versa) makes every lookup miss and
+                # silently reverts this to the deleting behaviour it replaced.
+                abs_p = Path.cwd() / p
+                src = _backed_up.get(p)
+                if src is not None and src.exists():
+                    abs_p.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, abs_p)   # existed before: put it back
+                else:
+                    abs_p.unlink(missing_ok=True)  # created by the fold: remove
+        shutil.rmtree(_backup_dir, ignore_errors=True)
 
 DEFAULT_VALIDATION_SEASONS = (2023, 2024, 2025)
 COMPARISON_OUTPUT_PATH = Path("data/experiments/phase2_single_week_comparison.csv")

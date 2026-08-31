@@ -204,23 +204,36 @@ class NFLPredictor:
         results["scoring_format"] = scoring_format
         return results
 
-    def predict(self, n_weeks: int = 1, 
+    def predict(self, n_weeks: int = 1,
                 position: str = None,
                 player_name: str = None,
                 top_n: int = 50,
-                scoring_format: str = "ppr") -> pd.DataFrame:
+                scoring_format: str = "ppr",
+                as_of: Optional[Tuple[int, int]] = None) -> pd.DataFrame:
         """
         Make predictions for specified parameters.
-        
+
         Args:
             n_weeks: Number of weeks to predict (1-18)
             position: Optional position filter
             player_name: Optional specific player
             top_n: Number of top players to return
             scoring_format: 'ppr', 'half_ppr', or 'standard'
-            
+            as_of: (season, week) to predict AS IF standing before that week.
+                Player history is truncated to games strictly before it, so the
+                serving path can be scored against outcomes that already
+                happened. Default None = predict the real upcoming week.
+
         Returns:
             DataFrame with predictions
+
+        On `as_of`: without it this method is structurally untestable against
+        outcomes -- it always targets `get_prediction_target_week()`, so there
+        is no completed week to compare against. That is how two serving
+        defects (a dead call, then 8x-inflated predictions from position-local
+        team shares) survived in production with a green test suite. Everything
+        validated before 2026-08-30 measured the TRAINING pipeline; the serving
+        path was never scored.
         """
         if not self.is_initialized:
             if not self.initialize():
@@ -230,7 +243,10 @@ class NFLPredictor:
         n_weeks = max(1, min(n_weeks, MAX_PREDICTION_WEEKS))
         
         # Prediction target week (upcoming game) and ensure schedule is loaded when available
-        pred_season, pred_week = get_prediction_target_week()
+        if as_of is not None:
+            pred_season, pred_week = int(as_of[0]), int(as_of[1])
+        else:
+            pred_season, pred_week = get_prediction_target_week()
         try:
             from src.utils.data_manager import DataManager
             DataManager().ensure_schedule_loaded(pred_season)
@@ -279,6 +295,25 @@ class NFLPredictor:
                 print(f"No player found matching '{player_name}'")
                 return pd.DataFrame()
         
+        # Backtest truncation, BEFORE feature engineering.
+        #
+        # Cut every row from the target week onward, across all positions, so
+        # rolling windows, team shares and opponent stats are all built from
+        # games that had actually been played when the prediction would have
+        # been made. Truncating after feature engineering would leave the
+        # target week inside every rolling mean -- the model would be shown the
+        # answer and the backtest would report a fictitious accuracy.
+        if as_of is not None and {"season", "week"} <= set(player_data.columns):
+            before = len(player_data)
+            s = pd.to_numeric(player_data["season"], errors="coerce")
+            w = pd.to_numeric(player_data["week"], errors="coerce")
+            player_data = player_data[(s < pred_season) | ((s == pred_season) & (w < pred_week))]
+            print(f"  as_of {pred_season} wk {pred_week}: kept {len(player_data)} of "
+                  f"{before} rows (games completed before the target week)")
+            if player_data.empty:
+                print("  no history before the target week")
+                return pd.DataFrame()
+
         # Prepare features on the FULL multi-position frame, so team-relative
         # denominators are the real ones.
         player_data = self._prepare_features(player_data)

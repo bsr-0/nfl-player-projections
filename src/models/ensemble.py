@@ -300,7 +300,43 @@ class EnsemblePredictor:
                     reasons.append("horizon_module_missing")
                 self.horizon_availability[position]["deep_18w"] = "disabled_or_unavailable:" + ",".join(reasons)
 
-        self.is_loaded = len(self.position_models) > 0 or len(self.single_week_models) > 0 or len(self.component_predictors) > 0
+        # A weekly model is REQUIRED for is_loaded. Component predictors alone
+        # are not enough, and used to be.
+        #
+        # On 2026-08-30 the multiweek/1w .joblib artifacts were destroyed
+        # mid-session (fold runs writing into the real MODELS_DIR). load_models
+        # then reported is_loaded=True on the strength of component_*.json
+        # written 2026-08-29 13:56 -- artifacts of a mode retired earlier that
+        # same day -- and predict() silently served them. A backtest was run
+        # against those stale models and reported as validation of the current
+        # ones. Reporting success with zero weekly models is what made that
+        # possible.
+        _has_weekly = len(self.position_models) > 0 or len(self.single_week_models) > 0
+        self.is_loaded = _has_weekly
+
+        _ptc = MODEL_CONFIG.get("position_target_type", {})
+        _component_positions = [p for p, t in _ptc.items() if t == "component"]
+        if self.component_predictors and not _component_positions:
+            # Loaded, but nothing is configured to use them. Say so rather than
+            # letting them stand in for models that are missing.
+            print(
+                f"WARNING: found component predictors for "
+                f"{sorted(self.component_predictors)} but no position is in "
+                f"component mode (position_target_type={_ptc}). These are stale "
+                f"artifacts of a retired mode and will NOT be used."
+            )
+            self.component_predictors = {}
+
+        if not self.is_loaded:
+            missing = [p for p in positions
+                       if p not in self.position_models
+                       and p not in self.single_week_models]
+            print(
+                f"ERROR: no weekly models could be loaded (missing for "
+                f"{missing}). Expected {MODELS_DIR}/multiweek_<pos>.joblib or "
+                f"model_<pos>_1w.joblib. Run `python -m src.models.train` "
+                f"before predicting; serving cannot proceed."
+            )
 
         # Load adaptive ensemble weights if available
         self.adaptive_weights = self._load_adaptive_weights()
