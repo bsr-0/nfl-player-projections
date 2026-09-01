@@ -229,19 +229,30 @@ fetch("data/weekly_meta.json")
         withheld until that model is driving the page. Season-total accuracy is
         on the <a href="draft.html" style="color:#60a5fa">draft board</a>.`;
     }
-    if (meta.measured) {
-      document.getElementById("biasline").textContent =
-        POS.filter(p => meta.measured[p])
-           .map(p => `${p} ${meta.measured[p].bias.toFixed(1)}`).join(", ") + " points";
-      document.getElementById("maeline").textContent =
-        POS.filter(p => meta.measured[p])
-           .map(p => `${p} ${meta.measured[p].mae.toFixed(1)}`).join(", ") + " points";
+    // Only fill these when the weekly model is actually driving the page. In
+    // prorated mode the paragraphs above are rewritten and the spans they
+    // contained no longer exist -- writing to them threw a TypeError that was
+    // swallowed by the catch below, so the table never loaded at all.
+    // Null-guarded regardless: a note rewrite must not be able to break data
+    // rendering again.
+    if (meta.measured && !prorated) {
+      const bl = document.getElementById("biasline");
+      const ml = document.getElementById("maeline");
+      const fmt = (k) => POS.filter(p => meta.measured[p])
+        .map(p => `${p} ${meta.measured[p][k].toFixed(1)}`).join(", ") + " points";
+      if (bl) bl.textContent = fmt("bias");
+      if (ml) ml.textContent = fmt("mae");
     }
     return loadWeek(meta.weeks[0]);
   })
   .catch(e => {
+    // Surface the real error. This handler previously hid a TypeError thrown by
+    // the page's own note-rewriting code behind a message blaming missing data,
+    // so the page looked like it had no payload when the payload was fine.
+    console.error("weekly.html failed to render:", e);
     document.getElementById("meta").textContent =
-      "Failed to load: " + e + " — run scripts/generate_weekly_data.py";
+      "Failed to render: " + (e && e.message ? e.message : e)
+      + " — data may be fine; check the console.";
   });
 
 for (const id of ["filter","q","limit"])
