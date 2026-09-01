@@ -46,12 +46,22 @@
   .flag { color:var(--warn); font-size:12px; }
   .note { padding:14px 24px; color:var(--dim); font-size:12px; max-width:900px; }
   .note strong { color:var(--fg); }
+  .sitenav { display:flex; gap:6px; padding:10px 0 0; }
+  .sitenav a { border:1px solid var(--line); background:var(--panel);
+               color:var(--dim); padding:6px 14px; border-radius:8px;
+               font-size:13px; text-decoration:none; }
+  .sitenav a.current { color:var(--fg); border-color:#3b82f6; font-weight:600; }
   #tbl-wrap { max-height:70vh; overflow:auto; }
 </style>
 
 <header>
   <h1>2026 Draft Board</h1>
   <div class="sub" id="meta">loading…</div>
+  <nav class="sitenav">
+    <a href="index.html">Season</a>
+    <a href="draft.html" class="current">Draft board</a>
+    <a href="weekly.html">Weekly</a>
+  </nav>
 </header>
 
 <div class="controls">

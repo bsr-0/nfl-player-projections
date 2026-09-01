@@ -1,14 +1,50 @@
 {
   "season": 2026,
-  "week": 1,
-  "cold_start": true,
-  "generated_at": "2026-08-31T23:03:47+00:00",
+  "mode": "season_prorated",
+  "weeks": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
   "counts": {
-    "QB": 102,
-    "RB": 202,
-    "WR": 300,
-    "TE": 165
+    "1": 461,
+    "2": 461,
+    "3": 461,
+    "4": 461,
+    "5": 434,
+    "6": 407,
+    "7": 400,
+    "8": 395,
+    "9": 432,
+    "10": 407,
+    "11": 377,
+    "12": 461,
+    "13": 404,
+    "14": 432,
+    "15": 461,
+    "16": 461,
+    "17": 461,
+    "18": 461
   },
+  "games_per_season": 17,
+  "completed_game_rows": 0,
+  "has_intervals": false,
+  "generated_at": "2026-09-01T00:46:14+00:00",
   "measured": {
     "QB": {
       "mae": 7.09,
@@ -27,5 +63,5 @@
       "bias": -1.22
     }
   },
-  "model": "weekly ensemble (1w horizon), log1p+smearing calibration"
+  "model": "season model (Step 8) total / 17"
 }

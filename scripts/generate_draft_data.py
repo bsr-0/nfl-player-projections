@@ -399,7 +399,7 @@ def generate_model_performance():
 
     out_path = DATA_DIR / "model_performance.json"
     with open(out_path, "w") as f:
-        json.dump(payload, f, indent=2)
+        json.dump(_json_safe(payload), f, indent=2, allow_nan=False)
     print(f"  Wrote model_performance.json ({len(payload.get('per_player_season_totals', []))} players, season {prev_season})")
 
 
@@ -802,7 +802,7 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
             })
         out_path = DATA_DIR / f"players_{pos}.json"
         with open(out_path, "w") as f:
-            json.dump(players, f, indent=2)
+            json.dump(_json_safe(players), f, indent=2, allow_nan=False)
         n_preseason = sum(1 for p in players if p["projection_source"] == "preseason_model")
         n_weekly = sum(1 for p in players if p["projection_source"] == "weekly_18w")
         print(f"  Wrote {len(players)} players to {out_path.name}"
@@ -832,7 +832,7 @@ def generate_schedule_impact(upcoming_season: int, schedule_available: bool):
         }
     out_path = DATA_DIR / "schedule_impact.json"
     with open(out_path, "w") as f:
-        json.dump(payload, f, indent=2)
+        json.dump(_json_safe(payload), f, indent=2, allow_nan=False)
     print(f"  Wrote {out_path.name}")
 
 
@@ -919,7 +919,7 @@ def generate_model_metadata_frontend(upcoming_season: int, prev_season: int,
     }
     out_path = DATA_DIR / "draft_model_metadata.json"
     with open(out_path, "w") as f:
-        json.dump(payload, f, indent=2)
+        json.dump(_json_safe(payload), f, indent=2, allow_nan=False)
     print(f"  Wrote {out_path.name}")
 
 
@@ -964,6 +964,26 @@ def schedule_transition_check(upcoming_season: int, schedule_available: bool):
             except Exception:
                 pass
         print()
+
+
+
+def _json_safe(obj):
+    """Replace NaN/Inf with None so the payload is VALID JSON.
+
+    Python's json.dump emits bare `NaN`/`Infinity` by default. That is a
+    non-standard extension: Python can read it back, but a browser's
+    JSON.parse rejects it outright. docs/data/players_*.json shipped with
+    13-58 NaN tokens each, so docs/draft.html failed to parse them and
+    rendered "Failed to load" for every visitor (found 2026-08-31).
+    """
+    import math
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
 
 
 def main():

@@ -194,6 +194,28 @@
     .two-col { grid-template-columns: 1fr; }
   }
 
+  /* Cross-page navigation. Added 2026-08-31 with explicit approval to touch
+     this otherwise-frozen file (CLAUDE.md section 9); scoped to a nav strip so
+     no table, data or render logic is affected. */
+  .sitenav {
+    display: flex;
+    gap: 6px;
+    padding: 10px 0 0;
+  }
+  .sitenav a {
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+  .sitenav a.current {
+    color: var(--text-primary);
+    border-color: var(--series-1);
+    font-weight: 600;
+  }
   .tabs {
     display: flex;
     gap: 6px;
@@ -246,6 +268,11 @@
 <header>
   <h1>2026 Season Projections</h1>
   <p id="source-line">Loading&hellip;</p>
+  <nav class="sitenav">
+    <a href="index.html" class="current">Season</a>
+    <a href="draft.html">Draft board</a>
+    <a href="weekly.html">Weekly</a>
+  </nav>
 </header>
 
 <main>
