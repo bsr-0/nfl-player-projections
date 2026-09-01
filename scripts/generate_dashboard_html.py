@@ -2261,7 +2261,12 @@ def main():
     html = generate_html(season)
 
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = DOCS_DIR / "index.html"
+    # season.html, not index.html. As of 2026-08-31 docs/index.html is a
+    # redirect to draft.html -- the draft board absorbed the season view, since
+    # it renders the same projections plus VOR, league settings, ADP and byes.
+    # Writing this dashboard to index.html would silently clobber that redirect
+    # on the next regeneration and resurrect a page the nav no longer links to.
+    out_path = DOCS_DIR / "season.html"
     out_path.write_text(html, encoding="utf-8")
 
     data_dir = DOCS_DIR / "data"
