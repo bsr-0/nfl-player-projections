@@ -19,12 +19,18 @@ from integrations.espn_fantasy import ESPNFantasyConnector
 
 def main():
     league_id = os.environ.get("ESPN_LEAGUE_ID")
-    year = os.environ.get("ESPN_YEAR", "2026")
+    year = os.environ.get("ESPN_YEAR")
     espn_s2 = os.environ.get("ESPN_S2")
     swid = os.environ.get("ESPN_SWID")
 
-    if not league_id:
-        print("Set ESPN_LEAGUE_ID (and ESPN_S2 / ESPN_SWID for a private league).")
+    missing = [n for n, v in (("ESPN_LEAGUE_ID", league_id),
+                              ("ESPN_YEAR", year)) if not v]
+    if missing:
+        # Guard ESPN_YEAR too, not just the league id. Without it an unset year
+        # reaches int(None) and dies with a TypeError about NoneType, which says
+        # nothing about which variable is missing.
+        print(f"Set {' and '.join(missing)}"
+              " (plus ESPN_S2 / ESPN_SWID for a private league).")
         sys.exit(1)
 
     connector = ESPNFantasyConnector(

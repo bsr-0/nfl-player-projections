@@ -2,6 +2,9 @@
 .env
 .env.local
 .env.*.local
+# .env.local and .env.*.local were covered, but .env.espn / .env.prod matched
+# nothing. Any .env variant is a secrets file; ignore the whole family.
+.env.*
 *.env
 !.env.example
 secrets.py
