@@ -140,13 +140,21 @@ def load_training_data(positions: list = None, min_games: int = 4,
         get_current_nfl_season,
         current_season_has_weeks_played,
         is_draft_prep_window,
+        season_has_completed_games,
     )
     current_season = get_current_nfl_season()
     # current_season_has_weeks_played() stays True for months after a season
     # ends (the season DID have weeks played), so it alone can't tell
     # "mid-season" apart from "offseason draft prep for next year" — same
     # ordering DataManager.get_train_test_seasons() already uses.
-    in_season = current_season_has_weeks_played() and not is_draft_prep_window()
+    #
+    # It is also a pure CALENDAR check, so between the nominal start of week 1
+    # and actual kickoff it claims the season is underway while no result
+    # exists. Both guards below then demand rows that cannot exist and block
+    # training outright. Require a played game, matching get_train_test_seasons.
+    in_season = (current_season_has_weeks_played()
+                 and not is_draft_prep_window()
+                 and season_has_completed_games(current_season))
     caller_set_season = _explicit_test_season or (test_season is not None)
     if in_season and not caller_set_season and auto_test_season != current_season:
         raise ValueError(

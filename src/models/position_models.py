@@ -46,6 +46,7 @@ class TargetTransformer:
         self.shift = 0.0
         self.active = False  # Whether transformation is actually applied
         self.smearing = 1.0  # Duan smearing factor, 1.0 = no correction
+        self._smear_knots = None  # (prediction centres, per-stratum factors)
 
     def fit_transform(self, y: np.ndarray, position: str = None) -> np.ndarray:
         """Transform the target, using the PINNED per-position decision.
@@ -99,34 +100,74 @@ class TargetTransformer:
 
         Training on log1p(y) and inverting with expm1 estimates a CONDITIONAL
         GEOMETRIC MEAN, which by Jensen's inequality lies below the arithmetic
-        mean the prediction is supposed to be. The gap grows with residual
-        variance, so it is largest exactly where outcomes are most volatile.
+        mean the prediction is supposed to be.
 
-        Measured on the 2026-08-30 serving backtest, relative bias by position:
-        QB -19%, RB -37%, WR -40%, TE -39% -- and QB is the ONLY position whose
-        1-week model does not use this transform. That is the signature.
+        FITTED IN STRATA, not globally. Duan's single factor assumes residuals
+        are homoscedastic in log space. They are not: residual variance grows
+        with the prediction, so one global factor under-corrects the busy end of
+        the distribution. Measured 2026-09-01 -- after global smearing the
+        models still predicted only 0.67-0.77x their OWN training target mean
+        (RB 6.45 vs 8.51, WR 4.83 vs 7.25), a shortfall a factor of ~1.22 could
+        not close because ~1.32 was needed.
 
-        Duan (1983) corrects it non-parametrically: multiply the back-
-        transformed prediction by the mean of exp(residual) in log space, which
-        needs no distributional assumption about the residuals.
+        Strata are quantiles of the PREDICTED value, which is what is available
+        at inference. Each stratum keeps its own factor; between knots the
+        factor is interpolated so the correction is continuous and cannot
+        introduce a step change in the ranking.
         """
-        from config.settings import TARGET_TRANSFORM_MODE
+        from config.settings import TARGET_TRANSFORM_MODE, SMEARING_STRATA
+        self.smearing = 1.0
+        self._smear_knots = None
         if not self.active or TARGET_TRANSFORM_MODE != "smearing":
-            self.smearing = 1.0
             return
-        resid = np.asarray(y_true_log, dtype=float) - np.asarray(y_pred_log, dtype=float)
-        resid = resid[np.isfinite(resid)]
-        if len(resid) < 20:
-            self.smearing = 1.0
+
+        yt = np.asarray(y_true_log, dtype=float)
+        yp = np.asarray(y_pred_log, dtype=float)
+        ok = np.isfinite(yt) & np.isfinite(yp)
+        yt, yp = yt[ok], yp[ok]
+        if len(yt) < 20:
             return
-        factor = float(np.mean(np.exp(resid)))
-        # Guard against a pathological fit; a correction should be a nudge.
-        self.smearing = float(np.clip(factor, 1.0, 3.0))
+
+        resid = yt - yp
+        # Global factor is retained as the fallback and as the value used when
+        # there are too few rows to stratify.
+        self.smearing = float(np.clip(np.mean(np.exp(resid)), 1.0, 3.0))
+
+        n_strata = int(SMEARING_STRATA)
+        if n_strata < 2 or len(yt) < 20 * n_strata:
+            return
+
+        # Quantile edges on the PREDICTION, since that is the only thing known
+        # at inference time.
+        edges = np.quantile(yp, np.linspace(0, 1, n_strata + 1))
+        edges = np.unique(edges)
+        if len(edges) < 3:
+            return
+
+        centres, factors = [], []
+        for i in range(len(edges) - 1):
+            lo, hi = edges[i], edges[i + 1]
+            m = (yp >= lo) & (yp <= hi) if i == len(edges) - 2 else (yp >= lo) & (yp < hi)
+            if m.sum() < 20:
+                continue
+            centres.append(float(np.median(yp[m])))
+            factors.append(float(np.clip(np.mean(np.exp(resid[m])), 1.0, 3.0)))
+        if len(centres) >= 2:
+            self._smear_knots = (np.asarray(centres), np.asarray(factors))
 
     def inverse_transform(self, y_transformed: np.ndarray) -> np.ndarray:
         if not self.active:
             return y_transformed
-        return np.expm1(y_transformed) * self.smearing - self.shift
+        knots = getattr(self, "_smear_knots", None)
+        if knots is None:
+            factor = self.smearing
+        else:
+            # np.interp holds the end factors flat outside the fitted range,
+            # which is what we want: never extrapolate a correction.
+            centres, factors = knots
+            factor = np.interp(np.asarray(y_transformed, dtype=float),
+                               centres, factors)
+        return np.expm1(y_transformed) * factor - self.shift
 # Ensemble weights: 4-model when LightGBM available, else original 3-model
 if HAS_LIGHTGBM:
     ENSEMBLE_WEIGHTS_1W = {"random_forest": 0.20, "xgboost": 0.30, "lightgbm": 0.25, "ridge": 0.25}

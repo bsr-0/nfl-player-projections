@@ -174,3 +174,66 @@ def test_no_pin_configured_restores_skew_behaviour(mode, monkeypatch):
     t = TargetTransformer()
     t.fit_transform(_skewed(), position="QB")
     assert t.active, "with no pin, a skewed QB target should activate"
+
+
+# ---------------------------------------------------------------------------
+# Stratified smearing: implemented, MEASURED, and rejected as the default.
+#
+# Fitting the Duan factor within prediction quantiles made RB and WR worse on a
+# held-out 2025 backtest (RB bias -1.62 -> -1.83, WR -1.45 -> -1.54). The
+# hypothesis that residual variance grows with the prediction was backwards:
+# fitted factors DECREASE with prediction because in log space the low-usage
+# players are the volatile ones. The code path stays, the default does not.
+# ---------------------------------------------------------------------------
+
+def test_strata_default_is_global():
+    assert settings.SMEARING_STRATA == 1, (
+        "global smearing beat stratified on the 2026-09-01 holdout backtest; "
+        "see config/settings.py for the measurements")
+
+
+def test_strata_greater_than_one_fits_per_bucket_factors(mode, monkeypatch):
+    mode("smearing")
+    monkeypatch.setattr(settings, "SMEARING_STRATA", 5)
+    y = _skewed(n=8000)
+    tt = TargetTransformer()
+    y_log = tt.fit_transform(y, position="RB")
+    rng = np.random.default_rng(7)
+    pred_log = y_log + rng.normal(0, 0.3, len(y_log))
+    tt.fit_smearing(y_log, pred_log)
+    assert tt._smear_knots is not None, "expected per-stratum knots"
+    centres, factors = tt._smear_knots
+    assert len(factors) >= 2
+    assert np.all(factors >= 1.0) and np.all(factors <= 3.0)
+
+
+def test_strata_of_one_produces_no_knots(mode, monkeypatch):
+    mode("smearing")
+    monkeypatch.setattr(settings, "SMEARING_STRATA", 1)
+    y = _skewed(n=8000)
+    tt = TargetTransformer()
+    y_log = tt.fit_transform(y, position="RB")
+    tt.fit_smearing(y_log, y_log * 0.9)
+    assert tt._smear_knots is None, "strata=1 must use the single global factor"
+    assert tt.smearing > 1.0
+
+
+def test_stratified_correction_never_extrapolates(mode, monkeypatch):
+    """Outside the fitted range the end factors are held flat.
+
+    Extrapolating a correction into prediction territory the fit never saw is
+    how a calibration step turns into a fabrication step.
+    """
+    mode("smearing")
+    monkeypatch.setattr(settings, "SMEARING_STRATA", 5)
+    y = _skewed(n=8000)
+    tt = TargetTransformer()
+    y_log = tt.fit_transform(y, position="RB")
+    rng = np.random.default_rng(8)
+    tt.fit_smearing(y_log, y_log + rng.normal(0, 0.3, len(y_log)))
+    if tt._smear_knots is None:
+        pytest.skip("no knots fitted")
+    centres, factors = tt._smear_knots
+    far_low = np.interp(centres.min() - 10.0, centres, factors)
+    far_high = np.interp(centres.max() + 10.0, centres, factors)
+    assert far_low == factors[0] and far_high == factors[-1]

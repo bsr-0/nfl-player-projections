@@ -286,3 +286,30 @@ def is_future_or_current_matchup(
     if data_season < cur_season:
         return False
     return data_week >= cur_week_num
+
+
+def season_has_completed_games(season: int) -> bool:
+    """True only if at least one game of `season` has a final score.
+
+    Deliberately reads the schedule rather than trusting the calendar: a season
+    is "in progress" when games have been PLAYED, not when the date passes a
+    nominal week-1 boundary. Everything else in this module is pure calendar
+    arithmetic, so callers that need the distinction must use this.
+
+    Fails open (returns False) if the table is unreadable, because the safe
+    default is to treat the season as not-yet-started and keep training on
+    completed history.
+    """
+    try:
+        import sqlite3
+        from config.settings import DB_PATH
+        con = sqlite3.connect(DB_PATH)
+        try:
+            n = con.execute(
+                "SELECT COUNT(*) FROM schedule WHERE season = ? "
+                "AND home_score IS NOT NULL", (int(season),)).fetchone()[0]
+        finally:
+            con.close()
+        return n > 0
+    except Exception:
+        return False

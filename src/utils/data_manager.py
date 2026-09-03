@@ -114,6 +114,12 @@ class DataManager:
         except Exception:
             return []
     
+    @staticmethod
+    def _season_has_completed_games(season: int) -> bool:
+        """Thin delegate; see nfl_calendar.season_has_completed_games."""
+        from src.utils.nfl_calendar import season_has_completed_games
+        return season_has_completed_games(season)
+
     def get_train_test_seasons(self,
                                 test_season: int = None,
                                 n_train_seasons: int = None,
@@ -160,16 +166,38 @@ class DataManager:
         # recently completed season (e.g. 2025) had weeks played — but those ended in
         # February.  During draft prep the target is the UPCOMING season (e.g. 2026),
         # and training includes all completed history (e.g. 2018–2025).
-        if is_draft_prep_window() and test_season is None:
-            test_season = get_projection_season()
+        # Extended beyond the calendar draft-prep window to cover the gap
+        # between that window closing and the season's first kickoff. On
+        # 2026-09-03 the window had closed (September) but 2026 had 0 completed
+        # games, so this fell through to in-season handling and picked the last
+        # COMPLETED season as the test set -- training on 2018-2024 and
+        # silently discarding 2025, a full season of data, from production
+        # models. The season a model should project is the one that has not
+        # been played yet, whatever the calendar calls today.
+        _projection_season = get_projection_season()
+        _pre_kickoff = not self._season_has_completed_games(_projection_season)
+        if (is_draft_prep_window() or _pre_kickoff) and test_season is None:
+            test_season = _projection_season
             # test_season (e.g. 2026) is intentionally not in available — empty test set.
         else:
-            in_season = current_season_has_weeks_played()
+            # `current_season_has_weeks_played()` is a CALENDAR check --
+            # week_num >= 1 -- and says nothing about whether a game has
+            # actually been played. Between the nominal start of week 1 and
+            # kickoff it returns True while no result exists anywhere, so the
+            # guard below demanded database rows that cannot exist and blocked
+            # all training. Hit for real on 2026-09-03: calendar week 1, but
+            # 2026 had 272 scheduled games and 0 scores, and nfl_data_py
+            # returned HTTP 404 for 2026 weekly data.
+            #
+            # Require an actual completed game before treating the season as in
+            # progress.
+            in_season = (current_season_has_weeks_played()
+                         and self._season_has_completed_games(current_season))
 
             # In-season: current season must be in DB and must be test season
             if in_season and current_season not in available:
                 raise ValueError(
-                    f"Current season {current_season} has started (week >= 1) but is not in the database. "
+                    f"Current season {current_season} has completed games but is not in the database. "
                     "Run data refresh so current season is loaded from play-by-play (e.g. python -m src.data.auto_refresh)."
                 )
             if in_season and current_season in available and test_season is None:

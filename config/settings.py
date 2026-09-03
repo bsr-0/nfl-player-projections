@@ -891,6 +891,28 @@ TARGET_TRANSFORM_MODE = os.getenv("NFL_TARGET_TRANSFORM_MODE", "smearing")
 # position absent from this dict also falls back to the skew check.
 TARGET_TRANSFORM_POSITIONS = {"QB": False, "RB": True, "WR": True, "TE": True}
 
+# Number of prediction-quantile strata used to fit the Duan smearing factor.
+# 1 = a single global factor (the original Duan estimator).
+#
+# Duan assumes residuals are homoscedastic in log space. They are not here --
+# variance grows with the prediction -- so one factor under-corrects the busy
+# end. Measured 2026-09-01: after global smearing the models still predicted
+# only 0.67-0.77x their own training target mean.
+# MEASURED 2026-09-01 and REJECTED as a default. Stratifying made RB and WR
+# worse (RB bias -1.62 -> -1.83, WR -1.45 -> -1.54) on a held-out 2025 backtest.
+#
+# The hypothesis was backwards. Fitted factors DECREASE with the prediction
+# (RB [1.283, 1.243, 1.285, 1.202, 1.120]) because in LOG space the low-usage
+# players are the volatile ones -- a 0-point week vs a 5-point week is a huge
+# log swing, while a starter moving 12 -> 18 is a small one. Stratification
+# correctly learned to lift the top end less, and the top end is where the
+# points are. A uniform factor is accidentally better.
+#
+# Kept configurable rather than deleted: the code path is measured and
+# documented, and >1 is the right tool if residuals ever become
+# heteroscedastic in the other direction.
+SMEARING_STRATA = int(os.getenv("NFL_SMEARING_STRATA", "1"))
+
 FEATURE_VERSION_FILENAME = "feature_version.txt"
 
 # =============================================================================

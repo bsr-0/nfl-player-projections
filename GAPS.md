@@ -13422,3 +13422,120 @@ this prior stands as built. Two things would change that, neither speculative:
   * the daily feed accumulating more August seasons (2026+), at which point an
     August-legal prior fit on the RAW feed rather than the weekly table
     becomes trainable on more than a single season.
+## Residual bias after smearing: diagnosed, and one fix REJECTED (2026-09-01)
+
+### Two different causes, not one
+
+`HUBER_DELTA = 5.0` is a fixed constant applied in whatever space the model
+trains in, and the four positions do not train in the same space:
+
+    pos    space      model-space RMSE   delta/RMSE
+    QB     original         7.481           0.7   <- Huber's LINEAR region active
+    RB     log1p            0.605           8.3   <- effectively squared error
+    WR     log1p            0.664           7.5   <- effectively squared error
+    TE     log1p            0.596           8.4   <- effectively squared error
+
+So GAPS 7.11's "median-seeking loss on a right-skewed target" explains QB ONLY.
+For RB/WR/TE the loss never leaves its quadratic region and is mean-seeking, so
+it cannot be their cause. One constant meaning "5 fantasy points" for QB and
+"5 log units" for everyone else is itself a latent bug of the same shape as the
+log-space metrics from 2026-08-29.
+
+### What the bias actually looks like
+
+Measured on 2025 weeks 6/10/14, bias by predicted-value quartile:
+
+            Q1 low    Q2      Q3    Q4 high
+    WR       -28%    -37%   -24%     -14%
+    TE       -34%    -39%   -28%     -15%
+
+Worst at LOW predictions, mildest at the top -- the opposite of what a loss or
+under-correction story predicts.
+
+Selection was the obvious candidate (we score only players who actually
+played, and among low-rated players the ones who played are a biased upper
+slice). REJECTED: restricting to players who appeared in all three sampled
+weeks barely moved it (all rows -19 to -22%, regulars -16 to -20%).
+
+The real anomaly is that the model under-predicts relative to ITS OWN TRAINING
+TARGETS, which rules out covariate shift:
+
+    pos   train target mean   pred mean   ratio   scored actual mean
+    QB         14.23            10.54     0.74         13.05
+    RB          8.51             6.45     0.76          8.05
+    WR          7.25             4.83     0.67          6.09
+    TE          4.39             3.36     0.77          4.32
+
+The scored population's actuals match the training mean closely; the model's
+output is simply compressed to 0.67-0.77x.
+
+### REJECTED FIX: stratified smearing
+
+Hypothesis: Duan's single factor assumes homoscedastic log residuals; if
+variance grows with the prediction, one factor under-corrects the top.
+Implemented per-quantile factors (SMEARING_STRATA), retrained 2018-2024, and
+backtested the unseen 2025.
+
+    pos    global smearing      stratified (5)
+           MAE     bias         MAE     bias
+    RB    4.430   -1.623       4.469   -1.830   worse
+    WR    4.029   -1.454       4.037   -1.540   worse
+    TE    2.998   -1.215       2.996   -1.206   unchanged
+    QB    7.089   -1.295       7.089   -1.295   control, bit-identical
+
+THE HYPOTHESIS WAS BACKWARDS. Fitted factors DECREASE with the prediction
+(RB [1.283, 1.243, 1.285, 1.202, 1.120]) because in LOG space the low-usage
+players are the volatile ones: a 0-point week versus a 5-point week is a huge
+log swing, a starter moving 12 -> 18 is a small one. Stratification correctly
+learned to lift the top end less, and the top end is where the points are. A
+uniform factor is accidentally better.
+
+Default reverted to SMEARING_STRATA=1. The code path is kept, measured and
+tested, because >1 is the right tool if residuals ever become heteroscedastic
+in the other direction.
+
+### Still unexplained
+
+Why the models compress their own output to ~0.75x when 2 of 4 base learners
+and the meta-learner all use squared error. Untested candidates: the isotonic
+calibrator (fitted in model space, monotone but free to shrink), the
+RidgeCV meta-learner shrinking OOF predictions toward their mean, and
+`_BOUNDS_PER_WEEK` clipping. Note QB shows the SAME ~0.74 ratio with no
+transform at all, so whatever it is, it is not specific to the log path.
+
+## 2026-09-03 — Season rollover blocked training, then silently dropped a season
+
+Three guards decided "is the current season underway?" from the CALENDAR
+(`current_season_has_weeks_played()` -> `week_num >= 1`). On 2026-09-03 the
+calendar said NFL week 1 while 2026 had 272 scheduled games and **zero**
+scores, and `nfl_data_py` returned HTTP 404 for 2026 weekly data. The failures
+cascaded in order:
+
+1. `DataManager.get_train_test_seasons()` raised "Current season 2026 has
+   started but is not in the database" — demanding rows that cannot exist.
+   Training was blocked outright.
+2. With that fixed, selection fell through to in-season handling and chose the
+   last COMPLETED season as test, training on 2018-2024 and **discarding 2025
+   from production models**. The run reported success; the only reason it was
+   caught was that the smearing factors matched a known holdout build.
+3. With that fixed, `load_training_data()` raised "Current season is in
+   progress but test set is empty" from its own copy of the same calendar
+   check. An empty test set is the EXPECTED state before kickoff.
+
+Fix: one implementation, `nfl_calendar.season_has_completed_games(season)`,
+reading `schedule.home_score IS NOT NULL`. All three sites call it. A season is
+in progress when a game has been PLAYED, not when a date passes week 1.
+
+Covered by `tests/test_season_rollover_selection.py` (6), including a guard
+that the two call sites cannot drift apart.
+
+**The wider lesson:** a successful-looking retrain never stated what it trained
+on. Training runs should assert their own window, not just print it.
+
+### Upstream: nfl_data_py masks fetch errors with a NameError
+
+`nfl_data_py/__init__.py:153` is `except Error as e:` — an undefined name. Any
+failure inside `import_pbp_data` surfaces as `NameError: name 'Error' is not
+defined` instead of the real cause, so our logs showed that instead of the
+HTTP 404. Third-party; not patched here. When PBP loading fails, ignore that
+message and fetch the URL directly to see what actually happened.
