@@ -40,6 +40,14 @@ def main():
         swid=swid,
     )
 
+    # Report which mode this is, because the two are indistinguishable from the
+    # output otherwise. Credentials stay OPTIONAL rather than being removed:
+    # public/private is a league setting that can change, and the connector
+    # already declares both cookies Optional. The security fix was removing the
+    # hardcoded defaults, not deleting the capability.
+    auth = "authenticated (cookies supplied)" if (espn_s2 and swid) else "anonymous (public league access)"
+    print(f"Connecting to league {league_id} for {year} - {auth}")
+
     if not connector.connect():
         print("Connection failed — check league ID, year, and cookies.")
         sys.exit(1)
