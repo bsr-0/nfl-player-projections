@@ -13539,3 +13539,16 @@ failure inside `import_pbp_data` surfaces as `NameError: name 'Error' is not
 defined` instead of the real cause, so our logs showed that instead of the
 HTTP 404. Third-party; not patched here. When PBP loading fails, ignore that
 message and fetch the URL directly to see what actually happened.
+
+### Retired players occupy ~half the QB draft board
+
+`data/players_QB.json` ships 85 QBs, of which 40 have
+`projection_source: null` and `projection_points_total: null`. They are
+retired — P.Rivers (2021), J.Johnson, A.Dalton — and carry sequential filler
+ADPs (46, 47, 48...) that make them look ranked. Same pattern at RB (58/160),
+WR (48/248), TE (13/127).
+
+Pre-existing, unrelated to the 2026-09-03 rollover fix; found while verifying
+it. The roster query has no "active in the projection season" filter. Harmless
+if the page drops null projections, misleading if it renders them as zeroes —
+UNVERIFIED which, because docs/index.html is frozen under CLAUDE.md §9.
