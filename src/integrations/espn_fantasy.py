@@ -303,6 +303,75 @@ class ESPNFantasyConnector:
             return []
 
 
+    def get_league_settings(self) -> Dict[str, Any]:
+        """Roster slots and scoring rules.
+
+        These are what make league points comparable to the model's raw
+        fantasy points: a projection is only meaningful once you know the
+        league's PPR value and how many of each slot it starts.
+        """
+        if not self.connected:
+            return {}
+
+        st = self.league.settings
+        return {
+            'name': st.name,
+            'team_count': st.team_count,
+            'scoring_type': st.scoring_type,
+            'reg_season_count': st.reg_season_count,
+            'playoff_team_count': st.playoff_team_count,
+            'playoff_matchup_period_length': st.playoff_matchup_period_length,
+            'trade_deadline': st.trade_deadline,
+            'keeper_count': st.keeper_count,
+            'faab': st.faab,
+            'acquisition_budget': st.acquisition_budget,
+            'position_slot_counts': st.position_slot_counts,
+            # Only scoring rules with a non-zero value; the full table is
+            # ~150 rows of mostly-zero stat ids and obscures the real format.
+            'scoring_format': [
+                {'abbr': i.get('abbr'), 'label': i.get('label'),
+                 'points': i.get('points')}
+                for i in st.scoring_format if i.get('points')
+            ],
+        }
+
+    def get_matchups(self) -> List[Dict[str, Any]]:
+        """Head-to-head schedule, one row per team per week.
+
+        Built from team.schedule (opponent id by week) rather than
+        box_scores(), because box scores require played games and this is
+        useful before kickoff -- the matchup schedule is fixed when the
+        league is created.
+
+        `score` and `outcome` stay None until a week is played.
+        """
+        if not self.connected:
+            return []
+
+        names = {t.team_id: t.team_name for t in self.league.teams}
+        rows = []
+        for team in self.league.teams:
+            for i, opponent in enumerate(team.schedule):
+                # Older espn_api returns opponent ids, newer returns Team
+                # objects. Accept either rather than pinning a version.
+                opp_id = getattr(opponent, 'team_id', opponent)
+                scores = getattr(team, 'scores', [])
+                outcomes = getattr(team, 'outcomes', [])
+                score = scores[i] if i < len(scores) else None
+                outcome = outcomes[i] if i < len(outcomes) else None
+                rows.append({
+                    'week': i + 1,
+                    'team_id': team.team_id,
+                    'team_name': team.team_name,
+                    'opponent_id': opp_id,
+                    'opponent_name': names.get(opp_id, 'Unknown'),
+                    # 0.0 is ESPN's placeholder for an unplayed week; keep it
+                    # NULL so an unplayed week cannot be read as a shutout.
+                    'score': score if score else None,
+                    'outcome': outcome if outcome and outcome != 'U' else None,
+                })
+        return rows
+
 def get_espn_auth_instructions() -> str:
     """Return instructions for getting ESPN authentication cookies."""
     return """
