@@ -49,6 +49,27 @@ PATTERNS = [
      "hardcoded high-entropy fallback for an environment variable"),
 ]
 
+# Paths that carry ESPN fantasy-league ("pool") data: the user's own roster,
+# lineup and matchups. Blocked by PATH rather than content, because a roster
+# JSON contains no credential shape at all -- it is ordinary-looking player
+# names -- so the scanner above would pass it straight through.
+#
+# data/espn_private/ is gitignored, so reaching this check means either
+# `git add -f` or an edited .gitignore. Both are exactly the cases worth
+# stopping. NFL data is never affected: the patterns are anchored on the
+# private directory and on league-data filenames, not on the word "roster"
+# (scripts/audit_roster_eligibility_by_position.py is NFL depth charts).
+LEAGUE_DATA_PATHS = [
+    (re.compile(r'^data/espn_private/(?!\.gitkeep$)'),
+     "ESPN league data (private directory)"),
+    (re.compile(r'(^|/)my_roster[^/]*\.json$', re.I),
+     "ESPN roster export"),
+    (re.compile(r'(^|/)espn_[^/]*\.(json|csv|parquet)$', re.I),
+     "ESPN league data export"),
+    (re.compile(r'^docs/.*\b(roster|matchup|waiver|league_id)\b[^/]*\.json$', re.I),
+     "league data inside the published site directory"),
+]
+
 # Values that look like secrets but are not. Kept explicit and short: a long
 # allowlist is how these hooks stop catching anything.
 # NOTE: reading from os.environ / getenv is deliberately NOT allowlisted. The
@@ -83,6 +104,10 @@ def main():
     for path in staged_files():
         if path.startswith("scripts/hooks/"):
             continue                      # this file describes the patterns
+        for pat, label in LEAGUE_DATA_PATHS:
+            if pat.search(path):
+                findings.append((path, label, "<staged file path>"))
+                break
         for line in staged_added_lines(path):
             if ALLOW.search(line):
                 continue
@@ -97,12 +122,14 @@ def main():
     if not findings:
         return 0
 
-    print("\n\033[31mCommit blocked: credential-shaped content in staged changes\033[0m\n")
+    print("\n\033[31mCommit blocked: secrets or private league data staged\033[0m\n")
     for path, label, line in findings:
         print(f"  {path}")
         print(f"    {label}: {line}\n")
-    print("Move the value into an environment variable, or if this is a false")
-    print("positive, commit with --no-verify.\n")
+    print("Credentials: move the value into an environment variable.")
+    print("League data: it belongs in data/espn_private/ (gitignored) and must")
+    print("             never be committed or placed under docs/.")
+    print("False positive: commit with --no-verify.\n")
     return 1
 
 

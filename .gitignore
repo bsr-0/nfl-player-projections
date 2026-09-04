@@ -138,3 +138,13 @@ docs/data/espn_*.json
 data/espn_*.json
 **/espn_cache/
 .espn_cache/
+
+# The canonical landing zone for pulled league data (config.ESPN_PRIVATE_DIR).
+# Ignored by CONTENTS rather than by filename: the sync can write whatever it
+# likes in here and stay covered, with no rule to update.
+#
+# `/dir/*` not `/dir/`, because git does not descend into an excluded
+# directory -- with `/dir/` the .gitkeep negation below is silently dead and
+# the folder vanishes from the tree entirely.
+/data/espn_private/*
+!/data/espn_private/.gitkeep

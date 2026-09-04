@@ -13,8 +13,21 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 MODELS_DIR = DATA_DIR / "models"
 
+# ESPN fantasy-league ("pool") data: the user's own roster, lineup and
+# matchups. NOT NFL data, and the published site is NFL projections only.
+#
+# The location is the safeguard. docs/ is the GitHub Pages root, and the UI
+# fetches relative paths beneath it, so a browser cannot reach anything outside
+# docs/ no matter what the page markup says. Keeping this directory under
+# data/ makes displaying league data impossible rather than merely discouraged.
+# The predecessor script wrote docs/data/my_roster.json -- inside the published
+# tree -- which is exactly the mistake this constant exists to prevent.
+#
+# Anything written here is gitignored. Do not move it under docs/.
+ESPN_PRIVATE_DIR = DATA_DIR / "espn_private"
+
 # Create directories if they don't exist
-for dir_path in [RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR]:
+for dir_path in [RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR, ESPN_PRIVATE_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
 # Database
