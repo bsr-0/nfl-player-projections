@@ -126,3 +126,15 @@ data/experiments/phase7_histnan_v3_20260827/joined_all.csv
 # Play-by-play download cache, re-fetchable from nfl_data_py on demand.
 /data/raw/pbp_advanced_*.parquet
 /data/raw/pbp_team_advanced_*.parquet
+
+# ESPN fantasy-league ("pool") data. This is the user's own team -- roster,
+# lineup, matchups -- not NFL data, and the site is NFL projections only.
+# docs/ is a published Pages directory, so anything the sync drops there would
+# go public on the next commit. Patterns cover data outputs only; the ESPN
+# source files and the *_lineup_weekly.csv backtest outputs stay tracked.
+my_roster.json
+**/my_roster*.json
+docs/data/espn_*.json
+data/espn_*.json
+**/espn_cache/
+.espn_cache/
