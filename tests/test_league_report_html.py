@@ -48,7 +48,21 @@ def _report(**kw):
              "unavailable_reason": None},
         ],
         "tough_calls": [], "waivers": [],
-        "trades": {"basis": "within-position z-score", "buy_low": [
+        "trades": {"basis": "within-position z-score", "horizon_weeks": 14,
+                   "proposals": [
+            {"with": "Immaculate Concepcion",
+             "give": {"name": "Kenneth Walker III", "position": "RB",
+                      "nfl_team": "KC", "model_ppg": 9.01, "espn_ppg": 16.06,
+                      "injury_status": "ACTIVE"},
+             "get": {"name": "Josh Jacobs", "position": "RB",
+                     "nfl_team": "GB", "model_ppg": 12.92, "espn_ppg": 15.1,
+                     "injury_status": "DAY_TO_DAY"},
+             "our_gain_per_week": 3.91, "our_gain_over_horizon": 54.7,
+             "their_gain_per_week_espn": 1.12, "horizon_weeks": 14,
+             "lineup_change": {"in": [{"name": "Josh Jacobs", "slot": "RB"}],
+                               "out": [{"name": "Kenneth Walker III",
+                                        "slot": "RB"}], "moved": []}}],
+                   "buy_low": [
             {"name": "RJ Harvey", "position": "RB", "nfl_team": "DEN",
              "fantasy_team": "Dart Vader", "model_rank": 13, "espn_rank": 42,
              "injury_status": "ACTIVE"}], "sell_high": []},
@@ -122,3 +136,33 @@ def test_the_report_directory_is_outside_the_published_tree(mod):
     """Same guarantee as the snapshot: private by location, not by discipline."""
     assert mod.REPORT_DIR.resolve().is_relative_to(ESPN_PRIVATE_DIR.resolve())
     assert (PROJECT_ROOT / "docs").resolve() not in mod.REPORT_DIR.resolve().parents
+
+
+def test_a_proposal_names_the_partner_and_both_sides(mod):
+    page = mod.render(_report())
+
+    row = re.search(r"Immaculate.*?</tr>", page, re.S).group()
+    assert "Kenneth Walker III" in row and "Josh Jacobs" in row
+    assert "+3.9" in row and "+54.7" in row and "+1.1" in row
+
+
+def test_a_proposal_says_what_it_does_to_the_lineup(mod):
+    page = mod.render(_report())
+
+    assert "Josh Jacobs starts at RB" in page
+    assert "Kenneth Walker III to the bench" in page
+
+
+def test_the_two_gains_are_kept_in_separate_columns(mod):
+    """Ours and theirs are different currencies -- never summed, never netted."""
+    page = mod.render(_report())
+
+    header = re.search(r"<th>With</th>.*?</tr>", page, re.S).group()
+    assert "You /wk" in header and "Them /wk" in header and "Over 14" in header
+
+
+def test_no_workable_trade_says_so(mod):
+    trades = dict(_report()["trades"], proposals=[])
+    page = mod.render(_report(trades=trades))
+
+    assert page.count("nothing to report") == 3   # tough calls, waivers, trades

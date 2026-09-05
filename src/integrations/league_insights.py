@@ -287,6 +287,135 @@ def trade_candidates(league: list, team_name: str, limit: int = 8,
     }
 
 
+def _repriced(players: list, key: str, ignore_bye: bool = True) -> list:
+    """The same roster valued by one number, for a like-for-like comparison.
+
+    Byes are ignored on purpose here: a trade is a season-long decision, and a
+    player whose team is off this week is not worth nothing. Injuries still
+    count, because OUT is a fact about the player rather than about the
+    calendar.
+    """
+    out = []
+    for p in players:
+        value = p.get(key)
+        status = str(p.get("injury_status") or "")
+        available = value is not None and status not in UNAVAILABLE
+        if not ignore_bye and p.get("unavailable_reason") == "BYE":
+            available = False
+        out.append(dict(p, points=value, available=available))
+    return out
+
+
+def lineup_of(players: list, slots: list, key: str = "points",
+              ignore_bye: bool = True) -> list:
+    starters, _ = optimal_lineup(_repriced(players, key, ignore_bye), slots)
+    return starters
+
+
+def lineup_value(players: list, slots: list, key: str = "points",
+                 ignore_bye: bool = True) -> float:
+    """What this roster actually scores: its best legal lineup, not its talent.
+
+    This is why no separate surplus/need heuristic is needed. A fourth running
+    back contributes exactly what he starts for -- nothing -- so trading him
+    costs nothing, and a thin position shows up as a large gain from fixing
+    it.
+    """
+    return lineup_total(lineup_of(players, slots, key, ignore_bye))
+
+
+def _lineup_change(before: list, after: list) -> dict:
+    b = {s["name"]: s["slot"] for s in before}
+    a = {s["name"]: s["slot"] for s in after}
+    return {
+        "in": [{"name": n, "slot": a[n]} for n in a if n not in b],
+        "out": [{"name": n, "slot": b[n]} for n in b if n not in a],
+        "moved": [{"name": n, "from": b[n], "to": a[n]}
+                  for n in a if n in b and a[n] != b[n]],
+    }
+
+
+def propose_trades(league: list, team_name: str, slots: list,
+                   horizon_weeks: int, limit: int = 4, min_gain: float = 0.25,
+                   per_partner: int = 1) -> list:
+    """One-for-one swaps where BOTH lineups improve, each by its own numbers.
+
+    Ours is scored with this project's projections and theirs with ESPN's, and
+    that asymmetry is the entire mechanism: a trade is only worth proposing
+    when the two valuations disagree enough that each side improves on the
+    numbers it actually believes. Scoring both sides with our numbers would
+    just manufacture trades nobody would accept.
+
+    Gains are per week of starting-lineup points, carried out over the horizon.
+    The two gains are in different currencies and are labelled as such -- ours
+    runs at roughly 80% of ESPN's scale, so they are not to be compared to each
+    other, only each to zero.
+    """
+    mine = [p for p in league if p["fantasy_team"] == team_name]
+    partners = {}
+    for p in league:
+        owner = p["fantasy_team"]
+        if owner and owner != team_name:
+            partners.setdefault(owner, []).append(p)
+
+    base_lineup = lineup_of(mine, slots)
+    base_ours = lineup_total(base_lineup)
+    # Both sides of a swap must be priced by this project, not by the ESPN
+    # fallback. Otherwise the delta compares an ~80%-scale player against a
+    # full-scale one and invents a gain -- the same scale trap the trade
+    # rankings had. It costs the K and D/ST slots, which this project cannot
+    # value at all.
+    def valuable(p):
+        return (p.get("points_source") == "model"
+                and p.get("espn_projected_avg") is not None)
+
+    tradeable = [p for p in mine if valuable(p)]
+
+    found = []
+    for partner, roster in partners.items():
+        base_theirs = lineup_value(roster, slots, key="espn_projected_avg")
+        best = []
+        for give in tradeable:
+            keep_mine = [p for p in mine if p is not give]
+            for get in roster:
+                if not valuable(get):
+                    continue
+                after = lineup_of(keep_mine + [get], slots)
+                our_gain = round(lineup_total(after) - base_ours, 2)
+                if our_gain < min_gain:
+                    continue
+                their_gain = round(
+                    lineup_value([p for p in roster if p is not get] + [give],
+                                 slots, key="espn_projected_avg")
+                    - base_theirs, 2)
+                if their_gain <= 0:
+                    continue
+                best.append({
+                    "with": partner,
+                    "give": _side(give),
+                    "get": _side(get),
+                    "our_gain_per_week": our_gain,
+                    "our_gain_over_horizon": round(our_gain * horizon_weeks, 1),
+                    "their_gain_per_week_espn": their_gain,
+                    "horizon_weeks": horizon_weeks,
+                    "lineup_change": _lineup_change(base_lineup, after),
+                })
+        best.sort(key=lambda t: (-t["our_gain_per_week"],
+                                 -t["their_gain_per_week_espn"]))
+        found.extend(best[:per_partner])
+
+    found.sort(key=lambda t: (-t["our_gain_per_week"],
+                              -t["their_gain_per_week_espn"]))
+    return found[:limit]
+
+
+def _side(p: dict) -> dict:
+    return {"name": p["name"], "position": p["position"],
+            "nfl_team": p["nfl_team"], "model_ppg": p.get("points"),
+            "espn_ppg": _num(p.get("espn_projected_avg")),
+            "injury_status": p.get("injury_status")}
+
+
 def find_team(snapshot, team) -> dict:
     """A roster by team id or by a case-insensitive piece of its name."""
     rosters = snapshot.rosters
@@ -305,8 +434,18 @@ def find_team(snapshot, team) -> dict:
         f"{team!r}. Teams are -- {names}")
 
 
+def horizon_weeks(snapshot, week: int) -> int:
+    """Weeks left in the fantasy regular season, this one included.
+
+    From the league's own `reg_season_count`, because that is the window a
+    trade actually pays out over.
+    """
+    total = int((snapshot.settings or {}).get("reg_season_count") or 14)
+    return max(1, total - int(week) + 1)
+
+
 def build_report(snapshot, projections: pd.DataFrame, team, week=None,
-                 crosswalk=None) -> dict:
+                 crosswalk=None, horizon=None) -> dict:
     """The whole payload for one team in one week."""
     week = snapshot.week if week is None else int(week)
     mine = find_team(snapshot, team)
@@ -328,6 +467,7 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
     free_agents = _players(fa_rows.to_dict("records"))
 
     mode = _mode(projections)
+    horizon = horizon_weeks(snapshot, week) if horizon is None else int(horizon)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "snapshot": str(snapshot.path),
@@ -355,7 +495,10 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
         "bench": bench,
         "tough_calls": tough_calls(starters, bench),
         "waivers": waiver_targets(free_agents, roster, slots),
-        "trades": trade_candidates(league, mine["team_name"]),
+        "trades": dict(
+            trade_candidates(league, mine["team_name"]),
+            horizon_weeks=horizon,
+            proposals=propose_trades(league, mine["team_name"], slots, horizon)),
         "coverage": {
             "roster": match_report(league_rows[
                 league_rows["fantasy_team"] == mine["team_name"]]),

@@ -82,6 +82,10 @@ h2 {
 }
 .tile .value { display: block; font-size: 22px; font-weight: 620; margin-top: 2px; }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.cols.wide { grid-template-columns: 1.55fr 1fr; }
+.with { white-space: nowrap; }
+.note { font-size: 9.5px; padding-top: 0; }
+tr.note-row td { border-bottom: 1px solid var(--hairline); }
 table { width: 100%; border-collapse: collapse; }
 th {
   text-align: left; font-size: 9.5px; font-weight: 600; color: var(--ink-muted);
@@ -140,6 +144,12 @@ def status_chip(status) -> str:
 def source_chip(source) -> str:
     """Say out loud when a number came from ESPN rather than from here."""
     return ' <span class="chip espn">ESPN</span>' if source == "espn" else ""
+
+
+def _short(name, width=20) -> str:
+    """League team names are jokes, and some of them are long jokes."""
+    name = "" if name is None else str(name)
+    return name if len(name) <= width else name[:width - 1].rstrip() + "\u2026"
 
 
 def _player_cell(p) -> str:
@@ -214,6 +224,41 @@ def waiver_table(waivers, limit=6) -> str:
             f'<th class="num">Own</th></tr>{_rows(rows)}</table>')
 
 
+def _lineup_note(change: dict) -> str:
+    """What the swap actually does to the lineup, which is the point of it."""
+    moves = ([f'{esc(c["name"])} starts at {esc(c["slot"])}'
+              for c in change.get("in", [])]
+             + [f'{esc(c["name"])} to the bench'
+                for c in change.get("out", [])]
+             + [f'{esc(c["name"])} {esc(c["from"])} &rarr; {esc(c["to"])}'
+                for c in change.get("moved", [])])
+    return "; ".join(moves)
+
+
+def proposal_table(trades, limit=4) -> str:
+    """Concrete swaps: who with, who leaves, who arrives, what it is worth."""
+    weeks = trades.get("horizon_weeks")
+    rows = []
+    for t in trades.get("proposals", [])[:limit]:
+        give, get = t["give"], t["get"]
+        rows.append(
+            f'<tr><td class="with">{esc(_short(t["with"], 16))}</td>'
+            f'<td class="sell">{_player_cell(give)} '
+            f'<span class="muted">{esc(give["position"])} '
+            f'{num(give.get("model_ppg"))}</span></td>'
+            f'<td class="buy">{_player_cell(get)} '
+            f'<span class="muted">{esc(get["position"])} '
+            f'{num(get.get("model_ppg"))}</span></td>'
+            f'<td class="num">+{num(t["our_gain_per_week"])}</td>'
+            f'<td class="num">+{num(t["our_gain_over_horizon"])}</td>'
+            f'<td class="num dim">+{num(t["their_gain_per_week_espn"])}</td></tr>'
+            f'<tr><td></td><td colspan="5" class="muted note">'
+            f'{_lineup_note(t["lineup_change"])}</td></tr>')
+    return ('<table><tr><th>With</th><th>You give</th><th>You get</th>'
+            f'<th class="num">You /wk</th><th class="num">Over {esc(weeks)}</th>'
+            f'<th class="num">Them /wk</th></tr>{_rows(rows)}</table>')
+
+
 def trade_table(trades, limit=5) -> str:
     rows = []
     for kind, label, css in (("buy_low", "BUY", "buy"),
@@ -223,7 +268,7 @@ def trade_table(trades, limit=5) -> str:
             rows.append(
                 f'<tr><td class="pole {css}">{label}</td>'
                 f'<td>{_player_cell(t)}</td>'
-                f'<td class="dim">{esc(t.get("fantasy_team"))}</td>'
+                f'<td class="dim">{esc(_short(t.get("fantasy_team")))}</td>'
                 f'<td class="num">{pos}{t["model_rank"]}</td>'
                 f'<td class="num dim">{pos}{t["espn_rank"]}</td></tr>')
     return ('<table><tr><th></th><th>Player</th><th>Roster</th>'
@@ -271,9 +316,14 @@ def render(report: dict) -> str:
   <div>
     <section><h2>Tough calls</h2>{tough_table(report['tough_calls'])}</section>
     <section><h2>Waiver wire</h2>{waiver_table(report['waivers'])}</section>
-    <section><h2>Trades &mdash; {esc(report['trades'].get('basis'))}</h2>
-      {trade_table(report['trades'])}</section>
   </div>
+</div>
+
+<div class="cols wide">
+  <section><h2>Proposed trades &mdash; both lineups improve, each on its own
+    numbers</h2>{proposal_table(report['trades'])}</section>
+  <section><h2>Disagreements &mdash; {esc(report['trades'].get('basis'))}</h2>
+    {trade_table(report['trades'], limit=4)}</section>
 </div>
 
 <footer>

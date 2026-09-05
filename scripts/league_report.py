@@ -102,9 +102,27 @@ def _summarise(report: dict) -> None:
                 print(f"    {r['position']:<4}{r['name']:<24}{r['points']:>6}"
                       f"   over {r['instead_of']['name']} by {r['over']}")
     trades = report["trades"]
-    print(f"\n  Trades: {len(trades['buy_low'])} buy-low, "
-          f"{len(trades['sell_high'])} sell-high")
-    print(f"    basis: {trades['basis']}")
+    print(f"\n  Proposed trades (valued over "
+          f"{trades['horizon_weeks']} weeks)")
+    for t in trades["proposals"]:
+        give, get = t["give"], t["get"]
+        print(f"    with {t['with']}")
+        print(f"      give {give['name']} ({give['position']}) "
+              f"-> get {get['name']} ({get['position']})")
+        print(f"      you +{t['our_gain_per_week']}/wk "
+              f"(+{t['our_gain_over_horizon']} over {t['horizon_weeks']}), "
+              f"them +{t['their_gain_per_week_espn']}/wk by ESPN's numbers")
+        change = t["lineup_change"]
+        moves = ([f"{c['name']} starts at {c['slot']}" for c in change["in"]]
+                 + [f"{c['name']} to the bench" for c in change["out"]]
+                 + [f"{c['name']} {c['from']}->{c['to']}"
+                    for c in change["moved"]])
+        if moves:
+            print(f"      lineup: {'; '.join(moves)}")
+    if not trades["proposals"]:
+        print("    none that improve both lineups")
+    print(f"\n  Disagreements ({trades['basis']}): "
+          f"{len(trades['buy_low'])} buy-low, {len(trades['sell_high'])} sell-high")
     for kind in ("buy_low", "sell_high"):
         for r in trades[kind][:5]:
             pos, owner = r["position"], (r["fantasy_team"] or "")[:22]
@@ -114,11 +132,11 @@ def _summarise(report: dict) -> None:
                   f" {r['model_ppg']:>6} vs {r['espn_ppg']:>6}")
 
 
-def build(team, week=None, write=True) -> int:
+def build(team, week=None, write=True, horizon=None) -> int:
     snapshot = load_snapshot()
     week = snapshot.week if week is None else week
     projections = load_projections(snapshot.season, week)
-    report = build_report(snapshot, projections, team, week)
+    report = build_report(snapshot, projections, team, week, horizon=horizon)
     _summarise(report)
 
     if not write:
@@ -141,13 +159,17 @@ def main():
                          "(default: $ESPN_TEAM_ID)")
     ap.add_argument("--week", type=int, default=None,
                     help="week to project (default: the league's current week)")
+    ap.add_argument("--horizon", type=int, default=None,
+                    help="weeks a trade is valued over "
+                         "(default: the rest of the fantasy regular season)")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the report without writing it")
     args = ap.parse_args()
 
     if args.check_join:
         return check_join(args.week)
-    return build(args.team, args.week, write=not args.dry_run)
+    return build(args.team, args.week, write=not args.dry_run,
+                 horizon=args.horizon)
 
 
 if __name__ == "__main__":

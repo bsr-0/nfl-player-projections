@@ -10,8 +10,9 @@ import pandas as pd
 import pytest
 
 from src.integrations.league_insights import (
-    availability, build_report, eligible, find_team, optimal_lineup, price,
-    starting_slots, tough_calls, trade_candidates, waiver_targets,
+    availability, build_report, eligible, find_team, horizon_weeks,
+    lineup_value, optimal_lineup, price, propose_trades, starting_slots,
+    tough_calls, trade_candidates, waiver_targets,
 )
 from src.integrations.league_join import Snapshot, load_projections
 
@@ -234,3 +235,90 @@ def test_find_team_by_id_or_by_part_of_the_name():
     assert find_team(snap, "their")["team_name"] == "Theirs"
     with pytest.raises(ValueError, match="no team matches"):
         find_team(snap, "nobody")
+
+
+SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "RB/WR/TE"]
+
+
+def _tradeable(name, position, ours, espn, team, **kw):
+    return _p(name, position, ours, fantasy_team=team, model_season_ppg=ours,
+              espn_projected_avg=espn, **kw)
+
+
+def test_lineup_value_counts_only_what_starts():
+    """A fourth running back is worth what he starts for, which is nothing."""
+    roster = [_tradeable(f"RB{i}", "RB", pts, pts, "Mine")
+              for i, pts in enumerate([20.0, 15.0, 10.0, 9.0])]
+
+    assert lineup_value(roster, ["RB", "RB"]) == 35.0
+    assert lineup_value(roster[:3], ["RB", "RB"]) == 35.0
+
+
+def test_a_trade_is_proposed_when_the_two_valuations_disagree():
+    """We rate their WR above ours; ESPN rates ours above theirs. Both gain."""
+    league = [
+        _tradeable("My WR", "WR", 10.0, 18.0, "Mine"),
+        _tradeable("My QB", "QB", 20.0, 20.0, "Mine"),
+        _tradeable("Their WR", "WR", 16.0, 12.0, "Theirs"),
+        _tradeable("Their QB", "QB", 20.0, 20.0, "Theirs"),
+    ]
+
+    proposals = propose_trades(league, "Mine", ["QB", "WR"], horizon_weeks=14)
+
+    assert len(proposals) == 1
+    deal = proposals[0]
+    assert deal["with"] == "Theirs"
+    assert (deal["give"]["name"], deal["get"]["name"]) == ("My WR", "Their WR")
+    assert deal["our_gain_per_week"] == 6.0
+    assert deal["our_gain_over_horizon"] == 84.0
+    assert deal["their_gain_per_week_espn"] == 6.0
+    assert deal["lineup_change"]["in"] == [{"name": "Their WR", "slot": "WR"}]
+    assert deal["lineup_change"]["out"] == [{"name": "My WR", "slot": "WR"}]
+
+
+def test_no_trade_when_both_sides_value_players_the_same():
+    """Agreement means somebody has to lose, so nothing gets proposed."""
+    league = [
+        _tradeable("My WR", "WR", 10.0, 10.0, "Mine"),
+        _tradeable("Their WR", "WR", 16.0, 16.0, "Theirs"),
+    ]
+
+    assert propose_trades(league, "Mine", ["WR"], horizon_weeks=14) == []
+
+
+def test_espn_priced_players_are_never_traded():
+    """Their number is on a different scale; swapping one in invents a gain."""
+    league = [
+        _tradeable("My WR", "WR", 10.0, 10.0, "Mine"),
+        _tradeable("Their K", "K", 30.0, 30.0, "Theirs", points_source="espn"),
+        _tradeable("Their WR", "WR", 30.0, 4.0, "Theirs", points_source="espn"),
+    ]
+
+    assert propose_trades(league, "Mine", ["WR"], horizon_weeks=14) == []
+
+
+def test_an_injured_player_is_not_traded_for_as_if_he_plays():
+    """OUT means he contributes nothing to the lineup he would move into."""
+    league = [
+        _tradeable("My WR", "WR", 10.0, 18.0, "Mine"),
+        _tradeable("Their WR", "WR", 16.0, 12.0, "Theirs",
+                   injury_status="OUT"),
+    ]
+
+    assert propose_trades(league, "Mine", ["WR"], horizon_weeks=14) == []
+
+
+def test_horizon_is_the_rest_of_the_fantasy_regular_season():
+    snap = _snapshot(settings=dict(SETTINGS, reg_season_count=14))
+
+    assert horizon_weeks(snap, 1) == 14
+    assert horizon_weeks(snap, 12) == 3
+    assert horizon_weeks(snap, 18) == 1        # never zero or negative
+
+
+def test_the_report_carries_proposals_and_their_horizon():
+    report = build_report(_snapshot(), _projections(), team=1,
+                          crosswalk={"1": "00-0036223"}, horizon=9)
+
+    assert report["trades"]["horizon_weeks"] == 9
+    assert report["trades"]["proposals"] == []   # the other roster is empty
