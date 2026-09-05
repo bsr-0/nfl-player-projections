@@ -13338,15 +13338,31 @@ in `season_availability.py` for the sweep and why 25 rather than 5.
 `data/nfl_data.db` (it is gitignored and never cloned), so the panel was
 RECONSTRUCTED from nflverse: `stats_player_week_*` 2006-2025 for weekly PPR,
 `snap_counts_*` joined pfr_id -> gsis_id for the participation label,
-`nfldata/games.csv` for the schedule, `draft_picks.parquet` for rounds. It
-yields 9,527 player-seasons with 99.9% snap coverage in the snap era. It is
-NOT this project's DB and will differ from it: `data_source` carries no
-`inferred_pbp_confirmed_zero` tier, draft round resolves for only 72.3% of
-player-seasons (the rest bucket as undrafted), and none of the repo's own
-backfills are applied. Effect sizes this large and this consistent across two
-disjoint season sets are unlikely to be artifacts of that, but the exact
-figures should be re-run on the real DB before being quoted as production
-numbers. Two panel rows show `games_played` 18 against a 17-game
+`nfldata/games.csv` for the schedule, and draft rounds from `players.parquet`
+(`draft_picks.parquet` gives the same answer -- see below). It yields 9,527
+player-seasons with 99.9% snap coverage in the snap era. It is NOT this
+project's DB and will differ from it: `data_source` carries no
+`inferred_pbp_confirmed_zero` tier, and none of the repo's own backfills are
+applied. Effect sizes this large and this consistent across two disjoint
+season sets are unlikely to be artifacts of that, but the exact figures should
+be re-run on the real DB before being quoted as production numbers.
+
+**A caveat withdrawn on re-run.** An earlier revision of this paragraph listed
+"draft round resolves for only 72.3% of player-seasons" as a fidelity defect.
+It is not one. Every one of the 2,857 players in the panel appears in
+`players.parquet`; 62.3% carry a draft round and the remaining 37.8% have it
+NULL because they were genuinely undrafted -- which matches this repo's own
+"~39% of players who reach the league are undrafted" (see
+`career_static_by_player`). The 72.3% is the player-SEASON figure and is
+higher than the 62.3% player figure simply because drafted players last
+longer. So bucket 8 is real undrafted players, not a mix of undrafted and
+unresolved, which is also why its rate (.449) sits sensibly beside round 7's
+(.440) rather than in the middle of the range.
+
+Rebuilding the draft table from `players.parquet` instead of
+`draft_picks.parquet` changed the panel by two player-seasons and reproduced
+every cold-start figure above to three decimals, so the result does not depend
+on which draft source is used. Two panel rows show `games_played` 18 against a 17-game
 `possible_games` (a mid-season team change resolving to the modal team); the
 estimator clips rate to [0, 1], so they are contained, but that is a
 pre-existing panel quirk rather than something this change introduced.
