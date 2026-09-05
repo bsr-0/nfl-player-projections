@@ -113,6 +113,37 @@ class ESPNFantasyConnector:
             'scoring_type': self.league.settings.scoring_type if hasattr(self.league.settings, 'scoring_type') else 'Unknown'
         }
     
+    @staticmethod
+    def _player_row(player) -> Dict[str, Any]:
+        """Flatten an espn_api Player.
+
+        Attribute names are checked against espn_api 0.46: the fields are
+        lineupSlot / projected_total_points / total_points. An earlier version
+        read slot_position / projected_points / points -- none of which exist
+        -- behind `hasattr(...) else 0`, so every player silently got slot
+        "Unknown" and projected 0 while ESPN was returning real numbers.
+
+        getattr defaults are None, never 0. A missing projection is unknown,
+        and writing 0 for unknown is how fabricated data gets into this
+        project (see GAPS.md: snap_share, team_stats, labels).
+        """
+        return {
+            'player_id': getattr(player, 'playerId', None),
+            'name': player.name,
+            'position': player.position,
+            'team': player.proTeam,
+            'lineup_slot': getattr(player, 'lineupSlot', None),
+            'projected_total_points': getattr(player, 'projected_total_points', None),
+            'projected_avg_points': getattr(player, 'projected_avg_points', None),
+            'total_points': getattr(player, 'total_points', None),
+            'avg_points': getattr(player, 'avg_points', None),
+            'percent_owned': getattr(player, 'percent_owned', None),
+            'percent_started': getattr(player, 'percent_started', None),
+            'acquisition_type': getattr(player, 'acquisitionType', None),
+            'injured': getattr(player, 'injured', None),
+            'injury_status': getattr(player, 'injuryStatus', None),
+        }
+
     def get_my_team(self, team_name: Optional[str] = None, team_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Get roster for a specific team.
@@ -144,17 +175,7 @@ class ESPNFantasyConnector:
         if not team:
             return {'error': 'Team not found'}
         
-        roster = []
-        for player in team.roster:
-            roster.append({
-                'name': player.name,
-                'position': player.position,
-                'team': player.proTeam,
-                'projected_points': player.projected_points if hasattr(player, 'projected_points') else 0,
-                'points': player.points if hasattr(player, 'points') else 0,
-                'slot': player.slot_position if hasattr(player, 'slot_position') else 'Unknown',
-                'injury_status': player.injuryStatus if hasattr(player, 'injuryStatus') else 'Active'
-            })
+        roster = [self._player_row(p) for p in team.roster]
         
         return {
             'team_name': team.team_name,
@@ -231,15 +252,17 @@ class ESPNFantasyConnector:
                     'surplus': actual - ideal
                 })
         
-        # Calculate average projected points by position
-        avg_by_position = roster_df.groupby('position')['projected_points'].mean().to_dict()
+        # Column renamed with the 0.46 attribute fix; skipna leaves a player
+        # with no projection out of the mean rather than counting them as 0.
+        avg_by_position = (roster_df.groupby('position')['projected_total_points']
+                           .mean().to_dict())
         
         return {
             'position_counts': position_counts,
             'needs': needs,
             'strengths': strengths,
             'avg_projected_by_position': avg_by_position,
-            'total_projected': roster_df['projected_points'].sum(),
+            'total_projected': roster_df['projected_total_points'].sum(),
             'recommendations': self._generate_recommendations(needs, strengths)
         }
     
@@ -291,13 +314,7 @@ class ESPNFantasyConnector:
             else:
                 free_agents = self.league.free_agents(size=limit)
             
-            return [{
-                'name': player.name,
-                'position': player.position,
-                'team': player.proTeam,
-                'projected_points': player.projected_points if hasattr(player, 'projected_points') else 0,
-                'percent_owned': player.percent_owned if hasattr(player, 'percent_owned') else 0
-            } for player in free_agents]
+            return [self._player_row(player) for player in free_agents]
         except Exception as e:
             print(f"Error fetching free agents: {e}")
             return []
