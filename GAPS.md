@@ -13309,10 +13309,54 @@ and read the new COLD START tables -- the cold-start rows are the only ones
 where the arms can differ much. `season_step8.py`'s "rookies 39.81" figure
 predates this change and has not been re-measured.
 
-**Follow-on, not done here:** draft round is an April signal. Whether a player
-is on the field in Week 1 is settled far later, and the repo already has the
-better signal -- `_lookup_depth_chart_rank_asof` in
-`single_week_ppr/season_projection.py`, plus `weekly_rosters_v2` (2024-2025
-only). Preseason depth-chart rank should override the draft-round prior once
-it exists for a target season; draft round is the right answer only for a
-projection built before camp.
+**Follow-on considered and REJECTED: a depth-chart override (2026-09-05).**
+
+Draft round is an April signal, and whether a player is on the field in Week 1
+is settled far later, so preseason depth-chart rank looks like the obvious
+upgrade to this prior. It was investigated and deliberately not built. The
+reason is a data fact, not a preference, and it is recorded here so nobody
+rebuilds it on the same wrong assumptions.
+
+An earlier draft of this section cited `weekly_rosters_v2` (2024-2025 only) as
+the constraint. That was wrong. The relevant table is `depth_charts`, which
+covers 2013-2025 for skill positions -- roughly twelve usable seasons, not two.
+Coverage was never the blocker. Timing is.
+
+Measured from `data/raw/depth_charts_2025_raw.parquet` (554,215 rows, the
+nflverse daily ESPN feed):
+
+    first snapshot   2025-08-03      July snapshot days   0
+    August days      26              through              2026-03-14
+
+and `backfill_depth_charts_2025.py::_assign_snapshots` keeps exactly one
+snapshot per week -- the last one strictly before kickoff -- so every August
+snapshot is discarded at load and the stored "week 1" chart is a ~2025-09-04
+snapshot. Before 2025 the old weekly feed simply starts at week 1, in
+September. **2025 is the only season with any August-legal depth chart at all.**
+
+This board is generated in July and August. So:
+
+  * a JULY projection has no depth-chart data for any season, under any
+    cutoff rule -- the feed does not exist yet;
+  * an AUGUST projection could only be trained on 2025, one season;
+  * the `week <= 1` cutoff (which is what makes the signal useful for rookies,
+    since a strict `week <` leaves a first-year player with no chart at all)
+    trains on a chart published in September and serves against a chart that
+    does not exist in July or August.
+
+That last one is the trap. It backtests well -- the week-1 chart is genuinely
+informative -- and in production every rookie falls through to nothing while
+veterans get a stale prior-season rank, so the measured cold-start gain is
+zero. It is the same silent train/serve skew class as the PreseasonProjector
+duplicate-feature-query bugs logged above: a model that looks stronger in the
+harness than it can possibly be when shipped.
+
+Draft round is therefore the correct signal for a July/August projection, and
+this prior stands as built. Two things would change that, neither speculative:
+
+  * regenerating the board near Week 1, which makes the week-1 chart legally
+    available at inference -- the cutoff should then be a run-date parameter,
+    never a hardcoded `<= 1`, so the as-of rule stays honest in backtest;
+  * the daily feed accumulating more August seasons (2026+), at which point an
+    August-legal prior fit on the RAW feed rather than the weekly table
+    becomes trainable on more than a single season.
