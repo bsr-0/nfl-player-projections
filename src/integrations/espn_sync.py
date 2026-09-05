@@ -375,7 +375,11 @@ class ESPNSyncService:
         """Fetch and resolve top free agents."""
         fa_list = []
         for pos in ("QB", "RB", "WR", "TE"):
-            fas = self.connector.get_free_agents(position=pos, limit=limit // 4)
+            try:
+                fas = self.connector.get_free_agents(position=pos, limit=limit // 4)
+            except Exception as e:                   # noqa: BLE001
+                print(f"Error fetching {pos} free agents: {e}")
+                continue
             fa_list.extend(fas)
 
         return self._resolve_players(fa_list, is_roster=False)

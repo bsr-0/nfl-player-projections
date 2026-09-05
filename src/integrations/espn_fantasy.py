@@ -301,23 +301,23 @@ class ESPNFantasyConnector:
         Args:
             position: Filter by position (QB, RB, WR, TE)
             limit: Maximum number of players to return
-            
+
         Returns:
             List of free agent player dictionaries
+
+        Raises whatever the ESPN call raises. It used to return [] on any
+        exception, which made a failed request indistinguishable from a pool
+        with nobody in it -- a snapshot would record "0 free agents" for what
+        was really a dropped connection. Callers record the failure instead.
         """
         if not self.connected:
             return []
-        
-        try:
-            if position:
-                free_agents = self.league.free_agents(position=position, size=limit)
-            else:
-                free_agents = self.league.free_agents(size=limit)
-            
-            return [self._player_row(player) for player in free_agents]
-        except Exception as e:
-            print(f"Error fetching free agents: {e}")
-            return []
+
+        if position:
+            free_agents = self.league.free_agents(position=position, size=limit)
+        else:
+            free_agents = self.league.free_agents(size=limit)
+        return [self._player_row(player) for player in free_agents]
 
 
     def get_league_settings(self) -> Dict[str, Any]:
