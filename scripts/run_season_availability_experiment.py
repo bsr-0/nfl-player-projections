@@ -20,12 +20,26 @@ Arms (availability term only):
     const_position   position mean games-played rate, TRAINING SEASONS ONLY
     hist_player      the player's own rate across prior seasons
     hist_shrunk      hist_player shrunk toward const_position by games observed
+    hist_shrunk_est  hist_shrunk, computed by the PRODUCTION estimator rather
+                     than by the hand-rolled arithmetic above. Should match
+                     hist_shrunk to floating point; it is here as a standing
+                     check that the two have not drifted apart.
+    hist_shrunk_k*   hist_shrunk, but shrunk toward the position x draft-round
+                     mean instead of the position mean, at bucket weight K.
+                     One arm per --draft-bucket-k value.
+
+The draft-round arms exist to answer the question the position mean cannot:
+a player with no history gets w = 0, so his estimate IS the shrinkage target,
+and a target that ignores draft capital hands every rookie at a position the
+same number. Read `n_with_history` alongside the MAE -- the cold-start rows
+are the only ones where these arms can differ much from hist_shrunk.
 
 Leakage: every arm reads seasons strictly before the target season. No
 current-season, no realized snaps, no future roster status.
 
 Usage:
     python scripts/run_season_availability_experiment.py
+    python scripts/run_season_availability_experiment.py --draft-bucket-k 25 50 100 200
 """
 from __future__ import annotations
 
@@ -45,13 +59,14 @@ from src.models.single_week_ppr.population import (
 )
 # One definition of the panel and the estimator, shared with production.
 from src.models.single_week_ppr.season_availability import (
-    SHRINKAGE_K, SeasonAvailabilityEstimator, load_player_seasons,
+    DRAFT_BUCKET_K, SHRINKAGE_K, SeasonAvailabilityEstimator, load_player_seasons,
 )
 
 OUT_PATH = Path("data/experiments/season_availability.csv")
 
 
-def build_arms(hist: pd.DataFrame, target: pd.DataFrame, season: int) -> pd.DataFrame:
+def build_arms(hist: pd.DataFrame, target: pd.DataFrame, season: int,
+               panel: pd.DataFrame, bucket_ks: list) -> pd.DataFrame:
     """Availability estimates for `target`, from `hist` (seasons < season only)."""
     out = target.copy()
     pos_rate = hist.groupby("position")["rate"].mean()
@@ -68,6 +83,16 @@ def build_arms(hist: pd.DataFrame, target: pd.DataFrame, season: int) -> pd.Data
     out["has_history"] = out["hist_player"].notna()
     out["hist_player"] = out["hist_player"].fillna(out["const_position"])
 
+    # Estimator arms. Fit on the FULL panel deliberately: fit() drops seasons
+    # >= before_season itself, so causality here is structural rather than
+    # dependent on this script having filtered correctly.
+    est = SeasonAvailabilityEstimator(use_draft_prior=False).fit(panel, before_season=season)
+    out["hist_shrunk_est"] = est.predict_rate(out).to_numpy()
+    for k in bucket_ks:
+        est_k = SeasonAvailabilityEstimator(
+            draft_bucket_k=k, use_draft_prior=True).fit(panel, before_season=season)
+        out[f"hist_shrunk_k{k:g}"] = est_k.predict_rate(out).to_numpy()
+
     # Prior-season PPR per game: the production term for stage 2. Most recent
     # prior season only, so it is a plausible pre-season forecast rather than
     # a career average.
@@ -81,21 +106,28 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seasons", nargs="+", type=int, default=[2023, 2024, 2025])
+    ap.add_argument("--draft-bucket-k", nargs="+", type=float, default=[DRAFT_BUCKET_K],
+                    help="Cell weight(s) for the position x draft-round target. "
+                         "One arm per value; sweep to tune it.")
     args = ap.parse_args()
 
     panel = load_player_seasons()
     print(f"player-seasons in the contract population: {len(panel)}")
     print(f"  snap-era floor {SNAP_LABEL_MIN_SEASON}, receiving floor "
           f"{RECEIVING_CHARTING_MIN_SEASON} for {sorted(RECEIVING_DEPENDENT_POSITIONS)}")
+    known_round = int(panel["draft_round"].notna().sum()) if "draft_round" in panel else 0
+    print(f"  draft round known for {known_round} of {len(panel)} player-seasons; "
+          f"the rest bucket as undrafted")
 
-    arms = ["const_position", "hist_player", "hist_shrunk"]
+    arms = (["const_position", "hist_player", "hist_shrunk", "hist_shrunk_est"]
+            + [f"hist_shrunk_k{k:g}" for k in args.draft_bucket_k])
     rows = []
     for season in args.seasons:
         hist = panel[panel["season"] < season]
         target = panel[panel["season"] == season]
         if hist.empty or target.empty:
             continue
-        est = build_arms(hist, target, season)
+        est = build_arms(hist, target, season, panel, args.draft_bucket_k)
         for pos, g in est.groupby("position"):
             for arm in arms:
                 pred_games = g[arm] * g["possible_games"]
@@ -129,6 +161,14 @@ def main() -> None:
                     rows[-1]["games_mae_hist_only"] = float((pg - sub["games_played"]).abs().mean())
                     rows[-1]["season_mae_hist_only"] = float(
                         (pg * sub["ppr_per_game"] - sub["ppr"]).abs().mean())
+                # The complement, and the only place the draft-round arms can
+                # move much: these rows have w = 0, so the arm IS the target.
+                cold = g[~g["has_history"]]
+                if len(cold):
+                    pg = cold[arm] * cold["possible_games"]
+                    rows[-1]["n_cold"] = int(len(cold))
+                    rows[-1]["games_mae_cold"] = float((pg - cold["games_played"]).abs().mean())
+                    rows[-1]["games_bias_cold"] = float((pg - cold["games_played"]).mean())
 
     res = pd.DataFrame(rows)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -139,6 +179,13 @@ def main() -> None:
     print(res.pivot_table(index="position", columns="arm", values="games_mae").round(3).to_string())
     print("\n=== GAMES PLAYED: MAE, players WITH prior history only ===")
     print(res.pivot_table(index="position", columns="arm", values="games_mae_hist_only").round(3).to_string())
+    print("\n=== GAMES PLAYED: MAE, COLD START only (no prior history) ===")
+    print("    NOTE: these are cold-start players who played at least one game.")
+    print("    A pick who never dressed is absent from the panel entirely, so the")
+    print("    round-to-round spread measured here understates the real one.")
+    print(res.pivot_table(index="position", columns="arm", values="games_mae_cold").round(3).to_string())
+    print("\n=== GAMES PLAYED: bias, COLD START only ===")
+    print(res.pivot_table(index="position", columns="arm", values="games_bias_cold").round(3).to_string())
     print("\n=== SEASON PPR (oracle production): MAE ===")
     print(res.pivot_table(index="position", columns="arm", values="season_mae").round(2).to_string())
     print("\n=== SEASON PPR (oracle production): bias ===")

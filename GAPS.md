@@ -13247,3 +13247,178 @@ Verified end to end: a full retrain under the pin reproduced the transform
 state and smearing factors bit-identically (1.2246 / 1.2554 / 1.2149) with no
 disagreements reported. Setting the dict to None restores skew-based behaviour;
 unlisted positions fall back to it.
+
+---
+
+### Cold start: the availability target is conditioned on draft round (2026-09-05)
+
+**Status: SHIPPED AND MEASURED.** An earlier revision of this section said
+"SHIPPED BUT NOT MEASURED" and warned that it contained no numbers. It has
+since been run; see "What was measured" below, including the note on which DB
+the numbers came from.
+
+The season projection is `E[games] x E[PPR per game]`. A player with no NFL
+history gets shrinkage weight `w = 0 / (0 + K) = 0`, so his games estimate is
+*entirely* whatever target he is shrunk toward. That target was the position
+mean, which means every rookie at a position received an identical exposure
+estimate -- a first-round back and a seventh-round back alike. Draft capital
+was already in the PRODUCTION half's features, but the exposure half threw it
+away, and exposure is where cold-start variance actually lives.
+
+The target is now the position x draft-round mean, hierarchically shrunk
+toward the position mean by cell size (`DRAFT_BUCKET_K = 25` player-seasons):
+
+    prior(pos, round) = wc * cell_mean + (1 - wc) * position_mean
+    wc = n_cell / (n_cell + DRAFT_BUCKET_K)
+
+so a thin cell collapses back to exactly the previous behaviour rather than
+chasing noise. Rounds 1-7 each get a bucket; everything else -- undrafted, the
+old 8-12 round era, a missing draft row -- shares bucket 8, matching
+`build_multiyear_season_pairs`, which fills the same NaN with `UNDRAFTED_ROUND`
+on the grounds that `draft_picks_v2` has no row at all for an undrafted player.
+
+Fallback is per ROW, not per call: a frame carrying rounds for some players
+still conditions those, and any row whose (position, round) cell was never fit
+falls to the position mean. A caller that supplies no `draft_round` column gets
+the old estimate bit-for-bit, and `use_draft_prior=False` restores it
+explicitly for A/B.
+
+**The selection bias this cannot cross, and which makes it conservative.** The
+panel holds only player-seasons with >= 1 observed game -- the same boundary
+that has always limited this estimator. A late pick who never dressed is not in
+it. So the round-to-round spread being learned is the spread AMONG players who
+reached the field, which is *narrower* than the real one. This moves the
+estimate in the right direction; it still does not answer "will this player
+play at all". `draft_picks_v2` sets `player_id` to NULL for anyone who has
+never played an NFL snap, so the population that would answer that question is
+structurally absent from this DB, not merely unqueried.
+
+**What was verified:** 11 new unit tests on synthetic panels, and a full-suite
+A/B from an identical starting state -- zero regressions, the same 8
+pre-existing failures before and after. On a synthetic panel the production
+estimator with the prior disabled reproduces the hand-rolled `hist_shrunk`
+arithmetic to 0.0.
+
+**What was measured.** Games-played MAE on COLD-START rows (no prior history),
+targets 2023-25, 343 cold-start rows of 1,733 total. `const_position`,
+`hist_player` and `hist_shrunk` are identical on these rows by construction --
+`w = 0`, so every one of them IS the position mean:
+
+    position   position mean   K=25    delta
+    QB              4.419      3.319   -1.10  (-24.9%)   n=36
+    RB              5.620      4.748   -0.87  (-15.5%)   n=93
+    TE              5.198      3.799   -1.40  (-26.9%)   n=70
+    WR              5.104      4.139   -0.97  (-18.9%)   n=144
+
+4/4 positions. Repeated on a DISJOINT season set (targets 2018-22): 4/4 again,
+same ordering across K. Rookie games were being over-predicted and that falls
+too (RB bias +2.01 -> +1.47, TE +2.01 -> +1.51, WR +1.16 -> +0.77, QB +0.53 ->
++0.06). Players WITH prior history move slightly in the same direction (WR
+3.805 -> 3.723, RB 3.986 -> 3.907), so the cold-start gain is not paid for by
+the veterans. Season PPR under oracle production improves 4/4 as well.
+
+The underlying spread the position mean was discarding, over 2013-24:
+
+    round      1     2     3     4     5     6     7   undrafted
+    rate     .746  .712  .651  .612  .571  .519  .440    .449
+
+Monotonic across all seven rounds -- about five games between a first- and a
+seventh-rounder. Undrafted landing next to round 7 is a good sign for the
+bucket-8 convention, since that bucket also absorbs players whose draft row
+does not resolve.
+
+`hist_shrunk_est` matched the hand-rolled `hist_shrunk` to 0.000 in every cell,
+so the production estimator and the experiment's arithmetic have not drifted.
+
+`DRAFT_BUCKET_K` was RETUNED from 100 to 25 on this evidence; 100 was chosen
+a priori from a noise argument and was far too much shrinkage. See the constant
+in `season_availability.py` for the sweep and why 25 rather than 5.
+
+**Caveat on the DB these numbers came from.** The container running this had no
+`data/nfl_data.db` (it is gitignored and never cloned), so the panel was
+RECONSTRUCTED from nflverse: `stats_player_week_*` 2006-2025 for weekly PPR,
+`snap_counts_*` joined pfr_id -> gsis_id for the participation label,
+`nfldata/games.csv` for the schedule, and draft rounds from `players.parquet`
+(`draft_picks.parquet` gives the same answer -- see below). It yields 9,527
+player-seasons with 99.9% snap coverage in the snap era. It is NOT this
+project's DB and will differ from it: `data_source` carries no
+`inferred_pbp_confirmed_zero` tier, and none of the repo's own backfills are
+applied. Effect sizes this large and this consistent across two disjoint
+season sets are unlikely to be artifacts of that, but the exact figures should
+be re-run on the real DB before being quoted as production numbers.
+
+**A caveat withdrawn on re-run.** An earlier revision of this paragraph listed
+"draft round resolves for only 72.3% of player-seasons" as a fidelity defect.
+It is not one. Every one of the 2,857 players in the panel appears in
+`players.parquet`; 62.3% carry a draft round and the remaining 37.8% have it
+NULL because they were genuinely undrafted -- which matches this repo's own
+"~39% of players who reach the league are undrafted" (see
+`career_static_by_player`). The 72.3% is the player-SEASON figure and is
+higher than the 62.3% player figure simply because drafted players last
+longer. So bucket 8 is real undrafted players, not a mix of undrafted and
+unresolved, which is also why its rate (.449) sits sensibly beside round 7's
+(.440) rather than in the middle of the range.
+
+Rebuilding the draft table from `players.parquet` instead of
+`draft_picks.parquet` changed the panel by two player-seasons and reproduced
+every cold-start figure above to three decimals, so the result does not depend
+on which draft source is used. Two panel rows show `games_played` 18 against a 17-game
+`possible_games` (a mid-season team change resolving to the modal team); the
+estimator clips rate to [0, 1], so they are contained, but that is a
+pre-existing panel quirk rather than something this change introduced.
+
+`season_step8.py`'s "rookies 39.81" figure predates this change and has still
+not been re-measured -- that is an end-to-end season-PPR number, not this
+experiment's availability-only one.
+
+**Follow-on considered and REJECTED: a depth-chart override (2026-09-05).**
+
+Draft round is an April signal, and whether a player is on the field in Week 1
+is settled far later, so preseason depth-chart rank looks like the obvious
+upgrade to this prior. It was investigated and deliberately not built. The
+reason is a data fact, not a preference, and it is recorded here so nobody
+rebuilds it on the same wrong assumptions.
+
+An earlier draft of this section cited `weekly_rosters_v2` (2024-2025 only) as
+the constraint. That was wrong. The relevant table is `depth_charts`, which
+covers 2013-2025 for skill positions -- roughly twelve usable seasons, not two.
+Coverage was never the blocker. Timing is.
+
+Measured from `data/raw/depth_charts_2025_raw.parquet` (554,215 rows, the
+nflverse daily ESPN feed):
+
+    first snapshot   2025-08-03      July snapshot days   0
+    August days      26              through              2026-03-14
+
+and `backfill_depth_charts_2025.py::_assign_snapshots` keeps exactly one
+snapshot per week -- the last one strictly before kickoff -- so every August
+snapshot is discarded at load and the stored "week 1" chart is a ~2025-09-04
+snapshot. Before 2025 the old weekly feed simply starts at week 1, in
+September. **2025 is the only season with any August-legal depth chart at all.**
+
+This board is generated in July and August. So:
+
+  * a JULY projection has no depth-chart data for any season, under any
+    cutoff rule -- the feed does not exist yet;
+  * an AUGUST projection could only be trained on 2025, one season;
+  * the `week <= 1` cutoff (which is what makes the signal useful for rookies,
+    since a strict `week <` leaves a first-year player with no chart at all)
+    trains on a chart published in September and serves against a chart that
+    does not exist in July or August.
+
+That last one is the trap. It backtests well -- the week-1 chart is genuinely
+informative -- and in production every rookie falls through to nothing while
+veterans get a stale prior-season rank, so the measured cold-start gain is
+zero. It is the same silent train/serve skew class as the PreseasonProjector
+duplicate-feature-query bugs logged above: a model that looks stronger in the
+harness than it can possibly be when shipped.
+
+Draft round is therefore the correct signal for a July/August projection, and
+this prior stands as built. Two things would change that, neither speculative:
+
+  * regenerating the board near Week 1, which makes the week-1 chart legally
+    available at inference -- the cutoff should then be a run-date parameter,
+    never a hardcoded `<= 1`, so the as-of rule stays honest in backtest;
+  * the daily feed accumulating more August seasons (2026+), at which point an
+    August-legal prior fit on the RAW feed rather than the weekly table
+    becomes trainable on more than a single season.

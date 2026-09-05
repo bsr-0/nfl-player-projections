@@ -19,7 +19,8 @@ import pandas as pd
 import pytest
 
 from src.models.single_week_ppr.season_availability import (
-    SHRINKAGE_K, SeasonAvailabilityEstimator, load_player_seasons, project_season_ppr,
+    SHRINKAGE_K, SeasonAvailabilityEstimator, UNDRAFTED_ROUND, draft_bucket,
+    load_player_seasons, project_season_ppr,
 )
 
 REPO = Path(__file__).resolve().parent.parent
@@ -207,3 +208,144 @@ def test_module_does_not_construct_synthetic_rows():
     src = (REPO / "src" / "models" / "single_week_ppr" / "season_availability.py").read_text()
     for banned in ("synthetic", "reindex", "fill_missing_weeks"):
         assert banned not in src.replace("synthetic-week architecture", "")
+
+
+# --- 8. the shrinkage target is conditioned on draft round -----------------
+#
+# A player with no history gets w = 0, so his estimate IS the target. These
+# fix that the target separates by draft capital, that it degrades to the old
+# position-mean behaviour wherever the round is thin or absent, and that it
+# never overrides a player's own record.
+
+def _draft_history(seasons=(2020, 2021, 2022), n=40):
+    """RB seasons where first-round backs are durable and seventh-round ones
+    are not -- a gap the position mean by construction cannot express."""
+    rows = []
+    for s in seasons:
+        for i in range(n):
+            rows.append({"player_id": f"r1_{i}", "position": "RB", "season": s,
+                         "games_played": 16, "possible_games": 17, "draft_round": 1})
+            rows.append({"player_id": f"r7_{i}", "position": "RB", "season": s,
+                         "games_played": 6, "possible_games": 17, "draft_round": 7})
+    return pd.DataFrame(rows)
+
+
+def _rookies(rounds=(1, 7)):
+    return pd.DataFrame({
+        "player_id": [f"rookie_{r}" for r in rounds],
+        "position": ["RB"] * len(rounds),
+        "draft_round": list(rounds),
+        "possible_games": [17.0] * len(rounds),
+    })
+
+
+def test_cold_start_rookies_separate_by_draft_round():
+    """The point of the change: two rookies at one position, two numbers."""
+    est = SeasonAvailabilityEstimator(draft_bucket_k=1.0).fit(
+        _draft_history(), before_season=2023)
+    rates = est.predict_rate(_rookies())
+    assert rates.iloc[0] > rates.iloc[1]
+    assert rates.iloc[0] == pytest.approx(16 / 17, abs=0.01)
+    assert rates.iloc[1] == pytest.approx(6 / 17, abs=0.01)
+
+
+def test_disabling_the_prior_gives_every_rookie_the_same_number():
+    """The behaviour this replaced, kept reachable so the two can be A/B'd."""
+    est = SeasonAvailabilityEstimator(use_draft_prior=False).fit(
+        _draft_history(), before_season=2023)
+    rates = est.predict_rate(_rookies())
+    assert rates.iloc[0] == pytest.approx(rates.iloc[1])
+    assert rates.iloc[0] == pytest.approx(est.position_rate_["RB"])
+
+
+def test_absent_draft_column_reproduces_the_old_estimate_exactly():
+    """Backward compatibility for every caller that supplies no round."""
+    hist = _draft_history()
+    on = SeasonAvailabilityEstimator().fit(hist, before_season=2023)
+    off = SeasonAvailabilityEstimator(use_draft_prior=False).fit(hist, before_season=2023)
+    targets = _rookies().drop(columns=["draft_round"])
+    pd.testing.assert_series_equal(on.predict_rate(targets), off.predict_rate(targets))
+
+
+def test_a_thin_round_collapses_back_to_the_position_mean():
+    """One observation must not become a prior. This is the guard that makes
+    the change safe to default on."""
+    hist = _draft_history()
+    hist.loc[len(hist)] = {"player_id": "lone", "position": "RB", "season": 2022,
+                           "games_played": 1, "possible_games": 17, "draft_round": 4}
+    est = SeasonAvailabilityEstimator(draft_bucket_k=1000.0).fit(hist, before_season=2023)
+    lone_round = pd.DataFrame({"player_id": ["x"], "position": ["RB"],
+                               "draft_round": [4], "possible_games": [17.0]})
+    assert est.predict_rate(lone_round).iloc[0] == pytest.approx(
+        est.position_rate_["RB"], abs=1e-3)
+
+
+def test_an_unseen_round_falls_back_row_by_row():
+    """A frame where only some rows carry a usable round still conditions the
+    ones that do."""
+    est = SeasonAvailabilityEstimator(draft_bucket_k=1.0).fit(
+        _draft_history(), before_season=2023)
+    mixed = pd.DataFrame({"player_id": ["a", "b"], "position": ["RB", "RB"],
+                          "draft_round": [1, np.nan], "possible_games": [17.0, 17.0]})
+    rates = est.predict_rate(mixed)
+    assert rates.iloc[0] == pytest.approx(16 / 17, abs=0.01)
+    # NaN buckets as undrafted, which this history has never seen.
+    assert rates.iloc[1] == pytest.approx(est.position_rate_["RB"])
+
+
+def test_draft_prior_ignores_the_target_season_and_later():
+    """Same structural causality as the rest of fit(): the caller cannot leak
+    the projected season into the prior even by passing the whole panel."""
+    hist = _draft_history(seasons=(2020, 2021, 2022))
+    later = _draft_history(seasons=(2023, 2024))
+    later["games_played"] = 2
+    leaky = SeasonAvailabilityEstimator(draft_bucket_k=1.0).fit(
+        pd.concat([hist, later], ignore_index=True), before_season=2023)
+    clean = SeasonAvailabilityEstimator(draft_bucket_k=1.0).fit(hist, before_season=2023)
+    pd.testing.assert_frame_equal(leaky.draft_prior_, clean.draft_prior_)
+
+
+def test_draft_bucket_maps_missing_and_out_of_range_to_undrafted():
+    got = draft_bucket(pd.Series([1, 7, 8, 12, np.nan, 0, -1]))
+    assert got.tolist() == [1, 7] + [UNDRAFTED_ROUND] * 5
+
+
+def test_own_history_still_outweighs_the_round_for_a_veteran():
+    """Conditioning the target must not swamp a player's own record."""
+    iron = pd.DataFrame([{"player_id": "r7_iron", "position": "RB", "season": s,
+                          "games_played": 17, "possible_games": 17, "draft_round": 7}
+                         for s in (2020, 2021, 2022)])
+    est = SeasonAvailabilityEstimator(draft_bucket_k=1.0).fit(
+        pd.concat([_draft_history(), iron], ignore_index=True), before_season=2023)
+    t = pd.DataFrame({"player_id": ["r7_iron"], "position": ["RB"],
+                      "draft_round": [7], "possible_games": [17.0]})
+    rate = est.predict_rate(t).iloc[0]
+    assert rate > 0.80          # 51 prior games outweigh a weak round
+    assert rate < 1.0           # but are still shrunk
+
+
+def test_caller_columns_named_like_the_history_cannot_corrupt_the_estimate():
+    """`prior_games`/`prior_possible` on the input frame used to collide with
+    the merge and be read as the player's own record."""
+    est = SeasonAvailabilityEstimator().fit(_history(), before_season=2023)
+    clean = est.predict_rate(_targets())
+    decoy = _targets().assign(prior_games=999.0, prior_possible=1.0)
+    pd.testing.assert_series_equal(est.predict_rate(decoy), clean)
+
+
+def test_a_zero_possible_games_row_cannot_poison_the_position_mean():
+    hist = _history()
+    hist.loc[len(hist)] = {"player_id": "broken", "position": "RB", "season": 2022,
+                           "games_played": 3, "possible_games": 0}
+    est = SeasonAvailabilityEstimator().fit(hist, before_season=2023)
+    assert np.isfinite(est.position_rate_["RB"])
+
+
+def test_an_estimator_pickled_before_the_draft_prior_still_predicts():
+    """`Step8SeasonModel.save/load` pickle this object. One fitted before the
+    prior existed unpickles with no `draft_prior_` at all."""
+    est = SeasonAvailabilityEstimator().fit(_draft_history(), before_season=2023)
+    del est.draft_prior_
+    rates = est.predict_rate(_rookies())
+    assert rates.iloc[0] == pytest.approx(est.position_rate_["RB"])
+    assert rates.iloc[1] == pytest.approx(est.position_rate_["RB"])
