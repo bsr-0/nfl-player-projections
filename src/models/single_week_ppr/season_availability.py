@@ -43,9 +43,25 @@ itself shrunk toward the position mean by cell size (`DRAFT_BUCKET_K`), so
 a thin cell collapses back to exactly the old behaviour rather than
 chasing noise.
 
-This is deliberately conservative, and the reason is the boundary above:
-the panel holds only player-seasons with >= 1 observed game, so a late
-pick who never dressed is absent from it entirely. The measured
+Measured (2026-09-05, targets 2023-25, 343 cold-start rows), games-played
+MAE on cold-start players against the position-mean target it replaced:
+
+    QB 4.42 -> 3.32   RB 5.62 -> 4.75   TE 5.20 -> 3.80   WR 5.10 -> 4.14
+
+4/4 positions, -0.87 to -1.40 games, and it repeats on a disjoint
+2018-22 set (4/4 again). Over-prediction of rookie games falls with it
+(RB bias +2.01 -> +1.47, WR +1.16 -> +0.77). Players WITH history move
+only slightly, in the same direction (WR 3.81 -> 3.72), so this is not
+bought from the veterans.
+
+The underlying spread is large and monotonic -- over 2013-24, mean
+participation rate runs 0.746 at round 1 down to 0.440 at round 7, with
+undrafted at 0.449. Roughly five games between a first-rounder and a
+seventh-rounder, all of which the position mean was discarding.
+
+This is still conservative, and the reason is the boundary above: the
+panel holds only player-seasons with >= 1 observed game, so a late pick
+who never dressed is absent from it entirely. The measured
 round-to-round gap is therefore the gap AMONG players who reached the
 field, which understates the true one. The conditioning moves the estimate
 in the right direction; it still does not answer "will this player play at
@@ -71,14 +87,23 @@ from config.settings import regular_season_max_week, regular_season_week_sql
 SHRINKAGE_K = 16.0
 
 # Weight on a (position, draft round) cell's own mean is n / (n + K), n counted
-# in player-seasons. Chosen a priori rather than fit: within-cell SD of a season
-# rate is ~0.3, so n=100 puts the SE of a cell mean near 0.03 against a
-# between-round gap of maybe 0.05-0.10 -- i.e. roughly the point where the cell
-# has earned half its own weight. Over-shrinking is the safe failure direction
-# here (it returns the position mean, which is what this replaced), so this errs
-# high. `run_season_availability_experiment.py --draft-bucket-k A B C` sweeps it
-# against real data; nothing here has been tuned on this DB.
-DRAFT_BUCKET_K = 100.0
+# in player-seasons.
+#
+# Swept, not guessed. An earlier revision set this to 100 from a noise argument
+# alone and said so; measured, 100 was far too much shrinkage. Cold-start games
+# MAE falls monotonically as K drops, on two disjoint season sets:
+#
+#   K                 5      10      25      50     100     200   (position mean)
+#   2023-25 WR     4.110   4.117   4.139   4.172   4.231   4.326        5.104
+#   2018-22 WR     4.196   4.204   4.228   4.266   4.332      --        5.125
+#
+# 25 rather than 5: the curve is flat below 25 (WR moves 0.03 games between 25
+# and 5, and the ordering of the two is not stable across positions), while a
+# smaller K keeps stripping the thin-cell protection that makes this safe --
+# at K=25 a 25-row cell still gets only half its own weight, at K=5 it gets 83%.
+# Buying 0.03 games with that guard is a bad trade. Re-sweep with
+# `run_season_availability_experiment.py --draft-bucket-k A B C`.
+DRAFT_BUCKET_K = 25.0
 
 
 def draft_bucket(draft_round) -> pd.Series:
