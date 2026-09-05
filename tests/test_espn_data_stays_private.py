@@ -102,6 +102,16 @@ def test_private_dir_contents_are_gitignored():
 
 
 @pytest.mark.skipif(not (PROJECT_ROOT / ".git").exists(), reason="needs a git checkout")
+def test_the_rendered_report_is_gitignored_too():
+    """The HTML report is league data wearing a different extension."""
+    probe = ESPN_PRIVATE_DIR / "reports" / "probe_report.html"
+    rel = probe.relative_to(PROJECT_ROOT)
+    r = subprocess.run(["git", "check-ignore", str(rel)],
+                       cwd=PROJECT_ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, f"{rel} is NOT gitignored"
+
+
+@pytest.mark.skipif(not (PROJECT_ROOT / ".git").exists(), reason="needs a git checkout")
 def test_no_league_data_is_tracked_anywhere():
     r = subprocess.run(["git", "ls-files"], cwd=PROJECT_ROOT,
                        capture_output=True, text=True)
