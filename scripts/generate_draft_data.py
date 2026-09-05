@@ -28,6 +28,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pandas as pd
 import numpy as np
 
+from src.utils.player_names import board_name
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 MODELS_DIR = DATA_DIR / "models"
 BACKTEST_DIR = DATA_DIR / "backtest_results"
@@ -1000,24 +1002,6 @@ def _name_from_cfb_slug(slug):
     return " ".join(w.capitalize() for w in parts) or None
 
 
-NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
-
-
-def _board_name(full):
-    """"Fernando Mendoza" -> "F.Mendoza".
-
-    Every other row on the board is spelled that way -- the board is built
-    from nflverse weekly stats, which abbreviate. Suffixes go with it, which
-    is why Amon-Ra St. Brown is already on there as "A.St. Brown".
-    """
-    parts = [w for w in str(full).split() if w]
-    if len(parts) < 2:
-        return str(full)
-    while len(parts) > 2 and parts[-1].lower().strip(".") in NAME_SUFFIXES:
-        parts.pop()
-    return f"{parts[0][0]}.{' '.join(parts[1:])}"
-
-
 def _rookie_identities(draft: pd.DataFrame, ids: pd.DataFrame,
                        combine: pd.DataFrame) -> pd.DataFrame:
     """Name, board id and team for each drafted player.
@@ -1058,7 +1042,7 @@ def _rookie_identities(draft: pd.DataFrame, ids: pd.DataFrame,
     out["player_id"] = out["gsis_id"].fillna(out["draft_id"])
     out["team"] = out["draft_team"].replace(PFR_TEAM_CODES)
     named = out[out["name"].notna()].copy()
-    named["name"] = named["name"].map(_board_name)
+    named["name"] = named["name"].map(board_name)
     return named[["draft_id", "player_id", "name", "team", "position"]]
 
 

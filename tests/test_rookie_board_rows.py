@@ -88,18 +88,6 @@ def test_slug_names(mod, slug, expected):
     assert mod._name_from_cfb_slug(slug) == expected
 
 
-@pytest.mark.parametrize("full,expected", [
-    ("Fernando Mendoza", "F.Mendoza"),
-    ("Mike Washington Jr.", "M.Washington"),
-    ("Chris Brazzell II", "C.Brazzell"),
-    # The board already spells Amon-Ra St. Brown this way.
-    ("Amon-Ra St. Brown", "A.St. Brown"),
-    ("Ronnie", "Ronnie"),
-])
-def test_names_match_the_board_convention(mod, full, expected):
-    assert mod._board_name(full) == expected
-
-
 IDENTITIES = pd.DataFrame([
     {"draft_id": "MEN516487", "player_id": "00-0041562",
      "name": "Fernando Mendoza", "team": "LV", "position": "QB"},
