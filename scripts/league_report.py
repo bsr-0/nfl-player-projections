@@ -1,28 +1,38 @@
 """Insights for one fantasy team, built from a private ESPN league snapshot.
 
-PHASE 1 -- the join, and nothing else. Every section of the eventual report
-rests on one question: does a player ESPN names resolve to a projection this
-project produced? `--check-join` answers it out loud, including who does not
-resolve and why, because a silent 80% match rate is how a report ends up
-confidently ranking two thirds of a roster.
+Writes the report as JSON under data/espn_private/reports/, which the
+gitignore already covers by location -- the same rule that keeps the snapshot
+itself out of the repo (tests/test_espn_data_stays_private.py). Nothing here
+touches docs/.
 
-Reads only. Writes nothing, publishes nothing: league data stays under
-data/espn_private/ (see tests/test_espn_data_stays_private.py).
+`--check-join` reports the join the whole thing rests on: whether a player
+ESPN names resolves to a projection this project produced, and who does not,
+because a silent 80% match rate is how a report ends up confidently ranking
+two thirds of a roster.
+
+Which team is yours comes from ESPN_TEAM_ID, or --team with an id or any part
+of the name.
 
 Usage:
+    ESPN_TEAM_ID=1 python scripts/league_report.py
+    python scripts/league_report.py --team "Baby Back Gibbs" --week 3
     python scripts/league_report.py --check-join
-    python scripts/league_report.py --check-join --week 3
 """
 import argparse
+import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config.settings import PROJECT_ROOT
+from config.settings import ESPN_PRIVATE_DIR, PROJECT_ROOT
+from src.integrations.league_insights import build_report
 from src.integrations.league_join import (
     load_projections, load_snapshot, join_players, match_report,
 )
+
+REPORT_DIR = ESPN_PRIVATE_DIR / "reports"
 
 
 def _print_report(label: str, report: dict) -> None:
@@ -68,17 +78,76 @@ def check_join(week=None) -> int:
     return 0
 
 
+def _summarise(report: dict) -> None:
+    m = report["matchup"]
+    print(f"{report['team']['name']} -- week {report['week']} vs "
+          f"{m['opponent']}")
+    print(f"  projected {m['projected_total']} to "
+          f"{m['opponent_projected_total']} ({m['edge']:+})")
+    print(f"  mode={report['projection_mode']} -- {report['mode_note']}")
+    print("\n  Starters")
+    for p in report["starters"]:
+        flag = "" if p["points_source"] == "model" else "  [espn]"
+        print(f"    {p['slot']:<9}{p['name']:<24}{p['points']:>6}{flag}")
+    for label, key in (("Tough calls", "tough_calls"), ("Waivers", "waivers")):
+        rows = report[key]
+        print(f"\n  {label}: {len(rows)}")
+        for r in rows[:5]:
+            if key == "tough_calls":
+                print(f"    {r['slot']:<9}{r['starting']['name']:<20}"
+                      f"{r['starting']['points']:>6}  vs  "
+                      f"{r['benched']['name']:<20}{r['benched']['points']:>6}"
+                      f"   gap {r['gap']}")
+            else:
+                print(f"    {r['position']:<4}{r['name']:<24}{r['points']:>6}"
+                      f"   over {r['instead_of']['name']} by {r['over']}")
+    trades = report["trades"]
+    print(f"\n  Trades: {len(trades['buy_low'])} buy-low, "
+          f"{len(trades['sell_high'])} sell-high")
+    print(f"    basis: {trades['basis']}")
+    for kind in ("buy_low", "sell_high"):
+        for r in trades[kind][:5]:
+            pos, owner = r["position"], (r["fantasy_team"] or "")[:22]
+            label = "buy" if kind == "buy_low" else "sell"
+            print(f"    {label:<5}{r['name']:<22}{owner:<24}"
+                  f"ours {pos}{r['model_rank']:<4} espn {pos}{r['espn_rank']:<4}"
+                  f" {r['model_ppg']:>6} vs {r['espn_ppg']:>6}")
+
+
+def build(team, week=None, write=True) -> int:
+    snapshot = load_snapshot()
+    week = snapshot.week if week is None else week
+    projections = load_projections(snapshot.season, week)
+    report = build_report(snapshot, projections, team, week)
+    _summarise(report)
+
+    if not write:
+        return 0
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    out = REPORT_DIR / f"report_{report['season']}_wk{report['week']}.json"
+    out.write_text(json.dumps(report, indent=2, allow_nan=False, default=str))
+    latest = REPORT_DIR / "latest.json"
+    latest.write_text(out.read_text())
+    print(f"\nWrote {out.relative_to(PROJECT_ROOT)} ({out.stat().st_size:,} bytes)")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check-join", action="store_true",
                     help="report how much of the league resolves to a projection")
+    ap.add_argument("--team", default=os.environ.get("ESPN_TEAM_ID"),
+                    help="your team, by id or part of its name "
+                         "(default: $ESPN_TEAM_ID)")
     ap.add_argument("--week", type=int, default=None,
                     help="week to project (default: the league's current week)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the report without writing it")
     args = ap.parse_args()
 
-    if not args.check_join:
-        ap.error("phase 1 only implements --check-join")
-    return check_join(args.week)
+    if args.check_join:
+        return check_join(args.week)
+    return build(args.team, args.week, write=not args.dry_run)
 
 
 if __name__ == "__main__":
