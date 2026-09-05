@@ -986,6 +986,158 @@ def _json_safe(obj):
     return obj
 
 
+# Draft tables carry PFR's team codes; the board carries nflverse's. Only the
+# codes that actually differ are listed.
+PFR_TEAM_CODES = {"LVR": "LV", "NOR": "NO", "NWE": "NE", "GNB": "GB",
+                  "KAN": "KC", "SFO": "SF", "TAM": "TB", "LAR": "LA"}
+
+
+def _name_from_cfb_slug(slug):
+    """"carnell-tate-1" -> "Carnell Tate". Last resort only."""
+    if not isinstance(slug, str) or not slug:
+        return None
+    parts = [w for w in slug.split("-") if not w.isdigit()]
+    return " ".join(w.capitalize() for w in parts) or None
+
+
+NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+
+def _board_name(full):
+    """"Fernando Mendoza" -> "F.Mendoza".
+
+    Every other row on the board is spelled that way -- the board is built
+    from nflverse weekly stats, which abbreviate. Suffixes go with it, which
+    is why Amon-Ra St. Brown is already on there as "A.St. Brown".
+    """
+    parts = [w for w in str(full).split() if w]
+    if len(parts) < 2:
+        return str(full)
+    while len(parts) > 2 and parts[-1].lower().strip(".") in NAME_SUFFIXES:
+        parts.pop()
+    return f"{parts[0][0]}.{' '.join(parts[1:])}"
+
+
+def _rookie_identities(draft: pd.DataFrame, ids: pd.DataFrame,
+                       combine: pd.DataFrame) -> pd.DataFrame:
+    """Name, board id and team for each drafted player.
+
+    draft_picks_v2 carries no name at all, and its player_id is an nflverse
+    stub (MEN516487) while every other row on the board is keyed by GSIS id.
+    nflverse's id map supplies both; combine data covers the handful it misses;
+    the college-reference slug is the last resort. A pick that none of the
+    three can name is dropped -- a board row reading "MEN516487" is worse than
+    no row.
+
+    Returns `draft_id` (the key the projections are indexed by) alongside
+    `player_id` (GSIS where known), because those are not the same key.
+    """
+    out = draft.copy()
+    out["name"] = None
+
+    if ids is not None and not ids.empty:
+        lookup = ids.dropna(subset=["pfr_id"]).drop_duplicates("pfr_id")
+        out = out.merge(lookup[["pfr_id", "name", "gsis_id"]].rename(
+            columns={"name": "nflverse_name"}),
+            left_on="pfr_player_id", right_on="pfr_id", how="left")
+        out["name"] = out["name"].fillna(out["nflverse_name"])
+    if "gsis_id" not in out.columns:
+        out["gsis_id"] = None
+
+    if combine is not None and not combine.empty:
+        lookup = combine.dropna(subset=["pfr_id"]).drop_duplicates("pfr_id")
+        out = out.merge(lookup[["pfr_id", "player_name"]].rename(
+            columns={"player_name": "combine_name"}),
+            left_on="pfr_player_id", right_on="pfr_id", how="left",
+            suffixes=("", "_combine"))
+        out["name"] = out["name"].fillna(out["combine_name"])
+
+    out["name"] = out["name"].fillna(
+        out["cfb_player_id"].map(_name_from_cfb_slug))
+    out["draft_id"] = out["player_id"]
+    out["player_id"] = out["gsis_id"].fillna(out["draft_id"])
+    out["team"] = out["draft_team"].replace(PFR_TEAM_CODES)
+    named = out[out["name"].notna()].copy()
+    named["name"] = named["name"].map(_board_name)
+    return named[["draft_id", "player_id", "name", "team", "position"]]
+
+
+def _load_rookie_identities(upcoming_season: int) -> pd.DataFrame:
+    """Read the draft class and resolve who each pick is."""
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        draft = pd.read_sql(
+            "SELECT player_id, position, draft_team, pfr_player_id, "
+            "cfb_player_id FROM draft_picks_v2 WHERE draft_season = ? "
+            "AND position IN ('QB','RB','WR','TE') AND player_id IS NOT NULL",
+            conn, params=[int(upcoming_season)])
+        combine = pd.read_sql(
+            "SELECT pfr_id, player_name FROM combine_data_v2 "
+            "WHERE pfr_id IS NOT NULL", conn)
+    finally:
+        conn.close()
+    if draft.empty:
+        return pd.DataFrame()
+
+    # nflverse is the only source carrying GSIS ids for a class this new. It
+    # is a network fetch, so losing it costs names for a few picks and the
+    # right id for all of them -- not the rookies themselves.
+    try:
+        import nfl_data_py as nfl
+        ids = nfl.import_ids()
+    except Exception as e:                           # noqa: BLE001
+        print(f"  nflverse id map unavailable ({e}); "
+              "falling back to combine names and draft ids")
+        ids = pd.DataFrame()
+
+    return _rookie_identities(draft, ids, combine)
+
+
+def _rookie_board_rows(upcoming_season: int, preseason_df: pd.DataFrame,
+                       known_ids: set) -> pd.DataFrame:
+    """Board rows for first-year players the season model already projects.
+
+    The board's population comes from the previous season's weekly stats, so a
+    player whose first season is `upcoming_season` never reaches it -- there is
+    nothing to aggregate. The season model does not have that gap: its
+    cold-start rows are built from the draft class itself
+    (`preseason_features._cold_start_rows_from_draft`), and PR #96 conditioned
+    their availability on draft round specifically to make them better. Those
+    projections were being computed and then dropped here.
+
+    Prior-season columns stay NaN rather than zero. A rookie did not score 0
+    PPG last season; he has no last season, and the board renders the
+    difference (`prev_season_ppg: null` vs `0.0`).
+    """
+    identities = _load_rookie_identities(upcoming_season)
+    if identities.empty:
+        return pd.DataFrame()
+
+    projected = preseason_df.set_index("player_id")
+    rows = identities[identities["draft_id"].isin(projected.index)].copy()
+    # A "rookie" who already has a board row played before this draft class --
+    # a UDFA promoted last season, say. The existing row is the better one.
+    rows = rows[~rows["player_id"].astype(str).isin({str(i) for i in known_ids})]
+    if rows.empty:
+        return pd.DataFrame()
+
+    rows["preseason_projection_total"] = rows["draft_id"].map(
+        projected["pred_total"])
+    for col, out_col in (("confidence_score", "preseason_confidence"),
+                         ("support_class", "preseason_support_class")):
+        if col in projected.columns:
+            rows[out_col] = rows["draft_id"].map(projected[col])
+
+    # Present but empty, matching add_feature_importance()'s shape for a
+    # player it has nothing to say about.
+    rows["key_features"] = [[] for _ in range(len(rows))]
+    rows["feature_importance_rank"] = [{} for _ in range(len(rows))]
+    return rows.drop(columns=["draft_id"])
+
+
 def main():
     from src.utils.nfl_calendar import get_current_nfl_season, is_offseason
     from src.utils.database import DatabaseManager
@@ -1070,6 +1222,15 @@ def main():
         has_preseason_projection = bool(agg["preseason_projection_total"].notna().any())
         print(f"  Loaded preseason season-total projections for {upcoming_season} season"
               f" ({int(agg['preseason_projection_total'].notna().sum())} players)")
+
+        rookies = _rookie_board_rows(upcoming_season, preseason_df,
+                                     set(agg["player_id"]))
+        if not rookies.empty:
+            agg = pd.concat([agg, rookies], ignore_index=True)
+            print(f"  Added {len(rookies)} first-year players from the "
+                  f"{upcoming_season} draft class")
+        else:
+            print(f"  No {upcoming_season} first-year players to add")
     else:
         print(f"  No preseason season-total projections available for {upcoming_season} season")
 
