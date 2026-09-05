@@ -27,9 +27,15 @@ split and is why the arm exists in this shape.
 No special rookie path is needed here. `build_multiyear_season_pairs` emits
 cold-start rows (`_cold_start_rows`) with the `*_y1/_y2/_y3` lags left NaN and
 draft/combine/college populated; the production half is a LightGBM regressor
-which routes those NaN natively; and the exposure half falls back to the
-position-mean rate at zero weight on player history. Measured, step8 is BETTER
+which routes those NaN natively; and the exposure half falls back to its
+shrinkage target at zero weight on player history. Measured, step8 is BETTER
 on rookies (39.81) than on veterans (45.96).
+
+That 39.81 was measured when the exposure fallback was the flat position mean,
+which gave every rookie at a position the same games estimate. The target is
+now conditioned on draft round (see `season_availability`), and `pairs`
+carries `draft_round`, so this path picks it up automatically. The number
+above therefore predates the change and has NOT been re-measured.
 
 ### What actually had to change for production
 

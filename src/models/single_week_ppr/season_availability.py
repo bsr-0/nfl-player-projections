@@ -31,6 +31,25 @@ this player having a season, how many games does he play"* -- NOT *"will
 this player play at all"*. It has not been shown to identify players who
 miss a roster, start the season injured, retire, are cut, or are rookies
 with no NFL history. Do not read the fallback below as a solution to that.
+
+### The shrinkage target is conditioned on draft round
+
+A player with no history gets `w = 0`, so his estimate is entirely the
+target he is shrunk toward. When that target was the position mean, every
+rookie at a position got an IDENTICAL number -- a first-round back and a
+seventh-round back alike -- which discards the only exposure signal a
+week-1 rookie has. The target is now the position x draft-round mean,
+itself shrunk toward the position mean by cell size (`DRAFT_BUCKET_K`), so
+a thin cell collapses back to exactly the old behaviour rather than
+chasing noise.
+
+This is deliberately conservative, and the reason is the boundary above:
+the panel holds only player-seasons with >= 1 observed game, so a late
+pick who never dressed is absent from it entirely. The measured
+round-to-round gap is therefore the gap AMONG players who reached the
+field, which understates the true one. The conditioning moves the estimate
+in the right direction; it still does not answer "will this player play at
+all".
 """
 from __future__ import annotations
 
@@ -42,6 +61,7 @@ import pandas as pd
 from src.models.single_week_ppr.population import (
     RECEIVING_CHARTING_MIN_SEASON, RECEIVING_DEPENDENT_POSITIONS, label_participation,
 )
+from src.models.preseason_features import UNDRAFTED_ROUND
 from config.settings import regular_season_max_week, regular_season_week_sql
 
 # Weight on the player's own history is n_prior_games / (n_prior_games + K).
@@ -49,6 +69,73 @@ from config.settings import regular_season_max_week, regular_season_week_sql
 # weight and a five-year veteran ~84%. The raw per-player rate over-corrects
 # (WR season bias +12.36 vs +7.85 shrunk), which is why this exists.
 SHRINKAGE_K = 16.0
+
+# Weight on a (position, draft round) cell's own mean is n / (n + K), n counted
+# in player-seasons. Chosen a priori rather than fit: within-cell SD of a season
+# rate is ~0.3, so n=100 puts the SE of a cell mean near 0.03 against a
+# between-round gap of maybe 0.05-0.10 -- i.e. roughly the point where the cell
+# has earned half its own weight. Over-shrinking is the safe failure direction
+# here (it returns the position mean, which is what this replaced), so this errs
+# high. `run_season_availability_experiment.py --draft-bucket-k A B C` sweeps it
+# against real data; nothing here has been tuned on this DB.
+DRAFT_BUCKET_K = 100.0
+
+
+def draft_bucket(draft_round) -> pd.Series:
+    """Draft round as a prior bucket: 1-7, or UNDRAFTED_ROUND for everything else.
+
+    A missing round reads as undrafted, matching
+    `build_multiyear_season_pairs`, which fills the same NaN with
+    UNDRAFTED_ROUND. That is not a guess: `draft_picks_v2` has no row at all
+    for an undrafted player, so within this data "no draft row" and
+    "undrafted" are the same observation. Out-of-range rounds (the 8-12 round
+    era, or a bad value) land in the same bucket rather than opening cells
+    that modern classes can never populate.
+    """
+    r = pd.to_numeric(pd.Series(draft_round).reset_index(drop=True), errors="coerce")
+    return r.where(r.between(1, UNDRAFTED_ROUND - 1), UNDRAFTED_ROUND).astype(int)
+
+
+def _observed_rate(df: pd.DataFrame) -> pd.Series:
+    """games_played / possible_games, with an unusable denominator left NaN.
+
+    A zero or missing `possible_games` would otherwise divide to inf and take
+    the whole position mean with it -- means here are computed with skipna, so
+    NaN drops the row instead of poisoning the aggregate.
+    """
+    possible = pd.to_numeric(df["possible_games"], errors="coerce")
+    games = pd.to_numeric(df["games_played"], errors="coerce")
+    return games / possible.where(possible > 0)
+
+
+def load_draft_rounds(db_path: Optional[str] = None) -> pd.DataFrame:
+    """player_id -> draft_round, one row per player.
+
+    Deduplicated the same way `career_static_by_player` does it, on MIN
+    (draft_pick): `draft_picks_v2` carries a handful of players twice, and the
+    bare `draft_round` beside a MIN() aggregate resolves to that same
+    minimum-pick row under SQLite's bare-column rule.
+
+    Returns an empty frame when the table is absent, so an older DB degrades
+    to the position-mean target rather than failing the load outright.
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(db_path or DB_PATH))
+    try:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='draft_picks_v2'"
+        ).fetchone()
+        if not exists:
+            return pd.DataFrame(columns=["player_id", "draft_round"])
+        return pd.read_sql(
+            "SELECT player_id, draft_round, MIN(draft_pick) AS _pick "
+            "FROM draft_picks_v2 "
+            "WHERE player_id IS NOT NULL AND player_id != '' "
+            "GROUP BY player_id", conn)[["player_id", "draft_round"]]
+    finally:
+        conn.close()
 
 
 def load_player_seasons(db_path: Optional[str] = None) -> pd.DataFrame:
@@ -97,23 +184,44 @@ def load_player_seasons(db_path: Optional[str] = None) -> pd.DataFrame:
     # 2020 and 17 from 2021.
     fallback = played["season"].map(lambda s: regular_season_max_week(s) - 1)
     played["possible_games"] = played["possible_games"].fillna(fallback)
-    played["rate"] = played["games_played"] / played["possible_games"]
+    played["rate"] = _observed_rate(played)
     played["ppr_per_game"] = played["ppr"] / played["games_played"]
+
+    # Draft round rides along so `fit` and `predict_rate` bucket players the
+    # same way. Left NaN where unknown; `draft_bucket` reads that as undrafted.
+    rounds = load_draft_rounds(db_path)
+    if not rounds.empty:
+        played = played.merge(rounds, on="player_id", how="left")
+    else:
+        played["draft_round"] = np.nan
     return played
 
 
 class SeasonAvailabilityEstimator:
-    """E[games played] from prior seasons only, shrunk toward the position mean.
+    """E[games played] from prior seasons only, shrunk toward a population rate.
+
+    That rate is the player's position x draft-round mean where a round is
+    available and the position mean where it is not, so a player with no
+    history of his own is no longer indistinguishable from every other player
+    at his position. `use_draft_prior=False` restores the position-mean-only
+    behaviour exactly, for A/B against the 12/12 result in the module
+    docstring.
 
     Causality is structural rather than conventional: `fit` requires the
     target season and drops anything at or after it, so a caller cannot
-    accidentally train on the season being projected.
+    accidentally train on the season being projected -- and that now covers
+    the draft-round prior too, not just the per-player history.
     """
 
-    def __init__(self, shrinkage_k: float = SHRINKAGE_K):
+    def __init__(self, shrinkage_k: float = SHRINKAGE_K,
+                 draft_bucket_k: float = DRAFT_BUCKET_K,
+                 use_draft_prior: bool = True):
         self.shrinkage_k = float(shrinkage_k)
+        self.draft_bucket_k = float(draft_bucket_k)
+        self.use_draft_prior = bool(use_draft_prior)
         self.before_season: Optional[int] = None
         self.position_rate_: Optional[pd.Series] = None
+        self.draft_prior_: Optional[pd.DataFrame] = None
         self.player_history_: Optional[pd.DataFrame] = None
 
     def fit(self, player_seasons: pd.DataFrame, before_season: int) -> "SeasonAvailabilityEstimator":
@@ -128,34 +236,94 @@ class SeasonAvailabilityEstimator:
             raise ValueError(f"no seasons before {before_season} to fit on")
 
         self.before_season = int(before_season)
-        self.position_rate_ = (hist["games_played"] / hist["possible_games"]).groupby(
-            hist["position"]).mean()
+        rate = _observed_rate(hist)
+        self.position_rate_ = rate.groupby(hist["position"]).mean()
+        self.draft_prior_ = self._fit_draft_prior(hist, rate)
         self.player_history_ = hist.groupby("player_id").agg(
             prior_games=("games_played", "sum"),
             prior_possible=("possible_games", "sum")).reset_index()
         return self
 
+    def _fit_draft_prior(self, hist: pd.DataFrame, rate: pd.Series) -> Optional[pd.DataFrame]:
+        """Position x draft-round mean rate, shrunk toward the position mean.
+
+        Returns None when there is no round to condition on, which is what
+        keeps this backward compatible: the estimator then targets the
+        position mean exactly as it did before.
+        """
+        if not self.use_draft_prior or "draft_round" not in hist.columns:
+            return None
+
+        cells = pd.DataFrame({
+            "position": hist["position"].to_numpy(),
+            "draft_bucket": draft_bucket(hist["draft_round"]).to_numpy(),
+            "rate": rate.to_numpy(),
+        }).dropna(subset=["rate"])
+        if cells.empty:
+            return None
+
+        agg = cells.groupby(["position", "draft_bucket"])["rate"].agg(
+            ["mean", "size"]).reset_index()
+        position_rate = agg["position"].map(self.position_rate_)
+        # An unseen position cannot happen here (the cells come from `hist`,
+        # which is what position_rate_ was built from), but the fill keeps the
+        # arithmetic total rather than silently emitting NaN priors.
+        position_rate = position_rate.fillna(self.position_rate_.mean())
+        w = agg["size"] / (agg["size"] + self.draft_bucket_k)
+        agg["prior"] = w * agg["mean"] + (1.0 - w) * position_rate
+        return agg[["position", "draft_bucket", "prior"]]
+
+    def _target_rate(self, merged: pd.DataFrame, position_rate: pd.Series) -> pd.Series:
+        """The rate a row is shrunk toward: its draft-round cell, else position.
+
+        Falls back per ROW, not per call: a frame where only some players carry
+        a draft round still gets the conditioned target for the ones that do.
+        """
+        # getattr, not attribute access: `save`/`load` pickle this estimator, so
+        # a model fitted before the draft prior existed unpickles without the
+        # attribute at all and must keep predicting rather than raise.
+        prior_table = getattr(self, "draft_prior_", None)
+        if prior_table is None or "draft_round" not in merged.columns:
+            return position_rate
+
+        keys = pd.DataFrame({
+            "position": merged["position"].to_numpy(),
+            "draft_bucket": draft_bucket(merged["draft_round"]).to_numpy(),
+        })
+        joined = keys.merge(prior_table, on=["position", "draft_bucket"], how="left")
+        prior = pd.Series(joined["prior"].to_numpy(), index=merged.index)
+        return prior.fillna(position_rate)
+
     def predict_rate(self, players: pd.DataFrame) -> pd.Series:
         """Expected participation rate per row.
 
-        Fallback for a player with no prior history: the position mean rate,
-        with zero weight on player history (`w = 0 / (0 + K)`). This is a
-        documented degradation, not an estimate of whether an unknown player
-        will play at all -- see the module docstring.
+        Fallback for a player with no prior history: the shrinkage target, at
+        zero weight on player history (`w = 0 / (0 + K)`). That target is the
+        player's position x draft-round rate where a round is available and the
+        position mean where it is not. This is a documented degradation, not an
+        estimate of whether an unknown player will play at all -- see the
+        module docstring.
         """
         if self.position_rate_ is None:
             raise RuntimeError("call fit() before predict_rate()")
 
-        merged = players.merge(self.player_history_, on="player_id", how="left")
+        # Dropped rather than suffixed: a caller whose frame already carries
+        # these names would otherwise silently be read as its own history.
+        clash = [c for c in ("prior_games", "prior_possible") if c in players.columns]
+        merged = (players.drop(columns=clash) if clash else players).merge(
+            self.player_history_, on="player_id", how="left")
+
         prior_games = merged["prior_games"].fillna(0.0)
-        player_rate = merged["prior_games"] / merged["prior_possible"]
+        prior_possible = merged["prior_possible"]
+        player_rate = merged["prior_games"] / prior_possible.where(prior_possible > 0)
 
         position_rate = merged["position"].map(self.position_rate_)
         if position_rate.isna().any():
             position_rate = position_rate.fillna(self.position_rate_.mean())
+        target = self._target_rate(merged, position_rate)
 
         w = prior_games / (prior_games + self.shrinkage_k)
-        rate = w * player_rate.fillna(position_rate) + (1.0 - w) * position_rate
+        rate = w * player_rate.fillna(target) + (1.0 - w) * target
         return pd.Series(np.clip(rate.to_numpy(), 0.0, 1.0), index=players.index)
 
     def predict_games(self, players: pd.DataFrame,

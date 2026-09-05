@@ -13247,3 +13247,72 @@ Verified end to end: a full retrain under the pin reproduced the transform
 state and smearing factors bit-identically (1.2246 / 1.2554 / 1.2149) with no
 disagreements reported. Setting the dict to None restores skew-based behaviour;
 unlisted positions fall back to it.
+
+---
+
+### Cold start: the availability target is conditioned on draft round (2026-09-05)
+
+**Status: SHIPPED BUT NOT MEASURED.** Read the last paragraph before quoting
+any number from this section, because there are none.
+
+The season projection is `E[games] x E[PPR per game]`. A player with no NFL
+history gets shrinkage weight `w = 0 / (0 + K) = 0`, so his games estimate is
+*entirely* whatever target he is shrunk toward. That target was the position
+mean, which means every rookie at a position received an identical exposure
+estimate -- a first-round back and a seventh-round back alike. Draft capital
+was already in the PRODUCTION half's features, but the exposure half threw it
+away, and exposure is where cold-start variance actually lives.
+
+The target is now the position x draft-round mean, hierarchically shrunk
+toward the position mean by cell size (`DRAFT_BUCKET_K = 100` player-seasons):
+
+    prior(pos, round) = wc * cell_mean + (1 - wc) * position_mean
+    wc = n_cell / (n_cell + DRAFT_BUCKET_K)
+
+so a thin cell collapses back to exactly the previous behaviour rather than
+chasing noise. Rounds 1-7 each get a bucket; everything else -- undrafted, the
+old 8-12 round era, a missing draft row -- shares bucket 8, matching
+`build_multiyear_season_pairs`, which fills the same NaN with `UNDRAFTED_ROUND`
+on the grounds that `draft_picks_v2` has no row at all for an undrafted player.
+
+Fallback is per ROW, not per call: a frame carrying rounds for some players
+still conditions those, and any row whose (position, round) cell was never fit
+falls to the position mean. A caller that supplies no `draft_round` column gets
+the old estimate bit-for-bit, and `use_draft_prior=False` restores it
+explicitly for A/B.
+
+**The selection bias this cannot cross, and which makes it conservative.** The
+panel holds only player-seasons with >= 1 observed game -- the same boundary
+that has always limited this estimator. A late pick who never dressed is not in
+it. So the round-to-round spread being learned is the spread AMONG players who
+reached the field, which is *narrower* than the real one. This moves the
+estimate in the right direction; it still does not answer "will this player
+play at all". `draft_picks_v2` sets `player_id` to NULL for anyone who has
+never played an NFL snap, so the population that would answer that question is
+structurally absent from this DB, not merely unqueried.
+
+**What was verified:** 11 new unit tests on synthetic panels, and a full-suite
+A/B from an identical starting state -- zero regressions, the same 8
+pre-existing failures before and after. On a synthetic panel the production
+estimator with the prior disabled reproduces the hand-rolled `hist_shrunk`
+arithmetic to 0.0.
+
+**What was NOT verified, and must be before this is trusted:** anything on real
+data. This container has no `data/nfl_data.db`, so every real-data test skipped
+and no MAE was measured. `DRAFT_BUCKET_K = 100` was chosen a priori from the
+noise scale (within-cell season-rate SD ~0.3, so n=100 puts the cell mean's SE
+near 0.03 against a between-round gap of maybe 0.05-0.10), NOT fit. Run:
+
+    python scripts/run_season_availability_experiment.py --draft-bucket-k 25 50 100 200
+
+and read the new COLD START tables -- the cold-start rows are the only ones
+where the arms can differ much. `season_step8.py`'s "rookies 39.81" figure
+predates this change and has not been re-measured.
+
+**Follow-on, not done here:** draft round is an April signal. Whether a player
+is on the field in Week 1 is settled far later, and the repo already has the
+better signal -- `_lookup_depth_chart_rank_asof` in
+`single_week_ppr/season_projection.py`, plus `weekly_rosters_v2` (2024-2025
+only). Preseason depth-chart rank should override the draft-round prior once
+it exists for a target season; draft round is the right answer only for a
+projection built before camp.
