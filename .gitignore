@@ -56,6 +56,9 @@ scripts/data/cache/
 
 # Frontend
 frontend/node_modules/
+# ...and the repo root, where `npm install jsdom` once dropped 25MB of
+# transitive dependencies with no package.json to record them.
+node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/tsconfig.tsbuildinfo
