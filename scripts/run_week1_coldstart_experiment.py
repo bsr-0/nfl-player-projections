@@ -25,6 +25,13 @@ Arms:
                    room that produces 22 PPR points a week is in a different
                    situation from one landing in a room that produces 12,
                    whatever his own history says.
+    rank_prior     the week-1 depth chart alone: mean week-1 points for a
+                   (position, depth rank) cell, shrunk by cell size.
+    pace_x_rank    the published number times a walk-forward factor per depth
+                   rank. The chart is the one signal that speaks to the role
+                   question directly, and this asks the only question that
+                   matters for it -- whether it adds anything ON TOP of draft
+                   capital, which step 8 already carries.
     coldstart_ramp the per-game rate times ONE scalar, fitted walk-forward on
                    earlier cold-start rows: sum(actual week-1 points) over
                    sum(predicted rate). Neither 17 games nor E[games] but the
@@ -286,6 +293,57 @@ def evaluate(rows: pd.DataFrame, arms) -> dict:
     return out
 
 
+def depth_ranks() -> pd.DataFrame:
+    """Best (lowest) week-1 depth-chart rank per player and season.
+
+    Read straight from `depth_charts` rather than through a helper module, so
+    this arm has no dependency beyond the table. MIN across a player's rows:
+    a back listed RB2 and KR3 is an RB2.
+    """
+    con = sqlite3.connect(str(DB_PATH))
+    try:
+        dc = pd.read_sql(
+            "SELECT CAST(season AS INT) AS season, gsis_id AS player_id, "
+            "MIN(CAST(depth_team AS INTEGER)) AS depth_rank FROM depth_charts "
+            "WHERE week = 1 AND gsis_id IS NOT NULL AND depth_team IS NOT NULL "
+            "GROUP BY season, gsis_id", con)
+    finally:
+        con.close()
+    dc["depth_rank"] = dc["depth_rank"].clip(upper=3)
+    return dc
+
+
+def add_depth_arms(rows: pd.DataFrame, min_train: int = 60) -> pd.DataFrame:
+    """Depth-chart arms, fit walk-forward on earlier cold-start rows."""
+    rows = rows.merge(depth_ranks(), on=["player_id", "season"], how="left")
+    rows["rank_prior"] = pd.NA
+    rows["pace_x_rank"] = pd.NA
+    charted = rows.cold_start.eq(1) & rows.depth_rank.notna()
+    print(f"  charted cold-start rows: {int(charted.sum())} of "
+          f"{int(rows.cold_start.sum())}")
+
+    for season in sorted(rows["season"].unique()):
+        train = rows[charted & (rows.season < season)]
+        if len(train) < min_train:
+            print(f"  {season}: skipped ({len(train)} earlier charted rows)")
+            continue
+        # The chart alone, and the chart as a correction to the model.
+        cell = train.groupby(["position", "depth_rank"])["actual"].mean()
+        overall = train.groupby("position")["actual"].mean()
+        factor = train.groupby("depth_rank").apply(
+            lambda g: g.actual.sum() / g.step8_pace.sum())
+        mask = charted & rows.season.eq(season)
+        keys = list(zip(rows.loc[mask, "position"], rows.loc[mask, "depth_rank"]))
+        rows.loc[mask, "rank_prior"] = [
+            cell.get(k, overall.get(k[0])) for k in keys]
+        rows.loc[mask, "pace_x_rank"] = (
+            rows.loc[mask, "step8_pace"]
+            * rows.loc[mask, "depth_rank"].map(factor).fillna(1.0))
+        print(f"  {season}: factors "
+              f"{ {int(k): round(v, 2) for k, v in factor.items()} }", flush=True)
+    return rows
+
+
 def matchup_arm(seasons, pool_from: int) -> pd.DataFrame:
     """Walk-forward: each season predicted by a model fit only on cold-start
     week-1 rows from earlier seasons, the same discipline step 8 gets."""
@@ -388,6 +446,10 @@ def main():
         rows.loc[mask, "coldstart_ramp"] = rows.loc[mask, "step8_per_game"] * ramp
         print(f"  {season}: ramp {ramp:.3f} from {len(train)} rows", flush=True)
 
+    print("\ndepth-chart arms (cold start only)")
+    rows = add_depth_arms(rows)
+    depth_rows = rows[rows.cold_start.eq(1) & rows["pace_x_rank"].notna()]
+
     print("\nmatchup arm (cold start only)")
     rows = rows.merge(matchup_arm(sorted(rows["season"].unique()),
                                   args.pool_from),
@@ -412,6 +474,8 @@ def main():
             for pos, g in rows[rows.cold_start == 1].groupby("position")},
         "matchup_head_to_head": evaluate(head_to_head, arms + ["matchup", "hurdle"]),
         "coldstart_ramp": evaluate(ramp_rows, arms + ["coldstart_ramp"]),
+        "depth_chart": evaluate(depth_rows,
+                                arms + ["rank_prior", "pace_x_rank"]),
         # DIAGNOSTIC, NOT A SERVABLE FILTER. Realised snap share is not known
         # before kickoff, so conditioning on it cannot be shipped. It answers a
         # different question: with the "did he even play a role" part of the
@@ -449,6 +513,8 @@ def main():
           result["matchup_head_to_head"], arms + ["matchup", "hurdle"])
     table("cold-start ramp (seasons with earlier rows to fit the scalar on)",
           result["coldstart_ramp"], arms + ["coldstart_ramp"])
+    table("depth chart (charted cold-start rows)", result["depth_chart"],
+          arms + ["rank_prior", "pace_x_rank"])
 
     for t in SNAP_SHARE_THRESHOLDS:
         scored = result["by_snap_share"][str(t)]["cold_start"]

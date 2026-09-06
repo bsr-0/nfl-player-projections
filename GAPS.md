@@ -13914,3 +13914,55 @@ movers, because a destination profile is a competition signal as much as an
 opportunity one: a receiver landing in a room that already absorbs targets
 projects lower. Largest: K.Boutte -35.8 (-45%), R.Shaheed -29.5, J.Jennings
 -27.7.
+
+
+## Depth-chart rank: the seventh cold-start arm, and the seventh null (2026-09-06)
+
+The rejected-alternatives round ended by pointing at the slice rather than the
+pie -- for a player with no NFL history, week 1 is mostly a question of whether
+he is on the field, and neither team-room output nor opponent strength answers
+it. The week-1 depth chart answers it directly, and GAPS 13374's rejection was
+about a JULY board being unable to read a September snapshot, which does not
+bind a report generated in week 1.
+
+Two arms, both walk-forward, both in
+`scripts/run_week1_coldstart_experiment.py` so the numbers are reproducible
+rather than argued:
+
+    rank_prior     mean week-1 points for a (position, rank) cell
+    pace_x_rank    the published number times a factor per rank
+
+    charted cold-start rows, 2023-2025 (n=134, the seasons with enough
+    earlier charted rows to fit on)
+
+      step8_pace     MAE 3.74  bias -0.22  R2 +0.251
+      pace_x_rank    MAE 3.68  bias -0.11  R2 +0.220
+      rank_prior     MAE 4.27  bias +0.01  R2 +0.104
+
+      pace_x_rank vs step8_pace: dMAE -0.059, 95% CI [-0.373, +0.260]
+      rank_prior  vs step8_pace: dMAE +0.529, 95% CI [-0.015, +1.048]
+
+The chart alone is clearly worse than the model. As a correction ON TOP of the
+model it is nominally better and better calibrated, and it loses in 2025 while
+winning 2023 and 2024 -- an interval four times the size of the effect. Not
+shippable.
+
+### What the factors say, which is worth keeping
+
+The walk-forward multipliers are stable across every fit: rank 1 x1.45-1.49,
+rank 2 x0.68-0.85, rank 3 x0.72-0.84. The chart is telling us the season model
+under-projects a listed starter by about half and over-projects a backup by a
+fifth -- a real, consistent statement about where step 8's error lives, and the
+same pattern the snap-share diagnostic found from the other direction. It
+cannot be turned into an accuracy gain at n=134, which is the honest summary of
+this whole line: the signal is real, the sample is not big enough to bank it.
+
+### Correcting a claim made in the same session
+
+This measurement was described as invalidated by the roster fix, on the
+grounds that the board had changed underneath it. It had not. `inference_teams`
+defaults to "auto", which only reaches for the roster snapshot when the target
+season has no stats, so a historical target season is untouched -- re-running
+the harness after the roster work produced 1,636 rows identical to four
+decimal places, cold-start rows included. The 2026 board moved; the backtest
+did not.
