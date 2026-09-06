@@ -22,6 +22,16 @@ showing. Prorated rows deliberately carry NO confidence interval: a season
 floor/ceiling divided by 17 is a pace band, not a weekly outcome range, and
 presenting it as the latter would overstate precision.
 
+`/ 17` IS THE MEASURED CHOICE FOR COLD START, not a placeholder (2026-09-05).
+Scored against real week-1 PPR over 2021-2025, 208 players with no NFL
+history: MAE 3.70, bias -0.18, R2 +0.270. Four alternatives lost, each with a
+paired-bootstrap CI entirely on the wrong side of zero -- team-room output x a
+draft-round share (+0.58 MAE), that plus the week-1 opponent's defence
+(+0.32), a half-and-half blend with the published number (+0.23), and
+dividing by expected games instead of 17 (+0.77). See GAPS.md and
+scripts/run_week1_coldstart_experiment.py. Anything replacing this has to beat
+3.70 at -0.18 on cold start.
+
 Usage:
     python scripts/generate_weekly_data.py
     python scripts/generate_weekly_data.py --weeks 1 6

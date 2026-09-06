@@ -13,6 +13,25 @@ all, because that split is the whole question -- a cold-start player's pace is
 almost entirely the shrinkage target that PR #96 changed.
 
 Arms:
+    team_share     the alternative: what the player's TEAM produces at his
+                   position per week, times the share a player like him takes.
+                   For a cold-start player "like him" means his draft round --
+                   the only role signal that exists before he plays -- and the
+                   share is fitted on past rookies, ratio-of-sums, shrunk
+                   toward the position mean by cell size. For a veteran it is
+                   his OWN share of his old team's position group, carried to
+                   his new team's level. This is the "team tendencies and how
+                   a team uses its players" hypothesis: a back landing in a
+                   room that produces 22 PPR points a week is in a different
+                   situation from one landing in a room that produces 12,
+                   whatever his own history says.
+    matchup        the same hypothesis carried one step further: a Ridge on
+                   where he landed AND who he opens against -- draft capital,
+                   his new team's prior-season production at his position and
+                   its pace, and what the week-1 opponent gave up to that
+                   position last year. team_share has the first half; this
+                   adds the matchup. Cold start only, walk-forward, see
+                   src/models/week1_matchup.py.
     step8_pace     the published number: step 8 season total / 17
     step8_per_game the same total over the model's OWN expected games, which
                    is the production term `E[PPR per game | played]` on its
@@ -28,7 +47,10 @@ Arms:
 
 Leakage: step 8 is refit per target season on pairs strictly before it, with
 availability fit `before_season=S`. position_mean excludes the target season.
-prior_ppg reads season S-1, which is known before week 1 is played.
+prior_ppg reads season S-1, which is known before week 1 is played. team_share
+reads team levels from S-1 and fits its share table on seasons < S; the one
+target-season fact it uses is which team the player is on in week 1, which is
+public roster information before kickoff and is not the label.
 
 POPULATION CAVEAT, stated because it flatters every arm: only players who
 recorded a week-1 row are scored. A rookie drafted and inactive in week 1 is
@@ -99,11 +121,86 @@ def week1_actuals(season: int) -> pd.DataFrame:
     con = sqlite3.connect(str(DB_PATH))
     try:
         return pd.read_sql(
-            "SELECT player_id, fantasy_points AS actual FROM player_weekly_stats "
+            "SELECT player_id, team, fantasy_points AS actual "
+            "FROM player_weekly_stats "
             "WHERE season = ? AND week = 1 AND fantasy_points IS NOT NULL",
             con, params=[int(season)])
     finally:
         con.close()
+
+
+def _weekly(columns="player_id, season, week, team, fantasy_points"):
+    con = sqlite3.connect(str(DB_PATH))
+    try:
+        w = pd.read_sql(
+            f"SELECT {columns} FROM player_weekly_stats "
+            "WHERE fantasy_points IS NOT NULL", con)
+        pos = pd.read_sql(
+            "SELECT player_id, position FROM players WHERE position IS NOT NULL",
+            con)
+    finally:
+        con.close()
+    return w.merge(pos.drop_duplicates("player_id"), on="player_id", how="left")
+
+
+def team_position_levels(weekly: pd.DataFrame) -> pd.DataFrame:
+    """PPR points a team's position room produces per week, by season.
+
+    The room, not the player: this is the situation a rookie is drafted into,
+    and it is knowable before he takes a snap.
+    """
+    per_week = (weekly[weekly["position"].isin(("QB", "RB", "WR", "TE"))]
+                .groupby(["season", "team", "position", "week"])["fantasy_points"]
+                .sum().reset_index())
+    return (per_week.groupby(["season", "team", "position"])["fantasy_points"]
+            .mean().reset_index().rename(columns={"fantasy_points": "level"}))
+
+
+def fit_rookie_shares(weekly, levels, debut, draft_round, before: int,
+                      bucket_k: float = 25.0) -> dict:
+    """Share of his room's weekly output a rookie takes in week 1.
+
+    Ratio of sums, not mean of ratios: a rookie landing in a room that
+    produced 4 points a week would otherwise contribute a share of 3.0 and
+    swamp the estimate. Shrunk toward the position mean by cell size, the same
+    device and the same K as the availability prior's draft buckets.
+    """
+    wk1 = weekly[(weekly.week == 1) & (weekly.season < before)].copy()
+    wk1["debut"] = wk1.player_id.map(debut)
+    rookies = wk1[wk1.debut == wk1.season].copy()
+    if rookies.empty:
+        return {}
+    prior = levels.assign(season=levels.season + 1)
+    rookies = rookies.merge(prior, on=["season", "team", "position"], how="left")
+    rookies = rookies[rookies.level > 0]
+    rookies["round"] = rookies.player_id.map(draft_round).fillna(8).astype(int)
+    rookies.loc[rookies["round"] > 7, "round"] = 8
+
+    shares = {}
+    for pos, g in rookies.groupby("position"):
+        pos_share = g.fantasy_points.sum() / g.level.sum()
+        shares[(pos, None)] = pos_share
+        for rnd, cell in g.groupby("round"):
+            w = len(cell) / (len(cell) + bucket_k)
+            cell_share = cell.fantasy_points.sum() / cell.level.sum()
+            shares[(pos, int(rnd))] = w * cell_share + (1 - w) * pos_share
+    return shares
+
+
+def veteran_shares(weekly, levels, season: int) -> pd.DataFrame:
+    """Each player's share of his OWN room last season, to carry forward."""
+    prev = weekly[weekly.season == season - 1]
+    if prev.empty:
+        return pd.DataFrame(columns=["player_id", "vet_share"])
+    per_player = (prev.groupby(["player_id", "team", "position"])
+                  ["fantasy_points"].mean().reset_index())
+    per_player = per_player.merge(
+        levels[levels.season == season - 1].drop(columns="season"),
+        on=["team", "position"], how="left")
+    per_player = per_player[per_player.level > 0]
+    per_player["vet_share"] = per_player.fantasy_points / per_player.level
+    return (per_player.sort_values("fantasy_points", ascending=False)
+            .drop_duplicates("player_id")[["player_id", "vet_share"]])
 
 
 def prior_ppg(season: int) -> pd.DataFrame:
@@ -115,6 +212,38 @@ def prior_ppg(season: int) -> pd.DataFrame:
             "GROUP BY player_id", con, params=[int(season) - 1])
     finally:
         con.close()
+
+
+def draft_rounds() -> dict:
+    con = sqlite3.connect(str(DB_PATH))
+    try:
+        d = pd.read_sql("SELECT player_id, draft_round FROM draft_picks_v2 "
+                        "WHERE player_id IS NOT NULL AND draft_round IS NOT NULL",
+                        con)
+    finally:
+        con.close()
+    return dict(zip(d.player_id, d.draft_round))
+
+
+def add_team_share(rows: pd.DataFrame, season: int, weekly, levels, debut,
+                   rounds) -> pd.DataFrame:
+    """level(new team, position, S-1) x the share a player like him takes."""
+    shares = fit_rookie_shares(weekly, levels, debut, rounds, before=season)
+    rows = rows.merge(levels[levels.season == season - 1].drop(columns="season"),
+                      on=["team", "position"], how="left")
+    rows = rows.merge(veteran_shares(weekly, levels, season), on="player_id",
+                      how="left")
+    rnd = rows.player_id.map(rounds).fillna(8).astype(int).clip(upper=8)
+
+    share = []
+    for cold, pos, r, vet in zip(rows.cold_start, rows.position, rnd,
+                                 rows.vet_share):
+        if cold:
+            share.append(shares.get((pos, int(r)), shares.get((pos, None))))
+        else:
+            share.append(vet if pd.notna(vet) else np.nan)
+    rows["team_share"] = rows["level"] * pd.Series(share, index=rows.index)
+    return rows.drop(columns=["vet_share"])
 
 
 def _score(g: pd.DataFrame, arm: str) -> dict:
@@ -138,14 +267,44 @@ def evaluate(rows: pd.DataFrame, arms) -> dict:
     return out
 
 
+def matchup_arm(seasons, pool_from: int) -> pd.DataFrame:
+    """Walk-forward: each season predicted by a model fit only on cold-start
+    week-1 rows from earlier seasons, the same discipline step 8 gets."""
+    from src.models.week1_matchup import Week1MatchupModel, build_week1_rows
+
+    pool = build_week1_rows(range(pool_from, max(seasons) + 1))
+    out = []
+    for season in sorted(seasons):
+        train, test = pool[pool.season < season], pool[pool.season == season]
+        if len(train) < 50 or test.empty:
+            print(f"  {season}: skipped ({len(train)} training rows)")
+            continue
+        model = Week1MatchupModel().fit(train)
+        out.append(test[["player_id", "season"]].assign(
+            matchup=model.predict(test), matchup_train_rows=len(train),
+            matchup_alpha=model.alpha_))
+        print(f"  {season}: fit on {len(train)} rows, alpha {model.alpha_}",
+              flush=True)
+    return (pd.concat(out, ignore_index=True) if out else
+            pd.DataFrame(columns=["player_id", "season", "matchup"]))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seasons", type=int, nargs=2, metavar=("FIRST", "LAST"),
                     default=[2021, 2025])
+    ap.add_argument("--pool-from", type=int, default=2013,
+                    help="first season of cold-start rows the matchup arm may "
+                         "train on (it needs season-1 team stats)")
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
 
     first, last = args.seasons
+    weekly = _weekly()
+    levels = team_position_levels(weekly)
+    debut = weekly.groupby("player_id")["season"].min().to_dict()
+    rounds = draft_rounds()
+
     frames = []
     for season in range(first, last + 1):
         print(f"fitting step 8 as of {season} ...", flush=True)
@@ -156,8 +315,10 @@ def main():
         rows = (pace.merge(week1_actuals(season), on="player_id", how="inner")
                     .merge(prior_ppg(season), on="player_id", how="left"))
         rows["season"] = season
+        rows = add_team_share(rows, season, weekly, levels, debut, rounds)
         print(f"  {len(rows)} players with a week-1 row "
-              f"({int(rows.cold_start.sum())} cold start)")
+              f"({int(rows.cold_start.sum())} cold start, "
+              f"{int(rows.team_share.notna().sum())} with a team level)")
         frames.append(rows)
 
     if not frames:
@@ -175,11 +336,29 @@ def main():
         means = other.groupby("position")["actual"].mean()
         parts.append(g.assign(position_mean=g["position"].map(means)))
     rows = pd.concat(parts, ignore_index=True).dropna(subset=["position_mean"])
-    # A cold-start player has no last season; the floor stands in for it.
+    # A cold-start player has no last season; the floor stands in for it. Same
+    # for a team room that did not exist last season, or a veteran with no
+    # prior share to carry.
     rows["prior_ppg"] = rows["prior_ppg"].fillna(rows["position_mean"])
+    rows["team_share"] = rows["team_share"].fillna(rows["position_mean"])
 
-    arms = ["step8_pace", "step8_per_game", "position_mean", "prior_ppg"]
+    # A fixed half-and-half, pre-registered rather than tuned: the question is
+    # whether team context adds anything ON TOP of the published number, and a
+    # weight fitted on these same rows could not answer that honestly.
+    rows["blend_pace_team"] = 0.5 * rows["step8_pace"] + 0.5 * rows["team_share"]
+
+    arms = ["step8_pace", "step8_per_game", "team_share", "blend_pace_team",
+            "position_mean", "prior_ppg"]
     rows = rows.dropna(subset=["step8_per_game"])
+
+    print("\nmatchup arm (cold start only)")
+    rows = rows.merge(matchup_arm(sorted(rows["season"].unique()),
+                                  args.pool_from),
+                      on=["player_id", "season"], how="left")
+    # The matchup arm exists only for cold-start players, so its comparison
+    # has to be on the rows where every arm has a number.
+    head_to_head = rows[rows["matchup"].notna()]
+
     result = {
         "run_at": datetime.now().isoformat(timespec="seconds"),
         "seasons": [first, last],
@@ -193,20 +372,39 @@ def main():
         "by_position_cold_start": {
             pos: evaluate(g, arms).get("all")
             for pos, g in rows[rows.cold_start == 1].groupby("position")},
+        "matchup_head_to_head": evaluate(head_to_head, arms + ["matchup"]),
+        "matchup_coverage": {
+            "cold_start_rows": int((rows.cold_start == 1).sum()),
+            "with_matchup": int(((rows.cold_start == 1)
+                                 & rows["matchup"].notna()).sum())},
     }
 
-    for slice_name, scores in result["pooled"].items():
-        print(f"\n{slice_name}  (mean actual {scores['mean_actual']})")
-        for arm in arms:
-            s = scores[arm]
-            print(f"  {arm:<14} n={s['n']:<5} MAE {s['mae']:>5}  "
-                  f"RMSE {s['rmse']:>5}  bias {s['bias']:>+6}  R2 {s['r2']:>+7}")
+    def table(title, scored, arm_names):
+        print(f"\n=== {title} ===")
+        for slice_name, scores in scored.items():
+            print(f"\n{slice_name}  (mean actual {scores['mean_actual']})")
+            for arm in arm_names:
+                s = scores.get(arm)
+                if s:
+                    print(f"  {arm:<16} n={s['n']:<5} MAE {s['mae']:>5}  "
+                          f"RMSE {s['rmse']:>5}  bias {s['bias']:>+6}  "
+                          f"R2 {s['r2']:>+7}")
+
+    table("matchup head-to-head (rows where every arm has a number)",
+          result["matchup_head_to_head"], arms + ["matchup"])
+    table("all rows", result["pooled"], arms)
 
     out = args.out or (OUT_DIR / f"week1_coldstart_"
                        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2))
     print(f"\nWrote {out}")
+
+    # Per-row output, so a later question about significance or per-season
+    # consistency does not need another five refits of step 8.
+    rows_out = out.with_suffix(".rows.csv")
+    rows.to_csv(rows_out, index=False)
+    print(f"      {rows_out.name} ({len(rows)} rows)")
     return 0
 
 

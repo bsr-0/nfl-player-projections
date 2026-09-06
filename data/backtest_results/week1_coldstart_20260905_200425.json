@@ -1,0 +1,1126 @@
+{
+  "run_at": "2026-09-05T20:04:25",
+  "seasons": [
+    2021,
+    2025
+  ],
+  "train_from": 2019,
+  "population": "players with a week-1 row in player_weekly_stats",
+  "position_mean_basis": "leave-one-season-out",
+  "pooled": {
+    "all": {
+      "step8_pace": {
+        "n": 1636,
+        "mae": 4.43,
+        "bias": -1.01,
+        "rmse": 6.1,
+        "r2": 0.377
+      },
+      "step8_per_game": {
+        "n": 1636,
+        "mae": 4.65,
+        "bias": 0.72,
+        "rmse": 6.01,
+        "r2": 0.394
+      },
+      "team_share": {
+        "n": 1636,
+        "mae": 4.59,
+        "bias": 0.74,
+        "rmse": 6.07,
+        "r2": 0.382
+      },
+      "blend_pace_team": {
+        "n": 1636,
+        "mae": 4.39,
+        "bias": -0.13,
+        "rmse": 5.88,
+        "r2": 0.42
+      },
+      "position_mean": {
+        "n": 1636,
+        "mae": 5.65,
+        "bias": 0.0,
+        "rmse": 7.17,
+        "r2": 0.138
+      },
+      "prior_ppg": {
+        "n": 1636,
+        "mae": 4.72,
+        "bias": 1.04,
+        "rmse": 6.14,
+        "r2": 0.368
+      },
+      "mean_actual": 7.48
+    },
+    "cold_start": {
+      "step8_pace": {
+        "n": 208,
+        "mae": 3.7,
+        "bias": -0.18,
+        "rmse": 5.11,
+        "r2": 0.27
+      },
+      "step8_per_game": {
+        "n": 208,
+        "mae": 4.47,
+        "bias": 1.83,
+        "rmse": 5.48,
+        "r2": 0.16
+      },
+      "team_share": {
+        "n": 208,
+        "mae": 4.28,
+        "bias": 0.53,
+        "rmse": 5.36,
+        "r2": 0.196
+      },
+      "blend_pace_team": {
+        "n": 208,
+        "mae": 3.92,
+        "bias": 0.17,
+        "rmse": 5.07,
+        "r2": 0.282
+      },
+      "position_mean": {
+        "n": 208,
+        "mae": 5.43,
+        "bias": 2.55,
+        "rmse": 6.26,
+        "r2": -0.097
+      },
+      "prior_ppg": {
+        "n": 208,
+        "mae": 5.43,
+        "bias": 2.55,
+        "rmse": 6.26,
+        "r2": -0.097
+      },
+      "mean_actual": 4.91
+    },
+    "veteran": {
+      "step8_pace": {
+        "n": 1428,
+        "mae": 4.53,
+        "bias": -1.13,
+        "rmse": 6.23,
+        "r2": 0.375
+      },
+      "step8_per_game": {
+        "n": 1428,
+        "mae": 4.67,
+        "bias": 0.56,
+        "rmse": 6.09,
+        "r2": 0.402
+      },
+      "team_share": {
+        "n": 1428,
+        "mae": 4.63,
+        "bias": 0.77,
+        "rmse": 6.17,
+        "r2": 0.387
+      },
+      "blend_pace_team": {
+        "n": 1428,
+        "mae": 4.46,
+        "bias": -0.18,
+        "rmse": 5.99,
+        "r2": 0.421
+      },
+      "position_mean": {
+        "n": 1428,
+        "mae": 5.68,
+        "bias": -0.37,
+        "rmse": 7.29,
+        "r2": 0.142
+      },
+      "prior_ppg": {
+        "n": 1428,
+        "mae": 4.62,
+        "bias": 0.82,
+        "rmse": 6.12,
+        "r2": 0.396
+      },
+      "mean_actual": 7.85
+    }
+  },
+  "by_season": {
+    "2021": {
+      "all": {
+        "step8_pace": {
+          "n": 325,
+          "mae": 4.91,
+          "bias": -1.75,
+          "rmse": 6.69,
+          "r2": 0.379
+        },
+        "step8_per_game": {
+          "n": 325,
+          "mae": 5.01,
+          "bias": 0.15,
+          "rmse": 6.48,
+          "r2": 0.417
+        },
+        "team_share": {
+          "n": 325,
+          "mae": 4.87,
+          "bias": 0.05,
+          "rmse": 6.38,
+          "r2": 0.435
+        },
+        "blend_pace_team": {
+          "n": 325,
+          "mae": 4.78,
+          "bias": -0.85,
+          "rmse": 6.33,
+          "r2": 0.443
+        },
+        "position_mean": {
+          "n": 325,
+          "mae": 6.28,
+          "bias": -1.23,
+          "rmse": 8.04,
+          "r2": 0.104
+        },
+        "prior_ppg": {
+          "n": 325,
+          "mae": 4.96,
+          "bias": 0.3,
+          "rmse": 6.43,
+          "r2": 0.426
+        },
+        "mean_actual": 8.53
+      },
+      "cold_start": {
+        "step8_pace": {
+          "n": 43,
+          "mae": 3.86,
+          "bias": -0.26,
+          "rmse": 5.16,
+          "r2": 0.32
+        },
+        "step8_per_game": {
+          "n": 43,
+          "mae": 4.52,
+          "bias": 1.96,
+          "rmse": 5.57,
+          "r2": 0.207
+        },
+        "team_share": {
+          "n": 43,
+          "mae": 4.45,
+          "bias": 0.83,
+          "rmse": 5.38,
+          "r2": 0.26
+        },
+        "blend_pace_team": {
+          "n": 43,
+          "mae": 4.1,
+          "bias": 0.28,
+          "rmse": 5.09,
+          "r2": 0.336
+        },
+        "position_mean": {
+          "n": 43,
+          "mae": 5.35,
+          "bias": 2.27,
+          "rmse": 6.03,
+          "r2": 0.068
+        },
+        "prior_ppg": {
+          "n": 43,
+          "mae": 5.35,
+          "bias": 2.27,
+          "rmse": 6.03,
+          "r2": 0.068
+        },
+        "mean_actual": 5.36
+      },
+      "veteran": {
+        "step8_pace": {
+          "n": 282,
+          "mae": 5.07,
+          "bias": -1.97,
+          "rmse": 6.89,
+          "r2": 0.37
+        },
+        "step8_per_game": {
+          "n": 282,
+          "mae": 5.08,
+          "bias": -0.12,
+          "rmse": 6.61,
+          "r2": 0.42
+        },
+        "team_share": {
+          "n": 282,
+          "mae": 4.94,
+          "bias": -0.07,
+          "rmse": 6.52,
+          "r2": 0.436
+        },
+        "blend_pace_team": {
+          "n": 282,
+          "mae": 4.88,
+          "bias": -1.02,
+          "rmse": 6.5,
+          "r2": 0.439
+        },
+        "position_mean": {
+          "n": 282,
+          "mae": 6.42,
+          "bias": -1.76,
+          "rmse": 8.3,
+          "r2": 0.086
+        },
+        "prior_ppg": {
+          "n": 282,
+          "mae": 4.9,
+          "bias": -0.01,
+          "rmse": 6.49,
+          "r2": 0.441
+        },
+        "mean_actual": 9.01
+      }
+    },
+    "2022": {
+      "all": {
+        "step8_pace": {
+          "n": 316,
+          "mae": 4.75,
+          "bias": -1.43,
+          "rmse": 6.33,
+          "r2": 0.354
+        },
+        "step8_per_game": {
+          "n": 316,
+          "mae": 4.85,
+          "bias": 0.42,
+          "rmse": 6.12,
+          "r2": 0.396
+        },
+        "team_share": {
+          "n": 316,
+          "mae": 4.78,
+          "bias": 0.39,
+          "rmse": 6.2,
+          "r2": 0.379
+        },
+        "blend_pace_team": {
+          "n": 316,
+          "mae": 4.64,
+          "bias": -0.52,
+          "rmse": 6.06,
+          "r2": 0.408
+        },
+        "position_mean": {
+          "n": 316,
+          "mae": 5.45,
+          "bias": -0.73,
+          "rmse": 7.19,
+          "r2": 0.165
+        },
+        "prior_ppg": {
+          "n": 316,
+          "mae": 4.74,
+          "bias": 0.54,
+          "rmse": 6.1,
+          "r2": 0.399
+        },
+        "mean_actual": 8.09
+      },
+      "cold_start": {
+        "step8_pace": {
+          "n": 30,
+          "mae": 3.28,
+          "bias": 0.21,
+          "rmse": 4.38,
+          "r2": 0.277
+        },
+        "step8_per_game": {
+          "n": 30,
+          "mae": 4.26,
+          "bias": 2.1,
+          "rmse": 4.92,
+          "r2": 0.088
+        },
+        "team_share": {
+          "n": 30,
+          "mae": 3.74,
+          "bias": 0.69,
+          "rmse": 4.5,
+          "r2": 0.234
+        },
+        "blend_pace_team": {
+          "n": 30,
+          "mae": 3.5,
+          "bias": 0.45,
+          "rmse": 4.33,
+          "r2": 0.292
+        },
+        "position_mean": {
+          "n": 30,
+          "mae": 4.44,
+          "bias": 2.31,
+          "rmse": 5.18,
+          "r2": -0.014
+        },
+        "prior_ppg": {
+          "n": 30,
+          "mae": 4.44,
+          "bias": 2.31,
+          "rmse": 5.18,
+          "r2": -0.014
+        },
+        "mean_actual": 4.32
+      },
+      "veteran": {
+        "step8_pace": {
+          "n": 286,
+          "mae": 4.9,
+          "bias": -1.6,
+          "rmse": 6.5,
+          "r2": 0.34
+        },
+        "step8_per_game": {
+          "n": 286,
+          "mae": 4.91,
+          "bias": 0.24,
+          "rmse": 6.23,
+          "r2": 0.393
+        },
+        "team_share": {
+          "n": 286,
+          "mae": 4.89,
+          "bias": 0.36,
+          "rmse": 6.35,
+          "r2": 0.369
+        },
+        "blend_pace_team": {
+          "n": 286,
+          "mae": 4.76,
+          "bias": -0.62,
+          "rmse": 6.21,
+          "r2": 0.398
+        },
+        "position_mean": {
+          "n": 286,
+          "mae": 5.55,
+          "bias": -1.05,
+          "rmse": 7.37,
+          "r2": 0.151
+        },
+        "prior_ppg": {
+          "n": 286,
+          "mae": 4.78,
+          "bias": 0.35,
+          "rmse": 6.19,
+          "r2": 0.401
+        },
+        "mean_actual": 8.49
+      }
+    },
+    "2023": {
+      "all": {
+        "step8_pace": {
+          "n": 325,
+          "mae": 4.27,
+          "bias": -0.66,
+          "rmse": 6.0,
+          "r2": 0.32
+        },
+        "step8_per_game": {
+          "n": 325,
+          "mae": 4.61,
+          "bias": 1.02,
+          "rmse": 6.04,
+          "r2": 0.309
+        },
+        "team_share": {
+          "n": 325,
+          "mae": 4.69,
+          "bias": 1.28,
+          "rmse": 6.21,
+          "r2": 0.271
+        },
+        "blend_pace_team": {
+          "n": 325,
+          "mae": 4.36,
+          "bias": 0.31,
+          "rmse": 5.89,
+          "r2": 0.343
+        },
+        "position_mean": {
+          "n": 325,
+          "mae": 5.4,
+          "bias": 0.76,
+          "rmse": 6.95,
+          "r2": 0.086
+        },
+        "prior_ppg": {
+          "n": 325,
+          "mae": 4.87,
+          "bias": 1.61,
+          "rmse": 6.27,
+          "r2": 0.257
+        },
+        "mean_actual": 6.83
+      },
+      "cold_start": {
+        "step8_pace": {
+          "n": 46,
+          "mae": 3.9,
+          "bias": -1.02,
+          "rmse": 5.61,
+          "r2": 0.2
+        },
+        "step8_per_game": {
+          "n": 46,
+          "mae": 4.37,
+          "bias": 0.84,
+          "rmse": 5.59,
+          "r2": 0.203
+        },
+        "team_share": {
+          "n": 46,
+          "mae": 4.53,
+          "bias": 0.02,
+          "rmse": 5.8,
+          "r2": 0.142
+        },
+        "blend_pace_team": {
+          "n": 46,
+          "mae": 4.14,
+          "bias": -0.5,
+          "rmse": 5.51,
+          "r2": 0.227
+        },
+        "position_mean": {
+          "n": 46,
+          "mae": 5.51,
+          "bias": 2.17,
+          "rmse": 6.41,
+          "r2": -0.048
+        },
+        "prior_ppg": {
+          "n": 46,
+          "mae": 5.51,
+          "bias": 2.17,
+          "rmse": 6.41,
+          "r2": -0.048
+        },
+        "mean_actual": 5.47
+      },
+      "veteran": {
+        "step8_pace": {
+          "n": 279,
+          "mae": 4.34,
+          "bias": -0.6,
+          "rmse": 6.06,
+          "r2": 0.33
+        },
+        "step8_per_game": {
+          "n": 279,
+          "mae": 4.65,
+          "bias": 1.05,
+          "rmse": 6.12,
+          "r2": 0.317
+        },
+        "team_share": {
+          "n": 279,
+          "mae": 4.72,
+          "bias": 1.49,
+          "rmse": 6.27,
+          "r2": 0.281
+        },
+        "blend_pace_team": {
+          "n": 279,
+          "mae": 4.39,
+          "bias": 0.44,
+          "rmse": 5.96,
+          "r2": 0.352
+        },
+        "position_mean": {
+          "n": 279,
+          "mae": 5.38,
+          "bias": 0.53,
+          "rmse": 7.03,
+          "r2": 0.096
+        },
+        "prior_ppg": {
+          "n": 279,
+          "mae": 4.77,
+          "bias": 1.52,
+          "rmse": 6.24,
+          "r2": 0.288
+        },
+        "mean_actual": 7.06
+      }
+    },
+    "2024": {
+      "all": {
+        "step8_pace": {
+          "n": 336,
+          "mae": 4.14,
+          "bias": -0.64,
+          "rmse": 5.84,
+          "r2": 0.378
+        },
+        "step8_per_game": {
+          "n": 336,
+          "mae": 4.43,
+          "bias": 0.99,
+          "rmse": 5.78,
+          "r2": 0.39
+        },
+        "team_share": {
+          "n": 336,
+          "mae": 4.23,
+          "bias": 0.95,
+          "rmse": 5.71,
+          "r2": 0.406
+        },
+        "blend_pace_team": {
+          "n": 336,
+          "mae": 4.09,
+          "bias": 0.15,
+          "rmse": 5.59,
+          "r2": 0.43
+        },
+        "position_mean": {
+          "n": 336,
+          "mae": 5.55,
+          "bias": 0.79,
+          "rmse": 6.87,
+          "r2": 0.14
+        },
+        "prior_ppg": {
+          "n": 336,
+          "mae": 4.44,
+          "bias": 1.28,
+          "rmse": 5.87,
+          "r2": 0.371
+        },
+        "mean_actual": 6.84
+      },
+      "cold_start": {
+        "step8_pace": {
+          "n": 39,
+          "mae": 4.15,
+          "bias": 0.21,
+          "rmse": 5.52,
+          "r2": 0.292
+        },
+        "step8_per_game": {
+          "n": 39,
+          "mae": 4.86,
+          "bias": 2.27,
+          "rmse": 5.89,
+          "r2": 0.194
+        },
+        "team_share": {
+          "n": 39,
+          "mae": 4.47,
+          "bias": 0.51,
+          "rmse": 5.44,
+          "r2": 0.311
+        },
+        "blend_pace_team": {
+          "n": 39,
+          "mae": 4.22,
+          "bias": 0.36,
+          "rmse": 5.32,
+          "r2": 0.34
+        },
+        "position_mean": {
+          "n": 39,
+          "mae": 5.74,
+          "bias": 2.57,
+          "rmse": 6.41,
+          "r2": 0.042
+        },
+        "prior_ppg": {
+          "n": 39,
+          "mae": 5.74,
+          "bias": 2.57,
+          "rmse": 6.41,
+          "r2": 0.042
+        },
+        "mean_actual": 4.98
+      },
+      "veteran": {
+        "step8_pace": {
+          "n": 297,
+          "mae": 4.14,
+          "bias": -0.75,
+          "rmse": 5.88,
+          "r2": 0.381
+        },
+        "step8_per_game": {
+          "n": 297,
+          "mae": 4.37,
+          "bias": 0.82,
+          "rmse": 5.77,
+          "r2": 0.404
+        },
+        "team_share": {
+          "n": 297,
+          "mae": 4.2,
+          "bias": 1.0,
+          "rmse": 5.74,
+          "r2": 0.41
+        },
+        "blend_pace_team": {
+          "n": 297,
+          "mae": 4.07,
+          "bias": 0.12,
+          "rmse": 5.63,
+          "r2": 0.433
+        },
+        "position_mean": {
+          "n": 297,
+          "mae": 5.52,
+          "bias": 0.56,
+          "rmse": 6.92,
+          "r2": 0.142
+        },
+        "prior_ppg": {
+          "n": 297,
+          "mae": 4.27,
+          "bias": 1.11,
+          "rmse": 5.8,
+          "r2": 0.398
+        },
+        "mean_actual": 7.08
+      }
+    },
+    "2025": {
+      "all": {
+        "step8_pace": {
+          "n": 334,
+          "mae": 4.09,
+          "bias": -0.62,
+          "rmse": 5.6,
+          "r2": 0.423
+        },
+        "step8_per_game": {
+          "n": 334,
+          "mae": 4.36,
+          "bias": 0.99,
+          "rmse": 5.63,
+          "r2": 0.418
+        },
+        "team_share": {
+          "n": 334,
+          "mae": 4.39,
+          "bias": 1.02,
+          "rmse": 5.85,
+          "r2": 0.371
+        },
+        "blend_pace_team": {
+          "n": 334,
+          "mae": 4.11,
+          "bias": 0.2,
+          "rmse": 5.52,
+          "r2": 0.44
+        },
+        "position_mean": {
+          "n": 334,
+          "mae": 5.57,
+          "bias": 0.37,
+          "rmse": 6.76,
+          "r2": 0.16
+        },
+        "prior_ppg": {
+          "n": 334,
+          "mae": 4.61,
+          "bias": 1.44,
+          "rmse": 6.01,
+          "r2": 0.337
+        },
+        "mean_actual": 7.15
+      },
+      "cold_start": {
+        "step8_pace": {
+          "n": 50,
+          "mae": 3.26,
+          "bias": 0.13,
+          "rmse": 4.63,
+          "r2": 0.247
+        },
+        "step8_per_game": {
+          "n": 50,
+          "mae": 4.34,
+          "bias": 2.11,
+          "rmse": 5.28,
+          "r2": 0.021
+        },
+        "team_share": {
+          "n": 50,
+          "mae": 4.07,
+          "bias": 0.64,
+          "rmse": 5.33,
+          "r2": 0.004
+        },
+        "blend_pace_team": {
+          "n": 50,
+          "mae": 3.6,
+          "bias": 0.39,
+          "rmse": 4.82,
+          "r2": 0.186
+        },
+        "position_mean": {
+          "n": 50,
+          "mae": 5.77,
+          "bias": 3.25,
+          "rmse": 6.76,
+          "r2": -0.603
+        },
+        "prior_ppg": {
+          "n": 50,
+          "mae": 5.77,
+          "bias": 3.25,
+          "rmse": 6.76,
+          "r2": -0.603
+        },
+        "mean_actual": 4.34
+      },
+      "veteran": {
+        "step8_pace": {
+          "n": 284,
+          "mae": 4.24,
+          "bias": -0.75,
+          "rmse": 5.75,
+          "r2": 0.422
+        },
+        "step8_per_game": {
+          "n": 284,
+          "mae": 4.37,
+          "bias": 0.79,
+          "rmse": 5.68,
+          "r2": 0.436
+        },
+        "team_share": {
+          "n": 284,
+          "mae": 4.44,
+          "bias": 1.09,
+          "rmse": 5.93,
+          "r2": 0.385
+        },
+        "blend_pace_team": {
+          "n": 284,
+          "mae": 4.21,
+          "bias": 0.17,
+          "rmse": 5.63,
+          "r2": 0.446
+        },
+        "position_mean": {
+          "n": 284,
+          "mae": 5.53,
+          "bias": -0.14,
+          "rmse": 6.76,
+          "r2": 0.203
+        },
+        "prior_ppg": {
+          "n": 284,
+          "mae": 4.4,
+          "bias": 1.12,
+          "rmse": 5.86,
+          "r2": 0.4
+        },
+        "mean_actual": 7.64
+      }
+    }
+  },
+  "by_position_cold_start": {
+    "QB": {
+      "step8_pace": {
+        "n": 14,
+        "mae": 5.87,
+        "bias": -1.91,
+        "rmse": 7.53,
+        "r2": 0.138
+      },
+      "step8_per_game": {
+        "n": 14,
+        "mae": 6.34,
+        "bias": 2.38,
+        "rmse": 7.72,
+        "r2": 0.095
+      },
+      "team_share": {
+        "n": 14,
+        "mae": 7.04,
+        "bias": 1.77,
+        "rmse": 8.24,
+        "r2": -0.031
+      },
+      "blend_pace_team": {
+        "n": 14,
+        "mae": 6.23,
+        "bias": -0.07,
+        "rmse": 7.52,
+        "r2": 0.142
+      },
+      "position_mean": {
+        "n": 14,
+        "mae": 8.0,
+        "bias": 4.24,
+        "rmse": 9.14,
+        "r2": -0.268
+      },
+      "prior_ppg": {
+        "n": 14,
+        "mae": 8.0,
+        "bias": 4.24,
+        "rmse": 9.14,
+        "r2": -0.268
+      },
+      "mean_actual": 10.56
+    },
+    "RB": {
+      "step8_pace": {
+        "n": 53,
+        "mae": 3.55,
+        "bias": -0.48,
+        "rmse": 5.21,
+        "r2": 0.066
+      },
+      "step8_per_game": {
+        "n": 53,
+        "mae": 4.81,
+        "bias": 1.86,
+        "rmse": 5.66,
+        "r2": -0.104
+      },
+      "team_share": {
+        "n": 53,
+        "mae": 4.28,
+        "bias": 0.41,
+        "rmse": 5.26,
+        "r2": 0.047
+      },
+      "blend_pace_team": {
+        "n": 53,
+        "mae": 3.88,
+        "bias": -0.03,
+        "rmse": 5.11,
+        "r2": 0.1
+      },
+      "position_mean": {
+        "n": 53,
+        "mae": 5.93,
+        "bias": 3.68,
+        "rmse": 6.53,
+        "r2": -0.467
+      },
+      "prior_ppg": {
+        "n": 53,
+        "mae": 5.93,
+        "bias": 3.68,
+        "rmse": 6.53,
+        "r2": -0.467
+      },
+      "mean_actual": 4.87
+    },
+    "TE": {
+      "step8_pace": {
+        "n": 44,
+        "mae": 2.55,
+        "bias": 1.32,
+        "rmse": 3.22,
+        "r2": 0.295
+      },
+      "step8_per_game": {
+        "n": 44,
+        "mae": 3.36,
+        "bias": 2.56,
+        "rmse": 3.92,
+        "r2": -0.044
+      },
+      "team_share": {
+        "n": 44,
+        "mae": 2.91,
+        "bias": 0.39,
+        "rmse": 3.83,
+        "r2": 0.003
+      },
+      "blend_pace_team": {
+        "n": 44,
+        "mae": 2.65,
+        "bias": 0.85,
+        "rmse": 3.34,
+        "r2": 0.243
+      },
+      "position_mean": {
+        "n": 44,
+        "mae": 3.7,
+        "bias": 1.7,
+        "rmse": 4.21,
+        "r2": -0.201
+      },
+      "prior_ppg": {
+        "n": 44,
+        "mae": 3.7,
+        "bias": 1.7,
+        "rmse": 4.21,
+        "r2": -0.201
+      },
+      "mean_actual": 2.15
+    },
+    "WR": {
+      "step8_pace": {
+        "n": 97,
+        "mae": 3.98,
+        "bias": -0.44,
+        "rmse": 5.31,
+        "r2": 0.223
+      },
+      "step8_per_game": {
+        "n": 97,
+        "mae": 4.52,
+        "bias": 1.4,
+        "rmse": 5.59,
+        "r2": 0.139
+      },
+      "team_share": {
+        "n": 97,
+        "mae": 4.5,
+        "bias": 0.47,
+        "rmse": 5.48,
+        "r2": 0.173
+      },
+      "blend_pace_team": {
+        "n": 97,
+        "mae": 4.19,
+        "bias": 0.01,
+        "rmse": 5.25,
+        "r2": 0.241
+      },
+      "position_mean": {
+        "n": 97,
+        "mae": 5.57,
+        "bias": 2.07,
+        "rmse": 6.38,
+        "r2": -0.122
+      },
+      "prior_ppg": {
+        "n": 97,
+        "mae": 5.57,
+        "bias": 2.07,
+        "rmse": 6.38,
+        "r2": -0.122
+      },
+      "mean_actual": 5.38
+    }
+  },
+  "matchup_head_to_head": {
+    "all": {
+      "step8_pace": {
+        "n": 208,
+        "mae": 3.7,
+        "bias": -0.18,
+        "rmse": 5.11,
+        "r2": 0.27
+      },
+      "step8_per_game": {
+        "n": 208,
+        "mae": 4.47,
+        "bias": 1.83,
+        "rmse": 5.48,
+        "r2": 0.16
+      },
+      "team_share": {
+        "n": 208,
+        "mae": 4.28,
+        "bias": 0.53,
+        "rmse": 5.36,
+        "r2": 0.196
+      },
+      "blend_pace_team": {
+        "n": 208,
+        "mae": 3.92,
+        "bias": 0.17,
+        "rmse": 5.07,
+        "r2": 0.282
+      },
+      "position_mean": {
+        "n": 208,
+        "mae": 5.43,
+        "bias": 2.55,
+        "rmse": 6.26,
+        "r2": -0.097
+      },
+      "prior_ppg": {
+        "n": 208,
+        "mae": 5.43,
+        "bias": 2.55,
+        "rmse": 6.26,
+        "r2": -0.097
+      },
+      "matchup": {
+        "n": 208,
+        "mae": 4.02,
+        "bias": 0.19,
+        "rmse": 5.37,
+        "r2": 0.194
+      },
+      "mean_actual": 4.91
+    },
+    "cold_start": {
+      "step8_pace": {
+        "n": 208,
+        "mae": 3.7,
+        "bias": -0.18,
+        "rmse": 5.11,
+        "r2": 0.27
+      },
+      "step8_per_game": {
+        "n": 208,
+        "mae": 4.47,
+        "bias": 1.83,
+        "rmse": 5.48,
+        "r2": 0.16
+      },
+      "team_share": {
+        "n": 208,
+        "mae": 4.28,
+        "bias": 0.53,
+        "rmse": 5.36,
+        "r2": 0.196
+      },
+      "blend_pace_team": {
+        "n": 208,
+        "mae": 3.92,
+        "bias": 0.17,
+        "rmse": 5.07,
+        "r2": 0.282
+      },
+      "position_mean": {
+        "n": 208,
+        "mae": 5.43,
+        "bias": 2.55,
+        "rmse": 6.26,
+        "r2": -0.097
+      },
+      "prior_ppg": {
+        "n": 208,
+        "mae": 5.43,
+        "bias": 2.55,
+        "rmse": 6.26,
+        "r2": -0.097
+      },
+      "matchup": {
+        "n": 208,
+        "mae": 4.02,
+        "bias": 0.19,
+        "rmse": 5.37,
+        "r2": 0.194
+      },
+      "mean_actual": 4.91
+    }
+  },
+  "matchup_coverage": {
+    "cold_start_rows": 208,
+    "with_matchup": 208
+  }
+}

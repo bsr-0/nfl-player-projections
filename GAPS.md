@@ -13625,3 +13625,64 @@ Only players with a week-1 row in `player_weekly_stats` are scored. A rookie
 drafted and inactive in week 1 is not in it. This measures accuracy GIVEN he
 played, not the harder question of whether he would -- which is the question
 the availability half exists to answer, and it is not what this measures.
+
+
+## Cold start at week 1: four alternatives tested, all lost, `/ 17` locked in (2026-09-05)
+
+Follows the measurement above, which established the baseline. The question
+was whether a cold-start player's week-1 number improves by looking at where
+he landed and who he opens against, rather than at draft capital through the
+season model. Two agents built four arms between them; all four are scored on
+the same 208 cold-start rows (2021-2025 week 1, players with no NFL history
+and a week-1 game), walk-forward, in
+`scripts/run_week1_coldstart_experiment.py`.
+
+    arm               MAE   RMSE   bias    R2     what it uses
+    step8_pace       3.70   5.11  -0.18  +0.270   the published season total / 17
+    blend_pace_team  3.92   5.07  +0.17  +0.282   half step8_pace, half team_share
+    matchup          4.02   5.37  +0.19  +0.194   draft capital + new team's prior
+                                                  production at his position and
+                                                  pace + week-1 opponent's prior
+                                                  points and FP allowed to it
+    team_share       4.28   5.36  +0.53  +0.196   team position-room output x a
+                                                  draft-round share of it, shrunk
+    step8_per_game   4.47   5.48  +1.83  +0.160   season total / E[games]
+    position_mean    5.43   6.26  +2.55  -0.097   the floor
+
+Paired bootstrap on the MAE difference against `step8_pace`, 10k resamples:
+
+    blend_pace_team  +0.227  95% CI [+0.052, +0.402]   better in 0 of 5 seasons
+    matchup          +0.321  95% CI [+0.034, +0.605]   better in 1 of 5 seasons
+    team_share       +0.584  95% CI [+0.255, +0.912]   better in 0 of 5 seasons
+
+Every interval sits entirely on the worse side of zero. This is not "too close
+to call at n=208"; it is a consistent loss, season by season.
+
+### The one thing that did work
+
+`matchup` beats `team_share` by 0.26 MAE in 4 of 5 seasons, and the only
+difference between them is the opponent half -- what the week-1 defence gave
+up to that position last year. Opponent strength carries real signal. It is
+just not enough to lift team context past what draft capital already buys
+through the season model.
+
+### Why, most likely
+
+For a player with no NFL history the thing being predicted is mostly whether
+he is on the field at all. A third-round receiver behind two incumbents scores
+near zero however good his room and however soft the defence. Draft capital
+proxies that role question directly; team-room output and opponent softness
+describe the size of the pie, which only matters once his slice is known --
+and in week 1 nobody knows it. Any future arm should attack the slice
+(preseason depth chart, camp reports, snap-share priors), not the pie.
+
+### Decision
+
+`season total / 17` is the production cold-start system. It is now recorded as
+a measured choice in `generate_weekly_data.py`'s docstring rather than sitting
+there as an unexamined default, and the bar for replacing it is **3.70 MAE at
+-0.18 bias on cold start** -- not merely beating the position mean, and not
+merely fixing the bias term, which `step8_per_game` did while getting worse.
+
+`src/models/week1_matchup.py` is kept, marked REJECTED in its own docstring:
+it is the record of the attempt and the arm that isolated the opponent signal.
