@@ -2,7 +2,12 @@
 """Bulk backfill all high-value datasets from nfl-data-py into the local DB.
 
 Downloads: draft picks, combine data, snap counts, injuries (nfl-data-py
-version), NGS stats, QBR, depth charts, contracts, weekly rosters.
+version), NGS stats, QBR, depth charts (both schemas), contracts, weekly
+rosters, seasonal rosters, and rebuilds player_team_history.
+
+Every season-ranged pull runs to CURRENT_NFL_SEASON, which includes a season
+that has not been played: rosters and depth charts exist before kickoff and
+the projections read them.
 
 Usage:
     python scripts/backfill_all_data.py
@@ -44,7 +49,7 @@ DATASET_MIN_SEASON = {
 
 # depth_charts changed schema for 2025: a daily ESPN-style feed with no
 # season/week/depth_team column. Anything at or beyond this needs
-# scripts/backfill_depth_charts_2025.py, not a straight append.
+# scripts/backfill_depth_charts.py, not a straight append.
 DEPTH_CHART_NEW_SCHEMA_SEASON = 2025
 
 
@@ -212,7 +217,7 @@ def backfill_depth_charts(conn):
     here previously kept whatever columns happened to match -- which was
     `gsis_id` alone -- and wrote 554,215 rows with every key NULL. Those were
     later deleted as "junk" and the season written off as unbackfillable. Use
-    scripts/backfill_depth_charts_2025.py, which bridges the schemas.
+    scripts/backfill_depth_charts.py, which bridges the schemas.
     """
     import nfl_data_py as nfl
     cols = ["season", "club_code", "week", "depth_team",
@@ -229,7 +234,7 @@ def backfill_depth_charts(conn):
             raise RuntimeError(
                 f"depth chart feed is missing {missing} -- upstream changed "
                 f"schema. Do NOT let this fall through to a partial-column "
-                f"write; see scripts/backfill_depth_charts_2025.py."
+                f"write; see scripts/backfill_depth_charts.py."
             )
         df = df.dropna(subset=["week", "gsis_id"])[cols].drop_duplicates()
         _save_df(df, "depth_charts", conn)
@@ -245,12 +250,35 @@ def backfill_contracts(conn):
     _save_df(df, "contracts", conn)
 
 
+def _fetch_per_season(fetch, seasons, label: str) -> pd.DataFrame:
+    """Fetch one season at a time and concatenate what came back.
+
+    A single multi-season call is what upstream prefers, but for weekly
+    rosters it raises `cannot reindex on an axis with duplicate labels` as
+    soon as the upcoming season is in the list -- while each season fetched
+    alone is fine. The whole pull then failed, the caller printed FAILED, and
+    the table silently kept whatever it had: that is how weekly_rosters_v2
+    sat at 2024-2025 through the 2026 season opening.
+    """
+    frames = []
+    for season in seasons:
+        try:
+            got = fetch([season])
+        except Exception as e:                       # noqa: BLE001
+            print(f"    {label} {season}: {type(e).__name__} {str(e)[:60]}")
+            continue
+        if got is not None and len(got):
+            frames.append(got)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def backfill_weekly_rosters(conn):
     """Weekly 53-man roster snapshots."""
     import nfl_data_py as nfl
     print("  Loading weekly rosters...")
     try:
-        df = nfl.import_weekly_rosters(seasons_for("weekly_rosters"))
+        df = _fetch_per_season(nfl.import_weekly_rosters,
+                               seasons_for("weekly_rosters"), "weekly rosters")
         cols = ["season", "team", "position", "depth_chart_position",
                 "status", "player_name", "player_id", "gsis_it_id",
                 "week", "game_type", "headshot_url"]
@@ -261,6 +289,55 @@ def backfill_weekly_rosters(conn):
         print(f"    FAILED: {e}")
 
 
+def backfill_rosters(conn):
+    """Seasonal rosters -- who is on which team, including a season nobody
+    has played yet.
+
+    The projections depend on this: `preseason_features` reads it for
+    `dest_team`, and without it four features the model trains on arrive as
+    zeros at inference (GAPS.md 2026-09-06).
+    """
+    import subprocess
+    seasons = seasons_for("rosters")
+    print("  Loading seasonal rosters...")
+    # Delegates rather than reimplements: ingest_rosters.py owns the
+    # union-with-what-is-stored rule that keeps a narrow run from deleting
+    # history, since the insert replaces the whole table.
+    r = subprocess.run(
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "ingest_rosters.py"),
+         "--seasons", str(seasons[0]), str(seasons[-1])],
+        capture_output=True, text=True)
+    tail = (r.stdout or r.stderr).strip().splitlines()
+    for line in tail[-2:]:
+        print(f"    {line[:100]}")
+
+
+def backfill_new_schema_depth_charts(conn):
+    """Depth charts for the seasons the classic loader cannot read.
+
+    2025 onward ships a daily ESPN-style feed with no season/week/depth_team
+    column, so `backfill_depth_charts` skips it. Skipping used to mean those
+    seasons simply had none -- 2026 had zero rows on the morning of week 1.
+    """
+    import subprocess
+    for season in [s for s in SEASONS if s >= DEPTH_CHART_NEW_SCHEMA_SEASON]:
+        print(f"  Bridging {season} depth charts...")
+        r = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "backfill_depth_charts.py"),
+             "--season", str(season)],
+            capture_output=True, text=True)
+        tail = (r.stdout or r.stderr).strip().splitlines()
+        print(f"    {tail[-1][:100] if tail else 'no output'}")
+
+
+def rebuild_player_team_history(conn):
+    """Derived from played games, so a season with no games stays empty --
+    that is correct, not a gap."""
+    from src.utils.database import DatabaseManager
+    print(f"  -> player_team_history: "
+          f"{DatabaseManager().populate_player_team_history():,} rows")
+
+
 ALL_BACKFILLS = {
     "draft_picks": backfill_draft_picks,
     "combine": backfill_combine,
@@ -269,8 +346,11 @@ ALL_BACKFILLS = {
     "qbr": backfill_qbr,
     "injuries": backfill_injuries_nflpy,
     "depth_charts": backfill_depth_charts,
+    "depth_charts_new": backfill_new_schema_depth_charts,
     "contracts": backfill_contracts,
     "weekly_rosters": backfill_weekly_rosters,
+    "rosters": backfill_rosters,
+    "player_team_history": rebuild_player_team_history,
 }
 
 
@@ -300,7 +380,7 @@ def main():
     for table in ["draft_picks", "draft_picks_v2", "combine_data_v2",
                    "snap_counts", "ngs_passing", "ngs_rushing", "ngs_receiving",
                    "qbr", "injuries_nflpy", "depth_charts", "contracts",
-                   "weekly_rosters_v2"]:
+                   "weekly_rosters_v2", "rosters", "player_team_history"]:
         try:
             n = c.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             print(f"  {table}: {n} rows")

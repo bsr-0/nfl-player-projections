@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Load 2025 depth charts, bridging nflverse's new ESPN-style schema.
+"""Load new-schema depth charts, bridging nflverse's ESPN-style feed.
 
 `feature_engineering.py` recorded that 2025 "is NOT backfillable
 (import_depth_charts([2025]) fails upstream)". That is wrong: the call
@@ -23,9 +23,9 @@ leakage structurally impossible, matching the stricter-cutoff precedent in
 season_projection.py::_lookup_depth_chart_rank_asof.
 
 Usage:
-    python scripts/backfill_depth_charts_2025.py --dry-run
-    python scripts/backfill_depth_charts_2025.py
-    python scripts/backfill_depth_charts_2025.py --cache data/raw/depth_charts_2025_raw.parquet
+    python scripts/backfill_depth_charts.py                 # current season
+    python scripts/backfill_depth_charts.py --season 2025
+    python scripts/backfill_depth_charts.py --dry-run
 """
 import argparse
 import sqlite3
@@ -36,7 +36,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 
-SEASON = 2025
+# The season is a parameter, not a constant: the new schema started in 2025
+# and every season since ships the same daily feed, so hardcoding one meant
+# each new season silently had no depth charts at all.
 
 # Target schema, in `depth_charts` column order.
 COLUMNS = ["season", "club_code", "week", "depth_team", "last_name",
@@ -70,24 +72,24 @@ RETURNER_SLOTS = {"KR", "PR"}
 FIRST_POSTSEASON_WEEK = 19
 
 
-def _week_boundaries(conn: sqlite3.Connection) -> pd.DataFrame:
+def _week_boundaries(conn: sqlite3.Connection, season: int) -> pd.DataFrame:
     """First kickoff date per (season, week). game_time is date-only."""
     sched = pd.read_sql(
         "SELECT week, MIN(game_time) AS first_game FROM schedule "
-        f"WHERE season = {SEASON} AND game_time IS NOT NULL "
+        "WHERE season = ? AND game_time IS NOT NULL "
         "GROUP BY week ORDER BY week",
-        conn,
+        conn, params=(int(season),),
     )
     sched["first_game"] = pd.to_datetime(sched["first_game"], errors="coerce")
     return sched.dropna(subset=["first_game"])
 
 
-def _teams_by_week(conn: sqlite3.Connection) -> pd.DataFrame:
+def _teams_by_week(conn: sqlite3.Connection, season: int) -> pd.DataFrame:
     """(week, team) for every club actually playing that week."""
     return pd.read_sql(
         "SELECT week, home_team AS team FROM schedule WHERE season = ? "
         "UNION SELECT week, away_team AS team FROM schedule WHERE season = ?",
-        conn, params=(SEASON, SEASON),
+        conn, params=(int(season), int(season)),
     )
 
 
@@ -144,9 +146,9 @@ def _resolve_returner_positions(df: pd.DataFrame) -> pd.Series:
     return position.fillna(pd.Series(fallback, index=df.index))
 
 
-def _to_target_schema(picked: pd.DataFrame) -> pd.DataFrame:
+def _to_target_schema(picked: pd.DataFrame, season: int) -> pd.DataFrame:
     out = pd.DataFrame(index=picked.index)
-    out["season"] = SEASON
+    out["season"] = int(season)
     out["club_code"] = picked["team"]
     out["week"] = picked["week"].astype(int)
     out["depth_team"] = (
@@ -169,20 +171,26 @@ def _to_target_schema(picked: pd.DataFrame) -> pd.DataFrame:
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--cache", default="data/raw/depth_charts_2025_raw.parquet",
-                    help="reuse a saved raw pull instead of refetching 554K rows")
+    ap.add_argument("--season", type=int, default=None,
+                    help="season to load (default: the current NFL season)")
+    ap.add_argument("--cache", default=None,
+                    help="reuse a saved raw pull instead of refetching ~500K rows "
+                         "(default data/raw/depth_charts_<season>_raw.parquet)")
     args = ap.parse_args()
 
     from config.settings import DB_PATH
+    from src.utils.nfl_calendar import get_current_nfl_season
+    season = args.season or get_current_nfl_season()
+    print(f"season {season}")
     conn = sqlite3.connect(str(DB_PATH))
 
-    cache = Path(args.cache)
+    cache = Path(args.cache or f"data/raw/depth_charts_{season}_raw.parquet")
     if cache.exists():
         raw = pd.read_parquet(cache)
         print(f"raw: {len(raw):,} rows from {cache}")
     else:
         import nfl_data_py as nfl
-        raw = nfl.import_depth_charts([SEASON])
+        raw = nfl.import_depth_charts([season])
         cache.parent.mkdir(parents=True, exist_ok=True)
         raw.to_parquet(cache)
         print(f"raw: {len(raw):,} rows pulled and cached to {cache}")
@@ -194,14 +202,14 @@ def main():
     raw = raw.dropna(subset=["gsis_id"])
     print(f"after dropping null gsis_id: {len(raw):,} rows")
 
-    weeks = _week_boundaries(conn)
+    weeks = _week_boundaries(conn, season)
     print(f"schedule weeks: {len(weeks)} ({int(weeks.week.min())}-{int(weeks.week.max())})")
 
     picked = _assign_snapshots(raw, weeks)
-    out = _to_target_schema(picked)
+    out = _to_target_schema(picked, season)
 
     before = len(out)
-    out = _drop_eliminated_teams(out, _teams_by_week(conn))
+    out = _drop_eliminated_teams(out, _teams_by_week(conn, season))
     print(f"dropped {before - len(out):,} postseason rows for eliminated clubs")
 
     print(f"\nmapped {len(out):,} rows across {out.week.nunique()} weeks")
@@ -213,16 +221,17 @@ def main():
     print("unmapped position rows:", int(out.position.isna().sum()))
 
     existing = pd.read_sql(
-        f"SELECT COUNT(*) n FROM depth_charts WHERE season = {SEASON}", conn).n.iloc[0]
+        "SELECT COUNT(*) n FROM depth_charts WHERE season = ?", conn,
+        params=(int(season),)).n.iloc[0]
     if existing:
-        print(f"\n{SEASON} already has {existing:,} rows — deleting before reload")
+        print(f"\n{season} already has {existing:,} rows — deleting before reload")
 
     if args.dry_run:
         print(f"\nDRY RUN — would write {len(out):,} rows")
         return
 
     if existing:
-        conn.execute(f"DELETE FROM depth_charts WHERE season = {SEASON}")
+        conn.execute("DELETE FROM depth_charts WHERE season = ?", (int(season),))
         conn.commit()
     out.to_sql("depth_charts", conn, if_exists="append", index=False)
 

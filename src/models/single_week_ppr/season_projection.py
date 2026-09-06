@@ -304,7 +304,7 @@ def _lookup_depth_chart_rank_asof(gsis_id: str, target_season: int, target_week:
     carried-forward value) when no such snapshot exists at all -- e.g. a
     player never in depth_charts, or 2018/2019 with no prior-season
     fallback available either. (2025 was in that list until its charts were
-    loaded on 2026-08-19 -- see scripts/backfill_depth_charts_2025.py.)
+    loaded on 2026-08-19 -- see scripts/backfill_depth_charts.py.)
 
     Deliberately a STRICTER cutoff than `_add_depth_chart_rank`'s real-row
     lookup (`week <= target_week`, since that week's own snapshot is

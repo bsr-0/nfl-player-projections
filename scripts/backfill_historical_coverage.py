@@ -10,7 +10,7 @@ those floors.
     ngs_*          had 2018-2025  ->  upstream carries 2016+
 
 Both are pure appends in the existing schema -- unlike 2025's depth charts,
-which needed a schema bridge (scripts/backfill_depth_charts_2025.py).
+which needed a schema bridge (scripts/backfill_depth_charts.py).
 
 APPEND, never replace. `backfill_all_data.py::_save_df` defaults to
 `if_exists="replace"`, which drops the whole table; running it would undo
@@ -83,7 +83,7 @@ def backfill_depth_charts(conn, dry_run: bool) -> None:
         if "depth_team" not in d.columns:
             # 2025+ ships the daily ESPN-style feed instead; that needs the
             # dedicated bridge, not a straight append.
-            print(f"  {season}: new-schema feed — use backfill_depth_charts_2025.py")
+            print(f"  {season}: new-schema feed — use backfill_depth_charts.py")
             continue
         # Postseason is already encoded as continuing week numbers (2013:
         # 18=WC .. 21=SB), matching the stored 2020-2024 convention, so weeks

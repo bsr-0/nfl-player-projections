@@ -10,12 +10,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "backfill_depth_charts_2025.py"
+SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "backfill_depth_charts.py"
 
 
 @pytest.fixture(scope="module")
 def mod():
-    spec = importlib.util.spec_from_file_location("dc2025", SCRIPT)
+    spec = importlib.util.spec_from_file_location("backfill_depth_charts", SCRIPT)
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
@@ -67,7 +67,7 @@ def test_depth_team_clipped_to_old_feeds_vocabulary(mod):
         {**_snapshot("2025-09-03T07:00:00Z", rank=r), "week": 1}
         for r in (1, 2, 3, 4, 8)
     ])
-    out = mod._to_target_schema(picked)
+    out = mod._to_target_schema(picked, 2025)
 
     assert out["depth_team"].tolist() == ["1", "2", "3", "3", "3"]
     assert out["depth_team"].map(type).eq(str).all()
@@ -75,10 +75,12 @@ def test_depth_team_clipped_to_old_feeds_vocabulary(mod):
 
 def test_target_schema_matches_table_columns(mod):
     picked = pd.DataFrame([{**_snapshot("2025-09-03T07:00:00Z"), "week": 1}])
-    out = mod._to_target_schema(picked)
+    out = mod._to_target_schema(picked, 2025)
 
     assert list(out.columns) == mod.COLUMNS
-    assert out["season"].iloc[0] == mod.SEASON
+    # The season is an argument now, not a module constant -- hardcoding one
+    # is what left every season after 2025 with no depth charts at all.
+    assert out["season"].iloc[0] == 2025
     assert out["club_code"].iloc[0] == "KC"
 
 
@@ -86,7 +88,7 @@ def test_name_is_split_and_multiword_surnames_survive(mod):
     picked = pd.DataFrame([
         {**_snapshot("2025-09-03T07:00:00Z"), "player_name": "Amon-Ra St. Brown", "week": 1},
     ])
-    out = mod._to_target_schema(picked)
+    out = mod._to_target_schema(picked, 2025)
 
     assert out["first_name"].iloc[0] == "Amon-Ra"
     assert out["last_name"].iloc[0] == "St. Brown"
@@ -98,7 +100,7 @@ def test_slot_labels_normalize_to_standard_positions(mod):
         {**_snapshot("2025-09-03T07:00:00Z", pos_abb=abb), "week": 1}
         for abb in ("LT", "RCB", "LDE", "SLB", "PK")
     ])
-    out = mod._to_target_schema(picked)
+    out = mod._to_target_schema(picked, 2025)
 
     assert out["position"].tolist() == ["T", "CB", "DE", "OLB", "K"]
     # the fine-grained slot is preserved, matching the old depth_position
@@ -112,7 +114,7 @@ def test_returner_inherits_position_from_his_other_slot(mod):
         {**_snapshot("2025-09-03T07:00:00Z", pos_abb="WR", rank=2), "week": 1},
         {**_snapshot("2025-09-03T07:00:00Z", pos_abb="KR", rank=1), "week": 1},
     ])
-    out = mod._to_target_schema(picked)
+    out = mod._to_target_schema(picked, 2025)
 
     assert out["position"].tolist() == ["WR", "WR"]
     assert out["depth_position"].tolist() == ["WR", "KR"]
@@ -123,7 +125,7 @@ def test_returner_with_no_other_slot_stays_unresolved(mod):
     picked = pd.DataFrame([
         {**_snapshot("2025-09-03T07:00:00Z", pos_abb="PR"), "week": 1},
     ])
-    out = mod._to_target_schema(picked)
+    out = mod._to_target_schema(picked, 2025)
 
     assert pd.isna(out["position"].iloc[0])
 

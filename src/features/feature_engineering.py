@@ -323,7 +323,7 @@ def _load_depth_chart_asof_table() -> pd.DataFrame:
     written in nflverse's newer daily ESPN-style schema, which has no
     season/week/depth_team column at all, so a straight insert left them
     unmapped. They are now loaded properly by
-    scripts/backfill_depth_charts_2025.py; the filter stays as a guard.
+    scripts/backfill_depth_charts.py; the filter stays as a guard.
     Deduplicates per (season, week, gsis_id) via a deterministic MIN so a
     conflicting duplicate doesn't produce a nondeterministic result. (2024's
     row count was previously described here as "~3x-inflated" and in need of
@@ -1202,7 +1202,7 @@ class FeatureEngineer:
         # unbackfillable and carried stale 2024 ranks; in fact
         # import_depth_charts([2025]) succeeds and simply returns a different
         # (daily, ESPN-style) schema, loaded by
-        # scripts/backfill_depth_charts_2025.py on 2026-08-19. The bound
+        # scripts/backfill_depth_charts.py on 2026-08-19. The bound
         # still matters for 2018/2019 and for players absent from a given
         # season's charts: one season of staleness is acceptable (a
         # prior-season depth chart is real, if noisy, information -- exactly
