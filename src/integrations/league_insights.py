@@ -157,6 +157,29 @@ def optimal_lineup(players: list, slots: list):
     return filled, bench
 
 
+def _mark_against_espn(starters: list, bench: list) -> None:
+    """Flag every slot where this lineup disagrees with the one ESPN holds.
+
+    The lineup on this page is BUILT from projections, not read from ESPN, so
+    the page has to say where the two differ -- and, just as usefully, when
+    they do not.
+    """
+    for p in starters:
+        p["espn_starting"] = p.get("lineup_slot") not in BENCH_SLOTS
+        p["action"] = None if p["espn_starting"] else "START"
+    for p in bench:
+        p["espn_starting"] = p.get("lineup_slot") not in BENCH_SLOTS
+        p["action"] = "SIT" if p["espn_starting"] else None
+
+
+def lineup_changes(starters: list, bench: list) -> list:
+    """The moves that would take the ESPN lineup to this one."""
+    return [{"action": p["action"], "name": p["name"],
+             "position": p["position"], "points": p["points"],
+             "slot": p.get("slot") or p.get("lineup_slot")}
+            for p in list(starters) + list(bench) if p.get("action")]
+
+
 def lineup_total(starters: list) -> float:
     return round(sum(p["points"] for p in starters), 2)
 
@@ -269,12 +292,21 @@ def lineup_value(players: list, slots: list, key: str = "points",
     return lineup_total(lineup_of(players, slots, key, ignore_bye))
 
 
-def _lineup_change(before: list, after: list) -> dict:
+def _lineup_change(before: list, after: list, departed=None) -> dict:
+    """What the swap does to the lineup.
+
+    `departed` is the player being traded away. He leaves the lineup like a
+    benched player does, but he is not on the bench -- he is on another
+    roster, and saying "to the bench" about the man you just gave up reads as
+    a mistake because it is one.
+    """
     b = {s["name"]: s["slot"] for s in before}
     a = {s["name"]: s["slot"] for s in after}
     return {
         "in": [{"name": n, "slot": a[n]} for n in a if n not in b],
-        "out": [{"name": n, "slot": b[n]} for n in b if n not in a],
+        "out": [{"name": n, "slot": b[n],
+                 "reason": "traded" if n == departed else "benched"}
+                for n in b if n not in a],
         "moved": [{"name": n, "from": b[n], "to": a[n]}
                   for n in a if n in b and a[n] != b[n]],
     }
@@ -343,7 +375,8 @@ def propose_trades(league: list, team_name: str, slots: list,
                     "our_gain_over_horizon": round(our_gain * horizon_weeks, 1),
                     "their_gain_per_week_espn": their_gain,
                     "horizon_weeks": horizon_weeks,
-                    "lineup_change": _lineup_change(base_lineup, after),
+                    "lineup_change": _lineup_change(base_lineup, after,
+                                                    departed=give["name"]),
                 })
         best.sort(key=lambda t: (-t["our_gain_per_week"],
                                  -t["their_gain_per_week_espn"]))
@@ -401,6 +434,7 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
     roster = [p for p in league if p["fantasy_team"] == mine["team_name"]]
 
     starters, bench = optimal_lineup(roster, slots)
+    _mark_against_espn(starters, bench)
 
     matchup = snapshot.opponent_for(mine["team_id"], week)
     opponent_id = matchup.get("opponent_id")
@@ -438,6 +472,7 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
         "caveats": _caveats(mode, starters),
         "starters": starters,
         "bench": bench,
+        "lineup_changes": lineup_changes(starters, bench),
         "tough_calls": tough_calls(starters, bench),
         "waivers": waiver_targets(free_agents, roster, slots),
         "trades": {

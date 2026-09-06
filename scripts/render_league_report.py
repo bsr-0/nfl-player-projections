@@ -107,6 +107,7 @@ tr:last-child td { border-bottom: none; }
 .chip.warning  { color: var(--ink-2); border-color: var(--warning);
                  background: rgba(250,178,25,.16); }
 .chip.espn, .chip.bye { color: var(--ink-muted); }
+.chip.action { color: var(--buy); border-color: var(--buy); }
 .buy { color: var(--buy); }
 .sell { color: var(--sell); }
 .pole { font-weight: 650; }
@@ -151,14 +152,31 @@ def _short(name, width=20) -> str:
     return name if len(name) <= width else name[:width - 1].rstrip() + "\u2026"
 
 
+def action_chip(action) -> str:
+    """START/SIT: this row disagrees with the ESPN lineup."""
+    return (f' <span class="chip action">{esc(action)}</span>' if action
+            else "")
+
+
 def _player_cell(p) -> str:
     return (f'{esc(p.get("name"))}{status_chip(p.get("injury_status"))}'
+            f'{action_chip(p.get("action"))}'
             f'{source_chip(p.get("points_source"))}')
 
 
 def _rows(rows: list) -> str:
     return "\n".join(rows) if rows else (
         '<tr><td class="muted">nothing to report</td></tr>')
+
+
+def lineup_verdict(report: dict) -> str:
+    """This lineup is built from projections, not read from ESPN. Say so, and
+    say whether ESPN already agrees."""
+    changes = report.get("lineup_changes") or []
+    if not changes:
+        return "matches the lineup you have set in ESPN"
+    return (f"{len(changes)} change{'s' if len(changes) > 1 else ''} from the "
+            "lineup you have set in ESPN")
 
 
 def starters_table(starters) -> str:
@@ -227,7 +245,9 @@ def _lineup_note(change: dict) -> str:
     """What the swap actually does to the lineup, which is the point of it."""
     moves = ([f'{esc(c["name"])} starts at {esc(c["slot"])}'
               for c in change.get("in", [])]
-             + [f'{esc(c["name"])} to the bench'
+             + [f'{esc(c["name"])} '
+                + ("leaves the roster" if c.get("reason") == "traded"
+                   else "to the bench")
                 for c in change.get("out", [])]
              + [f'{esc(c["name"])} {esc(c["from"])} &rarr; {esc(c["to"])}'
                 for c in change.get("moved", [])])
@@ -292,7 +312,8 @@ def render(report: dict) -> str:
 
 <div class="cols">
   <div>
-    <section><h2>Starting lineup</h2>{starters_table(report['starters'])}</section>
+    <section><h2>Recommended lineup &mdash; {lineup_verdict(report)}</h2>
+      {starters_table(report['starters'])}</section>
     <section><h2>Bench</h2>{bench_table(report['bench'])}</section>
   </div>
   <div>

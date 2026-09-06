@@ -11,8 +11,8 @@ import pytest
 
 from src.integrations.league_insights import (
     availability, build_report, eligible, find_team, horizon_weeks,
-    lineup_value, optimal_lineup, price, propose_trades, starting_slots,
-    tough_calls, waiver_targets,
+    lineup_changes, lineup_value, optimal_lineup, price, propose_trades,
+    starting_slots, tough_calls, waiver_targets,
 )
 from src.integrations.league_join import Snapshot, load_projections
 
@@ -244,7 +244,8 @@ def test_a_trade_is_proposed_when_the_two_valuations_disagree():
     assert deal["our_gain_over_horizon"] == 84.0
     assert deal["their_gain_per_week_espn"] == 6.0
     assert deal["lineup_change"]["in"] == [{"name": "Their WR", "slot": "WR"}]
-    assert deal["lineup_change"]["out"] == [{"name": "My WR", "slot": "WR"}]
+    assert deal["lineup_change"]["out"] == [
+        {"name": "My WR", "slot": "WR", "reason": "traded"}]
 
 
 def test_no_trade_when_both_sides_value_players_the_same():
@@ -307,3 +308,56 @@ def test_a_pure_scale_difference_produces_no_proposal():
               for i, pts in enumerate([18.0, 12.0, 15.0, 9.0])]
 
     assert propose_trades(league, "Mine", ["WR", "WR"], horizon_weeks=14) == []
+
+
+def test_the_player_you_trade_away_does_not_go_to_your_bench():
+    """He is on another roster. Calling that "benched" reads as a mistake."""
+    league = [
+        _tradeable("My WR", "WR", 10.0, 18.0, "Mine"),
+        _tradeable("Their WR", "WR", 16.0, 12.0, "Theirs"),
+    ]
+
+    deal = propose_trades(league, "Mine", ["WR"], horizon_weeks=14)[0]
+
+    assert deal["lineup_change"]["out"] == [
+        {"name": "My WR", "slot": "WR", "reason": "traded"}]
+
+
+def test_a_bench_move_is_still_called_a_bench_move():
+    """Only the departing player is "traded"; anyone else displaced is not."""
+    league = [
+        _tradeable("Starter", "WR", 9.0, 20.0, "Mine"),
+        _tradeable("Also starting", "WR", 8.0, 8.0, "Mine"),
+        _tradeable("Their WR", "WR", 20.0, 9.0, "Theirs"),
+    ]
+
+    deal = propose_trades(league, "Mine", ["WR"], horizon_weeks=14)[0]
+    out = {o["name"]: o["reason"] for o in deal["lineup_change"]["out"]}
+
+    assert out["Starter"] == "traded"
+
+
+def test_the_lineup_says_where_it_disagrees_with_espn():
+    """The lineup here is built from projections, not read from ESPN."""
+    roster = [{"player_id": 1, "name": "Benched but better", "position": "RB",
+               "team": "DET", "lineup_slot": "BE", "injury_status": "ACTIVE",
+               "projected_avg_points": 20.0, "percent_owned": 50.0},
+              {"player_id": 2, "name": "Starting but worse", "position": "RB",
+               "team": "DET", "lineup_slot": "RB", "injury_status": "ACTIVE",
+               "projected_avg_points": 4.0, "percent_owned": 50.0}]
+    snap = _snapshot(settings={"position_slot_counts": {"RB": 1, "BE": 1}},
+                     rosters=[{"team_id": 1, "team_name": "Mine",
+                               "roster": roster}])
+
+    report = build_report(snap, _projections(), team=1, crosswalk={})
+
+    assert [c["action"] for c in report["lineup_changes"]] == ["START", "SIT"]
+    assert report["starters"][0]["name"] == "Benched but better"
+
+
+def test_no_disagreement_is_reported_as_no_changes():
+    report = build_report(_snapshot(), _projections(), team=1,
+                          crosswalk={"1": "00-0036223"})
+
+    assert report["lineup_changes"] == []
+    assert lineup_changes(report["starters"], report["bench"]) == []

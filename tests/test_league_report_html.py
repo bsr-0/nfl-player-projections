@@ -61,7 +61,8 @@ def _report(**kw):
              "their_gain_per_week_espn": 1.12, "horizon_weeks": 14,
              "lineup_change": {"in": [{"name": "Josh Jacobs", "slot": "RB"}],
                                "out": [{"name": "Kenneth Walker III",
-                                        "slot": "RB"}], "moved": []}}],
+                                        "slot": "RB", "reason": "traded"}],
+                               "moved": []}}],
                    },
         "coverage": {"roster": {"matched": 14, "players": 16,
                                 "by_reason": {"position not modelled": 2}}},
@@ -147,7 +148,7 @@ def test_a_proposal_says_what_it_does_to_the_lineup(mod):
     page = mod.render(_report())
 
     assert "Josh Jacobs starts at RB" in page
-    assert "Kenneth Walker III to the bench" in page
+    assert "Kenneth Walker III leaves the roster" in page
 
 
 def test_the_two_gains_are_kept_in_separate_columns(mod):
@@ -163,3 +164,35 @@ def test_no_workable_trade_says_so(mod):
     page = mod.render(_report(trades=trades))
 
     assert page.count("nothing to report") == 3   # tough calls, waivers, trades
+
+
+def test_the_traded_player_leaves_the_roster_not_the_lineup(mod):
+    page = mod.render(_report())
+
+    assert "Kenneth Walker III leaves the roster" in page
+    assert "Kenneth Walker III to the bench" not in page
+
+
+def test_a_benched_player_still_reads_as_benched(mod):
+    trades = _report()["trades"]
+    trades["proposals"][0]["lineup_change"]["out"][0]["reason"] = "benched"
+
+    assert "Kenneth Walker III to the bench" in mod.render(_report(trades=trades))
+
+
+def test_the_lineup_heading_says_whose_lineup_it_is(mod):
+    """It is built from projections, so it must not read as ESPN's."""
+    page = mod.render(_report(lineup_changes=[]))
+
+    assert "Recommended lineup" in page
+    assert "matches the lineup you have set in ESPN" in page
+
+
+def test_the_heading_counts_the_changes_when_there_are_any(mod):
+    page = mod.render(_report(lineup_changes=[
+        {"action": "START", "name": "A", "position": "RB", "points": 9.0,
+         "slot": "RB"},
+        {"action": "SIT", "name": "B", "position": "RB", "points": 4.0,
+         "slot": "RB"}]))
+
+    assert "2 changes from the lineup you have set in ESPN" in page
