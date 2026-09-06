@@ -64,6 +64,25 @@ def _report(**kw):
                                         "slot": "RB", "reason": "traded"}],
                                "moved": []}}],
                    },
+        "opponent_starters": [
+            {"slot": "QB", "name": "Justin Herbert", "position": "QB",
+             "nfl_team": "LAC", "points": 15.79, "points_source": "model",
+             "injury_status": "ACTIVE"}],
+        "injury_watch": [
+            {"slot": "WR", "name": "Zay Flowers", "position": "WR",
+             "injury_status": "QUESTIONABLE", "points": 13.65,
+             "points_source": "model",
+             "replacement": {"name": "Mike Evans", "points": 9.86,
+                             "cost": 3.79}},
+            {"slot": "K", "name": "Cameron Dicker", "position": "K",
+             "injury_status": "QUESTIONABLE", "points": 9.94,
+             "points_source": "espn", "replacement": None}],
+        "streamers": [
+            {"position": "D/ST", "current": {"name": "Jaguars D/ST",
+                                             "points": 4.61},
+             "available": {"name": "Browns D/ST", "nfl_team": "CLE",
+                           "points": 6.11, "percent_owned": 59.26},
+             "gain": 1.5}],
         "coverage": {"roster": {"matched": 14, "players": 16,
                                 "by_reason": {"position not modelled": 2}}},
     }
@@ -196,3 +215,39 @@ def test_the_heading_counts_the_changes_when_there_are_any(mod):
          "slot": "RB"}]))
 
     assert "2 changes from the lineup you have set in ESPN" in page
+
+
+def test_the_opponent_lineup_is_itemised(mod):
+    page = mod.render(_report())
+
+    assert "their projected lineup" in page
+    assert "Justin Herbert" in page
+
+
+def _section(page: str, heading: str) -> str:
+    """One section's markup. Players appear in several tables, so a bare
+    search finds the lineup row rather than the one under test."""
+    start = page.index(heading)
+    end = page.find("<h2", start)
+    return page[start:end if end > 0 else len(page)]
+
+
+def test_a_questionable_starter_shows_what_sitting_him_costs(mod):
+    watch = _section(mod.render(_report()), "Questionable starters")
+
+    row = re.search(r"Zay Flowers.*?</tr>", watch, re.S).group()
+    assert "Mike Evans" in row and "costs 3.8" in row
+
+
+def test_no_replacement_says_so_instead_of_going_blank(mod):
+    watch = _section(mod.render(_report()), "Questionable starters")
+
+    row = re.search(r"Cameron Dicker.*?</tr>", watch, re.S).group()
+    assert "nobody eligible on the bench" in row
+
+
+def test_streaming_names_the_gain_over_the_current_starter(mod):
+    page = mod.render(_report())
+
+    row = re.search(r"Browns D/ST.*?</tr>", page, re.S).group()
+    assert "for Jaguars D/ST" in row and "+1.5" in row

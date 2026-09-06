@@ -11,8 +11,9 @@ import pytest
 
 from src.integrations.league_insights import (
     availability, build_report, eligible, find_team, horizon_weeks,
-    lineup_changes, lineup_value, optimal_lineup, price, propose_trades,
-    starting_slots, tough_calls, waiver_targets,
+    injury_watch, lineup_changes, lineup_value, optimal_lineup, price,
+    propose_trades, starting_slots, streaming_targets, tough_calls,
+    waiver_targets,
 )
 from src.integrations.league_join import Snapshot, load_projections
 
@@ -361,3 +362,72 @@ def test_no_disagreement_is_reported_as_no_changes():
 
     assert report["lineup_changes"] == []
     assert lineup_changes(report["starters"], report["bench"]) == []
+
+
+def test_streaming_compares_against_the_man_you_are_starting():
+    """You drop the kicker for a better kicker; the bench is not the baseline."""
+    starters = [dict(_p("My K", "K", 8.0, points_source="espn"), slot="K")]
+    free_agents = [_p("Better K", "K", 10.0, points_source="espn"),
+                   _p("Worse K", "K", 7.0, points_source="espn"),
+                   _p("A receiver", "WR", 20.0)]
+
+    out = streaming_targets(free_agents, starters)
+
+    assert [t["available"]["name"] for t in out] == ["Better K"]
+    assert out[0]["gain"] == 2.0
+    assert out[0]["current"]["name"] == "My K"
+
+
+def test_streaming_only_covers_the_positions_you_stream():
+    """A better RB is a waiver add, not a stream, and belongs in that section."""
+    starters = [dict(_p("My RB", "RB", 8.0), slot="RB")]
+    free_agents = [_p("Better RB", "RB", 14.0)]
+
+    assert streaming_targets(free_agents, starters) == []
+
+
+def test_streaming_stays_on_one_pricing_scale():
+    starters = [dict(_p("My K", "K", 8.0, points_source="espn"), slot="K")]
+    free_agents = [_p("Model priced", "K", 30.0, points_source="model")]
+
+    assert streaming_targets(free_agents, starters) == []
+
+
+def test_a_questionable_starter_is_paired_with_who_would_replace_him():
+    starters = [dict(_p("Hurt", "WR", 13.0, injury_status="QUESTIONABLE"),
+                     slot="WR")]
+    bench = [_p("Next man", "WR", 9.0), _p("Worse", "WR", 4.0)]
+
+    watch = injury_watch(starters, bench, ["WR"])
+
+    assert watch[0]["name"] == "Hurt"
+    assert watch[0]["replacement"] == {"name": "Next man", "points": 9.0,
+                                       "cost": 4.0}
+
+
+def test_a_healthy_starter_is_not_on_the_watch_list():
+    starters = [dict(_p("Fine", "WR", 13.0), slot="WR")]
+
+    assert injury_watch(starters, [_p("Bench", "WR", 9.0)], ["WR"]) == []
+
+
+def test_no_eligible_replacement_says_so_rather_than_inventing_one():
+    starters = [dict(_p("Hurt K", "K", 9.0, injury_status="QUESTIONABLE",
+                        points_source="espn"), slot="K")]
+    bench = [_p("A receiver", "WR", 20.0)]
+
+    assert injury_watch(starters, bench, ["K"])[0]["replacement"] is None
+
+
+def test_the_report_itemises_the_opponent_lineup():
+    """The total says how big the hill is; the rows say where it is."""
+    snap = _snapshot()
+    snap.rosters[1]["roster"] = [
+        {"player_id": 2, "name": "Jahmyr Gibbs", "position": "RB",
+         "team": "DET", "lineup_slot": "RB", "injury_status": "ACTIVE",
+         "projected_avg_points": 21.5, "percent_owned": 99.9}]
+
+    report = build_report(snap, _projections(), team=1, crosswalk={})
+
+    assert [p["name"] for p in report["opponent_starters"]] == ["Jahmyr Gibbs"]
+    assert report["matchup"]["opponent_projected_total"] > 0

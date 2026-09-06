@@ -4,7 +4,9 @@ Every number here is either this project's projection or ESPN's, and every row
 says which. A player neither side can price is listed as unpriced rather than
 given a zero, which would quietly rank him last instead of unknown.
 
-    matchup      this team and its week's opponent, each at its best lineup
+    matchup      this team and its week's opponent, each at its best lineup,
+                 with the opponent's lineup itemised -- the total says how big
+                 the hill is, the rows say where it is
     starters     that lineup, and the bench behind it
     tough_calls  starter/bench pairs close enough that the projection is not
                  the thing that should decide them
@@ -34,6 +36,14 @@ BENCH_SLOTS = {"BE", "IR", "ER", ""}
 # deliberately absent: those are decisions, and the report should surface them
 # rather than quietly bench the player.
 UNAVAILABLE = {"OUT", "INJURY_RESERVE", "SUSPENSION", "DOUBTFUL"}
+
+# Positions a league starts exactly one of, where the weekly move is to drop
+# the man and take a better one rather than to bench him.
+STREAMED_POSITIONS = ("K", "D/ST")
+
+# Statuses that are a decision rather than an absence -- he may play, so the
+# report pairs him with who would play instead.
+WATCH_STATUSES = {"QUESTIONABLE", "DOUBTFUL", "DAY_TO_DAY"}
 
 # Two points a week. Inside this, the projection is not separating the two
 # players -- measured MAE is 3.0-7.1 points depending on position, so a
@@ -394,6 +404,63 @@ def _side(p: dict) -> dict:
             "injury_status": p.get("injury_status")}
 
 
+def streaming_targets(free_agents: list, starters: list,
+                      margin: float = 0.5, limit: int = 2) -> list:
+    """Better kickers and defences than the one you are starting.
+
+    The comparison is against the STARTER, not the worst man rostered, because
+    these are the slots you stream: you drop the kicker to take a better
+    kicker. Both sides are priced by ESPN -- this project does not model
+    either position -- so the comparison stays on one scale.
+    """
+    out = []
+    for position in STREAMED_POSITIONS:
+        current = next((s for s in starters if s["position"] == position), None)
+        if current is None or current["points"] is None:
+            continue
+        better = [f for f in free_agents
+                  if f["position"] == position and f["available"]
+                  and f["points_source"] == current["points_source"]
+                  and f["points"] > current["points"] + margin]
+        for fa in sorted(better, key=lambda f: -f["points"])[:limit]:
+            out.append({
+                "position": position,
+                "current": {"name": current["name"],
+                            "points": current["points"]},
+                "available": {"name": fa["name"], "nfl_team": fa["nfl_team"],
+                              "points": fa["points"],
+                              "percent_owned": fa.get("percent_owned")},
+                "gain": round(fa["points"] - current["points"], 2),
+            })
+    return sorted(out, key=lambda r: -r["gain"])
+
+
+def injury_watch(starters: list, bench: list, slots: list) -> list:
+    """Every questionable starter, paired with who would actually replace him.
+
+    A status chip on its own is not a decision. The decision is whether the man
+    behind him is close enough to start instead, so the replacement is the best
+    available bench player eligible for that slot, priced the same way.
+    """
+    out = []
+    for s in starters:
+        if str(s.get("injury_status") or "") not in WATCH_STATUSES:
+            continue
+        options = [b for b in bench
+                   if b["available"] and b["points"] is not None
+                   and b["points_source"] == s["points_source"]
+                   and eligible(s["slot"], b["position"])]
+        best = max(options, key=lambda b: b["points"], default=None)
+        out.append({
+            "slot": s["slot"], "name": s["name"], "position": s["position"],
+            "injury_status": s["injury_status"], "points": s["points"],
+            "replacement": ({"name": best["name"], "points": best["points"],
+                             "cost": round(s["points"] - best["points"], 2)}
+                            if best else None),
+        })
+    return out
+
+
 def find_team(snapshot, team) -> dict:
     """A roster by team id or by a case-insensitive piece of its name."""
     rosters = snapshot.rosters
@@ -473,6 +540,9 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
         "starters": starters,
         "bench": bench,
         "lineup_changes": lineup_changes(starters, bench),
+        "opponent_starters": opp_starters,
+        "injury_watch": injury_watch(starters, bench, slots),
+        "streamers": streaming_targets(free_agents, starters),
         "tough_calls": tough_calls(starters, bench),
         "waivers": waiver_targets(free_agents, roster, slots),
         "trades": {
