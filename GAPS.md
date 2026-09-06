@@ -13785,3 +13785,60 @@ lever for power is extending the step 8 baseline back past 2021 -- its
 training window is the cap, while the feature pool already runs from 2013 --
 which would roughly double n. With effect sizes of 0.06 MAE on the table, that
 was judged not worth it.
+
+
+## The cold-start multiplier is 0.74, and `/ 17` already supplies it (2026-09-06)
+
+A follow-up to the two entries above, prompted by the right question: if the
+problem with `season total / 17` is that it discounts games a player will not
+miss, why not post-process the cold-start number onto a 17-game basis instead?
+
+Forcing 17 games is algebraically `total / E[games]`, which is the
+`step8_per_game` arm, and it measured WORSE on cold start (MAE 4.47, bias
++1.83 against 3.70 / -0.18). So the interesting version is neither 17 nor
+E[games] but the multiplier that was actually observed. Measured on 930
+first-year players with a week-1 game, 2013-2025:
+
+    week-1 points / their own season per-game rate   0.881
+    week-1 snap share / season snap share            0.883   <- it is usage
+    the same ratio for veterans                      0.964
+
+A rookie plays about 12% less in week 1 than his own season average, because
+he has not earned the role yet. Veterans have no such ramp.
+
+### The arm
+
+`coldstart_ramp` is the per-game rate times one scalar, fit walk-forward on
+earlier cold-start rows as sum(actual week-1 points) / sum(predicted rate) --
+absorbing both the usage ramp and any optimism in the rate itself rather than
+hoping the games discount cancels them. Fitted values by season: 0.732, 0.709,
+0.766, 0.746.
+
+    cold start, 2022-2025 (n=165)
+      step8_pace      MAE 3.65  bias -0.16  R2 +0.255
+      coldstart_ramp  MAE 3.78  bias +0.07  R2 +0.247
+
+      dMAE +0.132, 95% CI [+0.059, +0.209], worse in 4 of 4 seasons
+
+### What it corrects
+
+The entry above called `/ 17` on cold start "two errors cancelling". That was
+wrong in one direction and is corrected here. The empirically right multiplier
+on a rookie's rate is ~0.74; the games discount supplies ~0.68 for the same
+players. Those are not two large errors that happen to offset -- they are the
+same magnitude reached by two routes. The remaining 9% is worth about 0.4
+points on a 5-point projection, and buying it costs more variance than it
+returns.
+
+The calibration does improve: bias -0.16 -> +0.07, near perfect. It just does
+not rank players any better, and a start/sit decision consumes the ranking.
+
+### Where the divergence actually is
+
+For veterans the ramp is 0.964 while `/ 17` still applies about 0.77, and that
+gap is where the measured -1.13 bias lives. So the display-layer fix this line
+of work keeps pointing at is VETERAN-ONLY: rookies are already at
+approximately the right multiplier, by accident; veterans are being discounted
+for absences they are not going to have in the week they are being started.
+Season totals should keep the discount either way -- it is what makes them
+season totals.

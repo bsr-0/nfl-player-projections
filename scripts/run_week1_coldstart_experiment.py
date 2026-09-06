@@ -25,6 +25,14 @@ Arms:
                    room that produces 22 PPR points a week is in a different
                    situation from one landing in a room that produces 12,
                    whatever his own history says.
+    coldstart_ramp the per-game rate times ONE scalar, fitted walk-forward on
+                   earlier cold-start rows: sum(actual week-1 points) over
+                   sum(predicted rate). Neither 17 games nor E[games] but the
+                   ratio that was actually observed, which absorbs both the
+                   week-1 usage ramp (measured 0.88 for first-year players
+                   against 0.96 for veterans -- they have not earned the role
+                   yet) and any optimism in the rate itself, instead of hoping
+                   the games discount happens to cancel them.
     hurdle         the two-stage version: P(role) x E[points | role] plus the
                    complement, fit on the same features. The snap-share
                    diagnostic showed step8_pace wins the composite by
@@ -365,6 +373,21 @@ def main():
             "position_mean", "prior_ppg"]
     rows = rows.dropna(subset=["step8_per_game"])
 
+    # One scalar per season, fit only on earlier seasons. Needs step 8
+    # predictions to fit against, and step 8 cannot be refit before 2021
+    # (its own training window), so the earliest scored season is the second.
+    rows["coldstart_ramp"] = pd.NA
+    print("\ncold-start ramp arm")
+    for season in sorted(rows["season"].unique()):
+        train = rows[(rows.cold_start == 1) & (rows.season < season)]
+        if len(train) < 30:
+            print(f"  {season}: skipped ({len(train)} earlier cold-start rows)")
+            continue
+        ramp = float(train.actual.sum() / train.step8_per_game.sum())
+        mask = rows.season == season
+        rows.loc[mask, "coldstart_ramp"] = rows.loc[mask, "step8_per_game"] * ramp
+        print(f"  {season}: ramp {ramp:.3f} from {len(train)} rows", flush=True)
+
     print("\nmatchup arm (cold start only)")
     rows = rows.merge(matchup_arm(sorted(rows["season"].unique()),
                                   args.pool_from),
@@ -372,6 +395,7 @@ def main():
     # The matchup arm exists only for cold-start players, so its comparison
     # has to be on the rows where every arm has a number.
     head_to_head = rows[rows["matchup"].notna()]
+    ramp_rows = rows[(rows.cold_start == 1) & rows["coldstart_ramp"].notna()]
 
     result = {
         "run_at": datetime.now().isoformat(timespec="seconds"),
@@ -387,6 +411,7 @@ def main():
             pos: evaluate(g, arms).get("all")
             for pos, g in rows[rows.cold_start == 1].groupby("position")},
         "matchup_head_to_head": evaluate(head_to_head, arms + ["matchup", "hurdle"]),
+        "coldstart_ramp": evaluate(ramp_rows, arms + ["coldstart_ramp"]),
         # DIAGNOSTIC, NOT A SERVABLE FILTER. Realised snap share is not known
         # before kickoff, so conditioning on it cannot be shipped. It answers a
         # different question: with the "did he even play a role" part of the
@@ -422,6 +447,8 @@ def main():
 
     table("matchup head-to-head (rows where every arm has a number)",
           result["matchup_head_to_head"], arms + ["matchup", "hurdle"])
+    table("cold-start ramp (seasons with earlier rows to fit the scalar on)",
+          result["coldstart_ramp"], arms + ["coldstart_ramp"])
 
     for t in SNAP_SHARE_THRESHOLDS:
         scored = result["by_snap_share"][str(t)]["cold_start"]
