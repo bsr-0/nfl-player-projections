@@ -13552,3 +13552,76 @@ Pre-existing, unrelated to the 2026-09-03 rollover fix; found while verifying
 it. The roster query has no "active in the projection season" filter. Harmless
 if the page drops null projections, misleading if it renders them as zeroes —
 UNVERIFIED which, because docs/index.html is frozen under CLAUDE.md §9.
+
+
+## Week 1 is not a season: what the published per-week number actually predicts (2026-09-05)
+
+Every measurement step 8 has is a SEASON measurement -- rookie season-total MAE
+39.81, cold-start games-played MAE 3.3-4.8 after the draft-round prior. But
+before kickoff the site publishes `season total / 17` as each week's
+projection (`generate_weekly_data.py`, mode `season_prorated`), and a week-1
+lineup decision reads that number. Nothing had measured it.
+
+`scripts/run_week1_coldstart_experiment.py` refits step 8 per target season
+2021-2025 on pairs strictly before it (availability fit `before_season=S`) and
+scores its per-week number against real week-1 PPR, split on whether the
+player had any NFL history at all. Results in
+`data/backtest_results/week1_coldstart_20260905_193124.json`.
+
+    cold start (n=208, mean actual 4.91)
+      step8_pace      MAE 3.70  RMSE 5.11  bias -0.18  R2 +0.270
+      step8_per_game  MAE 4.47  RMSE 5.48  bias +1.83  R2 +0.160
+      position_mean   MAE 5.43  RMSE 6.26  bias +2.55  R2 -0.097
+      prior_ppg            (undefined -- falls back to position_mean)
+
+    veteran (n=1428, mean actual 7.85)
+      step8_pace      MAE 4.53  RMSE 6.23  bias -1.13  R2 +0.375
+      step8_per_game  MAE 4.67  RMSE 6.09  bias +0.56  R2 +0.402
+      position_mean   MAE 5.68  RMSE 7.29  bias -0.37  R2 +0.142
+      prior_ppg       MAE 4.62  RMSE 6.12  bias +0.82  R2 +0.396
+
+### The model earns its keep on cold start and nowhere else at week 1
+
+On cold-start rows it beats the position-mean floor by **1.73 MAE**, and that
+floor posts NEGATIVE R2: "every rookie WR scores the rookie WR average" is
+worse than predicting the global mean, and step 8 turns it into +0.27. The win
+holds at all four positions (QB 5.87 vs 8.00, RB 3.55 vs 5.93, TE 2.55 vs
+3.70, WR 3.98 vs 5.57) and in all five seasons separately.
+
+Against veterans it is a **coin flip with the player's own prior-season PPG**:
+-0.09 MAE in step 8's favour, +0.02 R2 in prior_ppg's. A model this project
+has spent four architecture arms on does not beat "what he averaged last year"
+at week 1. Whatever value it has at week 1 is concentrated exactly where the
+cold-start work has been aimed, which is the argument for continuing to aim
+there and against reading week-1 veteran rankings as model output worth much.
+
+### `/ 17` is right for the wrong reason, and the obvious fix is worse
+
+The published number is biased low by -1.01 overall, and the bias sits on
+veterans (-1.13) rather than on cold start (-0.18). That is structural: `/ 17`
+averages in the games a player is expected to MISS, while only players who
+played can appear in this population. Dividing by the model's own `E[games]`
+instead -- recovering the production term `E[PPR per game | played]` exactly --
+should remove it.
+
+It overcorrects. `step8_per_game` swings the bias to +0.72 overall and +1.83 on
+cold start, and loses on MAE in 5/5 seasons for both slices. It does win on
+RMSE (6.01 vs 6.10) and R2 (+0.394 vs +0.377), so it has the better SHAPE and
+the worse LEVEL: dividing by expected games is right about the discount and
+wrong about week 1, because week 1 is a below-average usage week for the
+players whose season rate is built on later-season workloads. Rookies most of
+all, which is why their overcorrection (+1.83) is the largest.
+
+So the shipped `/ 17` is two errors cancelling -- a games discount that should
+not apply to a single week, against a season rate that over-predicts the first
+one. It is well calibrated on cold start (-0.18) by coincidence, not by
+design. A real week-1 number would model the ramp rather than lean on the
+cancellation, and any future change here has to beat 3.70/-0.18 on cold start,
+not just fix the bias term.
+
+### Population caveat, which flatters every arm
+
+Only players with a week-1 row in `player_weekly_stats` are scored. A rookie
+drafted and inactive in week 1 is not in it. This measures accuracy GIVEN he
+played, not the harder question of whether he would -- which is the question
+the availability half exists to answer, and it is not what this measures.

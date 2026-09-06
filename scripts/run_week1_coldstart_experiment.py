@@ -14,6 +14,12 @@ almost entirely the shrinkage target that PR #96 changed.
 
 Arms:
     step8_pace     the published number: step 8 season total / 17
+    step8_per_game the same total over the model's OWN expected games, which
+                   is the production term `E[PPR per game | played]` on its
+                   own. `/ 17` averages in the games a player is expected to
+                   MISS; this population is players who played, so the
+                   published number should be biased low by exactly that
+                   discount and this arm should remove it.
     position_mean  the position's mean week-1 points, fitted leave-one-season-
                    out. The floor any model has to clear to be worth running.
     prior_ppg      the player's own PPG last season. Undefined for cold-start
@@ -69,8 +75,13 @@ def step8_pace(season: int) -> pd.DataFrame:
         return pd.DataFrame()
 
     model = Step8SeasonModel().fit(train, panel, before_season=season)
-    preds = model.predict(infer, possible_games=possible_games_for_players(
-        infer, season))
+    possible = np.asarray(possible_games_for_players(infer, season), dtype=float)
+    preds = np.asarray(model.predict(infer, possible_games=possible))
+
+    # The model's own games estimate, the other half of games x rate. Dividing
+    # the total by it recovers the per-game production term exactly.
+    games = np.asarray(model.availability.predict_rate(infer),
+                       dtype=float) * possible
     cold = infer.get("is_cold_start")
     return pd.DataFrame({
         "player_id": infer["player_id"].values,
@@ -78,7 +89,8 @@ def step8_pace(season: int) -> pd.DataFrame:
         "cold_start": (cold.fillna(0).astype(int).values if cold is not None
                        else np.zeros(len(infer), dtype=int)),
         # The published week number is the season total over a season.
-        "step8_pace": np.asarray(preds) / 17.0,
+        "step8_pace": preds / 17.0,
+        "step8_per_game": preds / np.where(games > 0, games, np.nan),
         "train_seasons": season - TRAIN_FROM,
     })
 
@@ -166,7 +178,8 @@ def main():
     # A cold-start player has no last season; the floor stands in for it.
     rows["prior_ppg"] = rows["prior_ppg"].fillna(rows["position_mean"])
 
-    arms = ["step8_pace", "position_mean", "prior_ppg"]
+    arms = ["step8_pace", "step8_per_game", "position_mean", "prior_ppg"]
+    rows = rows.dropna(subset=["step8_per_game"])
     result = {
         "run_at": datetime.now().isoformat(timespec="seconds"),
         "seasons": [first, last],
