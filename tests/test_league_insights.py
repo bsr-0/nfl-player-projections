@@ -11,9 +11,9 @@ import pytest
 
 from src.integrations.league_insights import (
     availability, build_report, eligible, find_team, horizon_weeks,
-    injury_watch, lineup_changes, lineup_value, optimal_lineup, price,
-    propose_trades, starting_slots, streaming_targets, tough_calls,
-    waiver_targets,
+    first_year_starters, injury_watch, lineup_changes, lineup_value,
+    optimal_lineup, pace_band, price, propose_trades, starting_slots,
+    streaming_targets, tough_calls, waiver_targets, win_probability,
 )
 from src.integrations.league_join import Snapshot, load_projections
 
@@ -431,3 +431,61 @@ def test_the_report_itemises_the_opponent_lineup():
 
     assert [p["name"] for p in report["opponent_starters"]] == ["Jahmyr Gibbs"]
     assert report["matchup"]["opponent_projected_total"] > 0
+
+
+def _priced(name, points, mae=4.0, **kw):
+    return _p(name, "RB", points, measured_mae=mae, **kw)
+
+
+def test_win_probability_is_the_margin_over_the_combined_spread():
+    mine = [_priced("A", 20.0), _priced("B", 20.0)]
+    theirs = [_priced("C", 20.0), _priced("D", 20.0)]
+
+    assert win_probability(mine, theirs) == 0.5
+
+    ahead = [_priced("A", 30.0), _priced("B", 30.0)]
+    assert win_probability(ahead, theirs) > 0.9
+
+
+def test_no_measured_error_means_no_probability_rather_than_a_coin_flip():
+    """K and D/ST have no measured error in this project. Saying 50% would be
+    inventing one."""
+    mine = [_p("Kicker", "K", 9.0, measured_mae=None)]
+
+    assert win_probability(mine, [_p("Their K", "K", 8.0,
+                                     measured_mae=None)]) is None
+
+
+def test_unmeasured_players_add_points_but_no_spread():
+    mine = [_priced("A", 20.0), _p("Kicker", "K", 10.0, measured_mae=None)]
+    theirs = [_priced("C", 20.0)]
+
+    # The kicker's 10 points move the margin, so this must beat an even match.
+    assert win_probability(mine, theirs) > 0.9
+
+
+def test_the_pace_band_is_the_season_band_over_seventeen():
+    assert pace_band({"floor": 170.0, "ceiling": 340.0}) == [10.0, 20.0]
+    assert pace_band({"floor": None, "ceiling": 340.0}) is None
+
+
+def test_first_year_starters_are_the_ones_with_no_history():
+    starters = [_p("Rookie", "WR", 9.0, prev_season_games=None, matched=True),
+                _p("Veteran", "WR", 9.0, prev_season_games=16, matched=True),
+                # Unmatched: no board row at all, so nothing is known either way.
+                _p("Unknown", "WR", 9.0, prev_season_games=None, matched=False)]
+
+    assert first_year_starters(starters) == ["Rookie"]
+
+
+def test_a_rookie_starter_earns_the_measured_underprojection_caveat():
+    snap = _snapshot()
+    board = BOARD.assign(prev_season_games=None)
+    projections = load_projections(2026, 1, board=board, weekly=WEEKLY,
+                                   meta={"mode": "season_prorated"})
+
+    report = build_report(snap, projections, team=1,
+                          crosswalk={"1": "00-0036223"})
+
+    assert any("no NFL history" in c and "1.7 points a week low" in c
+               for c in report["caveats"])

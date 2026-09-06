@@ -29,12 +29,14 @@ def _report(**kw):
         "generated_at": "2026-09-05T23:32:45+00:00",
         "team": {"id": 1, "name": "Baby Back Gibbs"},
         "matchup": {"opponent": "Fig Newtons", "projected_total": 99.49,
-                    "opponent_projected_total": 100.78, "edge": -1.29},
+                    "opponent_projected_total": 100.78, "edge": -1.29,
+                    "win_probability": 0.476, "spread": 21.5},
         "caveats": ["Every week's projection is the season total over 17."],
         "starters": [
             {"slot": "QB", "name": "Lamar Jackson", "position": "QB",
              "nfl_team": "BAL", "opponent": "IND", "points": 14.07,
-             "points_source": "model", "injury_status": "ACTIVE"},
+             "points_source": "model", "injury_status": "ACTIVE",
+             "pace_band": [10.2, 18.6], "first_year": False},
             {"slot": "K", "name": "Cameron Dicker", "position": "K",
              "nfl_team": "LAC", "opponent": None, "points": 9.94,
              "points_source": "espn", "injury_status": "QUESTIONABLE"},
@@ -251,3 +253,31 @@ def test_streaming_names_the_gain_over_the_current_starter(mod):
 
     row = re.search(r"Browns D/ST.*?</tr>", page, re.S).group()
     assert "for Jaguars D/ST" in row and "+1.5" in row
+
+
+def test_the_headline_is_the_probability_not_the_margin(mod):
+    page = mod.render(_report())
+
+    assert "Win probability" in page and "48%" in page
+    assert "-1.3 projected" in page
+
+
+def test_no_probability_prints_a_dash_not_fifty_percent(mod):
+    matchup = dict(_report()["matchup"], win_probability=None)
+    page = mod.render(_report(matchup=matchup))
+
+    assert "50%" not in page
+
+
+def test_the_pace_band_is_shown_so_wide_rows_are_visible(mod):
+    page = mod.render(_report())
+
+    assert "Pace band" in page
+    assert "10.2&ndash;18.6" in page
+
+
+def test_a_first_year_player_is_marked(mod):
+    starters = [dict(_report()["starters"][0], first_year=True)]
+    page = mod.render(_report(starters=starters))
+
+    assert 'class="chip rookie">R<' in page

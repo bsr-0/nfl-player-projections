@@ -108,6 +108,7 @@ tr:last-child td { border-bottom: none; }
                  background: rgba(250,178,25,.16); }
 .chip.espn, .chip.bye { color: var(--ink-muted); }
 .chip.action { color: var(--buy); border-color: var(--buy); }
+.chip.rookie { color: var(--ink-2); border-color: var(--ink-muted); }
 .buy { color: var(--buy); }
 .sell { color: var(--sell); }
 .pole { font-weight: 650; }
@@ -160,9 +161,16 @@ def action_chip(action) -> str:
             else "")
 
 
+def rookie_chip(p) -> str:
+    """No NFL history at all -- the row the season model is measured to run
+    low on."""
+    return (' <span class="chip rookie">R</span>' if p.get("first_year")
+            else "")
+
+
 def _player_cell(p) -> str:
     return (f'{esc(p.get("name"))}{status_chip(p.get("injury_status"))}'
-            f'{action_chip(p.get("action"))}'
+            f'{rookie_chip(p)}{action_chip(p.get("action"))}'
             f'{source_chip(p.get("points_source"))}')
 
 
@@ -217,6 +225,12 @@ def streaming_table(streamers, limit=3) -> str:
             f'<th class="num">Own</th></tr>{_rows(rows)}</table>')
 
 
+def win_text(matchup: dict) -> str:
+    """No measured error on either side means no probability, not 50%."""
+    p = matchup.get("win_probability")
+    return "--" if p is None else f"{round(float(p) * 100):d}%"
+
+
 def lineup_verdict(report: dict) -> str:
     """This lineup is built from projections, not read from ESPN. Say so, and
     say whether ESPN already agrees."""
@@ -225,6 +239,18 @@ def lineup_verdict(report: dict) -> str:
         return "matches the lineup you have set in ESPN"
     return (f"{len(changes)} change{'s' if len(changes) > 1 else ''} from the "
             "lineup you have set in ESPN")
+
+
+def band_cell(p) -> str:
+    """The season floor/ceiling as a per-week pace.
+
+    Its WIDTH is the point: it is how the page says which numbers to distrust,
+    and a first-year player's band runs three times a veteran's.
+    """
+    band = p.get("pace_band")
+    if not band or band[0] is None:
+        return '<td class="num muted">--</td>'
+    return f'<td class="num dim">{num(band[0])}&ndash;{num(band[1])}</td>'
 
 
 def starters_table(starters) -> str:
@@ -236,9 +262,11 @@ def starters_table(starters) -> str:
             f'<td>{_player_cell(p)}</td>'
             f'<td class="dim">{esc(p.get("nfl_team"))}'
             f'{" vs " + esc(opponent) if opponent else ""}</td>'
-            f'<td class="num">{num(p.get("points"))}</td></tr>')
+            f'<td class="num">{num(p.get("points"))}</td>'
+            f'{band_cell(p)}</tr>')
     return ('<table><tr><th>Slot</th><th>Player</th><th>Matchup</th>'
-            f'<th class="num">Proj</th></tr>{_rows(rows)}</table>')
+            '<th class="num">Proj</th><th class="num">Pace band</th></tr>'
+            f'{_rows(rows)}</table>')
 
 
 def bench_table(bench, limit=6) -> str:
@@ -353,9 +381,11 @@ def render(report: dict) -> str:
     <span class="value">{num(m.get('projected_total'))}</span></div>
   <div class="tile"><span class="label">{esc(m.get('opponent'))}</span>
     <span class="value">{num(m.get('opponent_projected_total'))}</span></div>
-  <div class="tile"><span class="label">Edge</span>
-    <span class="value {'buy' if edge >= 0 else 'sell'}">
-      {'+' if edge >= 0 else ''}{num(edge)}</span></div>
+  <div class="tile"><span class="label">Win probability</span>
+    <span class="value {'buy' if (m.get('win_probability') or 0.5) >= 0.5 else 'sell'}">
+      {win_text(m)}</span>
+    <span class="label">{'+' if edge >= 0 else ''}{num(edge)} projected,
+      &plusmn;{num(m.get('spread'))} spread</span></div>
 </section>
 
 <div class="cols">

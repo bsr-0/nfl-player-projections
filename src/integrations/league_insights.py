@@ -23,6 +23,7 @@ report can say so.
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -36,6 +37,12 @@ BENCH_SLOTS = {"BE", "IR", "ER", ""}
 # deliberately absent: those are decisions, and the report should surface them
 # rather than quietly bench the player.
 UNAVAILABLE = {"OUT", "INJURY_RESERVE", "SUSPENSION", "DOUBTFUL"}
+
+# MAE -> sd for a normal, sqrt(pi/2). The pipeline publishes measured MAE per
+# position (weekly_meta.json), and that is the only error figure in this
+# project measured against real outcomes, so the spread is derived from it
+# rather than from a floor/ceiling band that means something else.
+MAE_TO_SD = math.sqrt(math.pi / 2)
 
 # Positions a league starts exactly one of, where the weekly move is to drop
 # the man and take a better one rather than to bench him.
@@ -123,10 +130,18 @@ def _players(rows: list) -> list:
             "floor": _num(row.get("floor")),
             "ceiling": _num(row.get("ceiling")),
             "week_ci": [_num(row.get("week_ci_low")), _num(row.get("week_ci_high"))],
+            "measured_mae": _num(row.get("measured_mae")),
+            # _clean matters twice here: NaN is not JSON, and "no prior
+            # season" has to read as None for the first-year test below.
+            "prev_season_games": _clean(row.get("prev_season_games")),
             "opponent": _clean(row.get("opponent")),
             "matched": row.get("match_method") is not None,
+            "pace_band": None,          # filled below, needs floor/ceiling
             "fantasy_team": _clean(row.get("fantasy_team")),
         })
+        out[-1]["pace_band"] = pace_band(out[-1])
+        out[-1]["first_year"] = (out[-1]["prev_season_games"] is None
+                                 and out[-1]["matched"])
     return out
 
 
@@ -188,6 +203,68 @@ def lineup_changes(starters: list, bench: list) -> list:
              "position": p["position"], "points": p["points"],
              "slot": p.get("slot") or p.get("lineup_slot")}
             for p in list(starters) + list(bench) if p.get("action")]
+
+
+def _spread(players: list) -> float:
+    """Standard deviation of a lineup total, treating players as independent.
+
+    Correlation is real -- a quarterback and his receiver score together -- and
+    ignoring it understates the spread. It is not modelled here because this
+    project has never measured it, and inventing a correlation would be worse
+    than stating the assumption.
+    """
+    variance = 0.0
+    for p in players:
+        mae = p.get("measured_mae")
+        if mae:
+            variance += (float(mae) * MAE_TO_SD) ** 2
+    return math.sqrt(variance)
+
+
+def win_probability(starters: list, opponent: list):
+    """P(this lineup outscores that one), from the pipeline's measured error.
+
+    Returns None when neither side has a measured position, which is the
+    honest answer rather than 50%.
+
+    K and D/ST carry no measured error in this project, so they contribute
+    their points to the total and nothing to the spread. Both teams start one
+    of each, so the omission is symmetric.
+    """
+    sd = math.sqrt(_spread(starters) ** 2 + _spread(opponent) ** 2)
+    if sd <= 0:
+        return None
+    margin = lineup_total(starters) - lineup_total(opponent)
+    # Normal CDF via erf: the sum of a dozen independent players is close
+    # enough to normal, and this avoids a scipy import for one call.
+    return round(0.5 * (1 + math.erf(margin / (sd * math.sqrt(2)))), 3)
+
+
+def pace_band(player: dict):
+    """The player's season floor/ceiling as a per-week pace, or None.
+
+    Deliberately NOT the same quantity as the spread above: this is the season
+    band over 17, which is what the board publishes, and it is here because
+    its WIDTH is the honest signal of which rows to distrust -- a rookie's band
+    is three times a veteran's.
+    """
+    floor, ceiling = player.get("floor"), player.get("ceiling")
+    if floor is None or ceiling is None:
+        return None
+    return [round(float(floor) / 17.0, 1), round(float(ceiling) / 17.0, 1)]
+
+
+def first_year_starters(starters: list) -> list:
+    """Starters with no NFL history, whom the season model is known to
+    under-project.
+
+    Measured 2021-2025: cold-start players who went on to play a quarter of
+    their team's snaps came in 1.68 points a week low, and 2.04 low among
+    those who played half. The number on the page is closer to a floor for
+    them than to a midpoint.
+    """
+    return [p["name"] for p in starters
+            if p.get("prev_season_games") is None and p.get("matched")]
 
 
 def lineup_total(starters: list) -> float:
@@ -535,8 +612,11 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
             "opponent_projected_total": lineup_total(opp_starters),
             "edge": round(lineup_total(starters)
                           - lineup_total(opp_starters), 2),
+            "win_probability": win_probability(starters, opp_starters),
+            "spread": round(math.sqrt(_spread(starters) ** 2
+                                      + _spread(opp_starters) ** 2), 1),
         },
-        "caveats": _caveats(mode, starters),
+        "caveats": _caveats(mode, starters, first_year_starters(starters)),
         "starters": starters,
         "bench": bench,
         "lineup_changes": lineup_changes(starters, bench),
@@ -558,7 +638,7 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
     }
 
 
-def _caveats(mode, starters: list) -> list:
+def _caveats(mode, starters: list, rookies=()) -> list:
     """What the reader has to know before trusting a number on this page."""
     notes = []
     if mode == "season_prorated":
@@ -566,6 +646,19 @@ def _caveats(mode, starters: list) -> list:
             "Every week's projection is the season total over 17, so the "
             "ranking is season-long. Only byes, injuries and the opponent "
             "label are week-specific.")
+    if rookies:
+        notes.append(
+            f"{', '.join(rookies)} " +
+            ("has" if len(rookies) == 1 else "have") +
+            " no NFL history. Measured 2021-2025, the season model came in "
+            "1.7 points a week low on cold-start players who went on to play "
+            "a quarter of their team's snaps, and 2.0 low on those who played "
+            "half -- read their number as closer to a floor than a midpoint.")
+    if any(p.get("measured_mae") for p in starters):
+        notes.append(
+            "Win probability treats players as independent and uses the "
+            "pipeline's own measured per-position error; kicker and defence "
+            "have no measured error here, so they add points but no spread.")
     borrowed = sorted({p["position"] for p in starters
                        if p["points_source"] == "espn"})
     if borrowed:

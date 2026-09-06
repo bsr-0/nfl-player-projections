@@ -65,7 +65,7 @@ PROJECTION_COLUMNS = (
     "player_id", "name", "season_total", "season_ppg", "week_points",
     "week_ci_low", "week_ci_high", "floor", "ceiling", "risk_score",
     "support_class", "source", "opponent", "home_away", "on_bye",
-    "projection_mode", "prev_season_games",
+    "projection_mode", "prev_season_games", "measured_mae",
 )
 
 
@@ -170,6 +170,11 @@ def load_projections(season: int, week: int, board: Optional[pd.DataFrame] = Non
         weekly, meta = load_week(season, week)
     meta = meta or {}
     board["projection_mode"] = meta.get("mode")
+    # The pipeline publishes its own measured error per position. Carrying it
+    # per row is what lets the report state a spread instead of implying the
+    # point estimate is exact.
+    board["measured_mae"] = board["position"].map(
+        {pos: m.get("mae") for pos, m in (meta.get("measured") or {}).items()})
 
     for col in ("week_points", "week_ci_low", "week_ci_high", "opponent",
                 "home_away"):
