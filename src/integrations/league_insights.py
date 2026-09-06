@@ -127,6 +127,8 @@ def _players(rows: list) -> list:
             "ceiling": _num(row.get("ceiling")),
             "week_ci": [_num(row.get("week_ci_low")), _num(row.get("week_ci_high"))],
             "measured_mae": _num(row.get("measured_mae")),
+            "expected_games": _num(row.get("expected_games")),
+            "week_points_basis": _clean(row.get("week_points_basis")),
             # _clean matters twice here: NaN is not JSON, and "no prior
             # season" has to read as None for the first-year test below.
             "prev_season_games": _clean(row.get("prev_season_games")),
@@ -589,8 +591,8 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
         "week": week,
         "projection_mode": mode,
         "mode_note": (
-            "Season total over 17 with real opponents and byes; identical "
-            "week to week, so ranking is season-long, not matchup-specific."
+            "Season pace with real opponents and byes; identical week to "
+            "week, so ranking is season-long, not matchup-specific."
             if mode == "season_prorated" else
             "Weekly model output for this week, with 80% intervals."),
         "team": {"id": mine.get("team_id"), "name": mine.get("team_name"),
@@ -633,7 +635,7 @@ def _caveats(mode, starters: list, rookies=()) -> list:
     notes = []
     if mode == "season_prorated":
         notes.append(
-            "Every week's projection is the season total over 17, so the "
+            "Every week's projection is derived from a season total, so the "
             "ranking is season-long. Only byes, injuries and the opponent "
             "label are week-specific.")
     if rookies:
@@ -644,19 +646,26 @@ def _caveats(mode, starters: list, rookies=()) -> list:
             "1.7 points a week low on cold-start players who went on to play "
             "a quarter of their team's snaps, and 2.0 low on those who played "
             "half -- read their number as closer to a floor than a midpoint.")
+    rebased = {p.get("week_points_basis") for p in starters} - {"published", None}
+    if rebased:
+        notes.append(
+            "Veterans are moved half way from the published season-total-over-17 "
+            "number toward points per game played: that divisor averages in "
+            "games they are expected to MISS, worth a measured -1.13 points a "
+            "player. First-year players keep the published basis, where it "
+            "measures better.")
     if any(p.get("measured_mae") for p in starters):
         notes.append(
-            "Win probability treats players as independent and uses the "
-            "pipeline's own measured per-position error; kicker and defence "
-            "have no measured error here, so they add points but no spread.")
+            "Win probability uses the pipeline's measured per-position error "
+            "and treats players as independent, which understates the spread; "
+            "kicker and defence have no measured error and add none.")
     borrowed = sorted({p["position"] for p in starters
                        if p["points_source"] == "espn"})
     if borrowed:
         notes.append(
             f"{', '.join(borrowed)} are priced by ESPN -- this project does "
-            "not model them. Its own numbers run at roughly 80% of ESPN's "
-            "scale, so the projected totals mix two scales; they are "
-            "consistent between the two teams but not comparable to ESPN's.")
+            "not model them -- so the totals mix two scales. They are "
+            "consistent between the two teams, not comparable to ESPN's.")
     return notes
 
 

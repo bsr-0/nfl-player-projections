@@ -600,8 +600,15 @@ def _load_step8_projections(upcoming_season: int):
     pg = possible_games_for_players(infer, upcoming_season)
     preds = model.predict(infer, possible_games=pg)
     out = with_board_metadata(infer, preds)
+    # The games half of `games x rate`, which the model computes and used to
+    # throw away. A consumer projecting a SINGLE week needs it: the season
+    # total carries the games a player is expected to miss, and dividing by 17
+    # spreads that discount across a week he is being started in.
+    out["expected_games"] = (model.availability.predict_rate(infer)
+                             * np.asarray(pg, dtype=float))
     return out.rename(columns={"predicted_total": "pred_total"})[
-        ["player_id", "pred_total", "confidence_score", "support_class"]
+        ["player_id", "pred_total", "confidence_score", "support_class",
+         "expected_games"]
     ]
 
 
@@ -785,6 +792,9 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
                 "projection_ceiling": proj_ceiling,
                 "projection_source": projection_source,
                 "support_class": row.get("preseason_support_class") or None,
+                "expected_games": (round(float(row["expected_games"]), 2)
+                                   if pd.notna(row.get("expected_games"))
+                                   else None),
                 "projection_model": PRESEASON_MODEL,
                 "risk_score": int(row["risk_score"]) if pd.notna(row.get("risk_score")) else None,
                 "injury_flag": False,
@@ -1110,6 +1120,8 @@ def _rookie_board_rows(upcoming_season: int, preseason_df: pd.DataFrame,
 
     rows["preseason_projection_total"] = rows["draft_id"].map(
         projected["pred_total"])
+    if "expected_games" in projected.columns:
+        rows["expected_games"] = rows["draft_id"].map(projected["expected_games"])
     for col, out_col in (("confidence_score", "preseason_confidence"),
                          ("support_class", "preseason_support_class")):
         if col in projected.columns:
@@ -1203,6 +1215,9 @@ def main():
         if "support_class" in preseason_df.columns:
             support_map = preseason_df.set_index("player_id")["support_class"].to_dict()
             agg["preseason_support_class"] = agg["player_id"].map(support_map)
+        if "expected_games" in preseason_df.columns:
+            games_map = preseason_df.set_index("player_id")["expected_games"].to_dict()
+            agg["expected_games"] = agg["player_id"].map(games_map)
         has_preseason_projection = bool(agg["preseason_projection_total"].notna().any())
         print(f"  Loaded preseason season-total projections for {upcoming_season} season"
               f" ({int(agg['preseason_projection_total'].notna().sum())} players)")

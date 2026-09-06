@@ -189,7 +189,7 @@ def test_build_report_states_its_matchup_and_its_limits():
     # An empty opponent roster projects nothing, and the edge says so.
     assert report["matchup"]["edge"] == 15.9
     assert report["projection_mode"] == "season_prorated"
-    assert any("season total over 17" in c for c in report["caveats"])
+    assert any("derived from a season total" in c for c in report["caveats"])
 
 
 def test_the_prorated_caveat_goes_away_in_weekly_mode():
@@ -197,7 +197,7 @@ def test_the_prorated_caveat_goes_away_in_weekly_mode():
                           team=1, crosswalk={"1": "00-0036223"})
 
     assert report["projection_mode"] == "weekly_model"
-    assert not any("season total over 17" in c for c in report["caveats"])
+    assert not any("derived from a season total" in c for c in report["caveats"])
 
 
 def test_find_team_by_id_or_by_part_of_the_name():

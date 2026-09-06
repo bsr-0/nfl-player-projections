@@ -13,7 +13,8 @@ import pandas as pd
 import pytest
 
 from src.integrations.league_join import (
-    Snapshot, join_players, load_projections, match_report,
+    Snapshot, VETERAN_PER_GAME_WEIGHT, join_players, load_projections,
+    match_report,
 )
 
 BOARD = pd.DataFrame([
@@ -226,3 +227,55 @@ def test_snapshot_reads_the_week_from_the_league_not_the_calendar():
     assert snap.opponent_for(1)["opponent_name"] == "Fig Newtons"
     assert snap.rostered()[0]["fantasy_team"] == "Baby Back Gibbs"
     assert snap.opponent_for(1, week=9) == {}
+
+
+VETERAN = pd.DataFrame([{
+    "player_id": "00-0036223", "name": "J.Gibbs", "team": "DET",
+    "position": "RB", "season_total": 170.0, "season_ppg": 10.0,
+    "floor": 120.0, "ceiling": 220.0, "risk_score": 40,
+    "support_class": "starter", "source": "preseason_model",
+    "prev_season_games": 16, "expected_games": 10.0}])
+
+VETERAN_WEEK = pd.DataFrame([{"name": "J.Gibbs", "position": "RB",
+                              "team": "DET", "opponent": "NO",
+                              "home_away": "home", "predicted_points": 10.0}])
+
+
+def test_a_veteran_is_moved_off_the_season_divisor():
+    """total/17 averages in games he is expected to miss; the week he is
+    being started in is not one of them."""
+    out = load_projections(2026, 1, board=VETERAN, weekly=VETERAN_WEEK,
+                           meta={"mode": "season_prorated"})
+
+    row = out.iloc[0]
+    # published 10.0, per game 170/10 = 17.0, half way = 13.5
+    assert row["week_points"] == 13.5
+    assert row["week_points_basis"] == "0.5 of the way to per-game"
+    assert VETERAN_PER_GAME_WEIGHT == 0.5
+
+
+def test_a_first_year_player_keeps_the_published_number():
+    """The two divisors nearly agree for him, and moving further overshoots."""
+    board = VETERAN.assign(prev_season_games=None)
+    out = load_projections(2026, 1, board=board, weekly=VETERAN_WEEK,
+                           meta={"mode": "season_prorated"})
+
+    assert out.iloc[0]["week_points"] == 10.0
+    assert out.iloc[0]["week_points_basis"] == "published"
+
+
+def test_the_real_weekly_model_is_never_rebased():
+    """Once games are played the number is a weekly prediction, not a pace."""
+    out = load_projections(2026, 1, board=VETERAN, weekly=VETERAN_WEEK,
+                           meta={"mode": "weekly_model"})
+
+    assert out.iloc[0]["week_points"] == 10.0
+    assert out.iloc[0]["week_points_basis"] == "published"
+
+
+def test_a_player_with_no_games_estimate_is_left_alone():
+    board = VETERAN.assign(expected_games=None)
+    out = load_projections(2026, 1, board=board, weekly=VETERAN_WEEK,
+                           meta={"mode": "season_prorated"})
+
+    assert out.iloc[0]["week_points"] == 10.0

@@ -58,7 +58,26 @@ BOARD_COLUMNS = {
     "support_class": "support_class",
     "risk_score": "risk_score",
     "prev_season_games": "prev_season_games",
+    "expected_games": "expected_games",
 }
+
+# How far to move a veteran's weekly number from `total / 17` toward
+# `total / E[games]`. Measured on 1,428 veteran week-1 rows, 2021-2025:
+#
+#     w      MAE    bias     R2
+#     0.00   4.53   -1.13   +0.375   <- what the site publishes
+#     0.50   4.55   -0.29   +0.406
+#     1.00   4.67   +0.56   +0.402
+#
+# MAE is flat from w=0.25 to w=0.6 (w=0.5 vs w=0: dMAE +0.012, 95% CI
+# [-0.040, +0.065]), so most of the calibration and all of the R2 gain come
+# for nothing. 0.5 is the midpoint of that flat region rather than its
+# argmin -- picking the argmin off the same rows would be fitting them.
+#
+# Cold-start players are deliberately excluded: for them the two divisors
+# nearly agree (the observed multiplier is 0.74 against the 0.68 that /17
+# already applies) and moving further overshoots -- measured +1.83 bias.
+VETERAN_PER_GAME_WEIGHT = 0.5
 
 # What a matched player carries over from the board.
 PROJECTION_COLUMNS = (
@@ -66,6 +85,7 @@ PROJECTION_COLUMNS = (
     "week_ci_low", "week_ci_high", "floor", "ceiling", "risk_score",
     "support_class", "source", "opponent", "home_away", "on_bye",
     "projection_mode", "prev_season_games", "measured_mae",
+    "expected_games", "week_points_basis",
 )
 
 
@@ -200,7 +220,40 @@ def load_projections(season: int, week: int, board: Optional[pd.DataFrame] = Non
     # projected player missing from it is on bye -- distinct from a player who
     # has no projection at all, which is why season_total gates this.
     merged["on_bye"] = merged["season_total"].notna() & merged["week_points"].isna()
-    return merged
+    return _rebase_veterans(merged, meta.get("mode"))
+
+
+def _rebase_veterans(rows: pd.DataFrame, mode) -> pd.DataFrame:
+    """Move a veteran's weekly number off the season-total divisor.
+
+    `total / 17` averages in the games a player is expected to miss -- correct
+    for a season projection, wrong for the week you are starting him in, and
+    worth a measured -1.13 points per veteran. This only applies while the
+    pipeline is publishing a prorated season pace; once it switches to
+    `weekly_model` the number is a real weekly prediction and must be left
+    alone.
+    """
+    rows["week_points_basis"] = "published"
+    # A board built before expected_games existed, or a caller injecting a
+    # trimmed frame, simply does not get rebased.
+    for col in ("expected_games", "prev_season_games"):
+        if col not in rows.columns:
+            rows[col] = pd.NA
+    if mode != "season_prorated":
+        return rows
+
+    can = (rows["expected_games"].notna() & (rows["expected_games"] > 0)
+           & rows["season_total"].notna() & rows["week_points"].notna()
+           & rows["prev_season_games"].notna())
+    if not can.any():
+        return rows
+
+    per_game = rows.loc[can, "season_total"] / rows.loc[can, "expected_games"]
+    w = VETERAN_PER_GAME_WEIGHT
+    rows.loc[can, "week_points"] = (
+        (1 - w) * rows.loc[can, "week_points"] + w * per_game).round(2)
+    rows.loc[can, "week_points_basis"] = f"{w:g} of the way to per-game"
+    return rows
 
 
 @lru_cache(maxsize=1)
