@@ -70,15 +70,6 @@ def _report(**kw):
             {"slot": "QB", "name": "Justin Herbert", "position": "QB",
              "nfl_team": "LAC", "points": 15.79, "points_source": "model",
              "injury_status": "ACTIVE"}],
-        "injury_watch": [
-            {"slot": "WR", "name": "Zay Flowers", "position": "WR",
-             "injury_status": "QUESTIONABLE", "points": 13.65,
-             "points_source": "model",
-             "replacement": {"name": "Mike Evans", "points": 9.86,
-                             "cost": 3.79}},
-            {"slot": "K", "name": "Cameron Dicker", "position": "K",
-             "injury_status": "QUESTIONABLE", "points": 9.94,
-             "points_source": "espn", "replacement": None}],
         "streamers": [
             {"position": "D/ST", "current": {"name": "Jaguars D/ST",
                                              "points": 4.61},
@@ -226,28 +217,6 @@ def test_the_opponent_lineup_is_itemised(mod):
     assert "Justin Herbert" in page
 
 
-def _section(page: str, heading: str) -> str:
-    """One section's markup. Players appear in several tables, so a bare
-    search finds the lineup row rather than the one under test."""
-    start = page.index(heading)
-    end = page.find("<h2", start)
-    return page[start:end if end > 0 else len(page)]
-
-
-def test_a_questionable_starter_shows_what_sitting_him_costs(mod):
-    watch = _section(mod.render(_report()), "Questionable starters")
-
-    row = re.search(r"Zay Flowers.*?</tr>", watch, re.S).group()
-    assert "Mike Evans" in row and "costs 3.8" in row
-
-
-def test_no_replacement_says_so_instead_of_going_blank(mod):
-    watch = _section(mod.render(_report()), "Questionable starters")
-
-    row = re.search(r"Cameron Dicker.*?</tr>", watch, re.S).group()
-    assert "nobody eligible on the bench" in row
-
-
 def test_streaming_names_the_gain_over_the_current_starter(mod):
     page = mod.render(_report())
 
@@ -281,3 +250,12 @@ def test_a_first_year_player_is_marked(mod):
     page = mod.render(_report(starters=starters))
 
     assert 'class="chip rookie">R<' in page
+
+
+def test_the_page_does_not_repeat_the_injury_chips_as_a_section(mod):
+    """The Q chips already say who is questionable; a table restating them
+    was spending a quarter of the page to say it twice."""
+    page = mod.render(_report())
+
+    assert "Questionable starters" not in page
+    assert 'class="chip warning">Q<' in page

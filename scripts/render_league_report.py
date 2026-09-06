@@ -193,22 +193,6 @@ def opponent_table(starters, opponent) -> str:
             f'<th class="num">Proj</th></tr>{_rows(rows)}</table>')
 
 
-def injury_table(watch) -> str:
-    """A status chip is not a decision; who replaces him is."""
-    rows = []
-    for w in watch:
-        rep = w.get("replacement")
-        instead = (f'{esc(rep["name"])} <span class="muted">'
-                   f'costs {num(rep["cost"])}</span>' if rep else
-                   '<span class="muted">nobody eligible on the bench</span>')
-        rows.append(
-            f'<tr><td class="muted">{esc(w["slot"])}</td>'
-            f'<td>{_player_cell(w)} {num(w.get("points"))}</td>'
-            f'<td>{instead}</td></tr>')
-    return ('<table><tr><th>Slot</th><th>Questionable starter</th>'
-            f'<th>If he sits</th></tr>{_rows(rows)}</table>')
-
-
 def streaming_table(streamers, limit=3) -> str:
     rows = []
     for st in streamers[:limit]:
@@ -402,16 +386,13 @@ def render(report: dict) -> str:
 </div>
 
 <div class="cols">
-  <section><h2>Questionable starters</h2>
-    {injury_table(report.get('injury_watch', []))}</section>
+  <section><h2>Waiver wire</h2>{waiver_table(report['waivers'], limit=4)}</section>
   <section><h2>Streaming &mdash; kicker and defence</h2>
     {streaming_table(report.get('streamers', []))}</section>
 </div>
 
-<section><h2>Waiver wire</h2>{waiver_table(report['waivers'], limit=4)}</section>
-
 <section><h2>Proposed trades &mdash; both lineups improve, each on its own
-  numbers</h2>{proposal_table(report['trades'], limit=3)}</section>
+  numbers</h2>{proposal_table(report['trades'], limit=5)}</section>
 
 <footer>
   <ul>{caveats}

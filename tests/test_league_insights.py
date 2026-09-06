@@ -11,9 +11,9 @@ import pytest
 
 from src.integrations.league_insights import (
     availability, build_report, eligible, find_team, horizon_weeks,
-    first_year_starters, injury_watch, lineup_changes, lineup_value,
-    optimal_lineup, pace_band, price, propose_trades, starting_slots,
-    streaming_targets, tough_calls, waiver_targets, win_probability,
+    first_year_starters, lineup_changes, lineup_value, optimal_lineup,
+    pace_band, price, propose_trades, starting_slots, streaming_targets,
+    tough_calls, waiver_targets, win_probability,
 )
 from src.integrations.league_join import Snapshot, load_projections
 
@@ -393,32 +393,6 @@ def test_streaming_stays_on_one_pricing_scale():
     assert streaming_targets(free_agents, starters) == []
 
 
-def test_a_questionable_starter_is_paired_with_who_would_replace_him():
-    starters = [dict(_p("Hurt", "WR", 13.0, injury_status="QUESTIONABLE"),
-                     slot="WR")]
-    bench = [_p("Next man", "WR", 9.0), _p("Worse", "WR", 4.0)]
-
-    watch = injury_watch(starters, bench, ["WR"])
-
-    assert watch[0]["name"] == "Hurt"
-    assert watch[0]["replacement"] == {"name": "Next man", "points": 9.0,
-                                       "cost": 4.0}
-
-
-def test_a_healthy_starter_is_not_on_the_watch_list():
-    starters = [dict(_p("Fine", "WR", 13.0), slot="WR")]
-
-    assert injury_watch(starters, [_p("Bench", "WR", 9.0)], ["WR"]) == []
-
-
-def test_no_eligible_replacement_says_so_rather_than_inventing_one():
-    starters = [dict(_p("Hurt K", "K", 9.0, injury_status="QUESTIONABLE",
-                        points_source="espn"), slot="K")]
-    bench = [_p("A receiver", "WR", 20.0)]
-
-    assert injury_watch(starters, bench, ["K"])[0]["replacement"] is None
-
-
 def test_the_report_itemises_the_opponent_lineup():
     """The total says how big the hill is; the rows say where it is."""
     snap = _snapshot()
@@ -489,3 +463,30 @@ def test_a_rookie_starter_earns_the_measured_underprojection_caveat():
 
     assert any("no NFL history" in c and "1.7 points a week low" in c
                for c in report["caveats"])
+
+
+def test_no_player_carries_more_than_three_proposals():
+    """One surplus player dominates the ranking -- every good deal is the same
+    man to a different team. Past the third the reader learns nothing new."""
+    league = [_tradeable("Surplus", "RB", 4.0, 20.0, "Mine"),
+              _tradeable("Second", "RB", 4.0, 19.0, "Mine")]
+    for i in range(6):
+        league.append(_tradeable(f"Theirs{i}", "RB", 20.0, 4.0, f"Team{i}"))
+
+    deals = propose_trades(league, "Mine", ["RB"], horizon_weeks=14)
+
+    given = [d["give"]["name"] for d in deals]
+    assert given.count("Surplus") == 3
+    # The slots the cap frees go to the next-best deal for somebody else.
+    assert "Second" in given
+
+
+def test_the_cap_counts_the_player_you_receive_too():
+    """Three different offers for the same target are also one idea."""
+    league = [_tradeable(f"Mine{i}", "RB", 4.0, 20.0, "Mine") for i in range(5)]
+    league.append(_tradeable("Target", "RB", 20.0, 4.0, "Theirs"))
+
+    deals = propose_trades(league, "Mine", ["RB"], horizon_weeks=14,
+                           per_partner=5)
+
+    assert [d["get"]["name"] for d in deals].count("Target") <= 3

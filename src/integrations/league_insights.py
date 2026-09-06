@@ -48,10 +48,6 @@ MAE_TO_SD = math.sqrt(math.pi / 2)
 # the man and take a better one rather than to bench him.
 STREAMED_POSITIONS = ("K", "D/ST")
 
-# Statuses that are a decision rather than an absence -- he may play, so the
-# report pairs him with who would play instead.
-WATCH_STATUSES = {"QUESTIONABLE", "DOUBTFUL", "DAY_TO_DAY"}
-
 # Two points a week. Inside this, the projection is not separating the two
 # players -- measured MAE is 3.0-7.1 points depending on position, so a
 # sub-2-point gap is noise wearing a decimal point.
@@ -400,8 +396,8 @@ def _lineup_change(before: list, after: list, departed=None) -> dict:
 
 
 def propose_trades(league: list, team_name: str, slots: list,
-                   horizon_weeks: int, limit: int = 4, min_gain: float = 0.25,
-                   per_partner: int = 1) -> list:
+                   horizon_weeks: int, limit: int = 5, min_gain: float = 0.25,
+                   per_partner: int = 1, per_player: int = 3) -> list:
     """One-for-one swaps where BOTH lineups improve, each by its own numbers.
 
     Ours is scored with this project's projections and theirs with ESPN's, and
@@ -414,6 +410,11 @@ def propose_trades(league: list, team_name: str, slots: list,
     The two gains are in different currencies and are labelled as such -- ours
     runs at roughly 80% of ESPN's scale, so they are not to be compared to each
     other, only each to zero.
+
+    No player appears in more than `per_player` proposals on either side. One
+    surplus player tends to dominate the ranking -- every good deal is the same
+    man to a different team -- and past the third of those the reader learns
+    nothing new, while the fourth-best deal for somebody else is information.
     """
     mine = [p for p in league if p["fantasy_team"] == team_name]
     partners = {}
@@ -465,13 +466,29 @@ def propose_trades(league: list, team_name: str, slots: list,
                     "lineup_change": _lineup_change(base_lineup, after,
                                                     departed=give["name"]),
                 })
-        best.sort(key=lambda t: (-t["our_gain_per_week"],
-                                 -t["their_gain_per_week_espn"]))
-        found.extend(best[:per_partner])
+        # Every qualifying deal goes forward; the caps below do the choosing.
+        # Truncating per partner first starved the player cap -- one surplus
+        # player was the best offer to every team, so no other name survived
+        # to compete.
+        found.extend(best)
 
     found.sort(key=lambda t: (-t["our_gain_per_week"],
                               -t["their_gain_per_week_espn"]))
-    return found[:limit]
+
+    appearances, per_team, kept = {}, {}, []
+    for deal in found:
+        names = (deal["give"]["name"], deal["get"]["name"])
+        if any(appearances.get(n, 0) >= per_player for n in names):
+            continue
+        if per_team.get(deal["with"], 0) >= per_partner:
+            continue
+        for n in names:
+            appearances[n] = appearances.get(n, 0) + 1
+        per_team[deal["with"]] = per_team.get(deal["with"], 0) + 1
+        kept.append(deal)
+        if len(kept) == limit:
+            break
+    return kept
 
 
 def _side(p: dict) -> dict:
@@ -510,32 +527,6 @@ def streaming_targets(free_agents: list, starters: list,
                 "gain": round(fa["points"] - current["points"], 2),
             })
     return sorted(out, key=lambda r: -r["gain"])
-
-
-def injury_watch(starters: list, bench: list, slots: list) -> list:
-    """Every questionable starter, paired with who would actually replace him.
-
-    A status chip on its own is not a decision. The decision is whether the man
-    behind him is close enough to start instead, so the replacement is the best
-    available bench player eligible for that slot, priced the same way.
-    """
-    out = []
-    for s in starters:
-        if str(s.get("injury_status") or "") not in WATCH_STATUSES:
-            continue
-        options = [b for b in bench
-                   if b["available"] and b["points"] is not None
-                   and b["points_source"] == s["points_source"]
-                   and eligible(s["slot"], b["position"])]
-        best = max(options, key=lambda b: b["points"], default=None)
-        out.append({
-            "slot": s["slot"], "name": s["name"], "position": s["position"],
-            "injury_status": s["injury_status"], "points": s["points"],
-            "replacement": ({"name": best["name"], "points": best["points"],
-                             "cost": round(s["points"] - best["points"], 2)}
-                            if best else None),
-        })
-    return out
 
 
 def find_team(snapshot, team) -> dict:
@@ -621,7 +612,6 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
         "bench": bench,
         "lineup_changes": lineup_changes(starters, bench),
         "opponent_starters": opp_starters,
-        "injury_watch": injury_watch(starters, bench, slots),
         "streamers": streaming_targets(free_agents, starters),
         "tough_calls": tough_calls(starters, bench),
         "waivers": waiver_targets(free_agents, roster, slots),
