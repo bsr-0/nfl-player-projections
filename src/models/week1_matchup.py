@@ -32,7 +32,7 @@ import sqlite3
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.model_selection import KFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -101,7 +101,7 @@ def build_week1_rows(seasons, con=None) -> pd.DataFrame:
             "SELECT player_id, MIN(season) AS debut FROM player_weekly_stats "
             "GROUP BY player_id", con)
         week1 = pd.read_sql(
-            "SELECT player_id, season, team, opponent, home_away, "
+            "SELECT player_id, season, team, opponent, home_away, snap_share, "
             "       fantasy_points AS actual "
             "FROM player_weekly_stats WHERE week = 1 "
             "AND fantasy_points IS NOT NULL", con)
@@ -224,3 +224,88 @@ class Week1MatchupModel:
         # Fantasy points do not go negative in this scoring; clip rather than
         # publish an impossible number.
         return np.clip(self.model.predict(self._matrix(rows)), 0.0, None)
+
+
+class Week1HurdleModel:
+    """Two questions instead of one: does he have a role, and what then?
+    MEASURED AND REJECTED -- MAE 4.29 against the published number's 3.70.
+
+        E[points] = P(role) x E[points | role] + (1 - P(role)) x E[points | none]
+
+    The split is not decoration. Measured 2026-09-05, `season total / 17` wins
+    the composite cold-start problem (MAE 3.70) almost entirely by answering
+    the first question: condition on a rookie who actually played a quarter of
+    his team's snaps and its R2 falls from +0.270 to +0.090, below every
+    team-context arm, with bias -1.68. Team context and the opening matchup are
+    the better answer to the second question and the worse answer to the first.
+    This gives each half the features that win it.
+
+    "Role" is a realised snap share at or above `role_threshold`. That is a
+    label, not a feature -- nothing here reads snap share at predict time.
+    """
+
+    def __init__(self, role_threshold: float = 0.25,
+                 alphas=RIDGE_ALPHAS, cs=(0.1, 1.0, 10.0),
+                 random_state: int = 0):
+        self.role_threshold = role_threshold
+        self.alphas, self.cs = alphas, cs
+        self.random_state = random_state
+        self.role_model = self.given_role = None
+        self.without_role = 0.0
+        self.medians = None
+        self.params_ = None
+
+    def _matrix(self, rows: pd.DataFrame) -> pd.DataFrame:
+        return rows.reindex(columns=FEATURES).astype(float).fillna(self.medians)
+
+    def _fit_once(self, rows, c, alpha):
+        x, y = self._matrix(rows), rows["actual"].astype(float)
+        has_role = (rows["snap_share"].astype(float)
+                    >= self.role_threshold).values
+        role = make_pipeline(StandardScaler(),
+                             LogisticRegression(C=c, max_iter=2000))
+        given = make_pipeline(StandardScaler(), Ridge(alpha=alpha))
+        # Degenerate fold (every row one class, or nobody without a role):
+        # fall back to a single Ridge on everything rather than crash.
+        if has_role.all() or not has_role.any():
+            given.fit(x, y)
+            return None, given, float(y.mean())
+        role.fit(x, has_role)
+        given.fit(x[has_role], y[has_role])
+        return role, given, float(y[~has_role].mean())
+
+    def _predict_with(self, parts, rows):
+        role, given, without = parts
+        x = self._matrix(rows)
+        point = given.predict(x)
+        if role is None:
+            return np.clip(point, 0.0, None)
+        p = role.predict_proba(x)[:, 1]
+        return np.clip(p * point + (1 - p) * without, 0.0, None)
+
+    def fit(self, rows: pd.DataFrame):
+        self.medians = rows.reindex(columns=FEATURES).astype(float).median()
+        folds = KFold(n_splits=min(5, max(2, len(rows) // 40)), shuffle=True,
+                      random_state=self.random_state)
+        best, best_score = None, np.inf
+        for c in self.cs:
+            for alpha in self.alphas:
+                errors = []
+                for train_idx, test_idx in folds.split(rows):
+                    parts = self._fit_once(rows.iloc[train_idx], c, alpha)
+                    pred = self._predict_with(parts, rows.iloc[test_idx])
+                    errors.append(np.abs(
+                        pred - rows.iloc[test_idx]["actual"].values).mean())
+                score = float(np.mean(errors))
+                if score < best_score:
+                    best, best_score = (c, alpha), score
+        self.params_ = {"C": best[0], "alpha": best[1]}
+        self.role_model, self.given_role, self.without_role = self._fit_once(
+            rows, *best)
+        return self
+
+    def predict(self, rows: pd.DataFrame) -> np.ndarray:
+        if self.given_role is None:
+            raise RuntimeError("call fit() first")
+        return self._predict_with(
+            (self.role_model, self.given_role, self.without_role), rows)

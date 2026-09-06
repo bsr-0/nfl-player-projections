@@ -13686,3 +13686,102 @@ merely fixing the bias term, which `step8_per_game` did while getting worse.
 
 `src/models/week1_matchup.py` is kept, marked REJECTED in its own docstring:
 it is the record of the attempt and the arm that isolated the opponent signal.
+
+
+## Cold start, the follow-up: where step 8's skill lives, and the ceiling above it (2026-09-05)
+
+The entry above locked `season total / 17` in after four arms lost. This asks
+the next question -- whether the loss is because team context carries no signal
+or because it answers the wrong half of the problem -- and ends by putting a
+CEILING on what any further work can win. Same 208 cold-start rows, same
+walk-forward discipline.
+
+### Every scored player was on the field
+
+Asked directly, so it is written down: all 208 rows have `snap_count > 0`,
+none zero, none null. `player_weekly_stats` has no rows for inactives, so the
+population never contained a player who did not dress. It does contain plenty
+who barely played -- median snap share 0.29, 44 of 208 under 10%, and 60 of
+208 scored zero points.
+
+### Step 8 wins by answering "does he play", not "how much does he score"
+
+Scoring the arms inside snap-share bands (a DIAGNOSTIC -- realised snap share
+is not knowable before kickoff and cannot be a filter in production):
+
+    cold start          >=0.00 (208)   >=0.10 (164)   >=0.25 (118)   >=0.50 (73)
+    step8_pace         3.70  +0.270   3.95  +0.224   4.61  +0.090   5.02  +0.049
+    blend_pace_team    3.92  +0.282   4.02  +0.274   4.54  +0.160   4.87  +0.111
+    matchup            4.02  +0.194   4.04  +0.215   4.55  +0.120   5.09  +0.029
+    team_share         4.28  +0.196   4.24  +0.241   4.69  +0.143   5.05  +0.074
+                                                        (MAE and R2)
+
+Step 8's R2 falls from +0.270 to +0.049 as the fringe players are removed, and
+its bias goes to -2.04: it systematically under-projects rookies who actually
+start, because it is averaging in the chance they do not. The team-context arms
+overtake it on R2 by the 0.25 cut. Its advantage is the role question.
+
+### The hurdle model does not recover it
+
+`Week1HurdleModel` splits the two questions -- P(role) x E[points | role] plus
+the complement -- and gives each half the same feature set. As first built it
+scored MAE 4.78 with R2 -0.197, worse than everything including the position
+mean. The cause was regularisation, not structure: the inner CV chose
+`alpha=1.0` in 4 of 5 seasons, so an 18-feature Ridge fit on ~170 role rows had
+its noise multiplied by a probability. Fixed (alpha 1000, role from draft pick
+alone) it scores 4.29 / +0.172 -- still +0.594 MAE worse than the published
+number, 95% CI [+0.389, +0.802].
+
+Two facts explain why the split cannot help much:
+
+  * Role is ALREADY well predicted by draft capital. `-draft_pick` alone gets
+    AUC 0.801 for "plays >= 25% of snaps"; the full 18-feature logistic gets
+    0.774, so team context and matchup make the role question WORSE. Realised
+    role rate runs 0.909 at round 1 to 0.222 at round 7 -- the ladder the
+    draft-round availability prior already encodes.
+  * Production GIVEN a role is barely predictable: stage 2 on role players
+    only scores MAE 5.25, R2 +0.087.
+
+### The ceiling: perfect role knowledge is worth nothing
+
+Replace the classifier with the realised label -- an oracle that knows before
+kickoff exactly who will play a quarter of the snaps -- and keep everything
+else:
+
+    oracle_role  MAE 3.67  bias +0.26  R2 +0.325
+    step8_pace   MAE 3.70  bias -0.18  R2 +0.270
+
+    oracle vs step8_pace: dMAE -0.022, 95% CI [-0.386, +0.334], P(better) 0.548
+
+A coin flip. This is the number that closes the question, because a depth
+chart -- the obvious instrument for predicting role -- can only move stage 1
+TOWARD this oracle and never past it. The ceiling above the published number is
+approximately zero MAE and +0.055 R2, inside the noise.
+
+### Nor is there anything better on the players who do start
+
+Restricting the comparison to the role subgroup (snap share >= 0.25, n=118),
+the arms rank blend 4.54, matchup 4.55, step8_pace 4.61 -- but the paired
+bootstraps are dMAE -0.063 [-0.298, +0.169] and -0.056 [-0.448, +0.336]. No
+arm wins the subgroup either. And step 8's -1.68 bias there is not a level
+error to subtract: removing it makes MAE WORSE, 4.61 -> 4.80, because the bias
+is carried by a few rookies who blew up rather than spread across the group.
+
+### Decision: no depth-chart work
+
+GAPS 13374 rejected depth charts for a July/August board on timing grounds and
+left the door open for a board regenerated near week 1, which is exactly the
+league report's case. That door is now closed on different grounds: the
+information a depth chart would supply is worth ~0.0 MAE even when supplied
+perfectly. `depth_charts` also has zero 2026 rows, so it would start with a
+backfill.
+
+`season total / 17` stands, now with a measured ceiling above it rather than
+only a comparison beneath it.
+
+**The honest caveat.** n=118 for the role subgroup and n=208 overall; those
+intervals are wide, and "no significant difference" is not "proven equal". The
+lever for power is extending the step 8 baseline back past 2021 -- its
+training window is the cap, while the feature pool already runs from 2013 --
+which would roughly double n. With effect sizes of 0.06 MAE on the table, that
+was judged not worth it.

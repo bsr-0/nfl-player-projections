@@ -25,6 +25,13 @@ Arms:
                    room that produces 22 PPR points a week is in a different
                    situation from one landing in a room that produces 12,
                    whatever his own history says.
+    hurdle         the two-stage version: P(role) x E[points | role] plus the
+                   complement, fit on the same features. The snap-share
+                   diagnostic showed step8_pace wins the composite by
+                   answering "does he play at all" and LOSES to team context
+                   once a role is granted, so this gives each half the
+                   features that win it. Role means a realised snap share
+                   >= 0.25 -- a training label, never a feature.
     matchup        the same hypothesis carried one step further: a Ridge on
                    where he landed AND who he opens against -- draft capital,
                    his new team's prior-season production at his position and
@@ -77,6 +84,10 @@ from config.settings import DATA_DIR, DB_PATH
 
 # Step 8's own training window, matching generate_draft_data.py.
 TRAIN_FROM = 2019
+
+# Snap-share cuts for the diagnostic slice. 0.0 is every row that played at
+# all; 0.25 is roughly a rotational role; 0.50 is a starter.
+SNAP_SHARE_THRESHOLDS = (0.0, 0.10, 0.25, 0.50)
 OUT_DIR = DATA_DIR / "backtest_results"
 
 
@@ -121,7 +132,7 @@ def week1_actuals(season: int) -> pd.DataFrame:
     con = sqlite3.connect(str(DB_PATH))
     try:
         return pd.read_sql(
-            "SELECT player_id, team, fantasy_points AS actual "
+            "SELECT player_id, team, snap_share, fantasy_points AS actual "
             "FROM player_weekly_stats "
             "WHERE season = ? AND week = 1 AND fantasy_points IS NOT NULL",
             con, params=[int(season)])
@@ -270,7 +281,8 @@ def evaluate(rows: pd.DataFrame, arms) -> dict:
 def matchup_arm(seasons, pool_from: int) -> pd.DataFrame:
     """Walk-forward: each season predicted by a model fit only on cold-start
     week-1 rows from earlier seasons, the same discipline step 8 gets."""
-    from src.models.week1_matchup import Week1MatchupModel, build_week1_rows
+    from src.models.week1_matchup import (
+        Week1HurdleModel, Week1MatchupModel, build_week1_rows)
 
     pool = build_week1_rows(range(pool_from, max(seasons) + 1))
     out = []
@@ -279,14 +291,16 @@ def matchup_arm(seasons, pool_from: int) -> pd.DataFrame:
         if len(train) < 50 or test.empty:
             print(f"  {season}: skipped ({len(train)} training rows)")
             continue
-        model = Week1MatchupModel().fit(train)
+        flat = Week1MatchupModel().fit(train)
+        hurdle = Week1HurdleModel().fit(train)
         out.append(test[["player_id", "season"]].assign(
-            matchup=model.predict(test), matchup_train_rows=len(train),
-            matchup_alpha=model.alpha_))
-        print(f"  {season}: fit on {len(train)} rows, alpha {model.alpha_}",
+            matchup=flat.predict(test), hurdle=hurdle.predict(test),
+            matchup_train_rows=len(train), matchup_alpha=flat.alpha_))
+        print(f"  {season}: fit on {len(train)} rows, "
+              f"matchup alpha {flat.alpha_}, hurdle {hurdle.params_}",
               flush=True)
     return (pd.concat(out, ignore_index=True) if out else
-            pd.DataFrame(columns=["player_id", "season", "matchup"]))
+            pd.DataFrame(columns=["player_id", "season", "matchup", "hurdle"]))
 
 
 def main():
@@ -372,7 +386,23 @@ def main():
         "by_position_cold_start": {
             pos: evaluate(g, arms).get("all")
             for pos, g in rows[rows.cold_start == 1].groupby("position")},
-        "matchup_head_to_head": evaluate(head_to_head, arms + ["matchup"]),
+        "matchup_head_to_head": evaluate(head_to_head, arms + ["matchup", "hurdle"]),
+        # DIAGNOSTIC, NOT A SERVABLE FILTER. Realised snap share is not known
+        # before kickoff, so conditioning on it cannot be shipped. It answers a
+        # different question: with the "did he even play a role" part of the
+        # problem removed, does knowing his team and his opponent finally beat
+        # draft capital? Every week-1 row in this table already has snaps > 0,
+        # so the thresholds separate contributors from three-snap bench bodies
+        # rather than players from inactives.
+        "by_snap_share": {
+            str(t): {
+                "cold_start": evaluate(
+                    head_to_head[head_to_head.snap_share >= t],
+                    arms + ["matchup", "hurdle"]).get("cold_start"),
+                "veteran": evaluate(rows[(rows.cold_start == 0)
+                                         & (rows.snap_share >= t)],
+                                    arms).get("veteran"),
+            } for t in SNAP_SHARE_THRESHOLDS},
         "matchup_coverage": {
             "cold_start_rows": int((rows.cold_start == 1).sum()),
             "with_matchup": int(((rows.cold_start == 1)
@@ -391,7 +421,20 @@ def main():
                           f"R2 {s['r2']:>+7}")
 
     table("matchup head-to-head (rows where every arm has a number)",
-          result["matchup_head_to_head"], arms + ["matchup"])
+          result["matchup_head_to_head"], arms + ["matchup", "hurdle"])
+
+    for t in SNAP_SHARE_THRESHOLDS:
+        scored = result["by_snap_share"][str(t)]["cold_start"]
+        if scored:
+            print(f"\n=== cold start, snap share >= {t:.2f} "
+                  f"(diagnostic; not knowable before kickoff) ===")
+            print(f"  mean actual {scored['mean_actual']}")
+            for arm in arms + ["matchup", "hurdle"]:
+                sc = scored.get(arm)
+                if sc:
+                    print(f"  {arm:<16} n={sc['n']:<5} MAE {sc['mae']:>5}  "
+                          f"RMSE {sc['rmse']:>5}  bias {sc['bias']:>+6}  "
+                          f"R2 {sc['r2']:>+7}")
     table("all rows", result["pooled"], arms)
 
     out = args.out or (OUT_DIR / f"week1_coldstart_"
