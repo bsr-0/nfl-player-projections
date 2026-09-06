@@ -82,7 +82,6 @@ h2 {
 }
 .tile .value { display: block; font-size: 22px; font-weight: 620; margin-top: 2px; }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
-.cols.wide { grid-template-columns: 1.55fr 1fr; }
 .with { white-space: nowrap; }
 .note { font-size: 9.5px; padding-top: 0; }
 tr.note-row td { border-bottom: 1px solid var(--hairline); }
@@ -242,7 +241,7 @@ def proposal_table(trades, limit=4) -> str:
     for t in trades.get("proposals", [])[:limit]:
         give, get = t["give"], t["get"]
         rows.append(
-            f'<tr><td class="with">{esc(_short(t["with"], 16))}</td>'
+            f'<tr><td class="with">{esc(_short(t["with"], 26))}</td>'
             f'<td class="sell">{_player_cell(give)} '
             f'<span class="muted">{esc(give["position"])} '
             f'{num(give.get("model_ppg"))}</span></td>'
@@ -257,23 +256,6 @@ def proposal_table(trades, limit=4) -> str:
     return ('<table><tr><th>With</th><th>You give</th><th>You get</th>'
             f'<th class="num">You /wk</th><th class="num">Over {esc(weeks)}</th>'
             f'<th class="num">Them /wk</th></tr>{_rows(rows)}</table>')
-
-
-def trade_table(trades, limit=5) -> str:
-    rows = []
-    for kind, label, css in (("buy_low", "BUY", "buy"),
-                             ("sell_high", "SELL", "sell")):
-        for t in trades.get(kind, [])[:limit]:
-            pos = esc(t["position"])
-            rows.append(
-                f'<tr><td class="pole {css}">{label}</td>'
-                f'<td>{_player_cell(t)}</td>'
-                f'<td class="dim">{esc(_short(t.get("fantasy_team")))}</td>'
-                f'<td class="num">{pos}{t["model_rank"]}</td>'
-                f'<td class="num dim">{pos}{t["espn_rank"]}</td></tr>')
-    return ('<table><tr><th></th><th>Player</th><th>Roster</th>'
-            '<th class="num">Ours</th><th class="num">ESPN</th></tr>'
-            f'{_rows(rows)}</table>')
 
 
 def render(report: dict) -> str:
@@ -319,12 +301,8 @@ def render(report: dict) -> str:
   </div>
 </div>
 
-<div class="cols wide">
-  <section><h2>Proposed trades &mdash; both lineups improve, each on its own
-    numbers</h2>{proposal_table(report['trades'])}</section>
-  <section><h2>Disagreements &mdash; {esc(report['trades'].get('basis'))}</h2>
-    {trade_table(report['trades'], limit=4)}</section>
-</div>
+<section><h2>Proposed trades &mdash; both lineups improve, each on its own
+  numbers</h2>{proposal_table(report['trades'], limit=5)}</section>
 
 <footer>
   <ul>{caveats}

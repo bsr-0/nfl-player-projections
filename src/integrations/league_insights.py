@@ -9,7 +9,7 @@ given a zero, which would quietly rank him last instead of unknown.
     tough_calls  starter/bench pairs close enough that the projection is not
                  the thing that should decide them
     waivers      free agents who beat somebody currently rostered here
-    trades       where this project and ESPN disagree most about a player
+    trades       swaps that improve both lineups, each on its own numbers
 
 WEEK-SPECIFIC IS A CLAIM THIS CANNOT YET MAKE. In `season_prorated` mode every
 week's number is the season total over 17 -- identical week to week, with only
@@ -173,7 +173,7 @@ def tough_calls(starters: list, bench: list, margin: float = TOUGH_CALL_MARGIN):
         if not b["available"]:
             continue
         # Same pricing source both sides. This project's numbers run at
-        # 73-85% of ESPN's (see trade_candidates), so a model-priced starter
+        # 73-85% of ESPN's (see propose_trades), so a model-priced starter
         # against an ESPN-priced bench player would compare two scales.
         rivals = [s for s in starters if eligible(s["slot"], b["position"])
                   and s["points_source"] == b["points_source"]]
@@ -230,61 +230,6 @@ def waiver_targets(free_agents: list, roster: list, slots: list,
             "injury_status": fa["injury_status"],
         })
     return sorted(targets, key=lambda t: -t["over"])[:limit]
-
-
-def trade_candidates(league: list, team_name: str, limit: int = 8,
-                     min_gap: float = 0.4):
-    """Where this project and ESPN disagree about a player's STANDING.
-
-    Not about his points. Measured on this snapshot, this project's per-week
-    numbers run at 73-85% of ESPN's by position (QB .835, RB .734, TE .845,
-    WR .803) while correlating .57-.87 with them: a season total over 17
-    carries the games a player is expected to MISS, where ESPN's average is
-    per game he plays. Subtracting one from the other therefore sorts by
-    scale -- every star on the roster comes out a "sell" -- so each side is
-    standardised within position first and the disagreement is the difference
-    in standing.
-
-    Rank within position travels too, because "we have him RB14 and ESPN has
-    him RB27" is the sentence a manager can act on.
-    """
-    priced = [dict(p, model_ppg=p["model_season_ppg"],
-                   espn_ppg=_num(p["espn_projected_avg"]))
-              for p in league
-              if p["points_source"] == "model"
-              and p["model_season_ppg"] is not None
-              and _num(p["espn_projected_avg"]) is not None]
-    if not priced:
-        return {"buy_low": [], "sell_high": [], "basis": "none"}
-
-    df = pd.DataFrame(priced)
-    for col, out in (("model_ppg", "model"), ("espn_ppg", "espn")):
-        grouped = df.groupby("position")[col]
-        std = grouped.transform("std").fillna(0.0)
-        centred = df[col] - grouped.transform("mean")
-        df[f"{out}_z"] = (centred / std.where(std > 0, 1.0)).round(3)
-        df[f"{out}_rank"] = grouped.rank(ascending=False,
-                                         method="min").astype(int)
-    df["gap"] = (df["model_z"] - df["espn_z"]).round(3)
-    df["rank_gap"] = df["espn_rank"] - df["model_rank"]
-
-    def shape(row):
-        return {"name": row["name"], "position": row["position"],
-                "nfl_team": row["nfl_team"], "fantasy_team": row["fantasy_team"],
-                "model_ppg": row["model_ppg"], "espn_ppg": row["espn_ppg"],
-                "model_rank": int(row["model_rank"]),
-                "espn_rank": int(row["espn_rank"]),
-                "rank_gap": int(row["rank_gap"]), "gap": float(row["gap"]),
-                "injury_status": row["injury_status"]}
-
-    mine = df["fantasy_team"] == team_name
-    buy = df[~mine & (df["gap"] >= min_gap)].sort_values("gap", ascending=False)
-    sell = df[mine & (df["gap"] <= -min_gap)].sort_values("gap")
-    return {
-        "basis": "within-position z-score, model minus ESPN",
-        "buy_low": [shape(r) for _, r in buy.head(limit).iterrows()],
-        "sell_high": [shape(r) for _, r in sell.head(limit).iterrows()],
-    }
 
 
 def _repriced(players: list, key: str, ignore_bye: bool = True) -> list:
@@ -495,10 +440,11 @@ def build_report(snapshot, projections: pd.DataFrame, team, week=None,
         "bench": bench,
         "tough_calls": tough_calls(starters, bench),
         "waivers": waiver_targets(free_agents, roster, slots),
-        "trades": dict(
-            trade_candidates(league, mine["team_name"]),
-            horizon_weeks=horizon,
-            proposals=propose_trades(league, mine["team_name"], slots, horizon)),
+        "trades": {
+            "horizon_weeks": horizon,
+            "proposals": propose_trades(league, mine["team_name"], slots,
+                                        horizon),
+        },
         "coverage": {
             "roster": match_report(league_rows[
                 league_rows["fantasy_team"] == mine["team_name"]]),

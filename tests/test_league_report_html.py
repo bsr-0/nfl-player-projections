@@ -62,10 +62,7 @@ def _report(**kw):
              "lineup_change": {"in": [{"name": "Josh Jacobs", "slot": "RB"}],
                                "out": [{"name": "Kenneth Walker III",
                                         "slot": "RB"}], "moved": []}}],
-                   "buy_low": [
-            {"name": "RJ Harvey", "position": "RB", "nfl_team": "DEN",
-             "fantasy_team": "Dart Vader", "model_rank": 13, "espn_rank": 42,
-             "injury_status": "ACTIVE"}], "sell_high": []},
+                   },
         "coverage": {"roster": {"matched": 14, "players": 16,
                                 "by_reason": {"position not modelled": 2}}},
     }

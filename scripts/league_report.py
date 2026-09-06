@@ -121,15 +121,6 @@ def _summarise(report: dict) -> None:
             print(f"      lineup: {'; '.join(moves)}")
     if not trades["proposals"]:
         print("    none that improve both lineups")
-    print(f"\n  Disagreements ({trades['basis']}): "
-          f"{len(trades['buy_low'])} buy-low, {len(trades['sell_high'])} sell-high")
-    for kind in ("buy_low", "sell_high"):
-        for r in trades[kind][:5]:
-            pos, owner = r["position"], (r["fantasy_team"] or "")[:22]
-            label = "buy" if kind == "buy_low" else "sell"
-            print(f"    {label:<5}{r['name']:<22}{owner:<24}"
-                  f"ours {pos}{r['model_rank']:<4} espn {pos}{r['espn_rank']:<4}"
-                  f" {r['model_ppg']:>6} vs {r['espn_ppg']:>6}")
 
 
 def build(team, week=None, write=True, horizon=None) -> int:

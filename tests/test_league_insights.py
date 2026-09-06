@@ -12,7 +12,7 @@ import pytest
 from src.integrations.league_insights import (
     availability, build_report, eligible, find_team, horizon_weeks,
     lineup_value, optimal_lineup, price, propose_trades, starting_slots,
-    tough_calls, trade_candidates, waiver_targets,
+    tough_calls, waiver_targets,
 )
 from src.integrations.league_join import Snapshot, load_projections
 
@@ -138,35 +138,6 @@ def test_waiver_targets_stay_on_one_scale():
     free_agents = [_p("ESPN priced", "RB", 30.0, points_source="espn")]
 
     assert waiver_targets(free_agents, roster, starting_slots(SETTINGS)) == []
-
-
-def test_a_pure_scale_difference_is_not_a_trade():
-    """The whole point of standardising.
-
-    ESPN at exactly 1.25x this project on every player is a disagreement about
-    nothing: the ordering is identical. Raw subtraction would call every one
-    of them a sell.
-    """
-    league = [_p(f"RB{i}", "RB", pts, fantasy_team=("Mine" if i < 3 else "Theirs"),
-                 espn_projected_avg=pts * 1.25, model_season_ppg=pts)
-              for i, pts in enumerate([20.0, 15.0, 12.0, 9.0, 6.0, 3.0])]
-
-    trades = trade_candidates(league, "Mine")
-
-    assert trades["buy_low"] == [] and trades["sell_high"] == []
-
-
-def test_a_real_disagreement_survives_standardising():
-    league = [_p(f"RB{i}", "RB", pts, fantasy_team="Theirs",
-                 espn_projected_avg=espn, model_season_ppg=pts)
-              for i, (pts, espn) in enumerate(
-                  [(20.0, 25.0), (15.0, 18.75), (12.0, 15.0),
-                   (11.0, 4.0), (6.0, 7.5), (3.0, 3.75)])]
-
-    buys = trade_candidates(league, "Mine")["buy_low"]
-
-    assert buys[0]["name"] == "RB3"
-    assert buys[0]["model_rank"] < buys[0]["espn_rank"]
 
 
 def _snapshot(**kw):
@@ -322,3 +293,17 @@ def test_the_report_carries_proposals_and_their_horizon():
 
     assert report["trades"]["horizon_weeks"] == 9
     assert report["trades"]["proposals"] == []   # the other roster is empty
+
+
+def test_a_pure_scale_difference_produces_no_proposal():
+    """ESPN at exactly 1.25x on every player is a disagreement about nothing.
+
+    The orderings are identical, so no swap can improve both lineups. This is
+    the trap the old raw-difference ranking fell into, kept pinned on the path
+    that replaced it.
+    """
+    league = [_tradeable(f"WR{i}", "WR", pts, pts * 1.25,
+                         "Mine" if i < 2 else "Theirs")
+              for i, pts in enumerate([18.0, 12.0, 15.0, 9.0])]
+
+    assert propose_trades(league, "Mine", ["WR", "WR"], horizon_weeks=14) == []
