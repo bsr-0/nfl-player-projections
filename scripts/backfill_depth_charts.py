@@ -120,14 +120,20 @@ def _assign_snapshots(raw: pd.DataFrame, weeks: pd.DataFrame) -> pd.DataFrame:
     raw = raw.assign(_dt=dt).dropna(subset=["_dt"])
     snapshot_days = pd.Series(sorted(raw["_dt"].unique()))
 
+    # Keyed by snapshot, so when ONE snapshot is the latest before several
+    # kickoffs it can only carry one week. setdefault gives it the earliest of
+    # them, which is the as-of reading: the chart you went into that week
+    # with. Before this, a season with no games played yet -- every snapshot
+    # precedes every kickoff -- had its whole preseason chart stamped week 18,
+    # the last iteration to win, so a week-1 consumer found nothing.
     chosen = {}
-    for _, row in weeks.iterrows():
+    for _, row in weeks.sort_values("week").iterrows():
         prior = snapshot_days[snapshot_days < row["first_game"]]
         if prior.empty:
             print(f"  week {int(row['week']):>2}: no snapshot before "
                   f"{row['first_game'].date()} — skipped")
             continue
-        chosen[prior.iloc[-1]] = int(row["week"])
+        chosen.setdefault(prior.iloc[-1], int(row["week"]))
 
     picked = raw[raw["_dt"].isin(chosen)].copy()
     picked["week"] = picked["_dt"].map(chosen)

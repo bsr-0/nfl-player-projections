@@ -141,3 +141,36 @@ def test_eliminated_clubs_dropped_only_in_postseason(mod):
     # both survive week 18 (regular season keeps every club, byes included)
     assert sorted(kept[kept.week == 18].club_code) == ["CHI", "KC"]
     assert kept[kept.week == 19].club_code.tolist() == ["KC"]
+
+
+def test_a_preseason_snapshot_belongs_to_week_one(mod):
+    """Before kickoff every snapshot precedes every week's first game.
+
+    Keyed by snapshot, the last iteration used to win, so a season with no
+    games played had its whole chart stamped week 18 and a week-1 consumer
+    found nothing.
+    """
+    raw = pd.DataFrame({"dt": ["2026-09-05T11:00:00Z", "2026-09-06T11:00:00Z"],
+                        "gsis_id": ["00-1", "00-2"]})
+    weeks = pd.DataFrame({
+        "week": [1, 2, 18],
+        "first_game": pd.to_datetime(["2026-09-09", "2026-09-16", "2027-01-03"])})
+
+    picked = mod._assign_snapshots(raw, weeks)
+
+    assert set(picked["week"]) == {1}
+    # The latest snapshot before kickoff, not the earliest.
+    assert picked["gsis_id"].tolist() == ["00-2"]
+
+
+def test_each_played_week_keeps_its_own_snapshot(mod):
+    """The normal in-season case must be unchanged: one chart per week."""
+    raw = pd.DataFrame({"dt": ["2026-09-08T11:00:00Z", "2026-09-15T11:00:00Z"],
+                        "gsis_id": ["00-1", "00-2"]})
+    weeks = pd.DataFrame({
+        "week": [1, 2],
+        "first_game": pd.to_datetime(["2026-09-09", "2026-09-16"])})
+
+    picked = mod._assign_snapshots(raw, weeks)
+
+    assert dict(zip(picked["gsis_id"], picked["week"])) == {"00-1": 1, "00-2": 2}
