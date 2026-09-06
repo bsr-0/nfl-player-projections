@@ -457,6 +457,42 @@ def aggregate_player_stats(season_df):
     return agg
 
 
+def apply_current_teams(agg, upcoming_season: int) -> int:
+    """Point each player at the team he is on NOW, not the one he played for.
+
+    The population is aggregated from last season's weekly stats, so `team` is
+    last season's team. `generate_weekly_data.py` looks up each player's
+    opponent from it, which means every player who moved in free agency was
+    shown his OLD team's schedule -- Kenneth Walker III, a Chief, listed
+    against Seattle's week-1 opponent.
+
+    Modifies `agg` in place and returns how many rows changed.
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        rosters = pd.read_sql(
+            "SELECT player_id, team, status FROM rosters WHERE season = ? "
+            "AND player_id IS NOT NULL AND team IS NOT NULL",
+            conn, params=[int(upcoming_season)])
+    except Exception:                                # noqa: BLE001
+        return 0
+    finally:
+        conn.close()
+    if rosters.empty:
+        return 0
+
+    rosters["_active"] = (rosters["status"].astype(str) == "ACT").astype(int)
+    current = (rosters.sort_values("_active", ascending=False)
+               .drop_duplicates("player_id").set_index("player_id")["team"])
+    mapped = agg["player_id"].map(current)
+    changed = mapped.notna() & (mapped != agg["team"])
+    agg.loc[changed, "team"] = mapped[changed]
+    return int(changed.sum())
+
+
 def compute_risk_scores(agg):
     """Risk score 0-100 where higher = more risky."""
     agg["risk_vol"] = 0.0
@@ -1180,6 +1216,10 @@ def main():
 
     agg = aggregate_player_stats(season_df)
     print(f"  Aggregated {len(agg)} unique players")
+
+    moved = apply_current_teams(agg, upcoming_season)
+    if moved:
+        print(f"  Re-teamed {moved} players from the {upcoming_season} roster")
 
     agg = compute_risk_scores(agg)
     agg = add_feature_importance(agg)

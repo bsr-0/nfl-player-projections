@@ -13842,3 +13842,75 @@ approximately the right multiplier, by accident; veterans are being discounted
 for absences they are not going to have in the week they are being started.
 Season totals should keep the discount either way -- it is what makes them
 season totals.
+
+
+## The 2026 board was served zeros for four features it trains on (2026-09-06)
+
+Found while asking what would most improve week-1 accuracy. `_team_for_season`
+derives each player's team from `player_weekly_stats`, so for a season nobody
+has played it returns nothing, and `build_multiyear_season_pairs` had no other
+source. Measured on the 2026 inference frame against its own training rows:
+
+    feature              training (2020-2025)   2026 inference
+    dest_team              100% populated          0% populated
+    team_changed              mean 0.218           0.000, every row
+    dest_hist_tgt_pg          mean 5.237           0.000, every row
+    dest_hist_carry_pg        mean 3.050           0.000, every row
+
+The destination profiles are multiplied by `team_changed`, so a NaN team
+collapsed all four together. Every 2026 projection was made by a model that
+believed nobody had changed teams and that every destination offence throws
+zero targets and runs zero carries a game. Same class as the PreseasonProjector
+feature-query skew logged above: a feature present in training and absent at
+serve time, zero-filled, which after centering pushes predictions low.
+
+`rosters` was empty for every season -- the table PreseasonProjector's
+`years_exp` join already failed against, noted in `preseason_features`'s own
+docstring. 24,656 rows ingested for 2019-2026 from
+`nfl.import_seasonal_rosters`.
+
+### What the roster snapshot is worth
+
+`build_multiyear_season_pairs` takes `inference_teams` so the harness can
+reproduce what production sees: "roster" forces the preseason snapshot,
+"none" reproduces the bug, "auto" (the default) uses stats when the season has
+been played. Refit per target season 2022-2025, scored on real week-1 PPR:
+
+                 realized (stats)   roster (the fix)   none (the bug)
+    all           MAE 4.307          4.310              4.341
+    veterans      MAE 4.401          4.405              4.420
+    cold start    MAE 3.653          3.653              3.791
+
+    paired, roster vs none:
+      all       dMAE -0.031  95% CI [-0.059, -0.002]  P(better) 0.984
+      veterans  dMAE -0.015  95% CI [-0.038, +0.008]
+
+Two results. The preseason roster is as good as knowing the team the player
+ended up on -- 4.310 against 4.307, identical on cold start -- so the harness
+was never flattering itself by using stats, and production gives up nothing.
+Coverage is in fact better from rosters (94-97%) than from stats (84-87%),
+which include only players who recorded a line.
+
+And the fix beats the bug significantly, but by 0.031 MAE. That is the first
+arm in this line of work whose interval excludes zero, and it is also the same
+order as the effects rejected as nulls. It is worth having as a CORRECTNESS
+fix -- a model served zeros for a feature it trained on is broken whichever way
+the error points -- and should not be sold as an accuracy win.
+
+### The visible half
+
+The board's population is aggregated from last season's weekly stats, so
+`team` was last season's team, and `generate_weekly_data.py` reads it to look
+up each player's opponent. Every player who moved was shown his OLD team's
+schedule: the league report printed "Kenneth Walker III - KC vs NE", a matchup
+that does not exist, because KC came from ESPN and NE is Seattle's week-1
+opponent. `apply_current_teams` re-teams the board from the roster snapshot --
+157 rows on this run -- and the payloads now read Walker KC vs DEN, Waddle DEN
+vs KC, A.J. Brown NE vs SEA.
+
+Projections moved for 101 of 518 players (19.5%, matching team_changed 0.199),
+non-movers bit-identical, mean -1.50 season points. The direction is DOWN for
+movers, because a destination profile is a competition signal as much as an
+opportunity one: a receiver landing in a room that already absorbs targets
+projects lower. Largest: K.Boutte -35.8 (-45%), R.Shaheed -29.5, J.Jennings
+-27.7.

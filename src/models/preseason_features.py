@@ -142,12 +142,62 @@ def _team_for_season(history: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _destination_team_profiles(history: pd.DataFrame) -> pd.DataFrame:
+def _inference_season_teams(season: int) -> pd.DataFrame:
+    """Team assignments for a season that has not been played.
+
+    `_team_for_season` reads player_weekly_stats, which by definition has no
+    rows for an unplayed season -- so at inference `dest_team` came back NaN
+    for every player and `team_changed`, `dest_hist_tgt_pg` and
+    `dest_hist_carry_pg` all zero-filled. The model trains with those
+    populated (dest_team 100%, team_changed mean 0.218, dest_hist_tgt_pg mean
+    5.24) and served with them at zero, which after centering pushes every
+    prediction low. Same class as the PreseasonProjector feature-query skew
+    logged in GAPS.
+
+    The roster snapshot is what a preseason projection actually has: free
+    agency has settled and the team is public. It is a slightly different
+    quantity from the training-time value, which is the majority-week team
+    the player ended up on, and that difference is the price of having the
+    feature at all rather than a zero.
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        rows = pd.read_sql(
+            "SELECT player_id, team, season, status FROM rosters "
+            "WHERE season = ? AND player_id IS NOT NULL AND team IS NOT NULL",
+            conn, params=[int(season)])
+    except Exception:                                # noqa: BLE001
+        return pd.DataFrame(columns=["player_id", "season", "team"])
+    finally:
+        conn.close()
+    if rows.empty:
+        return pd.DataFrame(columns=["player_id", "season", "team"])
+    # A player listed twice (traded, or active plus practice squad) resolves to
+    # his active row.
+    rows["_active"] = (rows["status"].astype(str) == "ACT").astype(int)
+    rows = (rows.sort_values("_active", ascending=False)
+            .drop_duplicates("player_id"))
+    return rows[["player_id", "season", "team"]]
+
+
+def _destination_team_profiles(history: pd.DataFrame,
+                               inference_season: Optional[int] = None) -> pd.DataFrame:
     """Team x position x season positional usage, 3-season rolling mean,
     shift(1) leakage-safe -- same logic as
     FeatureEngineer._add_dest_team_pos_profiles, reimplemented over
     season-level (not week-level) data since season-pair rows have no
-    `week` column to group by."""
+    `week` column to group by.
+
+    `inference_season` adds the row an unplayed season needs. The frame is
+    keyed by target season, so without it the merge for 2026 found nothing and
+    both columns zero-filled -- the model trains on a mean of 5.24 targets and
+    3.05 carries per game and was served zeros. The added row is the same
+    quantity the shift(1) rolling window would produce: the mean of the last
+    three PLAYED seasons, which is exactly what is knowable before kickoff.
+    """
     agg = (
         history.groupby(["team", "position", "season"])
         .agg(targets_sum=("targets", "sum"), carries_sum=("rushing_attempts", "sum"),
@@ -162,7 +212,19 @@ def _destination_team_profiles(history: pd.DataFrame) -> pd.DataFrame:
             agg.groupby(["team", "position"])[col]
             .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
         )
-    return agg[["team", "position", "season", "dest_hist_tgt_pg", "dest_hist_carry_pg"]]
+    out = agg[["team", "position", "season",
+               "dest_hist_tgt_pg", "dest_hist_carry_pg"]]
+    if inference_season is None or (agg["season"] == inference_season).any():
+        return out
+
+    recent = agg[agg["season"] < inference_season].sort_values("season")
+    tail = (recent.groupby(["team", "position"]).tail(3)
+            .groupby(["team", "position"])[["tgt_pg", "carry_pg"]].mean()
+            .reset_index()
+            .rename(columns={"tgt_pg": "dest_hist_tgt_pg",
+                             "carry_pg": "dest_hist_carry_pg"}))
+    tail["season"] = int(inference_season)
+    return pd.concat([out, tail[out.columns]], ignore_index=True)
 
 
 def career_static_by_player(db) -> pd.DataFrame:
@@ -278,7 +340,8 @@ def _cold_start_rows_from_draft(db, target: int, history: pd.DataFrame) -> pd.Da
 
 def build_multiyear_season_pairs(db, seasons: List[int],
                                   lookback_years: int = LOOKBACK_YEARS,
-                                  inference_season: Optional[int] = None) -> pd.DataFrame:
+                                  inference_season: Optional[int] = None,
+                                  inference_teams: str = "auto") -> pd.DataFrame:
     """Build (multi-year features, next-season target) pairs with real
     destination-team context. One row per (player, target season)."""
     history = _load_full_history(db)
@@ -287,7 +350,22 @@ def build_multiyear_season_pairs(db, seasons: List[int],
 
     season_agg = _season_aggregates(history)
     team_by_season = _team_for_season(history)
-    dest_profiles = _destination_team_profiles(history)
+    # `inference_teams` exists so the harness can reproduce what PRODUCTION
+    # sees. For a played season the stats supply a team, which production
+    # never has; "roster" forces the preseason snapshot production would use,
+    # and "none" reproduces the pre-fix state where the feature arrived empty.
+    if inference_season is not None:
+        played = (team_by_season["season"] == inference_season).any()
+        if inference_teams == "none":
+            team_by_season = team_by_season[
+                team_by_season["season"] != inference_season]
+        elif inference_teams == "roster" or (inference_teams == "auto"
+                                             and not played):
+            team_by_season = pd.concat(
+                [team_by_season[team_by_season["season"] != inference_season],
+                 _inference_season_teams(inference_season)],
+                ignore_index=True)
+    dest_profiles = _destination_team_profiles(history, inference_season)
 
     # Real experience: count of distinct prior seasons this player
     # appears in, computed once over full history (fixes the
