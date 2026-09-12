@@ -655,7 +655,12 @@ class NFLDataLoader:
         
         # Fumbles
         points += row.get('fumbles_lost', 0) * SCORING.get('fumbles_lost', -2)
-        
+
+        # Two-point conversions. SCORING has always defined these; this label
+        # never applied them, so the stored fantasy_points disagreed with the
+        # PBP-derived app path by 2 per conversion (AUDIT_REPORT.md #5 note).
+        points += row.get('two_point_conversions', 0) * SCORING.get('two_point_conversions', 2)
+
         return round(points, 1)
     
     def _store_weekly_data(self, df: pd.DataFrame, trust_position: bool = True):
@@ -693,6 +698,7 @@ class NFLDataLoader:
                 'opponent': _to_scalar_str(row.get('opponent', ''), ''),
                 'home_away': _to_scalar_str(row.get('home_away', 'unknown'), 'unknown'),
                 'games_played': 1,
+                'data_source': 'nflverse_stats',
                 'passing_attempts': _to_scalar_int(row.get('passing_attempts', 0), 0),
                 'passing_completions': _to_scalar_int(row.get('passing_completions', 0), 0),
                 'passing_yards': _to_scalar_int(row.get('passing_yards', 0), 0),
@@ -712,9 +718,12 @@ class NFLDataLoader:
                 'fumbles_lost': _to_scalar_int(row.get('fumbles_lost', 0), 0),
                 'fumbles': _to_scalar_int(row.get('fumbles', 0), 0),
                 'two_point_conversions': _to_scalar_int(row.get('two_point_conversions', 0), 0),
-                'snap_count': _to_scalar_int(row.get('snap_count', 0), 0),
-                'snap_share': _to_scalar_float(row.get('snap_share', 0.0), 0.0),
-                'team_snaps': _to_scalar_int(row.get('team_snaps', 0), 0),
+                # NaN here means "no snap record" (unknown), not zero snaps --
+                # see tests/test_snap_null_semantics.py. Preserve NULL through
+                # to the DB instead of fillna(0)'ing it away.
+                'snap_count': _to_scalar_int(row.get('snap_count'), None),
+                'snap_share': _to_scalar_float(row.get('snap_share'), None),
+                'team_snaps': _to_scalar_int(row.get('team_snaps'), None),
                 'pass_plays': _to_scalar_int(row.get('pass_plays', row.get('passing_attempts', 0)), 0),
                 'rush_plays': _to_scalar_int(row.get('rush_plays', row.get('rushing_attempts', 0)), 0),
                 'recv_targets': _to_scalar_int(row.get('recv_targets', row.get('targets', 0)), 0),
@@ -886,6 +895,12 @@ class NFLDataLoader:
                 "venue": _to_scalar_str(row.get("stadium", ""), ""),
                 "home_score": row.get("home_score"),
                 "away_score": row.get("away_score"),
+                # nflverse's own schedule import already carries these --
+                # pass them through instead of leaving them None on every
+                # reload and relying solely on the once-off Vegas backfill
+                # script to restore them (see insert_schedule's COALESCE).
+                "spread_line": _to_scalar_float(row.get("spread_line"), None),
+                "total_line": _to_scalar_float(row.get("total_line"), None),
             }
             self.db.insert_schedule(schedule_data)
             count += 1

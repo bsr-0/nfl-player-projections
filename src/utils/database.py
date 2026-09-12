@@ -833,11 +833,23 @@ class DatabaseManager:
             return True
     
     def insert_player_weekly_stats(self, stats: Dict[str, Any]) -> bool:
-        """Insert or update player weekly stats."""
+        """Insert or update player weekly stats.
+
+        Was `INSERT OR REPLACE`, which deletes and recreates the row on a
+        conflict -- any column not in this statement's list (e.g.
+        `data_source`) silently reverts to its schema default instead of
+        keeping what was already stored, and there was no way to say "I
+        don't know this value" for a column that legitimately can be either
+        0 or unknown (snap_count/snap_share/team_snaps -- see
+        tests/test_snap_null_semantics.py). ON CONFLICT DO UPDATE with
+        COALESCE(excluded.col, player_weekly_stats.col) fixes both: an
+        absent/NULL incoming value keeps the existing one instead of wiping
+        it, while a real (possibly zero) incoming value still overwrites.
+        """
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT OR REPLACE INTO player_weekly_stats 
+                INSERT INTO player_weekly_stats
                 (player_id, season, week, team, opponent, home_away, games_played,
                  passing_attempts, passing_completions, passing_yards, passing_tds,
                  interceptions, rushing_attempts, rushing_yards, rushing_tds,
@@ -850,8 +862,58 @@ class DatabaseManager:
                  pass_wpa, rush_wpa, recv_wpa,
                  pass_success_rate, rush_success_rate, recv_success_rate,
                  neutral_targets, neutral_rushes, third_down_targets, short_yardage_rushes,
-                 redzone_targets, goal_line_touches, two_minute_targets, high_leverage_touches)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 redzone_targets, goal_line_touches, two_minute_targets, high_leverage_touches,
+                 data_source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(player_id, season, week) DO UPDATE SET
+                    team = COALESCE(excluded.team, player_weekly_stats.team),
+                    opponent = COALESCE(excluded.opponent, player_weekly_stats.opponent),
+                    home_away = COALESCE(excluded.home_away, player_weekly_stats.home_away),
+                    games_played = COALESCE(excluded.games_played, player_weekly_stats.games_played),
+                    passing_attempts = COALESCE(excluded.passing_attempts, player_weekly_stats.passing_attempts),
+                    passing_completions = COALESCE(excluded.passing_completions, player_weekly_stats.passing_completions),
+                    passing_yards = COALESCE(excluded.passing_yards, player_weekly_stats.passing_yards),
+                    passing_tds = COALESCE(excluded.passing_tds, player_weekly_stats.passing_tds),
+                    interceptions = COALESCE(excluded.interceptions, player_weekly_stats.interceptions),
+                    rushing_attempts = COALESCE(excluded.rushing_attempts, player_weekly_stats.rushing_attempts),
+                    rushing_yards = COALESCE(excluded.rushing_yards, player_weekly_stats.rushing_yards),
+                    rushing_tds = COALESCE(excluded.rushing_tds, player_weekly_stats.rushing_tds),
+                    targets = COALESCE(excluded.targets, player_weekly_stats.targets),
+                    receptions = COALESCE(excluded.receptions, player_weekly_stats.receptions),
+                    receiving_yards = COALESCE(excluded.receiving_yards, player_weekly_stats.receiving_yards),
+                    receiving_tds = COALESCE(excluded.receiving_tds, player_weekly_stats.receiving_tds),
+                    fumbles = COALESCE(excluded.fumbles, player_weekly_stats.fumbles),
+                    fumbles_lost = COALESCE(excluded.fumbles_lost, player_weekly_stats.fumbles_lost),
+                    two_point_conversions = COALESCE(excluded.two_point_conversions, player_weekly_stats.two_point_conversions),
+                    snap_count = COALESCE(excluded.snap_count, player_weekly_stats.snap_count),
+                    snap_share = COALESCE(excluded.snap_share, player_weekly_stats.snap_share),
+                    team_snaps = COALESCE(excluded.team_snaps, player_weekly_stats.team_snaps),
+                    fantasy_points = COALESCE(excluded.fantasy_points, player_weekly_stats.fantasy_points),
+                    rush_inside_10 = COALESCE(excluded.rush_inside_10, player_weekly_stats.rush_inside_10),
+                    rush_inside_5 = COALESCE(excluded.rush_inside_5, player_weekly_stats.rush_inside_5),
+                    targets_15_plus = COALESCE(excluded.targets_15_plus, player_weekly_stats.targets_15_plus),
+                    air_yards = COALESCE(excluded.air_yards, player_weekly_stats.air_yards),
+                    pass_plays = COALESCE(excluded.pass_plays, player_weekly_stats.pass_plays),
+                    rush_plays = COALESCE(excluded.rush_plays, player_weekly_stats.rush_plays),
+                    recv_targets = COALESCE(excluded.recv_targets, player_weekly_stats.recv_targets),
+                    pass_epa = COALESCE(excluded.pass_epa, player_weekly_stats.pass_epa),
+                    rush_epa = COALESCE(excluded.rush_epa, player_weekly_stats.rush_epa),
+                    recv_epa = COALESCE(excluded.recv_epa, player_weekly_stats.recv_epa),
+                    pass_wpa = COALESCE(excluded.pass_wpa, player_weekly_stats.pass_wpa),
+                    rush_wpa = COALESCE(excluded.rush_wpa, player_weekly_stats.rush_wpa),
+                    recv_wpa = COALESCE(excluded.recv_wpa, player_weekly_stats.recv_wpa),
+                    pass_success_rate = COALESCE(excluded.pass_success_rate, player_weekly_stats.pass_success_rate),
+                    rush_success_rate = COALESCE(excluded.rush_success_rate, player_weekly_stats.rush_success_rate),
+                    recv_success_rate = COALESCE(excluded.recv_success_rate, player_weekly_stats.recv_success_rate),
+                    neutral_targets = COALESCE(excluded.neutral_targets, player_weekly_stats.neutral_targets),
+                    neutral_rushes = COALESCE(excluded.neutral_rushes, player_weekly_stats.neutral_rushes),
+                    third_down_targets = COALESCE(excluded.third_down_targets, player_weekly_stats.third_down_targets),
+                    short_yardage_rushes = COALESCE(excluded.short_yardage_rushes, player_weekly_stats.short_yardage_rushes),
+                    redzone_targets = COALESCE(excluded.redzone_targets, player_weekly_stats.redzone_targets),
+                    goal_line_touches = COALESCE(excluded.goal_line_touches, player_weekly_stats.goal_line_touches),
+                    two_minute_targets = COALESCE(excluded.two_minute_targets, player_weekly_stats.two_minute_targets),
+                    high_leverage_touches = COALESCE(excluded.high_leverage_touches, player_weekly_stats.high_leverage_touches),
+                    data_source = COALESCE(excluded.data_source, player_weekly_stats.data_source)
             """, (
                 stats.get("player_id"),
                 stats.get("season"),
@@ -859,50 +921,63 @@ class DatabaseManager:
                 stats.get("team"),
                 stats.get("opponent"),
                 stats.get("home_away"),
-                stats.get("games_played", 1),
-                stats.get("passing_attempts", 0),
-                stats.get("passing_completions", 0),
-                stats.get("passing_yards", 0),
-                stats.get("passing_tds", 0),
-                stats.get("interceptions", 0),
-                stats.get("rushing_attempts", 0),
-                stats.get("rushing_yards", 0),
-                stats.get("rushing_tds", 0),
-                stats.get("targets", 0),
-                stats.get("receptions", 0),
-                stats.get("receiving_yards", 0),
-                stats.get("receiving_tds", 0),
-                stats.get("fumbles", 0),
-                stats.get("fumbles_lost", 0),
-                stats.get("two_point_conversions", 0),
-                stats.get("snap_count", 0),
-                stats.get("snap_share", 0),
-                stats.get("team_snaps", 0),
-                stats.get("fantasy_points", 0),
-                stats.get("rush_inside_10", 0),
-                stats.get("rush_inside_5", 0),
-                stats.get("targets_15_plus", 0),
-                stats.get("air_yards", 0.0),
-                stats.get("pass_plays", 0),
-                stats.get("rush_plays", 0),
-                stats.get("recv_targets", 0),
-                stats.get("pass_epa", 0.0),
-                stats.get("rush_epa", 0.0),
-                stats.get("recv_epa", 0.0),
-                stats.get("pass_wpa", 0.0),
-                stats.get("rush_wpa", 0.0),
-                stats.get("recv_wpa", 0.0),
-                stats.get("pass_success_rate", 0.0),
-                stats.get("rush_success_rate", 0.0),
-                stats.get("recv_success_rate", 0.0),
-                stats.get("neutral_targets", 0),
-                stats.get("neutral_rushes", 0),
-                stats.get("third_down_targets", 0),
-                stats.get("short_yardage_rushes", 0),
-                stats.get("redzone_targets", 0),
-                stats.get("goal_line_touches", 0),
-                stats.get("two_minute_targets", 0),
-                stats.get("high_leverage_touches", 0),
+                # Every column below is written through
+                # `COALESCE(excluded.<col>, player_weekly_stats.<col>)` --
+                # "keep the existing value when the incoming one is absent"
+                # (same reasoning as insert_team_stats). A `.get(col, 0)`
+                # default breaks that: the incoming value is then NEVER
+                # absent, it's 0, and COALESCE(0, x) is 0 -- a caller
+                # passing a partial dict would silently zero every stat it
+                # didn't set. Binding None restores the intended semantics;
+                # the full-row loader in nfl_data_loader.py always supplies
+                # real values (including true zeros) for every one of these.
+                stats.get("games_played"),
+                stats.get("passing_attempts"),
+                stats.get("passing_completions"),
+                stats.get("passing_yards"),
+                stats.get("passing_tds"),
+                stats.get("interceptions"),
+                stats.get("rushing_attempts"),
+                stats.get("rushing_yards"),
+                stats.get("rushing_tds"),
+                stats.get("targets"),
+                stats.get("receptions"),
+                stats.get("receiving_yards"),
+                stats.get("receiving_tds"),
+                stats.get("fumbles"),
+                stats.get("fumbles_lost"),
+                stats.get("two_point_conversions"),
+                # NULL means "no snap record" (unknown), not zero -- do not
+                # default this away. See tests/test_snap_null_semantics.py.
+                stats.get("snap_count"),
+                stats.get("snap_share"),
+                stats.get("team_snaps"),
+                stats.get("fantasy_points"),
+                stats.get("rush_inside_10"),
+                stats.get("rush_inside_5"),
+                stats.get("targets_15_plus"),
+                stats.get("air_yards"),
+                stats.get("pass_plays"),
+                stats.get("rush_plays"),
+                stats.get("recv_targets"),
+                stats.get("pass_epa"),
+                stats.get("rush_epa"),
+                stats.get("recv_epa"),
+                stats.get("pass_wpa"),
+                stats.get("rush_wpa"),
+                stats.get("recv_wpa"),
+                stats.get("pass_success_rate"),
+                stats.get("rush_success_rate"),
+                stats.get("recv_success_rate"),
+                stats.get("neutral_targets"),
+                stats.get("neutral_rushes"),
+                stats.get("third_down_targets"),
+                stats.get("short_yardage_rushes"),
+                stats.get("redzone_targets"),
+                stats.get("goal_line_touches"),
+                stats.get("two_minute_targets"),
+                stats.get("high_leverage_touches"),
+                stats.get("data_source"),
             ))
             conn.commit()
             return True
@@ -1041,14 +1116,31 @@ class DatabaseManager:
             return True
     
     def insert_schedule(self, schedule_data: Dict[str, Any]) -> bool:
-        """Insert or update schedule entry."""
+        """Insert or update schedule entry.
+
+        Was `INSERT OR REPLACE`: any reload that doesn't carry Vegas lines
+        (the routine nflverse schedule reload never does -- only
+        `backfill_vegas_lines.py` populates them) deleted-and-recreated the
+        row, wiping spread_line/total_line back to NULL. ON CONFLICT DO
+        UPDATE with COALESCE(excluded.col, schedule.col) keeps the existing
+        value when the incoming one is absent, while a caller that DOES
+        supply real values (a rescore, a Vegas backfill) still overwrites.
+        """
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT OR REPLACE INTO schedule
+                INSERT INTO schedule
                 (season, week, home_team, away_team, game_id, game_time, venue,
                  home_score, away_score, spread_line, total_line)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(season, week, home_team, away_team) DO UPDATE SET
+                    game_id = COALESCE(excluded.game_id, schedule.game_id),
+                    game_time = COALESCE(excluded.game_time, schedule.game_time),
+                    venue = COALESCE(excluded.venue, schedule.venue),
+                    home_score = COALESCE(excluded.home_score, schedule.home_score),
+                    away_score = COALESCE(excluded.away_score, schedule.away_score),
+                    spread_line = COALESCE(excluded.spread_line, schedule.spread_line),
+                    total_line = COALESCE(excluded.total_line, schedule.total_line)
             """, (
                 schedule_data.get("season"),
                 schedule_data.get("week"),
