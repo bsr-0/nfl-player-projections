@@ -1094,6 +1094,10 @@ class TimeSeriesBacktester:
             "season": self.season,
             "target_mode": self.target_mode,
             "backtest_type": "expanding_window_weekly_refit",
+            # Which learner produced these numbers. Absent, the results page
+            # published a Ridge walk-forward's accuracy as if it were the
+            # served stacked ensemble's (AUDIT_REPORT.md #16).
+            "model_type": getattr(self, "model_type_label", "unknown"),
             "backtest_date": self._run_timestamp,
             "n_predictions": len(valid),
             "positions": self.positions,
@@ -1412,6 +1416,9 @@ def run_ts_backtest(
         target_mode=target_mode,
     )
     bt.emit_inactive_predictions = bool(emit_inactive_predictions)
+    bt.model_type_label = (
+        f"ridge(alpha={ridge_alpha})" if model_type == "ridge" else model_type
+    ) + (f" qb={qb_model}" if qb_model else "")
 
     # Per-position model overrides
     if qb_model:

@@ -385,6 +385,62 @@ def _apply_bounded_scaling(
     return artifact
 
 
+class BoundedScalerMismatch(RuntimeError):
+    """The persisted bounded scaler does not fit the frame it was asked to scale."""
+
+
+def apply_bounded_scaler_artifact(df: pd.DataFrame, artifact: Dict[str, Any]) -> pd.DataFrame:
+    """Apply the train-fitted bounded scaler to an inference frame, exactly as
+    `_apply_bounded_scaling` applied it to the training-time test frame.
+
+    Same reconciliation: a `<col>_missing` indicator absent from the frame
+    means "no missingness here" and is added as 0 (feature engineering only
+    emits indicators when a frame's missingness exceeds 2%, so an as_of
+    frame with no current-season rows lacks 18 of them). Any OTHER absent
+    column is an error -- the frame is not the feature set the scaler was
+    fitted on, and scaling a subset would be wrong.
+
+    Same NaN policy: missing values stay NaN through scaling (training fills
+    the median only to compute the transform, then restores NaN, and
+    PositionModel.predict median-fills at prediction time). The serving path
+    used to zero-fill BEFORE scaling instead, so every missing value reached
+    the models as scaled(0) in production but as the median in every
+    backtest.
+
+    Raises instead of skipping. Skipping silently is what served week-1
+    predictions 5-7x too high (2026-09-11): the column-count mismatch above
+    hit `except ValueError: pass`, and the models got raw features.
+    """
+    cols = list(artifact.get("columns") or [])
+    scaler = artifact.get("scaler")
+    if not cols or scaler is None:
+        return df
+    absent = [c for c in cols if c not in df.columns]
+    for c in absent:
+        if c.endswith("_missing"):
+            df[c] = 0.0
+    still_absent = [c for c in absent if not c.endswith("_missing")]
+    if still_absent:
+        raise BoundedScalerMismatch(
+            f"{len(still_absent)} of the {len(cols)} scaler columns are absent from the "
+            f"frame (e.g. {still_absent[:5]}). The persisted scaler was fitted on a "
+            f"different feature set; retrain (python -m src.models.train) rather than "
+            f"serve unscaled features."
+        )
+    for c in cols:                       # same dtype handling as training
+        if pd.api.types.is_integer_dtype(df[c]):
+            df[c] = df[c].astype(float)
+    vals = df[cols].replace([np.inf, -np.inf], np.nan)
+    mask = vals.notna().values
+    filled = vals.fillna(vals.median()).fillna(0.0).values
+    try:
+        scaled = scaler.transform(filled)
+    except ValueError as e:
+        raise BoundedScalerMismatch(f"bounded scaler rejected the frame: {e}") from e
+    df.loc[:, cols] = np.where(mask, scaled, np.nan)
+    return df
+
+
 def _prepare_training_data(
     train_data: pd.DataFrame,
     test_data: pd.DataFrame,

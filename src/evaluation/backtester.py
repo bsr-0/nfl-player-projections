@@ -7,7 +7,7 @@ generate accuracy metrics, and create visualizations for stakeholder presentatio
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -1249,9 +1249,25 @@ class ModelBacktester:
         }
 
     def save_results(self, results: Dict, filename: str = None):
-        """Save backtest results to file."""
+        """Save backtest results to file, stamped with a trust verdict.
+
+        Every artifact carries `trust = {"trusted": bool, "reasons": [...]}`
+        (see assess_artifact_trust) and an untrusted one is written under an
+        `_UNTRUSTED` name. Consumers that publish numbers (advanced_model_results.json,
+        scripts/generate_results_page.py) refuse untrusted artifacts. Before
+        this, a run whose predictions were ~5x off-scale (MAPE 687%, every
+        success criterion False) was still saved under the normal name and
+        would have been published as the served model's accuracy.
+        """
+        results["trust"] = assess_artifact_trust(results)
+        if not results["trust"]["trusted"]:
+            print("\n*** UNTRUSTED backtest artifact -- will not be published:")
+            for reason in results["trust"]["reasons"]:
+                print(f"    - {reason}")
         if filename is None:
-            filename = f"backtest_{results['season']}_{datetime.now().strftime('%Y%m%d')}.json"
+            suffix = ("" if results["trust"]["trusted"] else "_UNTRUSTED") + (
+                "_PARTIAL" if results.get("partial_season") else "")
+            filename = f"backtest_{results['season']}_{datetime.now().strftime('%Y%m%d')}{suffix}.json"
         
         # Convert numpy types and int64 keys to native Python types
         def convert_keys(obj):
@@ -1528,164 +1544,217 @@ class ValidationVisualizer:
             return "matplotlib not available"
 
 
-def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
+def assess_artifact_trust(results: Dict) -> Dict[str, Any]:
+    """Is this artifact even on the right scale to be published?
+
+    Sanity, not quality: a model that loses to a baseline is still a valid
+    measurement and stays trusted (that verdict lives in success_criteria /
+    model_has_real_edge). What this refuses is a measurement that cannot be
+    of the served model -- predictions on a different scale than the actuals,
+    which is what every feature-pipeline mismatch between an evaluation path
+    and training looks like from the outside.
     """
-    Run a complete backtest on the most recent test season using the production ensemble.
-    
-    Uses the same data load and feature pipeline as training; all preprocessing
-    (utilization weights, etc.) is train-derived only (loaded from disk). Test season
-    is strictly unseen: no use in training, tuning, or fitting.
-    
-    Args:
-        test_season: Season to backtest (None = auto-select latest)
-        
-    Returns:
-        Tuple of (results dict, report string)
+    reasons = []
+    m = results.get("metrics", {}) or {}
+    avg_actual = m.get("avg_actual")
+    avg_predicted = m.get("avg_predicted")
+    if avg_actual and avg_predicted is not None and avg_actual > 0:
+        ratio = avg_predicted / avg_actual
+        if not 0.5 <= ratio <= 2.0:
+            reasons.append(f"avg_predicted/avg_actual = {ratio:.2f} (outside 0.5-2.0): predictions are off-scale")
+    mape = m.get("mape")
+    if mape is not None and mape > 100:
+        reasons.append(f"MAPE {mape:.0f}% > 100%")
+    r2 = m.get("r2")
+    if r2 is not None and r2 < -1.0:
+        reasons.append(f"R2 {r2:.2f} < -1: worse than predicting the mean by more than the variance itself")
+    n = results.get("n_predictions")
+    if n is not None and n < 100:
+        reasons.append(f"only {n} predictions")
+    return {"trusted": not reasons, "reasons": reasons}
+
+
+def describe_model_type(position_models: Dict[str, Any],
+                        component_predictors: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """What was actually scored, derived from the fitted objects.
+
+    A backtest artifact with no model identity is what let published accuracy
+    numbers come from a Ridge walk-forward while the served model was the
+    stacked GBM ensemble (AUDIT_REPORT.md #16). Derived, not hardcoded, so the
+    label tracks whatever the trainer built: base learner keys straight from
+    PositionModel.models, "stacked(RidgeCV meta)" only when a meta-learner was
+    actually fitted, and component mode reported as such.
     """
+    from config.settings import FEATURE_VERSION, FEATURE_VERSION_FILENAME
+
+    # The code's feature version and the persisted models' can differ only
+    # under the inspection override, but record both so an artifact can
+    # never claim a feature set its models were not trained on.
+    try:
+        models_version = (MODELS_DIR / FEATURE_VERSION_FILENAME).read_text(encoding="utf-8").strip()
+    except OSError:
+        models_version = None
+
+    per_position = {}
+    for pos, mw in (position_models or {}).items():
+        if mw is None:
+            comp = (component_predictors or {}).get(pos)
+            per_position[pos] = (f"component_predictor:{type(comp).__name__}"
+                                 if comp is not None else "component_predictor")
+            continue
+        pm = getattr(mw, "models", {}).get(1) or next(iter(getattr(mw, "models", {}).values()), None)
+        if pm is None:
+            per_position[pos] = "unknown"
+            continue
+        bases = sorted(k for k, m in getattr(pm, "models", {}).items() if m is not None)
+        combiner = ("stacked(RidgeCV meta)" if getattr(pm, "meta_learner", None) is not None
+                    else "weighted_blend")
+        horizons = sorted(getattr(mw, "models", {}).keys())
+        per_position[pos] = f"{combiner}[{'+'.join(bases)}] horizons={horizons}"
+    return {
+        "model_type": "per_position_stacked_ensemble",
+        "model_type_by_position": per_position,
+        "feature_version": str(FEATURE_VERSION),
+        "models_feature_version": models_version,
+    }
+
+
+def _evaluation_frame(test_season: int) -> pd.DataFrame:
+    """Raw outcomes to score against: every played game of `test_season` and
+    of the season before it (history for the persistence / trailing /
+    prior-season baselines), with the Vegas columns the implied-total
+    baseline reads, attached from the schedule table.
+
+    nflverse `spread_line` is the HOME team's expected margin (positive =
+    home favoured), so the home implied total is (total + spread) / 2 and
+    the away one is (total - spread) / 2.
+    """
+    from src.utils.database import DatabaseManager
+    db = DatabaseManager()
+    with db._get_connection() as conn:
+        stats = pd.read_sql_query(
+            "SELECT s.player_id, p.name, p.position, s.team, s.opponent, s.season, s.week, "
+            "s.fantasy_points FROM player_weekly_stats s JOIN players p ON p.player_id = s.player_id "
+            "WHERE s.season IN (?, ?) AND s.week <= 18 AND s.fantasy_points IS NOT NULL "
+            "AND p.position IN ('QB','RB','WR','TE')",
+            conn, params=[int(test_season) - 1, int(test_season)])
+        sched = pd.read_sql_query(
+            "SELECT season, week, home_team, away_team, spread_line, total_line "
+            "FROM schedule WHERE season IN (?, ?)",
+            conn, params=[int(test_season) - 1, int(test_season)])
+    home = pd.DataFrame({"season": sched.season, "week": sched.week, "team": sched.home_team,
+                         "spread": sched.spread_line,
+                         "implied_team_total": (sched.total_line + sched.spread_line) / 2,
+                         "game_total": sched.total_line})
+    away = pd.DataFrame({"season": sched.season, "week": sched.week, "team": sched.away_team,
+                         "spread": -sched.spread_line,
+                         "implied_team_total": (sched.total_line - sched.spread_line) / 2,
+                         "game_total": sched.total_line})
+    lines = pd.concat([home, away], ignore_index=True).drop_duplicates(["season", "week", "team"])
+    return stats.merge(lines, on=["season", "week", "team"], how="left")
+
+
+def run_backtest(test_season: int = None, weeks: Optional[List[int]] = None) -> Tuple[Dict, str]:
+    """Full-season walk-forward of the SERVING path against what actually happened.
+
+    For every week of the held-out season this calls the production entry
+    point, `NFLPredictor.predict(as_of=(season, week))` -- which truncates
+    history to games completed before that week and builds features exactly
+    the way the app does -- and scores the result against that week's raw
+    fantasy points. Alignment is correct by construction (a prediction made
+    as_of week w is for week w), and there is no second feature pipeline to
+    drift from training.
+
+    The path this replaced rebuilt features itself: on the test season alone
+    (lookback windows cold, prev_season_ppg NaN for everyone), without the
+    bounded scaling training applies (predictions ~5x off-scale, 2026-09-10),
+    and scored against the SAME row's points although the models predict the
+    next week's. Its only defence was a success-criteria verdict nothing read.
+
+    `weeks` limits the walk-forward (a quick check); default is every played
+    week. Cost is one predict() call per week, ~40s each.
+    """
+    import time as _time
     from src.utils.data_manager import DataManager
-    from src.models.data_loading import load_training_data
-    from src.models.feature_preparation import (
-        add_engineered_features,
-        add_advanced_features,
-    )
-    from src.features.utilization_score import (
-        recalculate_utilization_with_weights,
-        calculate_utilization_scores,
-        load_percentile_bounds,
-    )
-    from src.models.ensemble import EnsemblePredictor
-    from config.settings import POSITIONS, MODELS_DIR
-    
+    from src.predict import NFLPredictor
+    from config.settings import POSITIONS
+
     print("=" * 60)
-    print("RUNNING MODEL BACKTEST (PRODUCTION ENSEMBLE)")
+    print("SERVING-PATH BACKTEST (production ensemble, as_of walk-forward)")
     print("=" * 60)
-    
-    # Get data with automatic season selection (same as train.py). Test season is current season when in-season.
+
     dm = DataManager()
     train_seasons, actual_test_season = dm.get_train_test_seasons(test_season=test_season)
-    
-    # Strict unseen test: test season must not be in train
     assert actual_test_season not in train_seasons, (
         f"Test season {actual_test_season} must not be in train seasons {train_seasons}"
     )
-    
-    print(f"\nBacktest Configuration:")
-    print(f"  Training seasons: {train_seasons}")
-    print(f"  Test season: {actual_test_season} (unseen)")
-    
-    # Load data via same path as training (positions, min_games consistent with train.py)
-    train_data, test_data, _, _ = load_training_data(
-        positions=POSITIONS,
-        min_games=4,
-        test_season=actual_test_season,
-        n_train_seasons=None,
-        optimize_training_years=False,
-    )
-    
-    if test_data.empty:
-        print("No test data available for backtest")
+    frame = _evaluation_frame(actual_test_season)
+    test_rows = frame[frame["season"] == actual_test_season]
+    if test_rows.empty:
+        print(f"No played games for {actual_test_season}; nothing to score.")
         return {}, ""
-    
-    # Prepare test data with train-derived artifacts only (no fitting on test)
-    bounds_path = MODELS_DIR / "utilization_percentile_bounds.json"
-    percentile_bounds = load_percentile_bounds(bounds_path) if bounds_path.exists() else None
-    weights_path = MODELS_DIR / "utilization_weights.json"
-    util_weights = None
-    if weights_path.exists():
-        with open(weights_path, "r") as f:
-            util_weights = json.load(f)
-    test_data = calculate_utilization_scores(
-        test_data, team_df=pd.DataFrame(), weights=util_weights, percentile_bounds=percentile_bounds
-    )
-    if util_weights is not None:
-        test_data = recalculate_utilization_with_weights(test_data, util_weights)
-    # Add Vegas/game script and other external features (same as training pipeline)
-    try:
-        from src.data.external_data import add_external_features
-        test_data = add_external_features(test_data, seasons=list(test_data["season"].unique()))
-    except Exception as e:
-        # A silent failure here means this backtest eval quietly runs
-        # without Vegas/weather/game-script features and nobody would
-        # know from the results alone -- worth surfacing (GAPS.md §9
-        # audit; this is the same class of blind spot that produced a
-        # false "flat" conclusion for the rookie-features ablation
-        # earlier this project until traced back to a missing pipeline
-        # stage).
-        print(f"  WARNING: external (Vegas/weather) features failed to load for backtest eval: {e}")
-    test_data = add_advanced_features(add_engineered_features(test_data))
-    
-    # Create target columns for alignment with model expectations
-    for n_weeks in [1, 4, 18]:
-        test_data[f"target_{n_weeks}w"] = test_data.groupby(["player_id", "season"])["fantasy_points"].transform(
-            lambda x: x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
-        )
-    
-    # Generate predictions using the persisted production ensemble
-    print("\nGenerating predictions on test data (production ensemble)...")
-    predictor = EnsemblePredictor()
-    predictor.load_models(positions=POSITIONS)
-    if not predictor.is_loaded:
-        print("Warning: No persisted models found. Falling back to baseline (rolling average).")
-        test_data["predicted_points"] = test_data.groupby("player_id")["fantasy_points"].transform(
-            lambda x: x.shift(1).rolling(window=4, min_periods=1).mean()
-        )
-    else:
-        test_data = predictor.predict(test_data, n_weeks=1)
-    
-    # Run backtest
-    backtester = ModelBacktester()
-    test_data = backtester.calculate_confidence_intervals(
-        test_data,
-        pred_col="predicted_points",
-        actual_col="fantasy_points",
-        confidence=0.80,
-        lower_col="prediction_ci80_lower",
-        upper_col="prediction_ci80_upper",
-    )
-    test_data = backtester.calculate_confidence_intervals(
-        test_data,
-        pred_col="predicted_points",
-        actual_col="fantasy_points",
-        confidence=0.95,
-        lower_col="prediction_ci95_lower",
-        upper_col="prediction_ci95_upper",
-    )
-    results = backtester.backtest_season(
-        predictions=test_data,
-        actuals=test_data,
-        season=actual_test_season,
-        prediction_col='predicted_points',
-        actual_col='fantasy_points'
-    )
+    played_weeks = sorted(int(w) for w in test_rows["week"].unique())
+    weeks = sorted(int(w) for w in weeks) if weeks else played_weeks
+    partial_season = set(weeks) != set(played_weeks)
+    print(f"  Training seasons: {train_seasons}")
+    print(f"  Test season: {actual_test_season} (unseen), weeks {weeks[0]}-{weeks[-1]}")
 
-    # Metrics by utilization tier (for fantasy decision-making)
-    if "utilization_score" in test_data.columns and "predicted_points" in test_data.columns and "fantasy_points" in test_data.columns:
-        tiers = {
-            "elite (80+)": test_data["utilization_score"] >= 80,
-            "strong (70-79)": (test_data["utilization_score"] >= 70) & (test_data["utilization_score"] < 80),
-            "average (60-69)": (test_data["utilization_score"] >= 60) & (test_data["utilization_score"] < 70),
-            "below_avg (50-59)": (test_data["utilization_score"] >= 50) & (test_data["utilization_score"] < 60),
-            "low (<50)": test_data["utilization_score"] < 50,
-        }
-        by_tier = {}
-        for tier_name, mask in tiers.items():
-            if mask.sum() < 5:
-                continue
-            sub = test_data.loc[mask].dropna(subset=["fantasy_points", "predicted_points"])
-            if len(sub) < 5:
-                continue
-            by_tier[tier_name] = {
-                "n_samples": int(len(sub)),
-                "rmse": float(np.sqrt(mean_squared_error(sub["fantasy_points"], sub["predicted_points"]))),
-                "mae": float(mean_absolute_error(sub["fantasy_points"], sub["predicted_points"])),
-            }
-        if by_tier:
-            results["by_utilization_tier"] = by_tier
-    
-    # Add config for reproducibility and auditing
+    predictor = NFLPredictor()
+    if not predictor.initialize():
+        print("No persisted models found; nothing to evaluate.")
+        return {}, ""
+
+    ci_cols = ["prediction_ci80_lower", "prediction_ci80_upper",
+               "prediction_ci95_lower", "prediction_ci95_upper"]
+    preds = []
+    for week in weeks:
+        t0 = _time.perf_counter()
+        p = predictor.predict(n_weeks=1, top_n=10000, as_of=(actual_test_season, week))
+        if p is None or p.empty or "player_id" not in p.columns:
+            print(f"  {actual_test_season} wk {week}: no predictions")
+            continue
+        keep = ["player_id", "predicted_points"] + [c for c in ci_cols if c in p.columns]
+        p = p[keep].copy()
+        p["season"] = actual_test_season
+        p["week"] = week
+        preds.append(p)
+        print(f"  {actual_test_season} wk {week}: {len(p)} predictions ({_time.perf_counter() - t0:.0f}s)")
+    if not preds:
+        print("No predictions produced; nothing to score.")
+        return {}, ""
+    pred_df = pd.concat(preds, ignore_index=True).drop_duplicates(["player_id", "season", "week"])
+
+    merged = (frame.merge(pred_df, on=["player_id", "season", "week"], how="left")
+                   .sort_values(["player_id", "season", "week"], kind="mergesort")
+                   .reset_index(drop=True))
+    scored = merged[merged["predicted_points"].notna()].copy()
+    scored["actual_for_backtest"] = scored["fantasy_points"]
+
+    backtester = ModelBacktester()
+    results = backtester.backtest_season(
+        predictions=scored, actuals=scored, season=actual_test_season,
+        prediction_col="predicted_points", actual_col="fantasy_points",
+    )
+    if all(c in scored.columns for c in ci_cols[:2]):
+        ci = scored[["fantasy_points", "prediction_ci80_lower", "prediction_ci80_upper"]].dropna()
+        if len(ci):
+            results["confidence_band_coverage_10pt"] = float(
+                ((ci["fantasy_points"] >= ci["prediction_ci80_lower"])
+                 & (ci["fantasy_points"] <= ci["prediction_ci80_upper"])).mean() * 100)
+
     results["train_seasons"] = train_seasons
     results["test_season"] = actual_test_season
-    results["model_source"] = "production_ensemble" if predictor.is_loaded else "baseline"
+    results["model_source"] = "production_ensemble"
+    results["backtest_path"] = "serving_path_as_of_walk_forward"
+    results["weeks_evaluated"] = weeks
+    results["partial_season"] = partial_season   # a --weeks quick check is never the season headline
+    ens = getattr(predictor, "predictor", None)
+    position_models = getattr(ens, "position_models", {}) or {}
+    results.update(describe_model_type(position_models, getattr(ens, "component_predictors", None)))
+    results["feature_counts"] = {
+        pos: len(getattr(mw.models.get(1) or next(iter(mw.models.values()), None), "feature_names", []))
+        for pos, mw in position_models.items() if mw is not None and getattr(mw, "models", None)
+    }
     try:
         metadata_path = MODELS_DIR / "model_metadata.json"
         if metadata_path.exists():
@@ -1693,115 +1762,40 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
                 results["model_metadata"] = json.load(f)
     except Exception:
         pass
-    if predictor.is_loaded:
-        try:
-            fc = {}
-            for pos in POSITIONS:
-                if pos in predictor.position_models:
-                    pm = predictor.position_models[pos]
-                    m = pm.models.get(1) or list(pm.models.values())[0]
-                    fc[pos] = len(getattr(m, "feature_names", []))
-                elif pos in predictor.single_week_models:
-                    fc[pos] = len(getattr(predictor.single_week_models[pos], "feature_names", []))
-            if fc:
-                results["feature_counts"] = fc
-        except Exception:
-            pass
-    
-    # Baseline comparison (model vs rolling-average baseline)
+
+    # Baselines are built from the FULL history frame (prior season included,
+    # NaN predictions where a week was not walked) and evaluated only on scored
+    # rows -- each routine masks on finite predictions itself. Built from the
+    # scored rows alone, a --weeks subset had no history and every trailing
+    # baseline collapsed to the same degenerate number.
     baseline_comp = backtester.compare_to_baseline(
-        test_data, actual_col='fantasy_points', pred_col='predicted_points'
-    )
+        merged, actual_col="fantasy_points", pred_col="predicted_points")
     if "error" not in baseline_comp:
         results["baseline_comparison"] = baseline_comp
-        print("\nBaseline comparison: model vs rolling 4-week average")
-        print(f"  Model RMSE: {baseline_comp['model']['rmse']}  Baseline RMSE: {baseline_comp['baseline']['rmse']}")
-        print(f"  Improvement: {baseline_comp['improvement']['rmse_pct']}% RMSE reduction")
-
-    # Multiple naive baselines (persistence, season avg, position avg) per requirements
     multi_baseline = backtester.compare_to_multiple_baselines(
-        test_data, actual_col='fantasy_points', pred_col='predicted_points'
-    )
+        merged, actual_col="fantasy_points", pred_col="predicted_points")
     if "error" not in multi_baseline:
         results["multiple_baseline_comparison"] = multi_baseline
+    try:
+        from src.evaluation.baselines import compare_model_to_baselines, format_baseline_report
+        if len(scored) >= 30:
+            bl = compare_model_to_baselines(merged, merged["predicted_points"], target_col="fantasy_points")
+            results["strong_baseline_comparison"] = bl
+            print(f"\n{format_baseline_report(bl)}")
+    except Exception as e:
+        print(f"  Strong baseline comparison skipped: {e}")
 
-    # Expert consensus benchmark when a CSV is available in data/.
-    expert_csv = DATA_DIR / "expert_consensus.csv"
-    if expert_csv.exists():
-        expert_comp = backtester.compare_to_expert_consensus(
-            test_data,
-            expert_csv_path=str(expert_csv),
-            actual_col="fantasy_points",
-            pred_col="predicted_points",
-            player_key="name",
-        )
-        if "error" not in expert_comp:
-            results["expert_comparison"] = expert_comp
+    results["success_criteria"] = check_success_criteria(results)
+    print(print_success_criteria_report(results["success_criteria"]))
 
-    # Success criteria (requirements Section VII - comprehensive)
-    m = results.get("metrics", {})
-    spearman_rho = m.get("spearman_rho")
-    within_10 = m.get("within_10_pts_pct")
-    within_7 = m.get("within_7_pts_pct")
-    tier_acc = m.get("tier_classification_accuracy")
-    mape = m.get("mape")
-
-    # Season stability: check no week has >20% worse RMSE than season average
-    weekly_rmse = [results["by_week"][w].get("rmse", 0) for w in results.get("by_week", {}) if results["by_week"][w].get("rmse")]
-    avg_weekly_rmse = np.mean(weekly_rmse) if weekly_rmse else 0
-    max_weekly_rmse = max(weekly_rmse) if weekly_rmse else 0
-    stability_ok = (max_weekly_rmse <= avg_weekly_rmse * 1.20) if avg_weekly_rmse > 0 else True
-
-    # Confidence interval calibration: % of actuals covered by calibrated 80% interval.
-    ci_mask = test_data[["fantasy_points", "prediction_ci80_lower", "prediction_ci80_upper"]].dropna()
-    if len(ci_mask) > 0:
-        ci_coverage = float(
-            ((ci_mask["fantasy_points"] >= ci_mask["prediction_ci80_lower"])
-             & (ci_mask["fantasy_points"] <= ci_mask["prediction_ci80_upper"])).mean() * 100
-        )
-    else:
-        ci_coverage = within_10
-
-    results["success_criteria"] = {
-        "spearman_gt_065": spearman_rho is not None and spearman_rho > 0.65,
-        "spearman_rho": spearman_rho,
-        "within_10_pts_pct_ge_80": within_10 is not None and within_10 >= 80.0,
-        "within_10_pts_pct": within_10,
-        "within_7_pts_pct_ge_70": within_7 is not None and within_7 >= 70.0,
-        "within_7_pts_pct": within_7,
-        "mape_lt_25": mape is not None and mape < 25.0,
-        "mape": mape,
-        "tier_accuracy_ge_075": tier_acc is not None and tier_acc >= 0.75,
-        "tier_accuracy": tier_acc,
-        "beat_all_baselines_by_20_pct": results.get("multiple_baseline_comparison", {}).get("model_beats_all_internal_by_20_pct", False),
-        "beat_all_baselines_by_25_pct": results.get("multiple_baseline_comparison", {}).get("model_beats_all_internal_by_25_pct", False),
-        "model_has_real_edge": results.get("multiple_baseline_comparison", {}).get("status", {}).get("model_has_real_edge", False),
-        "beat_primary_baseline_by_25_pct": (
-            baseline_comp.get("improvement", {}).get("rmse_pct") >= 25.0
-            if "error" not in baseline_comp else False
-        ),
-        "season_stability_ok": stability_ok,
-        "max_weekly_rmse": round(max_weekly_rmse, 2) if max_weekly_rmse else None,
-        "avg_weekly_rmse": round(avg_weekly_rmse, 2) if avg_weekly_rmse else None,
-        "confidence_band_coverage_10pt": ci_coverage,
-        "confidence_band_target_882": ci_coverage is not None and ci_coverage >= 88.2,
-    }
-    results["confidence_band_coverage_10pt"] = ci_coverage
-
-    # Generate report
     report = backtester.generate_report(results)
-    if results.get("baseline_comparison"):
-        bc = results["baseline_comparison"]
-        report += "\n\n" + "-" * 70 + "\nBASELINE COMPARISON (Model vs Rolling 4-Week Average)\n" + "-" * 70
-        report += f"\n  Model:   RMSE={bc['model']['rmse']}  MAE={bc['model']['mae']}  R²={bc['model']['r2']}"
-        report += f"\n  Baseline: RMSE={bc['baseline']['rmse']}  MAE={bc['baseline']['mae']}  R²={bc['baseline']['r2']}"
-        report += f"\n  Improvement: {bc['improvement']['rmse_pct']}% RMSE reduction, R² gain {bc['improvement']['r2_gain']}"
-        report += "\n" + "=" * 70
     print(report)
-    
-    # Save results (includes train_seasons, test_season, baseline_comparison)
+
     backtester.save_results(results)
-    
+    if not results["trust"]["trusted"]:
+        print("Skipping advanced_model_results.json and visualizations: artifact is untrusted.")
+        return results, report
+
     # Write app-compatible backtest_results for advanced_model_results.json
     backtest_results_app = {}
     for pos, pm in results.get("by_position", {}).items():
@@ -1833,7 +1827,7 @@ def run_backtest(test_season: int = None) -> Tuple[Dict, str]:
     viz = ValidationVisualizer()
     
     charts = []
-    charts.append(viz.create_prediction_scatter(test_data, 'fantasy_points', 'predicted_points'))
+    charts.append(viz.create_prediction_scatter(scored, 'fantasy_points', 'predicted_points'))
     charts.append(viz.create_accuracy_by_position(results))
     charts.append(viz.create_weekly_accuracy_trend(results))
     charts.append(viz.create_ranking_accuracy_chart(results))
@@ -2568,10 +2562,12 @@ if __name__ == "__main__":
     parser.add_argument("--season", type=int, default=None, help="Season to backtest (default: latest)")
     parser.add_argument("--multi-season", type=int, default=0, metavar="N",
                         help="Run backtest on last N seasons and report mean ± std (e.g. 3)")
+    parser.add_argument("--weeks", type=int, nargs="+", default=None,
+                        help="Only walk these weeks (quick check); default: every played week")
     
     args = parser.parse_args()
     
     if args.multi_season > 0:
         run_multi_season_backtest(n_seasons=args.multi_season)
     else:
-        results, report = run_backtest(args.season)
+        results, report = run_backtest(args.season, weeks=args.weeks)

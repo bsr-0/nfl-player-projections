@@ -502,6 +502,12 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     results["train_seasons"] = train_seasons
     results["test_season"] = actual_test_season
     results["model_source"] = "production_ensemble"
+    from src.evaluation.backtester import describe_model_type
+    results.update(describe_model_type(trainer.trained_models, trainer.component_predictors))
+    # feature_version.txt is written at the very end of training, so the
+    # on-disk value describe_model_type read is the PREVIOUS run's; the
+    # models scored here were just built at the code's version.
+    results["models_feature_version"] = str(FEATURE_VERSION)
     results["feature_counts"] = {
         pos: (
             len(getattr(trainer.component_predictors.get(pos), "feature_names", []))
@@ -750,8 +756,12 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         "model_drift": results.get("model_drift"),
         "confidence_band_coverage_10pt": results.get("confidence_band_coverage_10pt"),
     }
-    with open(app_results_path, "w") as f:
-        json.dump(app_payload, f, indent=2, default=str)
+    if results.get("trust", {}).get("trusted", False):
+        with open(app_results_path, "w") as f:
+            json.dump(app_payload, f, indent=2, default=str)
+    else:
+        print(f"  NOT writing {app_results_path.name}: backtest artifact is untrusted "
+              f"({'; '.join(results.get('trust', {}).get('reasons', ['no trust verdict']))})")
     print(f"\nBacktest complete. App results written to {app_results_path.name}")
 
     # Remove stale secondary result files that may show misleading metrics

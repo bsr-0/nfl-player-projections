@@ -43,7 +43,8 @@ def copy_board_data() -> None:
 POSITIONS = ["QB", "RB", "WR", "TE"]
 
 
-def latest_backtest_2025() -> Path:
+def latest_ts_backtest_2025() -> Path:
+    """Latest Ridge/GBM expanding-window walk-forward (ts_backtester.py)."""
     candidates = sorted(BACKTEST_DIR.glob("ts_backtest_2025_*.json"))
     candidates = [c for c in candidates if not c.name.endswith("_predictions.csv")]
     if not candidates:
@@ -51,21 +52,71 @@ def latest_backtest_2025() -> Path:
     return candidates[-1]
 
 
-def build_backtest_summary() -> dict:
-    path = latest_backtest_2025()
-    raw = json.loads(path.read_text())
+def latest_served_ensemble_backtest_2025() -> Path | None:
+    """Latest full-season backtest of the PERSISTED production ensemble
+    (backtester.run_backtest / train.py's post-training backtest), i.e. the
+    model the app actually serves."""
+    for path in sorted(BACKTEST_DIR.glob("backtest_2025_*.json"), reverse=True):
+        if "UNTRUSTED" in path.name or "PARTIAL" in path.name:
+            continue
+        try:
+            raw = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if raw.get("model_source") != "production_ensemble":
+            continue
+        # Refuse an artifact its own producer flagged as off-scale (see
+        # backtester.assess_artifact_trust); an old artifact with no verdict
+        # predates the gate and is accepted.
+        if raw.get("trust", {}).get("trusted", True) is False:
+            continue
+        if raw.get("partial_season"):          # a --weeks quick check, not a season
+            continue
+        return path
+    return None
 
-    dq = raw.get("decision_quality", {})
+
+def build_backtest_summary() -> dict:
+    """Headline accuracy comes from the served ensemble's own backtest, with
+    the model identity recorded next to it. The Ridge walk-forward is kept,
+    labelled, for its decision-quality (lineup) analysis, which the ensemble
+    backtest does not compute.
+
+    It used to take the newest ts_backtest_2025_*.json regardless of model:
+    that backtester runs Ridge by default and never recorded model_type, so
+    the published numbers were a different model's than the one served
+    (AUDIT_REPORT.md #16).
+    """
+    ts_path = latest_ts_backtest_2025()
+    ts_raw = json.loads(ts_path.read_text())
+    served_path = latest_served_ensemble_backtest_2025()
+    served_raw = json.loads(served_path.read_text()) if served_path else None
+
+    headline = served_raw if served_raw is not None else ts_raw
+    headline_path = served_path if served_raw is not None else ts_path
+
+    dq = ts_raw.get("decision_quality", {})
     weekly = dq.get("weekly_results", [])
 
     return {
-        "source_file": path.name,
-        "backtest_date": raw.get("backtest_date"),
-        "season": raw.get("season"),
-        "n_predictions": raw.get("n_predictions"),
-        "overall": raw.get("metrics", {}),
-        "by_position": raw.get("by_position", {}),
-        "baselines": raw.get("baselines", {}),
+        "source_file": headline_path.name,
+        "model_source": headline.get("model_source", "ts_backtester"),
+        "model_type": headline.get("model_type", "unknown"),
+        "model_type_by_position": headline.get("model_type_by_position"),
+        "feature_version": headline.get("feature_version"),
+        "is_served_model": served_raw is not None,
+        "backtest_date": headline.get("backtest_date"),
+        "season": headline.get("season"),
+        "n_predictions": headline.get("n_predictions"),
+        "overall": headline.get("metrics", {}),
+        "by_position": headline.get("by_position", {}),
+        "baselines": headline.get("baselines", {}),
+        "strong_baseline_comparison": headline.get("strong_baseline_comparison", {}),
+        "decision_quality_source": {
+            "source_file": ts_path.name,
+            "model_type": ts_raw.get("model_type", "ridge (unrecorded)"),
+            "backtest_date": ts_raw.get("backtest_date"),
+        },
         "decision_quality": {
             "n_weeks": dq.get("n_weeks"),
             "avg_model_score": dq.get("avg_model_score"),

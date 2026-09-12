@@ -393,6 +393,22 @@ def compare_model_to_baselines(
     if trailing_windows is None:
         trailing_windows = [3, 5]
 
+    # Every baseline below sorts internally and some (positional_rank via a
+    # merge) come back positionally aligned to THAT order while the arrays
+    # are compared positionally against the caller's order. Sorting once here
+    # and re-aligning the predictions makes label and positional alignment
+    # coincide. An unsorted frame used to produce misaligned baselines and a
+    # fictitious +38% "improvement" (serving-path backtest, 2026-09-11).
+    sorted_df = df.sort_values(["player_id", "season", "week"], kind="mergesort")
+    positions = df.index.get_indexer(sorted_df.index)
+    if isinstance(model_predictions, pd.Series):
+        # By label: a Series built from df (e.g. by a baseline function) can
+        # carry df's labels in a different order.
+        model_predictions = model_predictions.reindex(sorted_df.index).reset_index(drop=True)
+    else:
+        model_predictions = pd.Series(np.asarray(model_predictions)[positions])
+    df = sorted_df.reset_index(drop=True)
+
     actuals = df[target_col].values
     valid = np.isfinite(actuals) & np.isfinite(model_predictions.values)
 
