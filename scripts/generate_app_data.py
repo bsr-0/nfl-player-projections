@@ -38,13 +38,51 @@ def _apply_authoritative_positions(df: pd.DataFrame, pos_map: dict) -> pd.DataFr
     return out
 
 
+def _db_stats_fingerprint(db) -> dict:
+    """Cheap content fingerprint of player_weekly_stats.
+
+    created_at alone is not enough: the COALESCE upsert in insert_player_weekly_stats
+    updates rows in place, so a re-ingest that corrects values leaves COUNT and
+    MAX(created_at) unchanged. The stat sums move whenever values do.
+    """
+    try:
+        with db._get_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), ROUND(COALESCE(SUM(fantasy_points), 0), 1), "
+                "COALESCE(SUM(rushing_yards), 0), COALESCE(SUM(receiving_yards), 0), "
+                "COALESCE(SUM(fumbles_lost), 0), MAX(created_at) FROM player_weekly_stats"
+            ).fetchone()
+    except Exception as e:  # noqa: BLE001 -- a fingerprint failure must not block generation
+        return {"error": str(e)}
+    keys = ("n_rows", "sum_fp", "sum_rush_yds", "sum_rec_yds", "sum_fumbles_lost", "max_created_at")
+    return dict(zip(keys, [None if v is None else (float(v) if isinstance(v, float) else v) for v in row]))
+
+
+def _fingerprint_sidecar(cached_path: Path) -> Path:
+    return cached_path.with_suffix(".fingerprint.json")
+
+
+def _read_cache_fingerprint(cached_path: Path):
+    import json
+    try:
+        return json.loads(_fingerprint_sidecar(cached_path).read_text())
+    except (OSError, ValueError):
+        return None   # no sidecar (cache predates this check) -> treated as stale
+
+
+def _write_cache_fingerprint(cached_path: Path, fingerprint: dict) -> None:
+    import json
+    _fingerprint_sidecar(cached_path).write_text(json.dumps(fingerprint, indent=2, default=str))
+
+
 def generate_app_data(save_daily: bool = False) -> bool:
     """
     Generate feature data with ML predictions for the web app.
     
     1. Load data from DB (or cached_features if exists)
     2. Run NFLPredictor to get predictions
-    3. Merge predicted_points, projection_1w, projection_4w, projection_18w
+    3. Merge predicted_points, projection_1w, projection_4w (no projection_18w --
+       that horizon has no trained model; see MAX_TRAINED_HORIZON below)
     4. Save to data/cached_features.parquet (and optionally daily_predictions.parquet)
     
     Returns:
@@ -76,7 +114,14 @@ def generate_app_data(save_daily: bool = False) -> bool:
     authoritative_pos_map = _db.get_authoritative_player_positions()
     schedule_available_for_pred = _db.has_schedule_for_season(pred_season)
 
-    # Decide whether to use cache or rebuild from DB (use DB when cache is behind prediction target)
+    # Decide whether to use cache or rebuild from DB. Two staleness tests:
+    # behind the prediction target week, OR built from a different DB state.
+    # The week test alone let a re-ingest of past seasons (2025 was reloaded
+    # 2026-08-11..19, after the cache was built) go unnoticed for as long as
+    # the target week stood still: the board showed J.Allen's 2025 total as
+    # 226.6 (QB rushing zeroed) and every fumble-loser 2-6 points high,
+    # because those corrections only ever existed in the DB.
+    db_fingerprint = _db_stats_fingerprint(_db)
     full_df = None
     if cached_path.exists():
         cache_df = pd.read_parquet(cached_path)
@@ -86,11 +131,15 @@ def generate_app_data(save_daily: bool = False) -> bool:
             cache_latest_season < pred_season
             or (cache_latest_season == pred_season and cache_latest_week < pred_week)
         )
-        if not cache_behind:
+        cache_fingerprint = _read_cache_fingerprint(cached_path)
+        if cache_behind:
+            print(f"  Cache is behind prediction target ({pred_season} week {pred_week}); rebuilding from DB")
+        elif cache_fingerprint != db_fingerprint:
+            print(f"  Cache was built from a different player_weekly_stats state "
+                  f"(cache {cache_fingerprint}, DB {db_fingerprint}); rebuilding from DB")
+        else:
             full_df = cache_df
             print(f"  Loaded {len(full_df)} rows from cached_features.parquet")
-        else:
-            print(f"  Cache is behind prediction target ({pred_season} week {pred_week}); rebuilding from DB")
 
     # Load predictor and get predictions
     try:
@@ -104,15 +153,27 @@ def generate_app_data(save_daily: bool = False) -> bool:
         print(f"Could not load predictor: {e}")
         return False
     
-    # Get predictions for multiple horizons (1w, 4w, 18w, plus dynamic default)
+    # Get predictions for multiple horizons (1w, 4w, plus dynamic default).
+    # No horizon >= MAX_TRAINED_HORIZON is requested: TRAINING_HORIZONS
+    # (config/settings.py) only trains the 1-week and 4-week representative
+    # models, so MultiWeekModel has nothing registered for weeks
+    # horizon_long_threshold-18 ("long" in MultiWeekModel.horizon_groups) and
+    # now raises for them (see position_models.MultiWeekModel.predict)
+    # instead of silently substituting the 4-week model's unscaled output
+    # under an "18w" label, which is what produced e.g. QB predicted_ppg
+    # values off by roughly 4/18.
     from src.utils.nfl_calendar import get_current_nfl_week, is_offseason
+    from config.settings import MODEL_CONFIG
     week_info = get_current_nfl_week()
     cur_week_num = int(week_info.get("week_num", pred_week or 1) or 1)
     if cur_week_num < 1:
         cur_week_num = 1
-    # Default horizon: full season if offseason, else remaining weeks in season
-    default_horizon = 18 if is_offseason() else max(1, 18 - min(cur_week_num, 18) + 1)
-    horizons = [1, 4, 18]
+    MAX_TRAINED_HORIZON = MODEL_CONFIG.get("horizon_long_threshold", 9) - 1
+    # Default horizon: as much of the remaining season as is actually
+    # trained, capped at MAX_TRAINED_HORIZON weeks.
+    default_horizon = (MAX_TRAINED_HORIZON if is_offseason()
+                        else min(MAX_TRAINED_HORIZON, max(1, 18 - min(cur_week_num, 18) + 1)))
+    horizons = [1, 4]
     if default_horizon not in horizons:
         horizons.append(default_horizon)
     pred_dfs = {}
@@ -129,6 +190,11 @@ def generate_app_data(save_daily: bool = False) -> bool:
                     cols.append("home_away")
                 if "predicted_utilization" in df.columns:
                     cols.append("predicted_utilization")
+                # Availability is reported beside the prediction, not folded
+                # into it (see NFLPredictor._attach_injury_availability).
+                for extra in ("expected_points", "injury_adjustment"):
+                    if extra in df.columns:
+                        cols.append(extra)
                 pred_dfs[n_weeks] = df[[c for c in cols if c in df.columns]].copy()
                 pred_dfs[n_weeks] = pred_dfs[n_weeks].rename(
                     columns={"predicted_points": f"projection_{n_weeks}w"}
@@ -232,12 +298,12 @@ def generate_app_data(save_daily: bool = False) -> bool:
     # Optional: upcoming week label for app (e.g. "Super Bowl")
     from src.utils.nfl_calendar import get_week_label
     upcoming_label = get_week_label(pred_week, pred_season)
-    if is_offseason():
-        default_label = "Full Season Projections"
-    else:
-        start_wk = int(pred_week or cur_week_num or 1)
-        start_wk = max(1, min(start_wk, 18))
-        default_label = f"Rest of Season (Weeks {start_wk}\u201318)"
+    start_wk = int(pred_week or cur_week_num or 1)
+    start_wk = max(1, min(start_wk, 18))
+    end_wk = start_wk + default_horizon - 1
+    # Honest label: only claims the horizon actually predicted
+    # (MAX_TRAINED_HORIZON weeks), never "full season" through week 18.
+    default_label = f"Weeks {start_wk}\u2013{end_wk}" if end_wk > start_wk else f"Week {start_wk}"
     default_horizon_label = f"{pred_season} Season \u00b7 {default_label}"
     data_dir.mkdir(parents=True, exist_ok=True)
     meta_path = data_dir / "upcoming_week_meta.json"
@@ -299,8 +365,9 @@ def generate_app_data(save_daily: bool = False) -> bool:
                 print(f"  Aligned team with current-season roster ({pred_season}, {len(roster_team)} players)")
         except Exception as e:
             print(f"  Current-season roster refresh skipped: {e}")
-        # Merge projection_4w and projection_18w from other horizons
-        for n_weeks in (4, 18):
+        # Merge projection_4w from the other trained horizon (see
+        # MAX_TRAINED_HORIZON above -- there is no projection_18w anymore).
+        for n_weeks in (4,):
             if n_weeks in pred_dfs and not pred_dfs[n_weeks].empty and f"projection_{n_weeks}w" in pred_dfs[n_weeks].columns:
                 merge_df = pred_dfs[n_weeks][["player_id", f"projection_{n_weeks}w"]].drop_duplicates(subset=["player_id"])
                 upcoming_rows = upcoming_rows.merge(merge_df, on="player_id", how="left")
@@ -322,7 +389,8 @@ def generate_app_data(save_daily: bool = False) -> bool:
             upcoming_rows["team_next_season"] = np.nan
             print(f"  Next-season roster skipped: {e}")
         # Ensure projection_* and team_next_season exist in full_df so concat preserves them
-        for col in ["projection_1w", "projection_4w", "projection_18w", "team_next_season"]:
+        for col in ["projection_1w", "projection_4w", "team_next_season",
+                    "expected_points", "injury_adjustment"]:
             if col not in full_df.columns:
                 full_df[col] = np.nan
         # Ensure all columns from full_df exist in upcoming_rows (NaN for display-only rows)
@@ -354,12 +422,21 @@ def generate_app_data(save_daily: bool = False) -> bool:
                     full_df = full_df[~pred_week_mask]
         full_df = pd.concat([full_df, upcoming_rows], ignore_index=True)
         print(f"  Added {len(upcoming_rows)} prediction-target rows for {pred_season} week {pred_week}")
-        # Validation: log that 4w/18w differ from 1w
-        if "projection_1w" in upcoming_rows.columns and "projection_18w" in upcoming_rows.columns:
+        # Validation: log that 4w differs from 1w
+        if "projection_1w" in upcoming_rows.columns and "projection_4w" in upcoming_rows.columns:
             u1 = upcoming_rows["projection_1w"].dropna()
-            u18 = upcoming_rows["projection_18w"].dropna()
-            if len(u1) > 0 and len(u18) > 0:
-                print(f"  Validation: projection_1w range [{u1.min():.1f}, {u1.max():.1f}], projection_18w range [{u18.min():.1f}, {u18.max():.1f}]")
+            u4 = upcoming_rows["projection_4w"].dropna()
+            if len(u1) > 0 and len(u4) > 0:
+                print(f"  Validation: projection_1w range [{u1.min():.1f}, {u1.max():.1f}], projection_4w range [{u4.min():.1f}, {u4.max():.1f}]")
+
+    # projection_18w is retired (see MAX_TRAINED_HORIZON above) but a cache
+    # or daily_predictions file built before this fix can still carry stale
+    # values for it (e.g. old rows where it was fabricated as
+    # projection_1w * 18) that this run's `if col not in full_df.columns`
+    # guards never touch, since the column already exists. Drop it outright
+    # rather than let it persist as a landmine for anything that still reads
+    # this file expecting a real 18-week number.
+    full_df = full_df.drop(columns=["projection_18w"], errors="ignore")
 
     # Save (atomic write: temp file then rename to prevent corruption on crash)
     import tempfile, os
@@ -378,6 +455,7 @@ def generate_app_data(save_daily: bool = False) -> bool:
             raise
 
     _atomic_save(full_df, cached_path)
+    _write_cache_fingerprint(cached_path, db_fingerprint)
     print(f"  Saved to {cached_path}")
 
     if save_daily:
