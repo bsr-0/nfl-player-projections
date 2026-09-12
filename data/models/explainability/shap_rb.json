@@ -3,43 +3,43 @@
   "top_shap_features": [
     {
       "feature": "contract_apy_rank",
-      "mean_abs_shap": 0.07989029340687828
-    },
-    {
-      "feature": "snap_share_pct_roll3_mean",
-      "mean_abs_shap": 0.04029393199844576
-    },
-    {
-      "feature": "prev_season_ppg",
-      "mean_abs_shap": 0.014959362767858433
-    },
-    {
-      "feature": "rush_share_pct_roll3_mean",
-      "mean_abs_shap": 0.009932888001813302
+      "mean_abs_shap": 0.046031494167448186
     },
     {
       "feature": "snap_share_accel",
-      "mean_abs_shap": 0.007327220365969001
+      "mean_abs_shap": 0.04221425404316246
     },
     {
-      "feature": "fp_volatility_roll5",
-      "mean_abs_shap": 0.00701124227358335
+      "feature": "rush_share_pct_roll3_mean",
+      "mean_abs_shap": 0.02449643191973395
     },
     {
-      "feature": "fp_late6_vs_season",
-      "mean_abs_shap": 0.006242529320607926
+      "feature": "snap_share_pct_roll3_mean",
+      "mean_abs_shap": 0.014097801102570407
+    },
+    {
+      "feature": "prev_season_ppg",
+      "mean_abs_shap": 0.013910745822019465
     },
     {
       "feature": "spread",
-      "mean_abs_shap": 0.006046572687372402
+      "mean_abs_shap": 0.013111128332370185
     },
     {
-      "feature": "bayesian_prior_ppg",
-      "mean_abs_shap": 0.0058735287091598145
+      "feature": "targets_roll3_mean",
+      "mean_abs_shap": 0.011950878389760687
     },
     {
-      "feature": "wind_speed_mph",
-      "mean_abs_shap": 0.005297799900591853
+      "feature": "yards_per_carry_roll3_mean",
+      "mean_abs_shap": 0.009111237189043142
+    },
+    {
+      "feature": "speed_score",
+      "mean_abs_shap": 0.008369067847870853
+    },
+    {
+      "feature": "rb_ybc_avg_roll3_mean",
+      "mean_abs_shap": 0.006278669404879869
     }
   ]
 }

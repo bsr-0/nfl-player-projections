@@ -1,6 +1,6 @@
 {
-  "target_definition": "PPR fantasy points \u2014 awaiting 2026 NFL schedule",
-  "training_data_range": "2018-2025",
+  "target_definition": "PPR fantasy points \u2014 ML model predictions for 2026 season",
+  "training_data_range": "2018-2024",
   "positions": [
     "QB",
     "RB",
@@ -10,132 +10,238 @@
   "schedule_incorporated": true,
   "upcoming_season": 2026,
   "prev_season": 2025,
-  "has_ml_predictions": false,
+  "has_ml_predictions": true,
   "version": "v2.0.0",
-  "last_updated": "2026-08-19T13:49:33.201155",
-  "training_date": "2026-08-19T13:49:33.201155",
-  "test_season": 2026,
+  "last_updated": "2026-09-10T23:22:42.354051",
+  "training_date": "2026-09-10T23:22:42.354051",
+  "test_season": 2025,
   "n_features_per_position": {
-    "RB": 64,
-    "WR": 67,
-    "TE": 65
+    "QB": 442,
+    "RB": 67,
+    "WR": 70,
+    "TE": 68
   },
   "training_metrics": {},
   "backtest_results": {
     "QB": {
-      "rmse": 14.88,
-      "mae": 12.42,
-      "r2": -2.112,
-      "mape": 96.2,
-      "correlation": 0.241,
-      "directional_accuracy_pct": 55.0,
-      "within_3_pts_pct": 13.6,
-      "within_5_pts_pct": 22.1,
-      "within_7_pts_pct": 31.3,
-      "within_10_pts_pct": 43.2,
-      "spearman_rho": 0.241,
-      "tier_classification_accuracy": 0.241,
-      "boom_bust": {
-        "boom_prevalence": 0.21689259645464026,
-        "bust_prevalence": 0.17413972888425444,
-        "boom_precision": 0.0,
-        "boom_recall": 0.0,
-        "boom_f1": 0.0,
-        "bust_precision": 0.19828641370869032,
-        "bust_recall": 0.9700598802395209,
-        "bust_f1": 0.32926829268292684
-      },
-      "vor_rank_correlation": 0.22,
-      "mae_rmse_ratio": 0.835,
-      "spearman_top50": 0.241
-    },
-    "RB": {
-      "rmse": 6.29,
-      "mae": 4.49,
-      "r2": 0.289,
-      "mape": 63.0,
-      "correlation": 0.559,
-      "directional_accuracy_pct": 74.5,
-      "within_3_pts_pct": 44.7,
-      "within_5_pts_pct": 68.5,
-      "within_7_pts_pct": 83.3,
-      "within_10_pts_pct": 91.1,
-      "spearman_rho": -0.147,
-      "tier_classification_accuracy": 0.51,
-      "boom_bust": {
-        "boom_prevalence": 0.07981927710843373,
-        "bust_prevalence": 0.3772590361445783,
-        "boom_precision": 0.0,
-        "boom_recall": 0.0,
-        "boom_f1": 0.0,
-        "bust_precision": 0.6373390557939914,
-        "bust_recall": 0.592814371257485,
-        "bust_f1": 0.6142709410548087
-      },
-      "vor_rank_correlation": 0.577,
-      "mae_rmse_ratio": 0.714,
-      "spearman_top50": -0.147
-    },
-    "WR": {
-      "rmse": 6.16,
-      "mae": 4.49,
-      "r2": 0.212,
-      "mape": 67.2,
-      "correlation": 0.49,
-      "directional_accuracy_pct": 72.8,
-      "within_3_pts_pct": 44.0,
-      "within_5_pts_pct": 69.9,
-      "within_7_pts_pct": 82.0,
-      "within_10_pts_pct": 89.9,
-      "spearman_rho": -0.061,
-      "tier_classification_accuracy": 0.519,
-      "boom_bust": {
-        "boom_prevalence": 0.07345175228036485,
-        "bust_prevalence": 0.40950552088334136,
-        "boom_precision": 0.0,
-        "boom_recall": 0.0,
-        "boom_f1": 0.0,
-        "bust_precision": 0.6,
-        "bust_recall": 0.5732708089097304,
-        "bust_f1": 0.5863309352517986
-      },
-      "vor_rank_correlation": 0.467,
-      "mae_rmse_ratio": 0.73,
-      "spearman_top50": -0.061
+      "rmse": 8.32,
+      "mae": 6.87,
+      "r2": 0.207,
+      "mape": 104.4,
+      "directional_accuracy_pct": 66.7,
+      "within_5_pts_pct": 39.2,
+      "within_7_pts_pct": 55.3,
+      "within_10_pts_pct": 76.4,
+      "spearman_rho": 0.004
     },
     "TE": {
-      "rmse": 5.4,
-      "mae": 3.83,
-      "r2": 0.097,
-      "mape": 57.5,
-      "correlation": 0.43,
-      "directional_accuracy_pct": 64.5,
-      "within_3_pts_pct": 53.1,
-      "within_5_pts_pct": 74.2,
-      "within_7_pts_pct": 85.9,
-      "within_10_pts_pct": 93.0,
-      "spearman_rho": 0.14,
-      "tier_classification_accuracy": 0.562,
-      "boom_bust": {
-        "boom_prevalence": 0.04092526690391459,
-        "bust_prevalence": 0.46708185053380785,
-        "boom_precision": 0.0,
-        "boom_recall": 0.0,
-        "boom_f1": 0.0,
-        "bust_precision": 0.5990712074303406,
-        "bust_recall": 0.7371428571428571,
-        "bust_f1": 0.6609735269000854
-      },
-      "vor_rank_correlation": 0.424,
-      "mae_rmse_ratio": 0.711,
-      "spearman_top50": 0.14
+      "rmse": 4.72,
+      "mae": 3.03,
+      "r2": 0.364,
+      "mape": 53.5,
+      "directional_accuracy_pct": 79.6,
+      "within_5_pts_pct": 80.2,
+      "within_7_pts_pct": 88.7,
+      "within_10_pts_pct": 95.4,
+      "spearman_rho": 0.129
+    },
+    "RB": {
+      "rmse": 6.43,
+      "mae": 4.57,
+      "r2": 0.387,
+      "mape": 69.5,
+      "directional_accuracy_pct": 76.6,
+      "within_5_pts_pct": 68.5,
+      "within_7_pts_pct": 80.1,
+      "within_10_pts_pct": 89.7,
+      "spearman_rho": 0.181
+    },
+    "WR": {
+      "rmse": 5.97,
+      "mae": 4.26,
+      "r2": 0.326,
+      "mape": 75.6,
+      "directional_accuracy_pct": 76.6,
+      "within_5_pts_pct": 71.0,
+      "within_7_pts_pct": 80.4,
+      "within_10_pts_pct": 90.1,
+      "spearman_rho": -0.162
     }
   },
-  "top_features": {},
+  "top_features": {
+    "QB": [
+      {
+        "feature": "player_emb_1",
+        "importance": 57.760584178148456
+      },
+      {
+        "feature": "player_emb_0",
+        "importance": 33.01000441219395
+      },
+      {
+        "feature": "player_emb_6",
+        "importance": 28.05676365177965
+      },
+      {
+        "feature": "snap_share",
+        "importance": 26.287307371771238
+      },
+      {
+        "feature": "team_a_points_per_drive",
+        "importance": 26.003501832264888
+      },
+      {
+        "feature": "prev_season_ppg",
+        "importance": 22.757269774815168
+      },
+      {
+        "feature": "player_emb_5",
+        "importance": 21.25288192735694
+      },
+      {
+        "feature": "ngs_avg_air_yards_to_sticks_roll3_mean",
+        "importance": 17.751884603508245
+      },
+      {
+        "feature": "td_rate_roll3_mean",
+        "importance": 15.502809153355347
+      },
+      {
+        "feature": "snap_count",
+        "importance": 15.264496661580996
+      }
+    ],
+    "RB": [
+      {
+        "feature": "snap_share_pct_roll3_mean",
+        "importance": 104.5883263909466
+      },
+      {
+        "feature": "contract_apy_rank",
+        "importance": 96.01282355343837
+      },
+      {
+        "feature": "prev_season_ppg",
+        "importance": 76.5245542403281
+      },
+      {
+        "feature": "yards_per_carry_roll3_mean",
+        "importance": 75.26175100452
+      },
+      {
+        "feature": "rush_share_pct_roll3_mean",
+        "importance": 69.05513171753442
+      },
+      {
+        "feature": "bayesian_prior_ppg",
+        "importance": 50.76943759479176
+      },
+      {
+        "feature": "snap_share_accel",
+        "importance": 43.75550643206523
+      },
+      {
+        "feature": "team_motion_rate",
+        "importance": 40.755558319029646
+      },
+      {
+        "feature": "availability_3yr",
+        "importance": 40.50534167133824
+      },
+      {
+        "feature": "rush_epa_per_play_roll3_mean",
+        "importance": 40.25580887884129
+      }
+    ],
+    "WR": [
+      {
+        "feature": "contract_apy_rank",
+        "importance": 75.00956973573174
+      },
+      {
+        "feature": "prev_season_ppg",
+        "importance": 71.024217392388
+      },
+      {
+        "feature": "availability_3yr",
+        "importance": 66.2547779437664
+      },
+      {
+        "feature": "snap_share_pct_roll3_mean",
+        "importance": 50.273257316626314
+      },
+      {
+        "feature": "yards_per_target_roll3_mean",
+        "importance": 49.50665783554615
+      },
+      {
+        "feature": "current_qb_epa_per_att",
+        "importance": 48.25339467410704
+      },
+      {
+        "feature": "receptions_roll3_mean",
+        "importance": 48.05853150377646
+      },
+      {
+        "feature": "pbp_pass_play_participation_pct_roll3_mean",
+        "importance": 46.53473382233263
+      },
+      {
+        "feature": "wopr_roll3",
+        "importance": 44.057427366102125
+      },
+      {
+        "feature": "snap_share_accel",
+        "importance": 43.00402638109201
+      }
+    ],
+    "TE": [
+      {
+        "feature": "pbp_pass_play_participation_pct_roll3_mean",
+        "importance": 90.3425130610676
+      },
+      {
+        "feature": "prev_season_ppg",
+        "importance": 69.51632820030783
+      },
+      {
+        "feature": "wopr_roll3",
+        "importance": 45.81523816337955
+      },
+      {
+        "feature": "contract_apy_rank",
+        "importance": 38.00778146245882
+      },
+      {
+        "feature": "team_motion_rate",
+        "importance": 36.25304363541661
+      },
+      {
+        "feature": "draft_pick",
+        "importance": 34.25577538957021
+      },
+      {
+        "feature": "team_pct_13_personnel_roll3_mean",
+        "importance": 29.754603431361133
+      },
+      {
+        "feature": "targets_roll3_mean",
+        "importance": 28.551598288828586
+      },
+      {
+        "feature": "availability_3yr",
+        "importance": 27.75463611579117
+      },
+      {
+        "feature": "rookie_draft_value",
+        "importance": 26.503046523602574
+      }
+    ]
+  },
   "methodology": {
     "model_type": "LightGBM ensemble with XGBoost and Ridge regression",
-    "training_window": "2018-2025",
-    "test_season": "2026",
+    "training_window": "2018-2024",
+    "test_season": "2025",
     "scoring_format": "PPR (1 point per reception)",
     "features_description": "50 features per position including utilization scores, rolling averages (3/5/8 week windows), lag features, team context, matchup quality, and advanced play-by-play metrics",
     "overfitting_prevention": [
@@ -152,5 +258,5 @@
       "Full season (18-week)"
     ]
   },
-  "data_basis_note": "The 2026 NFL schedule has not been released. Projections will appear once the schedule is available. No extrapolations are used. The Model Performance tab shows how the model performed on the 2025 season (out-of-sample)."
+  "data_basis_note": "All projections are ML model outputs for the 2026 season. Model performance on the 2025 held-out season is shown in the Model Performance tab."
 }

@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-30T05:47:58.079149+00:00",
+  "generated_at": "2026-09-12T04:39:29.071147+00:00",
   "status": "fail",
   "checks": {
     "freshness": {
-      "passed": true,
+      "passed": false,
       "expected": {
-        "season": 2025,
-        "week": 18
+        "season": 2026,
+        "week": 1
       },
       "observed": {
         "season": 2025,
