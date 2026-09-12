@@ -1,6 +1,7 @@
 """Data manager for automatic season selection and data availability."""
 import os
 import json
+import warnings
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -194,8 +195,15 @@ class DataManager:
             in_season = (current_season_has_weeks_played()
                          and self._season_has_completed_games(current_season))
 
-            # In-season: current season must be in DB and must be test season
-            if in_season and current_season not in available:
+            # In-season: current season must be in DB when it is going to be
+            # the (default) test season. A caller that names its own
+            # test_season is deliberately not testing on the current season,
+            # so its absence from the DB is not an error for them -- hit on
+            # 2026-09-10: one 2026 game played, nflverse weekly 404 and the
+            # PBP fallback failing, and this blocked `train --test-season 2025`
+            # (the split every served model has used) along with everything
+            # that calls auto_refresh_data() just to report a status.
+            if in_season and current_season not in available and test_season is None:
                 raise ValueError(
                     f"Current season {current_season} has completed games but is not in the database. "
                     "Run data refresh so current season is loaded from play-by-play (e.g. python -m src.data.auto_refresh)."
@@ -388,7 +396,6 @@ def auto_refresh_data(force_check: bool = False) -> Dict:
         refresher = NFLDataRefresher()
         refresh_result = refresher.refresh(force=False)
         if isinstance(refresh_result, dict) and refresh_result.get("blocked"):
-            import warnings
             warnings.warn(
                 "Auto-refresh data quality gates FAILED — proceeding with existing DB data. "
                 "Check the quality gate report for details.",
@@ -396,7 +403,6 @@ def auto_refresh_data(force_check: bool = False) -> Dict:
             )
     except Exception as e:
         # Non-fatal: proceed with whatever is in DB
-        import warnings
         warnings.warn(f"Auto-refresh load skipped: {e}", UserWarning)
     
     manager = DataManager()
@@ -409,14 +415,23 @@ def auto_refresh_data(force_check: bool = False) -> Dict:
     if latest:
         manager.ensure_schedule_loaded(latest)
     
-    # Train/test split uses DB seasons (so test set has data)
-    train_seasons, test_season = manager.get_train_test_seasons()
-    
+    # Default train/test split, for the status report only. The caller that
+    # actually trains computes its own split (with its own test_season) in
+    # data_loading.load_training_data, so a split that cannot be defaulted
+    # right now (current season has a completed game but its stats are not
+    # loadable yet -- 2026-09-10, one game played, nflverse 404) must not
+    # block training here.
+    try:
+        train_test_split = manager.get_train_test_seasons()
+    except ValueError as e:
+        warnings.warn(f"Default train/test split unavailable: {e}", UserWarning)
+        train_test_split = None
+
     return {
         "available_seasons": availability["available_seasons"],
         "latest_season": latest,
         "prediction_season": manager.get_prediction_season(),
-        "train_test_split": (train_seasons, test_season),
+        "train_test_split": train_test_split,
     }
 
 
@@ -428,6 +443,7 @@ if __name__ == "__main__":
     # Show auto-selected train/test split
     print("\nAuto-selected train/test split:")
     status = auto_refresh_data(force_check=True)
-    print(f"  Train seasons: {status['train_test_split'][0]}")
-    print(f"  Test season: {status['train_test_split'][1]}")
+    split = status["train_test_split"]
+    print(f"  Train seasons: {split[0] if split else 'unavailable (see warning)'}")
+    print(f"  Test season: {split[1] if split else 'unavailable (see warning)'}")
     print(f"  Prediction season: {status['prediction_season']}")

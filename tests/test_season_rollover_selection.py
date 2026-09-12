@@ -18,34 +18,68 @@ whatever the calendar calls today.
 """
 import pytest
 
-from config.settings import DB_PATH
+import config.settings as settings
+from src.utils import nfl_calendar
 from src.utils.data_manager import DataManager
+from src.utils.database import DatabaseManager
 
-pytestmark = pytest.mark.skipif(not DB_PATH.exists(), reason="needs the local database")
+# These tests used to read the LIVE database and assert "2026 has 272
+# scheduled games and no scores" -- true until the 2026 opener was played on
+# 2026-09-09, at which point all three failed although the code was right
+# (AUDIT_REPORT.md #19/#21: tests must not depend on DB_PATH state). They now
+# build the state they assert about.
 
 
-def test_completed_games_check_reads_scores_not_the_calendar():
+@pytest.fixture
+def schedule_db(tmp_path, monkeypatch):
+    """A private schedule table; season_has_completed_games reads DB_PATH."""
+    db = DatabaseManager(db_path=tmp_path / "test.db")
+    monkeypatch.setattr(settings, "DB_PATH", tmp_path / "test.db")
+    for week in range(1, 4):
+        db.insert_schedule({"season": 2025, "week": week, "home_team": "AAA", "away_team": "BBB",
+                            "home_score": 20, "away_score": 17})
+        db.insert_schedule({"season": 2026, "week": week, "home_team": "AAA", "away_team": "BBB"})
+    return db
+
+
+def test_completed_games_check_reads_scores_not_the_calendar(schedule_db):
     dm = DataManager()
-    assert dm._season_has_completed_games(2025) is True, "2025 is fully played"
+    assert dm._season_has_completed_games(2025) is True, "2025 has scored games"
     assert dm._season_has_completed_games(2026) is False, (
-        "2026 has 272 scheduled games and no scores; a season is in progress "
+        "2026 has scheduled games and no scores; a season is in progress "
         "when games have been PLAYED, not when a date passes week 1")
 
+    schedule_db.insert_schedule({"season": 2026, "week": 1, "home_team": "AAA", "away_team": "BBB",
+                                 "home_score": 13, "away_score": 10})
+    assert dm._season_has_completed_games(2026) is True, "one played game is enough"
 
-def test_unplayed_future_season_is_never_treated_as_completed():
+
+def test_unplayed_future_season_is_never_treated_as_completed(schedule_db):
     assert DataManager()._season_has_completed_games(2099) is False
 
 
-def test_selection_trains_on_all_completed_history_before_kickoff():
+@pytest.fixture
+def calendar_week_one_before_kickoff(monkeypatch):
+    """Week 1 of 2026 per the calendar, no 2026 game played, 2018-2025 in the DB."""
+    monkeypatch.setattr(DataManager, "get_available_seasons_from_db", lambda self: list(range(2018, 2026)))
+    monkeypatch.setattr(DataManager, "_season_has_completed_games", staticmethod(lambda season: False))
+    monkeypatch.setattr(nfl_calendar, "get_current_nfl_season", lambda today=None: 2026)
+    monkeypatch.setattr(nfl_calendar, "current_season_has_weeks_played", lambda today=None: True)
+    monkeypatch.setattr(nfl_calendar, "is_draft_prep_window", lambda today=None: False)
+    monkeypatch.setattr(nfl_calendar, "get_projection_season", lambda today=None: 2026)
+
+
+def test_selection_trains_on_all_completed_history_before_kickoff(calendar_week_one_before_kickoff):
     """The projection season is the test set; nothing completed is discarded."""
     train, test = DataManager().get_train_test_seasons()
+    assert test == 2026
     assert test not in train, f"test season {test} leaked into train"
     assert max(train) == test - 1, (
         f"train ends {max(train)} but test is {test}; a completed season is "
         f"being discarded from training")
 
 
-def test_selection_does_not_raise_before_kickoff():
+def test_selection_does_not_raise_before_kickoff(calendar_week_one_before_kickoff):
     """It previously raised, which blocked training entirely."""
     DataManager().get_train_test_seasons()
 
@@ -68,8 +102,9 @@ def test_data_loading_guard_uses_the_same_completed_games_rule():
         "load_training_data must gate on a played game, not the calendar")
 
 
-def test_one_implementation_of_the_completed_games_check():
+def test_one_implementation_of_the_completed_games_check(schedule_db):
     """Both call sites resolve to the calendar module, so they cannot drift."""
     from src.utils.nfl_calendar import season_has_completed_games
 
-    assert DataManager()._season_has_completed_games(2026) == season_has_completed_games(2026)
+    for season in (2025, 2026, 2099):
+        assert DataManager()._season_has_completed_games(season) == season_has_completed_games(season)

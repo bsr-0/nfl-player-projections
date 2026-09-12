@@ -201,8 +201,15 @@ class SeasonAwareTimeSeriesSplit:
             return
         unique_seasons = sorted(set(self.seasons))
         n_seasons = len(unique_seasons)
-        # Need at least n_splits + 1 seasons (1 test per fold + remainder for train)
-        if n_seasons < self.n_splits + 1:
+        # Need n_splits test seasons, plus the purge gap, plus at least one
+        # training season before the earliest test season. The old guard
+        # (n_splits + 1) ignored the gap: with 4 seasons, n_splits=3, gap=1
+        # the first fold had no training seasons left and was skipped, so
+        # split() yielded 2 folds while get_n_splits() promised 3 -- sklearn
+        # raises on that, and it killed the 2026-09-09 retrain in WR Ridge
+        # tuning. Fall back to a plain TimeSeriesSplit instead, which always
+        # yields exactly n_splits.
+        if n_seasons < self.n_splits + 1 + self.gap_seasons:
             yield from TimeSeriesSplit(n_splits=self.n_splits).split(X, y, groups)
             return
         # Allocate test seasons: last n_splits seasons each serve as a test season
@@ -220,7 +227,11 @@ class SeasonAwareTimeSeriesSplit:
                 yield train_idx, test_idx
 
     def get_n_splits(self, X=None, y=None, groups=None):
-        return self.n_splits
+        # Must agree with what split() actually yields (sklearn checks), so
+        # count the season-aware folds rather than trusting n_splits.
+        if self.seasons is None or (X is not None and len(self.seasons) != len(X)):
+            return self.n_splits
+        return sum(1 for _ in self.split(np.empty(len(self.seasons))))
 
 
 class _IdentityScaler:
@@ -789,16 +800,28 @@ class PositionModel:
         return raw_pred
     
     def _prepare_input(self, X: pd.DataFrame) -> np.ndarray:
-        """Prepare and scale input for prediction using training medians for imputation."""
+        """Prepare and scale input for prediction.
+
+        Zero-fills NaN/inf, matching what `fit()` actually trained on: `fit()`
+        computes `feature_medians` (kept for OTHER callers that fill an
+        entirely-absent column before calling predict -- see ensemble.py) but
+        zero-fills its own input, and `self.scaler` was fit on that zero-filled
+        data. This used to median-fill instead, so every persisted model was
+        served a systematically different value for every missing feature than
+        the one its scaler and learners were fit on -- on real per-position
+        feature matrices, missingness is 11-13% overall with some columns
+        (team_motion_rate, NGS fields) 80-95% missing, so this was not a rare
+        edge case.
+
+        An ablation (zero-fill vs median-fill vs native NaN passthrough for
+        the two boosters that support it) found no policy dominant across
+        positions -- zero-fill was tied-best or best on 3 of 4 -- so this is a
+        consistency fix to match the already-trained models, not a change
+        that needs a retrain to validate.
+        """
         X = X[self.feature_names] if set(self.feature_names).issubset(X.columns) else X.reindex(columns=self.feature_names)
-        X_clean = X.replace([np.inf, -np.inf], np.nan)
-        medians = getattr(self, 'feature_medians', {})
-        if medians:
-            X_clean = X_clean.fillna(medians)
-        X_clean = X_clean.fillna(0)  # fallback for any remaining NaN
-        X_np = np.asarray(X_clean.values, dtype=np.float64)
-        X_np = np.where(np.isfinite(X_np), X_np, 0)
-        X_np = np.nan_to_num(X_np, nan=0.0)
+        X_np = np.asarray(X.to_numpy(dtype=np.float64, copy=True))
+        X_np = np.where(np.isfinite(X_np), X_np, 0.0)
         return self.scaler.transform(X_np)
     
     def predict_with_uncertainty(self, X: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
@@ -990,7 +1013,9 @@ class PositionModel:
 
     @staticmethod
     def _subsample_for_tuning(X: np.ndarray, y: np.ndarray,
-                              max_samples: int = 8000) -> Tuple[np.ndarray, np.ndarray]:
+                              seasons: Optional[np.ndarray] = None,
+                              max_samples: int = 8000,
+                              ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
         """Subsample data for hyperparameter tuning to keep trial times reasonable.
 
         Uses stratified temporal sampling: keeps ALL recent data (last 60%)
@@ -999,21 +1024,32 @@ class PositionModel:
         This avoids double-stacking recency bias (recency weights + tail-only
         subsampling) that would over-specialize hyperparameters to a narrow
         temporal window.
+
+        Returns the season labels of the SAME rows. Callers used to take
+        `seasons[-len(X_tune):]` instead -- the last N rows of the full
+        frame, not the rows actually sampled -- so the season-aware CV saw a
+        label array that belonged to different rows and, for a big position
+        like WR, spanned only the last 4 seasons: the one count where
+        SeasonAwareTimeSeriesSplit(n_splits=3, gap=1) could yield 2 folds
+        while promising 3, which RidgeCV rejects and which killed the
+        2026-09-09 retrain.
         """
         if len(X) <= max_samples:
-            return X, y
+            return X, y, seasons
         # Keep last 60% of max_samples as the recent block
         recent_count = int(max_samples * 0.6)
         older_count = max_samples - recent_count
-        X_recent, y_recent = X[-recent_count:], y[-recent_count:]
-        # Sample from older data
-        X_old, y_old = X[:-recent_count], y[:-recent_count]
-        if len(X_old) > older_count:
+        n_old = len(X) - recent_count
+        keep = np.arange(n_old)
+        if n_old > older_count:
             rng = np.random.RandomState(42)
-            idx = rng.choice(len(X_old), size=older_count, replace=False)
-            idx.sort()  # maintain temporal order
-            X_old, y_old = X_old[idx], y_old[idx]
-        return np.vstack([X_old, X_recent]), np.concatenate([y_old, y_recent])
+            keep = rng.choice(n_old, size=older_count, replace=False)
+            keep.sort()  # maintain temporal order
+        idx = np.concatenate([keep, np.arange(n_old, len(X))])
+        seasons_sub = None
+        if seasons is not None and len(seasons) == len(X):
+            seasons_sub = np.asarray(seasons)[idx]
+        return X[idx], y[idx], seasons_sub
 
     def _tune_random_forest(self, X: np.ndarray, y: np.ndarray, n_trials: int,
                             seasons: Optional[np.ndarray] = None) -> Dict:
@@ -1024,8 +1060,7 @@ class PositionModel:
         """
         if not HAS_OPTUNA:
             return self._get_default_params().get("random_forest", {})
-        X_tune, y_tune = self._subsample_for_tuning(X, y)
-        seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
+        X_tune, y_tune, seasons_tune = self._subsample_for_tuning(X, y, seasons)
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
         gap = MODEL_CONFIG.get("cv_gap_seasons", 1)
         def objective(trial):
@@ -1059,8 +1094,7 @@ class PositionModel:
         """
         if not HAS_OPTUNA:
             return self._get_default_params().get("xgboost", {})
-        X_tune, y_tune = self._subsample_for_tuning(X, y)
-        seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
+        X_tune, y_tune, seasons_tune = self._subsample_for_tuning(X, y, seasons)
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
         gap = MODEL_CONFIG.get("cv_gap_seasons", 1)
         def objective(trial):
@@ -1108,8 +1142,7 @@ class PositionModel:
         if not HAS_OPTUNA:
             return self._get_default_params().get("ridge", {})
         from sklearn.linear_model import RidgeCV as _RidgeCV
-        X_tune, y_tune = self._subsample_for_tuning(X, y)
-        seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
+        X_tune, y_tune, seasons_tune = self._subsample_for_tuning(X, y, seasons)
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
         gap = MODEL_CONFIG.get("cv_gap_seasons", 1)
         cv_splitter = SeasonAwareTimeSeriesSplit(
@@ -1125,8 +1158,7 @@ class PositionModel:
         """Tune LightGBM hyperparameters with Huber loss for outlier robustness."""
         if not HAS_OPTUNA:
             return self._get_default_params().get("lightgbm", {})
-        X_tune, y_tune = self._subsample_for_tuning(X, y)
-        seasons_tune = seasons[-len(X_tune):] if seasons is not None and len(seasons) >= len(X_tune) else None
+        X_tune, y_tune, seasons_tune = self._subsample_for_tuning(X, y, seasons)
         tune_folds = min(MODEL_CONFIG["cv_folds"], 3)
         gap = MODEL_CONFIG.get("cv_gap_seasons", 1)
         def objective(trial):
@@ -1551,19 +1583,26 @@ class MultiWeekModel:
         return self
     
     def predict(self, X: pd.DataFrame, n_weeks: int) -> np.ndarray:
-        """Make predictions for specified number of weeks."""
-        if n_weeks not in self.models:
-            # Find closest available model
-            available = list(self.models.keys())
-            closest = min(available, key=lambda x: abs(x - n_weeks))
-            model = self.models[closest]
-        else:
-            model = self.models[n_weeks]
+        """Make predictions for specified number of weeks.
 
-        # Do not apply naive proportional scaling between horizons.
-        # Representative models (1w/4w/18w) are trained on horizon-specific
-        # targets (e.g., utilization mean vs fantasy-point sums), so linear
-        # week-ratio scaling introduces bias and semantic mismatch.
+        Raises if `n_weeks` has no trained model, rather than silently
+        substituting the closest available one. The old fallback served an
+        18-week request with the 4-week (or even 1-week) model's raw output
+        under the "projection_18w" label with no scaling -- callers divided
+        that by 18 for a per-game rate, producing numbers off by roughly the
+        ratio of the two horizons. Silent + wrong is worse than a caller
+        having to request a horizon that's actually trained; see
+        config.settings.TRAINING_HORIZONS and MultiWeekModel.horizon_groups.
+        """
+        if n_weeks not in self.models:
+            trained = sorted(self.models.keys())
+            raise ValueError(
+                f"{self.position} MultiWeekModel has no model trained for "
+                f"n_weeks={n_weeks} (trained: {trained}). Request one of "
+                f"those horizons instead of relying on an unscaled "
+                f"nearest-model substitute."
+            )
+        model = self.models[n_weeks]
         return model.predict(X)
     
     def save(self, filepath: Path = None):
