@@ -7,6 +7,10 @@ Covers:
   audit_feature_availability classify feature columns correctly.
 - src/data/external_data.py: InjuryDataLoader must drop injury reports
   modified after that week's kickoff (GAPS.md §7.6).
+- src/features/feature_engineering.py: FeatureEngineer._add_contract_features
+  must bound the applicable contract by year_signed <= season, and
+  _merge_injury_data_from_cache must apply the same kickoff-timing guard as
+  InjuryDataLoader, since it queries player_injuries directly.
 """
 import sys
 from pathlib import Path
@@ -201,3 +205,107 @@ class TestInjuryTimingGuard:
         result = InjuryDataLoader().get_player_injury_status(injuries)
 
         assert len(result) == 1
+
+
+class TestContractYearBoundedBySeason:
+    """A row for season S must never see a contract signed after S."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_contract_cache(self):
+        # _contract_lookup_cache is a class-level cache (shared across every
+        # FeatureEngineer instance in the process) -- restore it after each
+        # test so this stub data doesn't leak into other tests.
+        from src.features.feature_engineering import FeatureEngineer
+        original = FeatureEngineer._contract_lookup_cache
+        yield
+        FeatureEngineer._contract_lookup_cache = original
+
+    def test_historical_row_does_not_see_future_contract(self):
+        from src.features.feature_engineering import FeatureEngineer
+
+        FeatureEngineer._contract_lookup_cache = pd.DataFrame([
+            {"player_id": "P1", "year_signed": 2016, "final_year": 2018, "apy_rank": 0.2},
+            {"player_id": "P1", "year_signed": 2023, "final_year": 2026, "apy_rank": 0.95},
+        ])
+        fe = FeatureEngineer.__new__(FeatureEngineer)
+        df = pd.DataFrame({"player_id": ["P1", "P1", "P1"], "season": [2015, 2017, 2018]})
+
+        out = fe._add_contract_features(df.copy())
+
+        # 2015: before any contract was signed -- no lookahead into the 2016 deal.
+        assert out.loc[0, "contract_apy_rank"] == 0.5
+        assert out.loc[0, "is_contract_year"] == 0
+        # 2017/2018: the 2016 rookie deal applies, NOT the 2023 mega-deal.
+        assert out.loc[1, "contract_apy_rank"] == 0.2
+        assert out.loc[2, "contract_apy_rank"] == 0.2
+        assert out.loc[1, "is_contract_year"] == 0
+        assert out.loc[2, "is_contract_year"] == 1  # 2018 is the rookie deal's final year
+
+    def test_current_and_future_seasons_use_the_applicable_contract(self):
+        from src.features.feature_engineering import FeatureEngineer
+
+        FeatureEngineer._contract_lookup_cache = pd.DataFrame([
+            {"player_id": "P1", "year_signed": 2016, "final_year": 2018, "apy_rank": 0.2},
+            {"player_id": "P1", "year_signed": 2023, "final_year": 2026, "apy_rank": 0.95},
+        ])
+        fe = FeatureEngineer.__new__(FeatureEngineer)
+        df = pd.DataFrame({"player_id": ["P1", "P1"], "season": [2020, 2023]})
+
+        out = fe._add_contract_features(df.copy())
+
+        # 2020: no contract signed yet for that gap -- most recent PAST
+        # contract (2016 rookie deal) carries forward, not the future one.
+        assert out.loc[0, "contract_apy_rank"] == 0.2
+        # 2023: the new deal was just signed, so it now applies.
+        assert out.loc[1, "contract_apy_rank"] == 0.95
+
+
+class TestInjuryCacheKickoffGuard:
+    """_merge_injury_data_from_cache must kickoff-filter like InjuryDataLoader."""
+
+    @pytest.fixture
+    def _mock_schedule(self, monkeypatch):
+        schedule = pd.DataFrame({
+            "season": [2024], "week": [1], "gameday": ["2024-09-08"],
+            "gametime": ["13:00"], "home_team": ["DEN"], "away_team": ["BBB"],
+        })
+        # _cached_import memoizes by (kind, seasons) at module scope, so a
+        # different schedule fixture used by another test class for the same
+        # season (TestInjuryTimingGuard) would otherwise leak in here.
+        external_data.clear_season_import_cache()
+        monkeypatch.setattr(external_data.nfl, "import_schedules", lambda seasons: schedule)
+
+    def _insert_injury(self, db, date_modified, report_status="Out"):
+        with db._get_connection() as conn:
+            conn.execute(
+                "INSERT INTO player_injuries (player_id, season, week, team, "
+                "report_status, date_modified) VALUES (?, ?, ?, ?, ?, ?)",
+                ("P1", 2024, 1, "DEN", report_status, date_modified),
+            )
+            conn.commit()
+
+    def test_post_kickoff_report_is_dropped(self, db, monkeypatch, _mock_schedule):
+        from src.utils import database as db_mod
+        monkeypatch.setattr(db_mod, "DatabaseManager", lambda: db)
+        from src.features import feature_engineering as fe_mod
+        self._insert_injury(db, "2024-09-08T18:30:00Z")  # after 17:00 UTC kickoff
+
+        fe = fe_mod.FeatureEngineer.__new__(fe_mod.FeatureEngineer)
+        df = pd.DataFrame({"player_id": ["P1"], "season": [2024], "week": [1]})
+        out = fe._merge_injury_data_from_cache(df.copy())
+
+        assert out.loc[0, "injury_score"] == 1.0
+        assert out.loc[0, "is_injured"] == 0
+
+    def test_pre_kickoff_report_is_kept(self, db, monkeypatch, _mock_schedule):
+        from src.utils import database as db_mod
+        monkeypatch.setattr(db_mod, "DatabaseManager", lambda: db)
+        from src.features import feature_engineering as fe_mod
+        self._insert_injury(db, "2024-09-06T12:00:00Z", report_status="Questionable")
+
+        fe = fe_mod.FeatureEngineer.__new__(fe_mod.FeatureEngineer)
+        df = pd.DataFrame({"player_id": ["P1"], "season": [2024], "week": [1]})
+        out = fe._merge_injury_data_from_cache(df.copy())
+
+        assert out.loc[0, "injury_score"] == 0.50
+        assert out.loc[0, "is_injured"] == 1

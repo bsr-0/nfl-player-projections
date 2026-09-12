@@ -676,11 +676,8 @@ class FeatureEngineer:
         if "injury_score" not in df.columns:
             df["injury_score"] = 1.0
 
-        # Prior-season / season-to-date PPG proxy.  At week 1 of a
-        # new season this evaluates to the prior season's PPG — the
-        # canonical draft-time signal.  From week 2 onward it is a
-        # season-to-date partial mean.  See _add_prev_season_ppg for
-        # the exact semantics.
+        # Prior-season PPG: the player's most recent prior season with games,
+        # constant across the current season. See _add_prev_season_ppg.
         df = self._add_prev_season_ppg(df)
 
         # v19 Exp 3: prior season weeks 14-17 avg PPG — cold-start form signal for QBs.
@@ -724,37 +721,77 @@ class FeatureEngineer:
         self._update_feature_columns(df)
         return df
 
+    @staticmethod
+    def _prior_season_ppg_table(df: pd.DataFrame) -> pd.DataFrame:
+        """For every row of `df`, the player's most recent PRIOR season that
+        has scored games: its PPG (``prev_season_ppg``) and the mean PPG of
+        the player's scored seasons before that one
+        (``career_ppg_before_prev``). Returned positionally aligned to `df`.
+
+        Built at the (player, season) level and joined back with a backward
+        merge_asof on season (exact matches excluded), so the value is
+        constant across every week of a season, a season with no scored
+        games is skipped rather than carried, and a prediction-stub row for
+        a season with no games yet still resolves to the prior season.
+        """
+        out = pd.DataFrame({"prev_season_ppg": np.nan,
+                            "career_ppg_before_prev": np.nan},
+                           index=range(len(df)), dtype="float64")
+        if "fantasy_points" not in df.columns:
+            return out
+        season = pd.to_numeric(df["season"], errors="coerce").astype("float64")
+        scored = pd.DataFrame({
+            "player_id": df["player_id"].to_numpy(),
+            "season": season.to_numpy(),
+            "fantasy_points": pd.to_numeric(df["fantasy_points"], errors="coerce").to_numpy(),
+        }).dropna(subset=["season", "fantasy_points"])
+        if scored.empty:
+            return out
+        by_season = (scored.groupby(["player_id", "season"])["fantasy_points"].mean()
+                           .rename("prev_season_ppg").reset_index()
+                           .sort_values(["player_id", "season"], kind="mergesort"))
+        by_season["career_ppg_before_prev"] = (
+            by_season.groupby("player_id")["prev_season_ppg"]
+                     .transform(lambda x: x.shift(1).expanding(min_periods=1).mean())
+        )
+        by_season = (by_season.rename(columns={"season": "_prior_season"})
+                              .sort_values("_prior_season", kind="mergesort"))
+
+        left = pd.DataFrame({"player_id": df["player_id"].to_numpy(),
+                             "season": season.to_numpy(),
+                             "_row": np.arange(len(df))})
+        left = left.dropna(subset=["season"]).sort_values("season", kind="mergesort")
+        merged = pd.merge_asof(
+            left, by_season, left_on="season", right_on="_prior_season",
+            by="player_id", direction="backward", allow_exact_matches=False,
+        )
+        out.loc[merged["_row"].to_numpy(), "prev_season_ppg"] = merged["prev_season_ppg"].to_numpy()
+        out.loc[merged["_row"].to_numpy(), "career_ppg_before_prev"] = merged["career_ppg_before_prev"].to_numpy()
+        return out
+
     def _add_prev_season_ppg(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add a single ``prev_season_ppg`` column.
+        """Add ``prev_season_ppg``: the player's PPG over their most recent
+        prior season with scored games, constant across every week of the
+        current season (see ``_prior_season_ppg_table``).
 
-        Within each (player_id, season), the per-game expanding mean
-        of ``fantasy_points`` (shift(1) to exclude the current week)
-        is the "season-to-date PPG before this game".  Shifting that
-        series by one row within each player maps week-1 of a new
-        season onto the LAST row of the prior season — which is the
-        full prior-season PPG.  From week 2 onward it degenerates to
-        a within-season partial-PPG proxy.  Defined exactly this way
-        in _create_rolling_features; this helper is the extracted
-        standalone version so create_causal_features can use it
-        without pulling in the rest of the full-pipeline rolling
-        feature zoo.
+        This used to be a within-season expanding mean shifted one ROW per
+        player, which only equals prior-season PPG at week 1 (and even then
+        minus the final game). Measured on 2022-2025: week 2 was NaN for
+        95.6% of rows -- the shift landed on week 1's empty expanding
+        window -- and from week 3 on it tracked the CURRENT season's lagged
+        mean (corr 0.65 with true prior-season PPG), so ``bayesian_prior_ppg``
+        and ``career_year_flag`` inherited a feature that changed meaning
+        week to week while leakage.py declared it "prior season". The
+        registry entry is now accurate.
 
-        Rookie-prior fill: rows where prev_season_ppg is NaN AND the
-        row's season equals the player's earliest season in the
-        frame are rookies — they get the position + draft-round
-        prior from ``data/rookie_priors.json`` (Phase 4C).  Non-
-        rookie NaN cases (gaps, retirements, traded players without
-        prior rows) fall through to the default 0-fill in
-        ``_impute_missing``."""
+        Rookie-prior fill: NaN rows in a player's debut season get the
+        position + draft-round prior from ``data/rookie_priors.json``
+        (Phase 4C, see ``_apply_rookie_prior``). Other NaN cases (no prior
+        season in the frame) stay NaN under PRESERVE_HISTORY_MISSINGNESS.
+        """
         if "fantasy_points" not in df.columns or "season" not in df.columns:
             return df
-        season_expanding_ppg = (
-            df.groupby(["player_id", "season"])["fantasy_points"]
-              .transform(lambda x: x.shift(1).expanding(min_periods=1).mean())
-        )
-        df["_tmp_season_ppg"] = season_expanding_ppg
-        df["prev_season_ppg"] = df.groupby("player_id")["_tmp_season_ppg"].shift(1)
-        df.drop(columns=["_tmp_season_ppg"], inplace=True, errors="ignore")
+        df["prev_season_ppg"] = self._prior_season_ppg_table(df)["prev_season_ppg"].to_numpy()
         df = self._apply_rookie_prior(df)
         return df
 
@@ -883,15 +920,21 @@ class FeatureEngineer:
 
     def _add_career_year_flag(self, df: pd.DataFrame) -> pd.DataFrame:
         """Binary: 1 if player's prior season was 30%+ above career avg PPG."""
-        if "prev_season_ppg" not in df.columns or "player_id" not in df.columns:
+        if ("prev_season_ppg" not in df.columns or "player_id" not in df.columns
+                or "fantasy_points" not in df.columns or "season" not in df.columns):
             df["career_year_flag"] = 0
             return df
 
-        career_ppg = df.groupby("player_id")["prev_season_ppg"].transform(
-            lambda x: x.shift(1).expanding(min_periods=1).mean()
-        )
-        pct_above = (df["prev_season_ppg"] - career_ppg) / career_ppg.clip(lower=1.0)
-        df["career_year_flag"] = (pct_above >= 0.30).astype(int).fillna(0)
+        # Season-level, like prev_season_ppg itself: the career baseline is the
+        # mean PPG of the player's scored seasons BEFORE the prior one, so the
+        # flag is constant within a season. The old row-wise expanding mean of
+        # prev_season_ppg drifted week to week as the current season's own
+        # rows entered the window.
+        table = self._prior_season_ppg_table(df)
+        prev = pd.to_numeric(df["prev_season_ppg"], errors="coerce").to_numpy()
+        career_ppg = table["career_ppg_before_prev"].to_numpy()
+        pct_above = (prev - career_ppg) / np.clip(career_ppg, 1.0, None)
+        df["career_year_flag"] = np.where(np.nan_to_num(pct_above, nan=0.0) >= 0.30, 1, 0)
         return df
 
     def _add_bayesian_prior_ppg(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1241,6 +1284,13 @@ class FeatureEngineer:
 
     @classmethod
     def _get_contract_lookup_table(cls) -> pd.DataFrame:
+        """All contracts (not deduped to the most recent per player).
+
+        `_add_contract_features` picks, per row, the contract that was
+        actually signed as of that row's season -- see there for why
+        keeping only "the" (most recent) contract per player was a
+        leakage bug.
+        """
         if cls._contract_lookup_cache is not None:
             return cls._contract_lookup_cache
 
@@ -1257,23 +1307,18 @@ class FeatureEngineer:
             c.close()
         except Exception:
             cls._contract_lookup_cache = pd.DataFrame(
-                columns=["player_id", "_final_year", "_apy_rank"]
+                columns=["player_id", "year_signed", "final_year", "apy_rank"]
             )
             return cls._contract_lookup_cache
 
-        # Build lookup: gsis_id → (final_year, apy, position), keeping
-        # the most recently signed contract per player.
-        contract_map = {}
-        for gsis, pos, yr_signed, yrs, apy in contracts:
-            final_year = int(yr_signed + yrs - 1)
-            existing = contract_map.get(gsis)
-            if existing is None or yr_signed > existing[0]:
-                contract_map[gsis] = (yr_signed, final_year, float(apy or 0), pos)
-
-        # Compute positional APY percentiles.
+        # Compute positional APY percentiles across every signed contract
+        # (not just the latest per player).
         from collections import defaultdict
         pos_apys = defaultdict(list)
-        for gsis, (_, _, apy, pos) in contract_map.items():
+        events = []
+        for gsis, pos, yr_signed, yrs, apy in contracts:
+            apy = float(apy or 0)
+            events.append((gsis, pos, int(yr_signed), int(yr_signed + yrs - 1), apy))
             if apy > 0:
                 pos_apys[pos].append(apy)
         pos_apys_sorted = {pos: sorted(vals) for pos, vals in pos_apys.items()}
@@ -1286,16 +1331,25 @@ class FeatureEngineer:
             return rank / len(vals)
 
         rows = [
-            (pid, final_year, _apy_pctile(apy, pos))
-            for pid, (_, final_year, apy, pos) in contract_map.items()
+            (gsis, yr_signed, final_year, _apy_pctile(apy, pos))
+            for gsis, pos, yr_signed, final_year, apy in events
         ]
         cls._contract_lookup_cache = pd.DataFrame(
-            rows, columns=["player_id", "_final_year", "_apy_rank"]
+            rows, columns=["player_id", "year_signed", "final_year", "apy_rank"]
         )
         return cls._contract_lookup_cache
 
     def _add_contract_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add contract year flag and APY rank from contracts table."""
+        """Add contract year flag and APY rank from contracts table.
+
+        Bounded by `year_signed <= season`: a row for season S can only
+        see a contract that had actually been signed by season S. The old
+        code kept just the most-recently-signed contract per player with
+        no season bound at all, so e.g. a 2019 row for a player who later
+        signed a 2023 mega-deal read that 2023 deal's contract-year flag
+        and APY percentile -- pure lookahead (both features are in every
+        position's CAUSAL_FEATURES).
+        """
         if "player_id" not in df.columns or "season" not in df.columns:
             df["is_contract_year"] = 0
             df["contract_apy_rank"] = 0.5
@@ -1307,11 +1361,23 @@ class FeatureEngineer:
             df["contract_apy_rank"] = 0.5
             return df
 
-        merged = df[["player_id", "season"]].merge(lookup, on="player_id", how="left")
+        left = df[["player_id", "season"]].reset_index(drop=True)
+        left["_row"] = np.arange(len(left))
+        # merge_asof: for each row, the contract with the largest
+        # year_signed <= season, matched within the same player_id.
+        left_sorted = left.sort_values("season", kind="mergesort")
+        right_sorted = lookup.sort_values("year_signed", kind="mergesort")
+        merged = pd.merge_asof(
+            left_sorted, right_sorted,
+            left_on="season", right_on="year_signed",
+            by="player_id", direction="backward",
+        ).sort_values("_row")
+
         df["is_contract_year"] = (
-            (merged["season"] == merged["_final_year"]) & merged["_final_year"].notna()
-        ).astype(int).to_numpy()
-        df["contract_apy_rank"] = merged["_apy_rank"].fillna(0.5).to_numpy()
+            (merged["season"].to_numpy() == merged["final_year"].to_numpy())
+            & merged["final_year"].notna().to_numpy()
+        ).astype(int)
+        df["contract_apy_rank"] = merged["apy_rank"].fillna(0.5).to_numpy()
         return df
 
     def _add_team_ol_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1762,8 +1828,29 @@ class FeatureEngineer:
         mask_nan = df["prev_season_ppg"].isna()
         if not mask_nan.any():
             return df
-        earliest_season = df.groupby("player_id")["season"].transform("min")
-        is_rookie = df["season"] == earliest_season
+        season_num = pd.to_numeric(df["season"], errors="coerce")
+        if "first_nfl_season" in df.columns and df["first_nfl_season"].notna().any():
+            # Frame-independent debut, same rule as advanced_rookie_injury:
+            # the frame's earliest season relabels a window's oldest veterans
+            # as rookies (filter to 2020+ and Frank Gore debuts in 2020), and
+            # now that prev_season_ppg is NaN for a player's WHOLE first
+            # in-frame season rather than just weeks 1-2, that mistake would
+            # hand a 10-year veteran a draft-round rookie prior all season.
+            # At the data floor (MIN_HISTORICAL_YEAR) a debut is only
+            # believed when the draft year agrees.
+            from config.settings import MIN_HISTORICAL_YEAR
+            first_num = pd.to_numeric(df["first_nfl_season"], errors="coerce")
+            is_rookie = season_num == first_num
+            censored = first_num <= int(MIN_HISTORICAL_YEAR)
+            if "draft_season" in df.columns:
+                draft_num = pd.to_numeric(df["draft_season"], errors="coerce")
+                is_rookie &= ~censored | (draft_num == first_num)
+            else:
+                is_rookie &= ~censored
+            is_rookie = is_rookie.fillna(False)
+        else:
+            earliest_season = df.groupby("player_id")["season"].transform("min")
+            is_rookie = df["season"] == earliest_season
         if not (mask_nan & is_rookie).any():
             return df
 
@@ -2222,15 +2309,14 @@ class FeatureEngineer:
                     lambda x: x.shift(1).rolling(window=200, min_periods=2).std()
                 ).clip(lower=1.0)
                 new_cols["fp_regression_to_mean_z"] = (player_ewm - pos_rolling_mean) / pos_rolling_std
-            # Season-level mean for same player: use expanding mean within each
-            # (player, season) group to avoid using future games within the season.
+            # Prior-season PPG, same definition as the causal path (see
+            # _add_prev_season_ppg for why the old in-season expanding mean
+            # was not that).
             if "season" in df.columns:
-                season_expanding_ppg = df.groupby(["player_id", "season"])["fantasy_points"].transform(
-                    lambda x: x.shift(1).expanding(min_periods=1).mean()
+                new_cols["prev_season_ppg"] = pd.Series(
+                    self._prior_season_ppg_table(df)["prev_season_ppg"].to_numpy(),
+                    index=df.index,
                 )
-                df["_tmp_season_ppg"] = season_expanding_ppg
-                new_cols["prev_season_ppg"] = df.groupby("player_id")["_tmp_season_ppg"].shift(1)
-                df.drop(columns=["_tmp_season_ppg"], inplace=True, errors="ignore")
         
         if "utilization_score" in df.columns and "position" in df.columns:
             pos_util_expanding_mean = df.groupby("position")["utilization_score"].transform(
@@ -4399,7 +4485,7 @@ class FeatureEngineer:
             season_list = ",".join(str(int(s)) for s in seasons)
             with db._get_connection() as conn:
                 cached = pd.read_sql_query(
-                    "SELECT player_id, season, week, report_status "
+                    "SELECT player_id, season, week, team, report_status, date_modified "
                     f"FROM player_injuries WHERE season IN ({season_list})",
                     conn,
                 )
@@ -4420,6 +4506,38 @@ class FeatureEngineer:
                 seasons,
             )
             return df
+
+        # Kickoff-filter, same guard as external_data.py's
+        # InjuryDataLoader.get_player_injury_status (GAPS.md §7.6): a report
+        # whose date_modified is AFTER that week's kickoff (e.g. a Friday
+        # "Out" update to a Thursday-night game already in progress, or a
+        # post-game official designation) can leak game-outcome information
+        # into a pre-game feature. This cache path queried player_injuries
+        # directly with no such check -- the guard existed only on the
+        # legacy external_data.py path, and the `combine_first` below let a
+        # cached (unfiltered) value silently override that filtered one.
+        try:
+            from src.data.external_data import InjuryDataLoader
+            kickoffs = InjuryDataLoader()._load_kickoff_times(
+                [int(s) for s in seasons])
+        except Exception:
+            kickoffs = pd.DataFrame(columns=["season", "week", "team", "kickoff"])
+
+        if not kickoffs.empty and "team" in cached.columns:
+            before = len(cached)
+            cached = cached.merge(kickoffs, on=["season", "week", "team"], how="left")
+            date_modified = pd.to_datetime(cached["date_modified"], errors="coerce", utc=True)
+            post_kickoff = date_modified.notna() & cached["kickoff"].notna() & (
+                date_modified > cached["kickoff"]
+            )
+            if post_kickoff.any():
+                logger.info(
+                    "Dropping %d/%d injury cache rows modified after kickoff "
+                    "(leakage guard, GAPS.md §7.6).",
+                    int(post_kickoff.sum()), before,
+                )
+                cached = cached[~post_kickoff]
+            cached = cached.drop(columns=["kickoff"])
 
         # Map report_status -> score.  Unknown / empty -> 1.0 (healthy).
         def _score(s):

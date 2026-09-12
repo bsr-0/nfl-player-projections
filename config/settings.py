@@ -817,7 +817,7 @@ QB_TARGET_CHOICE_FILENAME = "qb_target_choice.json"
 
 # Feature set version: bump when feature_engineering adds/removes/renames model features.
 # Saved when training; checked when loading models. Mismatch triggers a retrain warning.
-FEATURE_VERSION = "35"  # v35: is_power5 from an era-aware college->conference map (realignment-correct: Texas A&M is Big 12 pre-2012, SEC after; USC is Pac-12 until the 2024 Big Ten move). v34: real draft capital + birth_date. See GAPS.md.
+FEATURE_VERSION = "36"  # v36: prev_season_ppg is now actually prior-season PPG (constant within a season; was a lagged in-season expanding mean, NaN at week 2 for 95.6% of rows) -- career_year_flag and bayesian_prior_ppg inherit the fix; contract features bounded by year_signed <= season; injury cache kickoff-filtered. v35: is_power5 from an era-aware college->conference map (realignment-correct: Texas A&M is Big 12 pre-2012, SEC after; USC is Pac-12 until the 2024 Big Ten move). v34: real draft capital + birth_date. See GAPS.md.
 # v32: team pass-rate-over-expected (team_neutral_pass_rate_oe_roll3_mean, all 4 positions) + WR rushing usage (rush_share_pct_roll3_mean) — GAPS.md Phase 6b follow-up, two real gaps missed by the v31/Phase 6 audit — see FEATURE_VERSION history below
 # v31: rolling catch rate (catch_rate_roll3_mean, RB/WR/TE) — GAPS.md §8.1 Phase 6 (next_focus.md) audit; also corrects 10 stale "missing" items in that section, actually resolved v24-v30
 # v30: team OL quality (team_sack_rate_allowed/team_run_block_ybc_avg_roll3_mean, from weekly_pfr) + PBP-derived pass-play participation rate (pbp_pass_play_participation_pct_roll3_mean, NOT true route participation, GAPS.md §11.1.C/D/H)
