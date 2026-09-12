@@ -175,6 +175,44 @@ class NFLPredictor:
         return self.predict(n_weeks=18, position=position, top_n=top_n, scoring_format=scoring_format)
     
     @staticmethod
+    def _attach_injury_availability(results: pd.DataFrame, latest_data: pd.DataFrame) -> pd.DataFrame:
+        """Expose injury availability NEXT TO the prediction, not inside it.
+
+        `predicted_points` (and ppg/utilization/CI) is what the models are
+        trained on -- points given the player plays -- and what the
+        serving-path walk-forward scores against. `injury_adjustment` /
+        `expected_points` are for lineup views that want the availability-
+        weighted number.
+
+        Availability comes from `injury_score` -- the ACTUAL practice-report
+        status for the target week (Out=0.0 .. Probable=0.85 .. no report/
+        healthy=1.0), refreshed by `_refresh_injury_status_for_target_week`
+        right before this is called -- not from `injury_prob_combined`.
+        That column is a longer-horizon injury-HAZARD estimate (an age/
+        workload/history heuristic blended with an ML classifier trained
+        with class-weight balancing and never recalibrated back to a true
+        probability scale), and it never fell below ~0.15-0.25 for anyone,
+        healthy players included: multiplying it in was a uniform ~19%
+        haircut on every served number, invisible to any evaluation that
+        didn't run the full serving path (raw ensemble output was unbiased,
+        7.06 vs 6.86 actual on 2025 wk10; discounted, 5.68). It is still
+        exposed here, unmodified, as information -- validating and properly
+        calibrating it is separate follow-up work, not a same-week
+        availability signal.
+        """
+        if "player_id" not in results.columns:
+            return results
+        if "injury_score" in latest_data.columns:
+            score_map = latest_data.drop_duplicates("player_id").set_index("player_id")["injury_score"]
+            availability = pd.to_numeric(results["player_id"].map(score_map), errors="coerce").fillna(1.0).clip(0.0, 1.0)
+            results["injury_adjustment"] = availability
+            results["expected_points"] = results["predicted_points"] * availability
+        if "injury_prob_combined" in latest_data.columns:
+            prob_map = latest_data.drop_duplicates("player_id").set_index("player_id")["injury_prob_combined"]
+            results["injury_prob_combined"] = results["player_id"].map(prob_map)
+        return results
+
+    @staticmethod
     def _adjust_scoring_format(results: pd.DataFrame, scoring_format: str, n_weeks: int) -> pd.DataFrame:
         """Adjust predicted_points for scoring format (Half-PPR or Standard).
 
@@ -357,7 +395,8 @@ class NFLPredictor:
         
         # Refresh schedule- and opponent-dependent features for the prediction row
         latest_data = self.feature_engineer.refresh_matchup_features(latest_data)
-        
+        latest_data = self._refresh_injury_status_for_target_week(latest_data)
+
         # Make predictions (with speed monitoring per requirements: <5s per player)
         t_start = time.perf_counter()
         results = self.predictor.predict(latest_data, n_weeks=n_weeks)
@@ -420,25 +459,7 @@ class NFLPredictor:
         if "predicted_utilization" not in results.columns:
             results["predicted_utilization"] = results["predicted_points"]
 
-        # Apply injury probability discount to predicted points.
-        # injury_prob_combined (0 = healthy, ~0.15+ = high risk) is produced
-        # by add_advanced_rookie_injury_features() in _prepare_features().
-        # Merge it from latest_data (feature-engineered input) into results.
-        inj_prob_col = "injury_prob_combined"
-        if inj_prob_col in latest_data.columns and "player_id" in results.columns:
-            inj_map = latest_data.drop_duplicates("player_id").set_index("player_id")[inj_prob_col]
-            results[inj_prob_col] = results["player_id"].map(inj_map)
-            availability = (1.0 - results[inj_prob_col].fillna(0).clip(0, 1))
-            results["injury_adjustment"] = availability
-            results["predicted_points"] = results["predicted_points"] * availability
-            results["predicted_ppg"] = results["predicted_ppg"] * availability
-            results["predicted_utilization"] = results["predicted_utilization"] * availability
-            for ci_col in [
-                "prediction_ci80_lower", "prediction_ci80_upper",
-                "prediction_ci95_lower", "prediction_ci95_upper",
-            ]:
-                if ci_col in results.columns:
-                    results[ci_col] = results[ci_col] * availability
+        results = self._attach_injury_availability(results, latest_data)
 
         # Utilization tier, from utilization_score -- NOT predicted_utilization.
         #
@@ -563,7 +584,7 @@ class NFLPredictor:
             output_cols.append("util_tier")
         if "player_id" not in output_cols and "player_id" in results.columns:
             output_cols.insert(0, "player_id")
-        for inj_out in ["injury_prob_combined", "injury_adjustment"]:
+        for inj_out in ["injury_prob_combined", "injury_adjustment", "expected_points"]:
             if inj_out in results.columns and inj_out not in output_cols:
                 output_cols.append(inj_out)
 
@@ -708,18 +729,51 @@ class NFLPredictor:
             print(f"  Warning: snap imputation skipped ({type(e).__name__}: {e})")
             return data
 
+    def _refresh_injury_status_for_target_week(self, latest_data: pd.DataFrame) -> pd.DataFrame:
+        """Re-point `injury_score`/`is_injured` at the TARGET week's real report.
+
+        `latest_data` is each player's last COMPLETED game with its season/week
+        overwritten to the upcoming (pred_season, pred_week) -- exactly like
+        `refresh_matchup_features` does for team-relative features. Without
+        this, injury_score (a model feature, and the availability signal
+        `_attach_injury_availability` uses) still held the LAST game's report,
+        which has no relationship to the player's status for the game being
+        predicted. `_merge_injury_data_from_cache` merges strictly on
+        (player_id, season, week), so once season/week are overwritten it
+        naturally looks up the target week's own report -- existing columns
+        are dropped first so a week with no report yet defaults to healthy
+        (1.0) rather than silently carrying the last game's status forward.
+        """
+        if "injury_score" not in latest_data.columns and "is_injured" not in latest_data.columns:
+            return latest_data
+        latest_data = latest_data.drop(columns=["injury_score", "is_injured"], errors="ignore")
+        refreshed = self.feature_engineer._merge_injury_data_from_cache(latest_data)
+        # _merge_injury_data_from_cache early-returns the frame UNCHANGED when
+        # its cache query raises or finds nothing for the queried season (e.g.
+        # the target week's own season has no injury data loaded at all yet,
+        # the common case for an upcoming/future season) -- fine for its usual
+        # caller, which never drops the column first, but here that early
+        # return means injury_score comes back missing rather than defaulted.
+        # Restore the same healthy default the merge itself uses when a row
+        # simply has no report.
+        if "injury_score" not in refreshed.columns:
+            refreshed["injury_score"] = 1.0
+        if "is_injured" not in refreshed.columns:
+            refreshed["is_injured"] = 0
+        return refreshed
+
     def _prepare_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """Prepare features for prediction."""
         try:
             from src.data.external_data import add_external_features
             data = add_external_features(data, seasons=list(data["season"].unique()) if "season" in data.columns else None)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  WARNING: external (Vegas/weather/injury) features skipped at serving: {type(e).__name__}: {e}")
         try:
             from src.features.season_long_features import add_season_long_features
             data = add_season_long_features(data)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  WARNING: season-long features skipped at serving: {type(e).__name__}: {e}")
 
         # Calculate utilization scores
         data = self.utilization_calculator.calculate_all_scores(data, pd.DataFrame())
@@ -733,23 +787,18 @@ class NFLPredictor:
         try:
             from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features
             data = add_advanced_rookie_injury_features(data)
-        except Exception:
-            # Non-fatal fallback if optional feature module/data is unavailable.
-            pass
+        except Exception as e:
+            # Non-fatal, but never silent: a stage that vanishes here is a
+            # train/serve skew nobody can see in the output.
+            print(f"  WARNING: advanced rookie/injury features skipped at serving: {type(e).__name__}: {e}")
 
-        # Apply train-fitted bounded scaler to ensure serving parity.
-        # Skip silently if the saved scaler was built on a different feature set
-        # (feature version mismatch after retraining without regenerating the scaler).
+        # Train-fitted bounded scaler, applied exactly as training applied it
+        # to its test frame (column reconciliation, NaN preserved) and never
+        # skipped: a mismatch raises. See apply_bounded_scaler_artifact.
         if self.bounded_scaler_artifact:
-            cols = [c for c in self.bounded_scaler_artifact["columns"] if c in data.columns]
-            if cols:
-                values = data[cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
-                try:
-                    scaled = self.bounded_scaler_artifact["scaler"].transform(values)
-                    data.loc[:, cols] = scaled
-                except ValueError:
-                    pass  # Feature count mismatch from version bump — skip scaling
-        
+            from src.models.feature_preparation import apply_bounded_scaler_artifact
+            data = apply_bounded_scaler_artifact(data, self.bounded_scaler_artifact)
+
         return data
 
 

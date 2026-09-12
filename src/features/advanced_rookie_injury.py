@@ -20,23 +20,15 @@ INJURY PREDICTIONS:
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from config.settings import CURRENT_NFL_SEASON
+from config.settings import CURRENT_NFL_SEASON, MODELS_DIR
 from pathlib import Path
 from src.features.feature_policy_registry import FeaturePolicyRegistry
 import warnings
 warnings.filterwarnings('ignore')
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor, RandomForestClassifier
-
-try:
-    from imblearn.over_sampling import SMOTE
-    HAS_SMOTE = True
-except ImportError:
-    HAS_SMOTE = False
 
 
 # =============================================================================
@@ -1221,10 +1213,122 @@ class AdvancedRookieProjector:
 # ADVANCED INJURY PREDICTION
 # =============================================================================
 
+# =============================================================================
+# Injury risk model: calibrated logistic regression, persisted like the
+# project's other trained artifacts.
+#
+# Replaces two prior approaches to injury_prob_advanced/injury_prob_combined,
+# both measured against real next-week injury-report outcomes (train seasons
+# <=2023, held out 2024-2025) and found WORSE than the trivial "always
+# predict the training base rate" baseline (Brier 0.0334):
+#
+#   - The hand-tuned heuristic (position/age/workload/history-count
+#     multipliers, capped at 25%): Brier 0.057, mean predicted 18.8% against
+#     a true weekly incidence of 3.4% -- a systematic ~5.5x overprediction,
+#     for every player, healthy ones included. This is what predict.py's
+#     ~19% availability floor (fixed 2026-09-11) actually was.
+#   - A RandomForestClassifier with class_weight='balanced' (+ optional
+#     SMOTE) was CODED but never wired to run: `fit_injury_classifier` is
+#     never called with True by any caller in this pipeline, so
+#     `injury_prob_ml` was always NaN and `injury_prob_combined` was always
+#     exactly the heuristic. Tested anyway, exactly as coded: raw
+#     predict_proba averaged 48.5%, Brier 0.267 -- far worse than the
+#     heuristic it would have been blended with. class_weight='balanced'
+#     (and SMOTE) rebalance the training distribution to help a classifier
+#     RANK under severe imbalance; they do not yield a calibrated
+#     probability, and nothing recalibrated this one afterward.
+#
+# A plain, unweighted logistic regression on the same underlying inputs
+# (age, week, workload, prior-injury count, position) is calibrated by
+# construction for this kind of rare binary outcome. Out-of-sample it beat
+# every alternative tried, including a properly isotonic-recalibrated
+# version of the RandomForestClassifier above (Brier 0.0339 vs 0.0331 --
+# statistically indistinguishable, without needing a second held-out slice
+# just for calibration). See scripts/train_injury_risk_model.py.
+# =============================================================================
+INJURY_RISK_MODEL_FILENAME = "injury_risk_model.joblib"
+INJURY_RISK_NUMERIC_FEATURES = ["age", "week", "weekly_workload", "season_workload", "prior_injuries"]
+
+
+def _build_injury_risk_matrix(df: pd.DataFrame, numeric_features: List[str],
+                              position_categories: List[str]) -> pd.DataFrame:
+    """Feature matrix shared by fit and predict -- same columns, same order,
+    every time. Absent numeric features fill 0; positions outside the
+    persisted category list (a new/renamed position code) contribute an
+    all-zero dummy row rather than raising, matching this module's existing
+    "unknown defaults to the conservative middle" pattern.
+    """
+    X_num = pd.DataFrame({f: pd.to_numeric(df[f], errors="coerce") if f in df.columns
+                          else pd.Series(np.nan, index=df.index) for f in numeric_features}).fillna(0.0)
+    pos = df["position"] if "position" in df.columns else pd.Series("UNK", index=df.index)
+    pos_dummies = pd.get_dummies(pos, prefix="pos").reindex(
+        columns=[f"pos_{p}" for p in position_categories], fill_value=0)
+    return pd.concat([X_num.reset_index(drop=True), pos_dummies.reset_index(drop=True)],
+                     axis=1).set_axis(df.index)
+
+
+def fit_injury_risk_model(df: pd.DataFrame, path: Optional[Path] = None) -> Dict[str, Any]:
+    """Fit the calibrated injury-risk model on real outcomes and persist it.
+
+    `df` must carry `is_injured_next_week` (0/1) plus the numeric features
+    and `position`; rows with no next-week label (a player-season's last
+    row) must already be excluded by the caller -- see
+    scripts/train_injury_risk_model.py for how the production artifact is
+    built from the full historical frame.
+    """
+    from datetime import datetime
+    from sklearn.linear_model import LogisticRegression
+
+    position_categories = (sorted(df["position"].dropna().unique().tolist())
+                           if "position" in df.columns else ["QB", "RB", "TE", "WR"])
+    X = _build_injury_risk_matrix(df, INJURY_RISK_NUMERIC_FEATURES, position_categories)
+    y = df["is_injured_next_week"].astype(int).to_numpy()
+
+    model = LogisticRegression(max_iter=2000)
+    model.fit(X, y)
+    probs = model.predict_proba(X)[:, 1]
+
+    artifact = {
+        "model": model,
+        "feature_names": list(X.columns),
+        "numeric_features": INJURY_RISK_NUMERIC_FEATURES,
+        "position_categories": position_categories,
+        # Data-driven, not copied from the old heuristic's arbitrary 0.06/0.12:
+        # top decile of THIS model's own training distribution is "high",
+        # next three deciles "medium".
+        "risk_level_thresholds": {"high": float(np.quantile(probs, 0.90)),
+                                  "medium": float(np.quantile(probs, 0.60))},
+        "trained_at": datetime.now().isoformat(),
+        "n_train_rows": int(len(df)),
+        "train_prevalence": float(y.mean()),
+    }
+    path = path or (MODELS_DIR / INJURY_RISK_MODEL_FILENAME)
+    import joblib
+    joblib.dump(artifact, path)
+    return artifact
+
+
+def _load_injury_risk_model(path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    path = path or (MODELS_DIR / INJURY_RISK_MODEL_FILENAME)
+    if not path.exists():
+        return None
+    try:
+        import joblib
+        return joblib.load(path)
+    except Exception:
+        return None
+
+
+def predict_injury_risk(df: pd.DataFrame, artifact: Dict[str, Any]) -> np.ndarray:
+    X = _build_injury_risk_matrix(df, artifact["numeric_features"], artifact["position_categories"])
+    X = X[artifact["feature_names"]]
+    return artifact["model"].predict_proba(X)[:, 1]
+
+
 class AdvancedInjuryPredictor:
     """
     Sophisticated injury prediction using survival analysis concepts.
-    
+
     Approaches:
     1. Hazard rate modeling - Time-varying injury risk
     2. Recurrent event analysis - Players with injury history
@@ -1265,10 +1369,6 @@ class AdvancedInjuryPredictor:
     
     def __init__(self):
         self.injury_history = {}
-        self._ml_classifier = None
-        self._ml_scaler = None
-        self._ml_feature_names = []
-        self._ml_is_fitted = False
     
     def calculate_base_hazard_rate(self, position: str, weeks_played: int) -> float:
         """
@@ -1441,152 +1541,16 @@ class AdvancedInjuryPredictor:
         
         return result
     
-    def fit_injury_classifier(self, df: pd.DataFrame, use_smote: bool = True) -> bool:
-        """
-        Train an ML-based injury classifier on actual injury labels with
-        class imbalance handling.
-
-        Uses class_weight='balanced' (inverse-frequency weighting) as the
-        primary strategy, with optional SMOTE oversampling when imblearn
-        is available and use_smote=True.
-
-        The classifier learns from features like age, workload, position,
-        prior injuries, and week-in-season to predict whether a player
-        will be injured in the following week.
-
-        Returns True if the classifier was successfully fitted.
-        """
-        # Determine injury label column
-        if 'is_injured_next_week' in df.columns:
-            label_col = 'is_injured_next_week'
-        elif 'is_injured' in df.columns and 'player_id' in df.columns:
-            # Create next-week injury label from current-week flag
-            tmp = df.sort_values(['player_id', 'season', 'week']).copy()
-            tmp['is_injured_next_week'] = tmp.groupby('player_id')['is_injured'].shift(-1)
-            tmp = tmp.dropna(subset=['is_injured_next_week'])
-            tmp['is_injured_next_week'] = tmp['is_injured_next_week'].astype(int)
-            label_col = 'is_injured_next_week'
-            df = tmp
-        elif 'injury_score' in df.columns and 'player_id' in df.columns:
-            tmp = df.sort_values(['player_id', 'season', 'week']).copy()
-            tmp['is_injured_next_week'] = (tmp.groupby('player_id')['injury_score'].shift(-1) < 1.0).astype(int)
-            tmp = tmp.dropna(subset=['is_injured_next_week'])
-            label_col = 'is_injured_next_week'
-            df = tmp
-        else:
-            print("  Injury classifier: no injury label column found; skipping ML classifier.")
-            return False
-
-        # Build feature matrix from available columns
-        feature_candidates = [
-            'age', 'week', 'weekly_workload', 'season_workload',
-            'prior_injuries', 'injury_prob_advanced', 'injury_age_risk',
-            'injury_workload_risk',
-        ]
-        # Add position as numeric
-        pos_map = {'QB': 0, 'RB': 1, 'WR': 2, 'TE': 3}
-        if 'position' in df.columns:
-            df = df.copy()
-            df['_pos_encoded'] = df['position'].map(pos_map).fillna(2).astype(int)
-            feature_candidates.append('_pos_encoded')
-
-        available_features = [c for c in feature_candidates if c in df.columns]
-        if len(available_features) < 3:
-            print(f"  Injury classifier: only {len(available_features)} features available; need ≥3.")
-            return False
-
-        X = df[available_features].replace([np.inf, -np.inf], np.nan).fillna(0).values
-        y = df[label_col].values.astype(int)
-
-        # Check class distribution
-        n_pos = int(y.sum())
-        n_neg = len(y) - n_pos
-        if n_pos < 20 or n_neg < 20:
-            print(f"  Injury classifier: insufficient class balance (pos={n_pos}, neg={n_neg}); skipping.")
-            return False
-
-        prevalence = n_pos / len(y)
-        print(f"  Injury classifier: {len(y)} samples, {n_pos} positive ({prevalence:.1%} prevalence)")
-
-        # Scale features
-        self._ml_scaler = StandardScaler()
-        X_scaled = self._ml_scaler.fit_transform(X)
-
-        # Optional SMOTE oversampling for minority class
-        X_train, y_train = X_scaled, y
-        if use_smote and HAS_SMOTE and prevalence < 0.3:
-            try:
-                smote = SMOTE(
-                    sampling_strategy=min(0.5, prevalence * 3),
-                    random_state=42,
-                    k_neighbors=min(5, n_pos - 1),
-                )
-                X_train, y_train = smote.fit_resample(X_scaled, y)
-                print(f"  SMOTE applied: {len(y)} → {len(y_train)} samples "
-                      f"(minority {int(y_train.sum())}/{len(y_train)})")
-            except Exception as e:
-                print(f"  SMOTE failed ({e}); using class_weight='balanced' only.")
-                X_train, y_train = X_scaled, y
-
-        # Train classifier with class_weight='balanced' (inverse-frequency weighting)
-        self._ml_classifier = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=8,
-            min_samples_leaf=10,
-            class_weight='balanced',
-            random_state=42,
-            n_jobs=1,
-        )
-        self._ml_classifier.fit(X_train, y_train)
-        self._ml_feature_names = available_features
-        self._ml_is_fitted = True
-
-        # Report in-sample performance (for diagnostics only)
-        from sklearn.metrics import f1_score, precision_score, recall_score
-        y_pred = self._ml_classifier.predict(X_scaled)
-        y_proba = self._ml_classifier.predict_proba(X_scaled)[:, 1]
-        f1 = f1_score(y, y_pred, zero_division=0)
-        prec = precision_score(y, y_pred, zero_division=0)
-        rec = recall_score(y, y_pred, zero_division=0)
-        print(f"  Injury classifier fitted: F1={f1:.3f}, Precision={prec:.3f}, Recall={rec:.3f}")
-
-        return True
-
-    def predict_injury_ml(self, df: pd.DataFrame) -> np.ndarray:
-        """
-        Predict injury probability using the fitted ML classifier.
-
-        Returns array of probabilities (0-1). Falls back to NaN if
-        classifier is not fitted.
-        """
-        if not self._ml_is_fitted or self._ml_classifier is None:
-            return np.full(len(df), np.nan)
-
-        # Build feature matrix matching training features
-        tmp = df.copy()
-        pos_map = {'QB': 0, 'RB': 1, 'WR': 2, 'TE': 3}
-        if '_pos_encoded' in self._ml_feature_names and 'position' in tmp.columns:
-            tmp['_pos_encoded'] = tmp['position'].map(pos_map).fillna(2).astype(int)
-
-        available = [c for c in self._ml_feature_names if c in tmp.columns]
-        if len(available) < len(self._ml_feature_names):
-            # Fill missing features with 0
-            for c in self._ml_feature_names:
-                if c not in tmp.columns:
-                    tmp[c] = 0
-
-        X = tmp[self._ml_feature_names].replace([np.inf, -np.inf], np.nan).fillna(0).values
-        X_scaled = self._ml_scaler.transform(X)
-        return self._ml_classifier.predict_proba(X_scaled)[:, 1]
-
-    def add_advanced_injury_features(self, df: pd.DataFrame, fit_classifier: bool = False) -> pd.DataFrame:
+    def add_advanced_injury_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add advanced injury prediction features to DataFrame.
 
-        Args:
-            df: Player DataFrame
-            fit_classifier: If True, fit the ML injury classifier on this data.
-                Only set True when df contains TRAINING data only (no test data).
-                When False, uses a previously fitted classifier or skips ML features.
+        `injury_prob_advanced`/`injury_prob_combined` come from the
+        persisted, validated logistic-regression injury-risk model (see
+        fit_injury_risk_model / predict_injury_risk above) when one exists.
+        If the artifact hasn't been trained yet (fresh checkout), falls back
+        to the old heuristic with an explicit warning -- that heuristic is
+        measurably worse than "always predict the base rate" (Brier 0.057 vs
+        0.033), so this is a last resort, not a peer option.
         """
         result = df.copy()
 
@@ -1627,18 +1591,6 @@ class AdvancedInjuryPredictor:
         # Compute actual prior injury counts from historical data
         result = self._compute_prior_injury_counts(result)
 
-        # Calculate injury probability for each row
-        def calc_injury_prob(row):
-            pred = self.predict_injury_probability(
-                position=row['position'],
-                age=int(row['age']),
-                weeks_played=int(row.get('week', 1)),
-                weekly_workload=float(row['weekly_workload']),
-                season_workload=float(row['season_workload']),
-                prior_injuries=int(row.get('prior_injuries', 0))
-            )
-            return pred['injury_probability']
-
         def calc_age_risk(row):
             return self.calculate_age_risk_multiplier(int(row['age']))
 
@@ -1649,31 +1601,51 @@ class AdvancedInjuryPredictor:
                 float(row['season_workload'])
             )
 
-        result['injury_prob_advanced'] = result.apply(calc_injury_prob, axis=1)
         result['injury_age_risk'] = result.apply(calc_age_risk, axis=1)
         result['injury_workload_risk'] = result.apply(calc_workload_risk, axis=1)
 
-        # ML-based injury classifier: only fit on training data to avoid leakage
-        if fit_classifier:
-            self.fit_injury_classifier(result, use_smote=True)
-
-        # Use previously fitted classifier for predictions (or skip if not fitted)
-        if self._ml_is_fitted:
-            ml_proba = self.predict_injury_ml(result)
-            result['injury_prob_ml'] = ml_proba
-            # Blend: 60% ML + 40% heuristic for robust combined estimate
-            result['injury_prob_combined'] = (
-                0.6 * result['injury_prob_ml'] + 0.4 * result['injury_prob_advanced']
-            )
-            print("  ML injury classifier integrated (60% ML + 40% heuristic blend)")
+        artifact = _load_injury_risk_model()
+        if artifact is not None:
+            result['injury_prob_advanced'] = predict_injury_risk(result, artifact)
+            thresholds = artifact['risk_level_thresholds']
         else:
-            result['injury_prob_ml'] = np.nan
-            result['injury_prob_combined'] = result['injury_prob_advanced']
+            warnings.warn(
+                "No persisted injury risk model found at "
+                f"{MODELS_DIR / INJURY_RISK_MODEL_FILENAME}; falling back to the "
+                "unvalidated heuristic, which measurably overpredicts risk ~5.5x "
+                "(Brier 0.057 vs 0.033 for 'always predict the base rate' on real "
+                "outcomes). Run scripts/train_injury_risk_model.py.",
+                RuntimeWarning,
+            )
 
-        # Risk level categorization (use combined when available)
+            def calc_injury_prob_fallback(row):
+                pred = self.predict_injury_probability(
+                    position=row['position'],
+                    age=int(row['age']),
+                    weeks_played=int(row.get('week', 1)),
+                    weekly_workload=float(row['weekly_workload']),
+                    season_workload=float(row['season_workload']),
+                    prior_injuries=int(row.get('prior_injuries', 0))
+                )
+                return pred['injury_probability']
+
+            result['injury_prob_advanced'] = result.apply(calc_injury_prob_fallback, axis=1)
+            thresholds = {"high": 0.12, "medium": 0.06}  # the old heuristic's own scale
+
+        # No separate ML signal any more (the RandomForestClassifier path
+        # this replaced was never actually wired to run in production, and
+        # measured far worse than the model above when tested) -- kept as a
+        # column, not a value, for anything still reading it.
+        result['injury_prob_ml'] = np.nan
+        result['injury_prob_combined'] = result['injury_prob_advanced']
+
+        # Risk level categorization, against the ACTIVE estimator's own
+        # thresholds -- a fixed 0.06/0.12 cutoff would mean nothing once the
+        # scale producing the probability changes (the model's scale runs
+        # roughly 0.02-0.13; the old heuristic's ran 0.03-0.25).
         prob_col = 'injury_prob_combined'
         result['injury_risk_level'] = result[prob_col].apply(
-            lambda x: 'high' if x > 0.12 else ('medium' if x > 0.06 else 'low')
+            lambda x: 'high' if x > thresholds['high'] else ('medium' if x > thresholds['medium'] else 'low')
         )
 
         print(f"  Added: injury_prob_advanced, injury_prob_ml, injury_prob_combined, "
@@ -1686,13 +1658,11 @@ class AdvancedInjuryPredictor:
 # COMBINED FEATURE ADDITION
 # =============================================================================
 
-def add_advanced_rookie_injury_features(df: pd.DataFrame, fit_injury_classifier: bool = False) -> pd.DataFrame:
+def add_advanced_rookie_injury_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add all advanced rookie, injury, and combine features.
 
     Args:
         df: Player DataFrame
-        fit_injury_classifier: If True, fit the ML injury classifier on this data.
-            Only set True when df contains TRAINING data only (no test data).
     """
     print("\n" + "="*60)
     print("Adding Advanced Rookie & Injury Features")
@@ -1713,11 +1683,13 @@ def add_advanced_rookie_injury_features(df: pd.DataFrame, fit_injury_classifier:
         if "athleticism_grade" not in df.columns:
             df["athleticism_grade"] = "Average"
 
-    # Advanced injury features (hazard modeling, workload risk)
-    # ML classifier is NOT fitted here by default to avoid data leakage
-    # when called on combined train+test data via _apply_with_temporal_context
+    # Advanced injury features (hazard modeling, workload risk). The risk
+    # estimate itself comes from a separately-trained, persisted model (see
+    # fit_injury_risk_model / scripts/train_injury_risk_model.py) rather than
+    # being fit inline here, so there's no leakage risk from this being
+    # called on combined train+test data via _apply_with_temporal_context.
     injury_predictor = AdvancedInjuryPredictor()
-    df = injury_predictor.add_advanced_injury_features(df, fit_classifier=fit_injury_classifier)
+    df = injury_predictor.add_advanced_injury_features(df)
 
     # Apply grouped missing-data policies consistently with other feature builders.
     policy_registry = FeaturePolicyRegistry.from_config()
