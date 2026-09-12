@@ -416,10 +416,17 @@ def load_season_data(season: int):
         return pd.DataFrame()
     df = pd.read_parquet(parquet_path)
     df = _apply_authoritative_positions(df, _load_authoritative_position_map())
+    # Played games only. daily_predictions.parquet also carries the upcoming
+    # week's prediction-target rows (no fantasy_points yet); once 2026 had
+    # 880 of those, this stopped being empty for the new season, the
+    # "no data, use last season" fallback never fired, and the board tried
+    # to build every player's prior-season baseline out of stubs (NaN
+    # volatility -> compute_risk_scores' int cast crashed, 2026-09-10).
     mask = (
         (df["season"] == season)
         & (df["week"] <= 18)
         & (df["position"].isin(["QB", "RB", "WR", "TE"]))
+        & df["fantasy_points"].notna()
     )
     return df[mask]
 
@@ -444,9 +451,16 @@ def aggregate_player_stats(season_df):
         if col in season_df.columns:
             agg_dict[key] = (col, func)
 
-    agg = season_df.groupby(["player_id", "name", "team", "position"]).agg(
+    agg = season_df.groupby(["player_id", "name", "position"]).agg(
         **agg_dict
     ).reset_index()
+
+    # Fallback team for players apply_current_teams can't resolve from the
+    # current-season roster (e.g. retired/inactive): last team played, not
+    # grouped on, so a mid-season trade produces one row, not two.
+    last_team = (season_df.sort_values("week")
+                 .groupby("player_id")["team"].last())
+    agg["team"] = agg["player_id"].map(last_team)
 
     agg["fp_std"] = agg["fp_std"].fillna(0)
 
@@ -523,6 +537,16 @@ def compute_risk_scores(agg):
         gp_max = subset["games_played"].max()
         if gp_max > 0:
             agg.loc[mask, "risk_games"] = 1 - (subset["games_played"] / gp_max)
+
+    # A player with too few games has no volatility/CV/consistency (std of one
+    # game is NaN). Unknown is neither safe nor risky, so those components
+    # score the neutral midpoint; the games term already carries the thin
+    # sample. The stale feature cache used to hide this by median-filling
+    # everything, so the int cast below never met a NaN until the cache
+    # started rebuilding from the DB (2026-09-10).
+    for col in ("risk_vol", "risk_cv", "risk_consistency"):
+        agg[col] = agg[col].fillna(0.5)
+    agg["risk_games"] = agg["risk_games"].fillna(0.0)
 
     agg["risk_score"] = (
         agg["risk_vol"] * 30
