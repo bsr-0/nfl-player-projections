@@ -24,15 +24,17 @@ def get_current_nfl_season(today: Optional[datetime] = None) -> int:
 
 
 def _season_start(season_year: int) -> datetime:
-    """Approximate Week 1 Thursday (first week of Sept)."""
-    # NFL typically starts first Thursday of September
+    """Week 1 kickoff Thursday: the Thursday following Labor Day.
+
+    Labor Day is the first Monday of September; the NFL season opener is
+    three days later. (First-Thursday-of-September is wrong whenever
+    Sept 1 falls after a Thursday, e.g. 2026: Labor Day is Sept 7, kickoff
+    is Sept 10, not Sept 3.)
+    """
     sept = datetime(season_year, 9, 1)
-    # First Thursday
-    weekday = sept.weekday()  # 0=Mon, 3=Thu
-    days_until_thu = (3 - weekday) % 7
-    if days_until_thu == 0 and sept.day == 1 and sept.weekday() != 3:
-        days_until_thu = 7
-    return sept + timedelta(days=days_until_thu)
+    days_until_monday = (0 - sept.weekday()) % 7  # 0=Mon
+    labor_day = sept + timedelta(days=days_until_monday)
+    return labor_day + timedelta(days=3)
 
 
 def _playoff_dates(season_year: int) -> Dict[str, datetime]:
