@@ -21,11 +21,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from config.settings import DB_PATH
 from src.features.feature_policy_registry import FeaturePolicyRegistry
 from src.features.utilization_score import (
     SNAP_DATA_START_SEASON,
     SNAP_ROLL3_COL,
     apply_snap_imputation,
+)
+
+requires_real_db = pytest.mark.skipif(
+    not DB_PATH.exists(), reason="requires local data/nfl_data.db"
 )
 
 
@@ -109,6 +114,7 @@ class TestRegularSeasonBoundary:
         for s in (2021, 2024, 2025):
             assert regular_season_max_week(s) == 18, s
 
+    @requires_real_db
     def test_boundary_matches_the_schedule(self):
         """Derived from the schedule rather than asserted: a full slate is
         13+ games, a playoff round is 2-6."""
@@ -130,6 +136,7 @@ class TestRegularSeasonBoundary:
         finally:
             c.close()
 
+    @requires_real_db
     def test_playoff_week_excluded_from_possible_weeks(self):
         """A 2015 playoff team must get 16 game-weeks, same as a team that
         missed the playoffs -- previously the playoff team got 17."""
@@ -148,9 +155,9 @@ class TestFumblesLostPopulated:
     fantasy_points is computed from it at -2 apiece, so the target was
     overstated in the season used as both projection target and newest fold."""
 
+    @requires_real_db
     def test_every_season_has_fumbles(self):
         import sqlite3
-        from config.settings import DB_PATH
         c = sqlite3.connect(str(DB_PATH))
         try:
             rows = c.execute(
@@ -160,10 +167,10 @@ class TestFumblesLostPopulated:
             c.close()
         assert not rows, f"seasons with implausibly few fumbles lost: {rows}"
 
+    @requires_real_db
     def test_fantasy_points_reconstructs_from_components(self):
         """Catches a fumbles fix applied to the column but not to the target."""
         import sqlite3
-        from config.settings import DB_PATH
         c = sqlite3.connect(str(DB_PATH))
         try:
             d = pd.read_sql(
@@ -186,9 +193,9 @@ class TestEraStartConstants:
     read from the DB rather than trusted. A boundary that drifts from its
     source silently re-creates the bug it was added to fix."""
 
+    @requires_real_db
     def test_boundaries_match_source_tables(self):
         import sqlite3
-        from config.settings import DB_PATH
         from src.features.feature_engineering import (
             WEEKLY_PFR_START_SEASON, SEASONAL_PFR_START_SEASON,
             INJURY_DATA_START_SEASON, DEPTH_CHART_START_SEASON,
@@ -220,11 +227,11 @@ class TestPlayCountDenominators:
     fallback tested the WHOLE frame, so one 2025 row silently zeroed every
     other season's per-play EPA."""
 
+    @requires_real_db
     def test_fallback_is_per_row_not_per_frame(self):
         """Built from real rows: _create_base_features needs the full weekly
         schema, and a hand-rolled fixture silently diverges from it."""
         import sqlite3
-        from config.settings import DB_PATH
         from src.features.feature_engineering import FeatureEngineer
 
         c = sqlite3.connect(str(DB_PATH))
@@ -258,9 +265,9 @@ class TestPlayCountDenominators:
         )
         assert v_both != 0, "2015 must not collapse to a fabricated 0.0"
 
+    @requires_real_db
     def test_db_play_counts_are_populated_for_every_season(self):
         import sqlite3
-        from config.settings import DB_PATH
         c = sqlite3.connect(str(DB_PATH))
         try:
             bad = c.execute("""
