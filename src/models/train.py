@@ -62,7 +62,7 @@ from src.data.lineage import (
     utc_now_iso,
 )
 from src.models.utilization_to_fp import train_utilization_to_fp_per_position
-from src.data.quality_gates import run_quality_gates, validate_training_cache_integrity
+from src.data.quality_gates import run_db_quality_gates, validate_training_cache_integrity
 from src.evaluation.explainability import (
     get_top10_feature_importance_per_position,
     explain_with_shap,
@@ -903,6 +903,7 @@ def train_models(positions: list = None,
                  strict_requirements: bool = None,
                  fast: bool = False,
                  skip_cache_check: bool = False,
+                 skip_quality_gate: bool = False,
                  loyo_backtest: bool = False,
                  loyo_seasons: list = None):
     """
@@ -964,6 +965,34 @@ def train_models(positions: list = None,
         return
     else:
         print("✓ Data integrity gate passed")
+
+    # Pre-training DB quality gate (team/position coverage, row-count
+    # anomalies) — separate from the cache-integrity gate above, which
+    # checks the cached feature parquet rather than the raw DB. Freshness is
+    # excluded here: it asks "are we caught up to the live calendar," which
+    # is a serving/refresh-time question, not a training-data-integrity one
+    # (AUDIT_REPORT.md #10 — this gate was previously imported but never
+    # called at all).
+    if skip_quality_gate:
+        print("⚠ Skipping DB quality gate (--skip-quality-gate)")
+    else:
+        db_gate_result = run_db_quality_gates(check_freshness=False)
+        if not db_gate_result.passed:
+            print("\n" + "=" * 60)
+            print("TRAINING BLOCKED: DB quality gate FAILED")
+            print("=" * 60)
+            for name, check in db_gate_result.report.get("checks", {}).items():
+                if not check.get("passed", True):
+                    print(f"  ✗ {name}: {check}")
+            print("\nFix the data issues above and re-run. "
+                  "Use --skip-quality-gate to bypass (not recommended).")
+            gate_path = MODELS_DIR / "data_quality_gate_report.json"
+            gate_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(gate_path, "w") as f:
+                json.dump(db_gate_result.report, f, indent=2, default=str)
+            print(f"Full report: {gate_path}")
+            return
+        print("✓ DB quality gate passed")
 
     # H5: Experiment tracking
     from src.evaluation.experiment_tracker import ExperimentTracker
@@ -1734,6 +1763,12 @@ def main():
              "fails on stale cache and you want to retrain with fresh data loading."
     )
     parser.add_argument(
+        "--skip-quality-gate",
+        action="store_true",
+        help="Skip the DB quality gate (team/position coverage, row-count "
+             "anomalies) (not recommended)."
+    )
+    parser.add_argument(
         "--loyo-backtest",
         action="store_true",
         help="Run LOYO walk-forward backtest: train fresh per season, "
@@ -1758,6 +1793,7 @@ def main():
         strict_requirements=args.strict_requirements,
         fast=args.fast,
         skip_cache_check=args.skip_cache_check,
+        skip_quality_gate=args.skip_quality_gate,
         loyo_backtest=args.loyo_backtest,
         loyo_seasons=args.loyo_seasons,
     )

@@ -248,10 +248,19 @@ class NFLDataRefresher:
         except Exception as e:
             results['errors'].append(f"Player team history: {e}")
 
-        # Data quality gates — block refresh output if gates fail
+        # Data quality gates — block refresh output if gates fail.
+        # Freshness ("are we caught up to the live calendar") is excluded:
+        # it's routinely and expectedly false mid-week (nflverse hasn't
+        # published this week's stats yet), which isn't a data defect and
+        # can't be fixed by refusing to write data. Blocking on it here
+        # would mean the refresh is "blocked" essentially every day of an
+        # in-progress week -- exactly the kind of always-fails gate that
+        # made this check unenforceable in the first place (AUDIT_REPORT.md
+        # #10). Genuine defects (team/position coverage, row-count
+        # anomalies) are what should actually block.
         try:
             dq_path = MODELS_DIR / "data_quality_gate_refresh.json"
-            dq_result = run_db_quality_gates(report_path=dq_path)
+            dq_result = run_db_quality_gates(report_path=dq_path, check_freshness=False)
             results["quality_gates"] = {"passed": dq_result.passed, "report_path": str(dq_path)}
             if not dq_result.passed:
                 results["errors"].append("REFRESH BLOCKED: Data quality gates failed after refresh")

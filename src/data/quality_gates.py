@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from config.settings import DATA_DIR, MODELS_DIR, POSITIONS, SCORING
+from config.settings import DATA_DIR, MODELS_DIR, POSITIONS, SCORING, regular_season_max_week
 from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week
 
 EXPECTED_TEAMS = {
@@ -40,6 +40,8 @@ class DataQualityGates:
         df: pd.DataFrame,
         expected_season: Optional[int] = None,
         expected_week: Optional[int] = None,
+        db_path: Optional[Path] = None,
+        check_freshness: bool = True,
     ) -> DataQualityGateResult:
         report: Dict[str, Any] = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -64,11 +66,28 @@ class DataQualityGates:
             }
             return DataQualityGateResult(passed=False, report=report)
 
+        latest_season = int(df["season"].max())
+        latest_week = int(df.loc[df["season"] == latest_season, "week"].max())
+        is_postseason = latest_week > regular_season_max_week(latest_season)
+        scheduled_teams = None
+        if not is_postseason:
+            scheduled_teams = _load_scheduled_teams(latest_season, latest_week, db_path=db_path)
+
         checks = {
-            "freshness": self._check_freshness(df, expected_season, expected_week),
-            "completeness": self._check_completeness(df),
-            "anomalies": self._check_anomalies(df),
+            "completeness": self._check_completeness(
+                df, scheduled_teams=scheduled_teams, is_postseason=is_postseason
+            ),
+            "anomalies": self._check_anomalies(df, is_postseason=is_postseason),
         }
+        if check_freshness:
+            # Freshness asks "are we caught up to the live calendar" -- a
+            # serving/refresh-time question. Training runs against whatever
+            # historical seasons are already in the DB and doesn't need
+            # today's in-progress week, so callers like train.py opt out
+            # (check_freshness=False) rather than being blocked by a
+            # perpetually-stale in-season freshness check that has nothing
+            # to do with training-data integrity.
+            checks["freshness"] = self._check_freshness(df, expected_season, expected_week)
         report["checks"] = checks
 
         passed = all(check.get("passed", False) for check in checks.values())
@@ -105,13 +124,31 @@ class DataQualityGates:
             "observed": {"season": latest_season, "week": latest_week},
         }
 
-    def _check_completeness(self, df: pd.DataFrame) -> Dict[str, Any]:
+    def _check_completeness(
+        self,
+        df: pd.DataFrame,
+        scheduled_teams: Optional[set] = None,
+        is_postseason: bool = False,
+    ) -> Dict[str, Any]:
         latest_season = int(df["season"].max())
         latest_week = int(df.loc[df["season"] == latest_season, "week"].max())
         latest = df[(df["season"] == latest_season) & (df["week"] == latest_week)].copy()
 
         teams_present = set(latest["team"].dropna().astype(str).unique())
-        missing_teams = sorted(EXPECTED_TEAMS - teams_present)
+        if is_postseason:
+            # Team count legitimately shrinks every playoff round (down to 2
+            # for the Super Bowl); comparing against the full 32 here was the
+            # exact false positive AUDIT_REPORT.md #10 described.
+            missing_teams: list = []
+            team_check_note = "postseason week -- team-coverage check skipped"
+        else:
+            # A bye week normally leaves 2-6 of the 32 teams idle; comparing
+            # against the actual schedule (not the static 32) avoids treating
+            # every single bye week as a coverage failure. Falls back to the
+            # static roster only when the schedule itself isn't available.
+            expected = scheduled_teams if scheduled_teams is not None else EXPECTED_TEAMS
+            missing_teams = sorted(expected - teams_present)
+            team_check_note = None
 
         positions_present = set(latest["position"].dropna().astype(str).unique())
         missing_positions = sorted(set(self.expected_positions) - positions_present)
@@ -122,15 +159,18 @@ class DataQualityGates:
                 activity_metric = activity_metric + latest[col].fillna(0).astype(float)
         active_players = int(latest.loc[activity_metric > 0, "player_id"].nunique())
 
-        return {
+        result = {
             "passed": len(missing_teams) == 0 and len(missing_positions) == 0 and active_players > 0,
             "latest_window": {"season": latest_season, "week": latest_week},
             "missing_teams": missing_teams,
             "missing_positions": missing_positions,
             "active_players": active_players,
         }
+        if team_check_note:
+            result["note"] = team_check_note
+        return result
 
-    def _check_anomalies(self, df: pd.DataFrame) -> Dict[str, Any]:
+    def _check_anomalies(self, df: pd.DataFrame, is_postseason: bool = False) -> Dict[str, Any]:
         weekly = (
             df.groupby(["season", "week"], as_index=False)
             .size()
@@ -138,6 +178,16 @@ class DataQualityGates:
             .sort_values(["season", "week"])
             .reset_index(drop=True)
         )
+
+        if is_postseason:
+            # Row count naturally craters every playoff round; the 4-week
+            # rolling-median baseline is built from regular-season weeks and
+            # is not a meaningful comparison here.
+            return {
+                "passed": True,
+                "reason": "postseason week -- anomaly baseline not meaningful",
+                "latest_row_count": int(weekly.iloc[-1]["row_count"]),
+            }
 
         weekly["baseline"] = (
             weekly["row_count"]
@@ -172,6 +222,32 @@ class DataQualityGates:
         }
 
 
+def _load_scheduled_teams(
+    season: int, week: int, db_path: Optional[Path] = None
+) -> Optional[set]:
+    """Teams actually scheduled to play in (season, week), from the real
+    `schedule` table -- or None if the schedule has no rows for that week
+    (falls back to the static 32-team roster in that case)."""
+    db_file = db_path or (DATA_DIR / "nfl_data.db")
+    try:
+        with sqlite3.connect(str(db_file)) as conn:
+            rows = conn.execute(
+                "SELECT home_team, away_team FROM schedule WHERE season = ? AND week = ?",
+                (season, week),
+            ).fetchall()
+    except sqlite3.Error:
+        return None
+    if not rows:
+        return None
+    teams: set = set()
+    for home, away in rows:
+        if home:
+            teams.add(str(home).strip())
+        if away:
+            teams.add(str(away).strip())
+    return teams or None
+
+
 def load_player_weekly_stats(db_path: Optional[Path] = None) -> pd.DataFrame:
     """Load core columns needed by data quality gates."""
     db_file = db_path or (DATA_DIR / "nfl_data.db")
@@ -202,10 +278,18 @@ def run_quality_gates(
     expected_season: Optional[int] = None,
     expected_week: Optional[int] = None,
     report_path: Optional[Path] = None,
+    db_path: Optional[Path] = None,
+    check_freshness: bool = True,
 ) -> DataQualityGateResult:
     """Run quality gates over a dataframe and optionally write JSON report."""
     runner = DataQualityGates()
-    result = runner.evaluate(df, expected_season=expected_season, expected_week=expected_week)
+    result = runner.evaluate(
+        df,
+        expected_season=expected_season,
+        expected_week=expected_week,
+        db_path=db_path,
+        check_freshness=check_freshness,
+    )
     if report_path is not None:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(result.report, indent=2))
@@ -463,6 +547,7 @@ def run_db_quality_gates(
     report_path: Optional[Path] = None,
     expected_season: Optional[int] = None,
     expected_week: Optional[int] = None,
+    check_freshness: bool = True,
 ) -> DataQualityGateResult:
     """Run quality gates against the project DB."""
     df = load_player_weekly_stats(db_path=db_path)
@@ -472,6 +557,8 @@ def run_db_quality_gates(
         expected_season=expected_season,
         expected_week=expected_week,
         report_path=final_report_path,
+        db_path=db_path,
+        check_freshness=check_freshness,
     )
     try:
         position_check = check_position_integrity(db_path=db_path)

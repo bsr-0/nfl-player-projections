@@ -14,6 +14,11 @@ from config.settings import DATA_DIR, SEASONS_TO_SCRAPE, TRAINING_START_YEAR_DEF
 from src.utils.database import DatabaseManager
 
 
+class DataQualityGateBlocked(RuntimeError):
+    """Raised when auto-refresh's data quality gates failed and the caller
+    has not explicitly opted into proceeding anyway."""
+
+
 class DataManager:
     """
     Manages data availability and automatic season selection.
@@ -376,17 +381,21 @@ class DataManager:
         return "\n".join(report)
 
 
-def auto_refresh_data(force_check: bool = False) -> Dict:
+def auto_refresh_data(force_check: bool = False, allow_gate_failure: bool = False) -> Dict:
     """
     Convenience function to auto-refresh data and check availability.
-    
+
     Loads any missing weekly data (e.g. current season) from nfl-data-py so
     the ML pipeline sees the latest season. Then uses DB seasons for train/test
     split so test set is never empty.
-    
+
     Args:
         force_check: Force re-check even if recently checked
-        
+        allow_gate_failure: If True, a failed quality gate only warns instead
+            of raising (AUDIT_REPORT.md #10 -- this used to be the only
+            behavior, which meant a gate FAIL could never actually block
+            anything). Default is strict: raise DataQualityGateBlocked.
+
     Returns:
         Dict with current data status
     """
@@ -396,11 +405,19 @@ def auto_refresh_data(force_check: bool = False) -> Dict:
         refresher = NFLDataRefresher()
         refresh_result = refresher.refresh(force=False)
         if isinstance(refresh_result, dict) and refresh_result.get("blocked"):
-            warnings.warn(
-                "Auto-refresh data quality gates FAILED — proceeding with existing DB data. "
-                "Check the quality gate report for details.",
-                UserWarning,
+            message = (
+                "Auto-refresh data quality gates FAILED. "
+                "Check the quality gate report for details."
             )
+            if allow_gate_failure:
+                warnings.warn(f"{message} Proceeding with existing DB data (allow_gate_failure=True).",
+                               UserWarning)
+            else:
+                raise DataQualityGateBlocked(
+                    f"{message} Pass allow_gate_failure=True to proceed anyway (not recommended)."
+                )
+    except DataQualityGateBlocked:
+        raise
     except Exception as e:
         # Non-fatal: proceed with whatever is in DB
         warnings.warn(f"Auto-refresh load skipped: {e}", UserWarning)
