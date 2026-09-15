@@ -36,9 +36,16 @@ def _safe_spearman(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 def spearman_rank_correlation(
-    y_true: np.ndarray, y_pred: np.ndarray, top_n: Optional[int] = 50
+    y_true: np.ndarray, y_pred: np.ndarray, top_n: Optional[int] = None
 ) -> float:
-    """Spearman rank correlation between predicted and actual (target rho > 0.65 for top-50)."""
+    """Spearman rank correlation between predicted and actual.
+
+    Defaults to the full sample. Passing top_n selects the top-n rows by
+    predicted value first — only meaningful within a single, homogeneous
+    group (one position, one week); pooling across positions/weeks before
+    selecting on the predictor itself introduces restriction-of-range bias
+    and can flip the sign of the correlation.
+    """
     if len(y_true) < 2 or len(y_pred) < 2:
         return np.nan
     if top_n is not None and len(y_true) > top_n:

@@ -587,17 +587,26 @@ class ModelBacktester:
         
         # Ranking accuracy (did we correctly identify top players?)
         results["ranking_accuracy"] = self._calculate_ranking_accuracy(merged, actual_col, prediction_col)
-        # Spearman rank correlation per position (top-50, target rho > 0.65)
+        # Spearman rank correlation per position, averaged across weeks
+        # (target rho > 0.65). Computed within-week, not pooled across weeks:
+        # pooling first and selecting a top-N by predicted value mixes weeks
+        # with very different scoring environments and biases toward
+        # whichever week happened to produce the highest predictions.
         results["spearman_by_position"] = {}
         for pos in merged["position"].unique():
             pos_data = merged[merged["position"] == pos]
-            if len(pos_data) >= 10:
+            week_rhos = []
+            for _, week_data in pos_data.groupby("week"):
+                if len(week_data) < 5:
+                    continue
                 rho = spearman_rank_correlation(
-                    pos_data[actual_col].values,
-                    pos_data[prediction_col].values,
-                    top_n=50,
+                    week_data[actual_col].values,
+                    week_data[prediction_col].values,
                 )
-                results["spearman_by_position"][pos] = round(float(rho), 3) if np.isfinite(rho) else None
+                if np.isfinite(rho):
+                    week_rhos.append(rho)
+            if week_rhos:
+                results["spearman_by_position"][pos] = round(float(np.mean(week_rhos)), 3)
 
         # Top performers analysis
         results["top_performers"] = self._analyze_top_performers(merged, actual_col, prediction_col)
@@ -656,7 +665,7 @@ class ModelBacktester:
         within_10 = (np.abs(actual - predicted) <= 10).mean() * 100
 
         a, p = actual.values, predicted.values
-        spearman = spearman_rank_correlation(a, p, top_n=50)
+        spearman = spearman_rank_correlation(a, p)
         tier_acc = tier_classification_accuracy(a, p)
         boom_bust = boom_bust_metrics(a, p, boom_thresh=20.0, bust_thresh=5.0)
         vor = vor_accuracy(a, p)
@@ -817,7 +826,7 @@ class ModelBacktester:
         lines.append(f"    Within 7 points:     {m.get('within_7_pts_pct', 0):.1f}%  (target ≥ 70%)")
         lines.append(f"    Within 10 points:    {m['within_10_pts_pct']:.1f}%  (target ≥ 80%)")
         if m.get("spearman_rho") is not None:
-            lines.append(f"  Spearman (top-50):   {m['spearman_rho']:.3f}  (target > 0.65)")
+            lines.append(f"  Spearman (full):     {m['spearman_rho']:.3f}  (target > 0.65)")
         if m.get("tier_classification_accuracy") is not None:
             lines.append(f"  Tier accuracy:       {m['tier_classification_accuracy']:.3f}  (target > 0.75)")
         if m.get("vor_rank_correlation") is not None:
