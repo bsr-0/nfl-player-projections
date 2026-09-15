@@ -104,17 +104,19 @@
   high a good week can go — two players with the same projection and different
   ranges are not the same bet.</p>
 
-  <p id="accnote2"><strong>Projections run low, by a known amount.</strong> Measured against
-  real 2025 results using a model that never saw that season
-  (weeks 6/10/14): mean error <span id="biasline">—</span>. Some of this is
-  inherent — the model minimises average error, which pulls estimates toward
-  the middle of a right-skewed distribution — and a log-transform correction
-  already removes roughly 40% of it. Treat projections as conservative,
-  especially at the top.</p>
+  <p id="accnote2"><strong>How far off, and in which direction.</strong> Measured
+  against real 2025 results by replaying every week of that season through the
+  same code that serves this page, with a model that never saw it: mean error
+  <span id="biasline">—</span>. The model minimises average error, which pulls
+  estimates toward the middle of a right-skewed distribution, and a
+  log-transform correction removes part of that.</p>
 
   <p id="accnote"><strong>Accuracy.</strong> Average absolute error per
-  player-week on that same held-out test: <span id="maeline">—</span>. Ranking
+  player-week on that same held-out season: <span id="maeline">—</span>. Ranking
   is more reliable than the absolute values.</p>
+
+  <p id="baselinenote"><strong>How much the model beats guessing.</strong>
+  <span id="baselineline">—</span></p>
 
   <p><strong>What changes between weeks.</strong> <span id="varnote">Each week
   uses that player's real opponent from the schedule.</span> Players on bye are
@@ -238,10 +240,38 @@ fetch("data/weekly_meta.json")
     if (meta.measured && !prorated) {
       const bl = document.getElementById("biasline");
       const ml = document.getElementById("maeline");
-      const fmt = (k) => POS.filter(p => meta.measured[p])
-        .map(p => `${p} ${meta.measured[p][k].toFixed(1)}`).join(", ") + " points";
-      if (bl) bl.textContent = fmt("bias");
-      if (ml) ml.textContent = fmt("mae");
+      // Signed, per position: the bias is small and no longer runs the same
+      // way for every position, so a single "runs low" claim would be wrong.
+      const fmt = (k, signed) => POS.filter(p => meta.measured[p])
+        .map(p => {
+          const v = meta.measured[p][k];
+          return `${p} ${signed && v > 0 ? "+" : ""}${v.toFixed(1)}`;
+        }).join(", ") + " points";
+      if (bl) bl.textContent = fmt("bias", true) + " (positive = projected above actual)";
+      if (ml) ml.textContent = fmt("mae", false);
+    }
+
+    // What the model is worth against naive baselines, stated plainly.
+    const bsl = document.getElementById("baselineline");
+    const bs = meta.baseline_standing;
+    if (bsl) {
+      if (prorated || !bs || !bs.rmse_improvement_pct) {
+        const note = document.getElementById("baselinenote");
+        if (note) note.style.display = "none";
+      } else {
+        const pct = bs.rmse_improvement_pct;
+        const named = { trailing_3g_avg: "a 3-game average", season_avg: "this season's average",
+                        vegas_implied: "the betting line", blended_heuristic: "a blended heuristic" };
+        const parts = Object.keys(named).filter(k => pct[k] != null)
+          .map(k => `${pct[k] > 0 ? "beats" : "loses to"} ${named[k]} by ${Math.abs(pct[k]).toFixed(1)}%`);
+        bsl.textContent =
+          `Replaying ${bs.season} week by week, the model ${parts.join(", ")} (error reduction). `
+          + (bs.beat_all_baselines_by_20_pct
+              ? "That clears the project's bar of beating every baseline by 20%."
+              : "That is a narrow margin — it does not clear the project's bar of beating "
+                + "every baseline by 20%, so treat these as a modest edge over simple "
+                + "heuristics, not a decisive one.");
+      }
     }
     return loadWeek(meta.weeks[0]);
   })

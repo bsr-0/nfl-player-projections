@@ -55,12 +55,96 @@ from config.settings import DB_PATH
 OUT_DIR = Path("docs/data")
 GAMES_PER_SEASON = 17
 
-MEASURED = {
-    "QB": {"mae": 7.09, "bias": -1.30},
-    "RB": {"mae": 4.43, "bias": -1.62},
-    "WR": {"mae": 4.03, "bias": -1.45},
-    "TE": {"mae": 3.00, "bias": -1.22},
-}
+BACKTEST_DIR = Path("data/backtest_results")
+
+
+def measured_accuracy() -> dict | None:
+    """Per-position accuracy read from the latest TRUSTED, full-season
+    serving-path backtest -- the artifact that scores the model this page
+    actually serves, week by week, against what those players really did.
+
+    This used to be a hardcoded dict (QB 7.09 / RB 4.43 / WR 4.03 / TE 3.00,
+    with a -1.2 to -1.6 point "runs low" bias) copied from a three-week spot
+    check whose artifact no longer exists -- AUDIT_REPORT.md #16. Two things
+    made those numbers wrong to keep publishing: they were never
+    reproducible, and the low bias they described was largely the blanket
+    injury discount that used to be multiplied into every projection, which
+    is gone (availability is reported separately now). Returns None when no
+    trusted artifact exists, so the page can say nothing rather than assert
+    a stale number.
+    """
+    for path in sorted(BACKTEST_DIR.glob("backtest_*_*.json"), reverse=True):
+        if "UNTRUSTED" in path.name or "PARTIAL" in path.name:
+            continue
+        try:
+            raw = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if raw.get("backtest_path") != "serving_path_as_of_walk_forward":
+            continue
+        if raw.get("trust", {}).get("trusted", True) is False or raw.get("partial_season"):
+            continue
+        by_pos = raw.get("by_position") or {}
+        out = {}
+        for pos, m in by_pos.items():
+            if m.get("mae") is None or m.get("avg_predicted") is None or m.get("avg_actual") is None:
+                continue
+            out[pos] = {
+                "mae": round(float(m["mae"]), 2),
+                "bias": round(float(m["avg_predicted"]) - float(m["avg_actual"]), 2),
+            }
+        if out:
+            out["_source"] = {
+                "file": path.name,
+                "season": raw.get("season"),
+                "weeks": len(raw.get("weeks_evaluated") or []),
+                "model_type": raw.get("model_type"),
+                "feature_version": raw.get("feature_version"),
+            }
+            return out
+    return None
+
+
+def baseline_standing() -> dict | None:
+    """How the served model actually compares to the naive baselines, from
+    the same trusted artifact.
+
+    The fix order's instruction was "until it wins, keep serving Step 8 and
+    SAY SO" -- this is the say-so, published rather than left in a JSON file
+    nobody reads. The honest current answer is a narrow win: the model beats
+    a trailing-3-game average by a few percent and season-average by less,
+    which is not the same as being decisively better, and the page should
+    not imply otherwise.
+    """
+    for path in sorted(BACKTEST_DIR.glob("backtest_*_*.json"), reverse=True):
+        if "UNTRUSTED" in path.name or "PARTIAL" in path.name:
+            continue
+        try:
+            raw = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if raw.get("backtest_path") != "serving_path_as_of_walk_forward":
+            continue
+        if raw.get("trust", {}).get("trusted", True) is False or raw.get("partial_season"):
+            continue
+        strong = raw.get("strong_baseline_comparison") or {}
+        if not strong:
+            continue
+        criteria = raw.get("success_criteria") or {}
+        return {
+            "season": raw.get("season"),
+            "rmse_improvement_pct": {
+                k: v.get("rmse_improvement_pct") for k, v in strong.items()
+                if isinstance(v, dict)
+            },
+            "beats_every_baseline": all(
+                (v.get("rmse_improvement_pct") or 0) > 0 for v in strong.values()
+                if isinstance(v, dict)
+            ),
+            "beat_all_baselines_by_20_pct": criteria.get("beat_all_baselines_by_20_pct"),
+            "model_has_real_edge": criteria.get("model_has_real_edge"),
+        }
+    return None
 
 KEEP = ["name", "position", "team", "opponent", "home_away",
         "predicted_points", "prediction_ci80_lower", "prediction_ci80_upper"]
@@ -219,7 +303,8 @@ def main() -> int:
         "completed_game_rows": int(played),
         "has_intervals": mode == "weekly_model",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "measured": MEASURED,
+        "measured": measured_accuracy(),
+        "baseline_standing": baseline_standing(),
         "model": ("season model (Step 8) total / 17"
                   if mode == "season_prorated"
                   else "weekly ensemble (1w horizon), log1p+smearing calibration"),

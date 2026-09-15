@@ -1,0 +1,12 @@
+{
+  "run_at": "2026-09-05T19:21:49",
+  "seasons": [
+    2025,
+    2025
+  ],
+  "train_from": 2019,
+  "population": "players with a week-1 row in player_weekly_stats",
+  "pooled": {},
+  "by_season": {},
+  "by_position_cold_start": {}
+}

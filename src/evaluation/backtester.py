@@ -21,7 +21,8 @@ from src.evaluation.metrics import (
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config.settings import POSITIONS, DATA_DIR, MODELS_DIR, MODEL_CONFIG, LOYO_CONFIG
+from config.settings import (
+    POSITIONS, DATA_DIR, MODELS_DIR, MODEL_CONFIG, LOYO_CONFIG, FEATURE_VERSION)
 
 
 class ModelBacktester:
@@ -2093,6 +2094,18 @@ def run_loyo_backtest(
 
     result = {
         "backtest_type": "loyo_walk_forward",
+        # What produced these numbers, so they can never be mistaken for the
+        # served model's (AUDIT_REPORT.md #16). Unlike run_backtest -- which
+        # walks the SERVING path against the persisted ensemble -- LOYO trains
+        # a FRESH model per fold through the production training pipeline
+        # (_run_one_fold -> _prepare_training_data, so bounded scaling and
+        # winsorization do apply) and scores it against the winsorized
+        # target_1w. That makes it a measure of the pipeline's fold-level
+        # skill, not of the artifact currently being served.
+        "model_source": "per_fold_retrain",
+        "model_type": "per_fold_retrain(production training pipeline)",
+        "scored_against": "target_1w (winsorized to train 1st/99th percentile)",
+        "feature_version": str(FEATURE_VERSION),
         "backtest_date": datetime.now().isoformat(),
         "test_seasons": [f["season"] for f in per_fold],
         "n_folds": len(per_fold),

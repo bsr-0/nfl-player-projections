@@ -175,6 +175,63 @@ class PBPStatsAggregator:
 
         return df
     
+    @staticmethod
+    def _exclude_two_point_plays(plays: pd.DataFrame) -> pd.DataFrame:
+        """Drop two-point conversion plays from an attempt/target population.
+
+        A conversion attempt is not an official pass/rush attempt or target,
+        and nflverse already zeroes its yards, TDs and completions -- but it
+        still carries play_type 'pass'/'run' and a pass_attempt/rush_attempt
+        flag, so counting plays (`play_id: count`) folded ~148 league-wide
+        non-attempts per season into passing_attempts/rushing_attempts/
+        targets. Those same plays are credited separately, as two-point
+        conversions, by aggregate_two_point_conversions.
+        """
+        if 'two_point_attempt' not in plays.columns:
+            return plays
+        return plays[plays['two_point_attempt'].fillna(0) != 1]
+
+    def aggregate_two_point_conversions(self, pbp: pd.DataFrame = None) -> pd.DataFrame:
+        """Successful two-point conversions per player-week, from PBP.
+
+        nflverse zeroes yards/TDs/receptions on two-point plays because they
+        are not official passing/rushing/receiving stats, so those 2 points
+        reach fantasy_points ONLY if counted separately. The weekly-data path
+        does that (passing_/rushing_/receiving_2pt_conversions), but this PBP
+        fallback never did: it declared the column and defaulted it to 0, so
+        every conversion in a PBP-sourced season scored zero. 2025 is exactly
+        such a season -- nflverse weekly 404s for it, so the fallback is the
+        only source.
+
+        Both passer and receiver are credited on a conversion pass, matching
+        nflverse weekly's separate columns and SCORING['two_point_conversions'].
+        """
+        pbp = pbp if pbp is not None else self.pbp_data
+        empty = pd.DataFrame(columns=['season', 'week', 'player_id', 'two_point_conversions'])
+        if pbp is None or pbp.empty:
+            return empty
+        if 'two_point_attempt' not in pbp.columns or 'two_point_conv_result' not in pbp.columns:
+            return empty
+
+        conv = pbp[(pbp['two_point_attempt'].fillna(0) == 1)
+                   & (pbp['two_point_conv_result'] == 'success')]
+        if conv.empty:
+            return empty
+
+        credits = []
+        for col in ('passer_player_id', 'rusher_player_id', 'receiver_player_id'):
+            if col not in conv.columns:
+                continue
+            sub = conv.loc[conv[col].notna(), ['season', 'week', col]]
+            if not sub.empty:
+                credits.append(sub.rename(columns={col: 'player_id'}))
+        if not credits:
+            return empty
+
+        out = pd.concat(credits, ignore_index=True)
+        out = out.groupby(['season', 'week', 'player_id'], as_index=False).size()
+        return out.rename(columns={'size': 'two_point_conversions'})
+
     def aggregate_passing_stats(self, pbp: pd.DataFrame = None) -> pd.DataFrame:
         """Aggregate passing stats by player/week."""
         pbp = pbp if pbp is not None else self.pbp_data
@@ -182,7 +239,7 @@ class PBPStatsAggregator:
             return pd.DataFrame()
 
         # Filter to pass plays
-        pass_plays = pbp[pbp['play_type'] == 'pass'].copy()
+        pass_plays = self._exclude_two_point_plays(pbp[pbp['play_type'] == 'pass']).copy()
         if 'passer_player_id' in pass_plays.columns:
             pass_plays = pass_plays[pass_plays['passer_player_id'].notna()]
         
@@ -236,7 +293,7 @@ class PBPStatsAggregator:
             return pd.DataFrame()
         
         # Filter to rush plays
-        rush_plays = pbp[pbp['play_type'] == 'run'].copy()
+        rush_plays = self._exclude_two_point_plays(pbp[pbp['play_type'] == 'run']).copy()
         if 'rusher_player_id' in rush_plays.columns:
             rush_plays = rush_plays[rush_plays['rusher_player_id'].notna()]
 
@@ -310,7 +367,8 @@ class PBPStatsAggregator:
             return pd.DataFrame()
         
         # Filter to pass plays with a receiver
-        rec_plays = pbp[(pbp['play_type'] == 'pass') & (pbp['receiver_player_id'].notna())].copy()
+        rec_plays = self._exclude_two_point_plays(
+            pbp[(pbp['play_type'] == 'pass') & (pbp['receiver_player_id'].notna())]).copy()
 
         # Air yards + deep target proxies (15+ air yards)
         if 'air_yards' in rec_plays.columns:
@@ -655,6 +713,22 @@ class PBPStatsAggregator:
         # Infer position if not from snaps
         if 'position' not in all_stats.columns or all_stats['position'].isna().any():
             all_stats['position'] = all_stats.apply(self._infer_position, axis=1)
+
+        # Two-point conversions. Merged AFTER the duplicate collapse above (a
+        # player who both passed and received in one game would otherwise have
+        # his credits summed twice) and BEFORE fantasy points, which is the
+        # only place those 2 points enter the score.
+        two_pt = self.aggregate_two_point_conversions(pbp)
+        all_stats = all_stats.drop(columns=['two_point_conversions'], errors='ignore')
+        if not two_pt.empty:
+            for frame in (all_stats, two_pt):
+                for key in ('season', 'week'):
+                    frame[key] = pd.to_numeric(frame[key], errors='coerce').astype('Int64')
+            all_stats = all_stats.merge(two_pt, on=['season', 'week', 'player_id'], how='left')
+        if 'two_point_conversions' not in all_stats.columns:
+            all_stats['two_point_conversions'] = 0
+        all_stats['two_point_conversions'] = (
+            all_stats['two_point_conversions'].fillna(0).astype(int))
 
         # Calculate fantasy points
         all_stats = self.calculate_fantasy_points(all_stats)
