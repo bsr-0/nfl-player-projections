@@ -24,48 +24,48 @@
   "training_metrics": {},
   "backtest_results": {
     "QB": {
-      "rmse": 8.32,
-      "mae": 6.87,
-      "r2": 0.207,
-      "mape": 104.4,
-      "directional_accuracy_pct": 66.7,
-      "within_5_pts_pct": 39.2,
-      "within_7_pts_pct": 55.3,
-      "within_10_pts_pct": 76.4,
-      "spearman_rho": 0.004
+      "rmse": 8.33,
+      "mae": 6.86,
+      "r2": 0.201,
+      "mape": 103.5,
+      "directional_accuracy_pct": 66.2,
+      "within_5_pts_pct": 39.4,
+      "within_7_pts_pct": 55.6,
+      "within_10_pts_pct": 76.2,
+      "spearman_rho": 0.429
     },
     "TE": {
-      "rmse": 4.72,
+      "rmse": 4.69,
       "mae": 3.03,
-      "r2": 0.364,
-      "mape": 53.5,
-      "directional_accuracy_pct": 79.6,
-      "within_5_pts_pct": 80.2,
+      "r2": 0.367,
+      "mape": 54.3,
+      "directional_accuracy_pct": 79.0,
+      "within_5_pts_pct": 80.1,
       "within_7_pts_pct": 88.7,
       "within_10_pts_pct": 95.4,
-      "spearman_rho": 0.129
+      "spearman_rho": 0.652
     },
     "RB": {
-      "rmse": 6.43,
-      "mae": 4.57,
-      "r2": 0.387,
-      "mape": 69.5,
-      "directional_accuracy_pct": 76.6,
-      "within_5_pts_pct": 68.5,
-      "within_7_pts_pct": 80.1,
-      "within_10_pts_pct": 89.7,
-      "spearman_rho": 0.181
+      "rmse": 6.46,
+      "mae": 4.6,
+      "r2": 0.383,
+      "mape": 69.7,
+      "directional_accuracy_pct": 76.5,
+      "within_5_pts_pct": 67.9,
+      "within_7_pts_pct": 79.8,
+      "within_10_pts_pct": 89.4,
+      "spearman_rho": 0.664
     },
     "WR": {
-      "rmse": 5.97,
-      "mae": 4.26,
-      "r2": 0.326,
-      "mape": 75.6,
-      "directional_accuracy_pct": 76.6,
-      "within_5_pts_pct": 71.0,
-      "within_7_pts_pct": 80.4,
-      "within_10_pts_pct": 90.1,
-      "spearman_rho": -0.162
+      "rmse": 6.05,
+      "mae": 4.34,
+      "r2": 0.308,
+      "mape": 78.5,
+      "directional_accuracy_pct": 76.2,
+      "within_5_pts_pct": 70.1,
+      "within_7_pts_pct": 79.7,
+      "within_10_pts_pct": 89.9,
+      "spearman_rho": 0.624
     }
   },
   "top_features": {
