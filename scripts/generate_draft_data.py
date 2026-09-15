@@ -749,6 +749,81 @@ def _load_oos_prediction_map():
         return {}
 
 
+def _load_bye_weeks(season: int) -> dict:
+    """{team: bye_week} from the real `schedule` table.
+
+    A team's bye is the one week (of 18) it has no scheduled game --
+    computed, not guessed, so it stays correct if the league ever changes
+    bye-week placement or adds a week (AUDIT_REPORT.md #7 -- this was
+    previously hardcoded None for every player).
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        rows = conn.execute(
+            "SELECT home_team, week FROM schedule WHERE season = ? "
+            "UNION SELECT away_team, week FROM schedule WHERE season = ?",
+            (season, season),
+        ).fetchall()
+        all_weeks = conn.execute(
+            "SELECT DISTINCT week FROM schedule WHERE season = ?", (season,)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    all_weeks = {w for (w,) in all_weeks}
+    played_by_team: dict = {}
+    for team, week in rows:
+        played_by_team.setdefault(team, set()).add(week)
+
+    bye_weeks = {}
+    for team, played in played_by_team.items():
+        missing = sorted(all_weeks - played)
+        if len(missing) == 1:
+            bye_weeks[team] = missing[0]
+        # More or fewer than one missing week means either the season isn't
+        # fully scheduled yet or something's off -- leave that team unset
+        # rather than guess.
+    return bye_weeks
+
+
+def _load_injury_flags(season: int) -> dict:
+    """{player_id: True} for players with a non-empty injury report status
+    in the most recent week reported for `season`.
+
+    Real practice-report data from scripts/backfill_injuries.py, not a
+    hardcoded False for every player (AUDIT_REPORT.md #7). "Probable" and
+    a null/empty status both mean no real concern, so only Out/Doubtful/
+    Questionable set the flag.
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        latest_week = conn.execute(
+            "SELECT MAX(week) FROM player_injuries WHERE season = ?", (season,)
+        ).fetchone()[0]
+        if latest_week is None:
+            return {}
+        rows = conn.execute(
+            "SELECT player_id, report_status FROM player_injuries "
+            "WHERE season = ? AND week = ?",
+            (season, latest_week),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    concerning = {"out", "doubtful", "questionable"}
+    return {
+        player_id: True
+        for player_id, status in rows
+        if status and str(status).strip().lower() in concerning
+    }
+
+
 def _load_adp_map(season: int) -> dict:
     """Real market ADP (FantasyPros ECR, via adp_history) keyed by
     (normalized name, position).
@@ -855,6 +930,10 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
     # Load OOS prediction data for off-season enrichment
     oos_map = _load_oos_prediction_map()
     adp_map = _load_adp_map(upcoming_season)
+    bye_map = _load_bye_weeks(upcoming_season)
+    injury_map = _load_injury_flags(upcoming_season)
+    from src.features.player_age import age_from_birth_date, birth_date_map
+    birth_dates = birth_date_map()
     normalize_name = EntityResolver.normalize_name
 
     for pos in ["QB", "RB", "WR", "TE"]:
@@ -886,13 +965,14 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
             player_id = str(row["player_id"])
             oos = oos_map.get(player_id, {})
             adp = adp_map.get((normalize_name(row["name"]), row["position"]))
+            age = age_from_birth_date(birth_dates.get(player_id), upcoming_season)
 
             players.append({
                 "player_id": player_id,
                 "name": row["name"],
                 "team": row["team"],
                 "position": row["position"],
-                "bye_week": None,
+                "bye_week": bye_map.get(row["team"]),
                 "adp": round(adp, 1) if adp is not None else None,
                 "model_rank": rank,
                 "projection_points_total": proj_total,
@@ -906,8 +986,8 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
                                    else None),
                 "projection_model": PRESEASON_MODEL,
                 "risk_score": int(row["risk_score"]) if pd.notna(row.get("risk_score")) else None,
-                "injury_flag": False,
-                "age": None,
+                "injury_flag": injury_map.get(player_id, False),
+                "age": round(age, 1) if pd.notna(age) else None,
                 "key_features": row.get("key_features", []),
                 "feature_importance_rank": row.get("feature_importance_rank", {}),
                 "uses_schedule": schedule_available,
