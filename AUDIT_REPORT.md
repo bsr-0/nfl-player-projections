@@ -1,5 +1,31 @@
 # Audit Report — 2026-09-09
 
+> **Status (2026-09-15): all 25 findings resolved.** The body below is the
+> original report, kept as written. Don't re-investigate from it -- verify
+> against the current code. Resolution by finding (commit):
+>
+> | # | Commit | | # | Commit |
+> |---|---|---|---|---|
+> | 1 | `5a514ce` | | 14 | `d148f2f` |
+> | 2 | `37ad02d` | | 15 | `4dc1866` (served ensemble now beats every baseline but one blended heuristic, -1.2%) |
+> | 3 | `7608895` badge, injury feed backfilled, `d02e824` refresh entrypoint | | 16 | `4dc1866` |
+> | 4 | `8ff75bc` | | 17 | `d8d5751` |
+> | 5 | `77045ca` | | 18 | `dc02cc6` (file was orphaned, deleted -- not a mistyped number) |
+> | 6 | `afce5d3`, then `06073e4` + follow-up for name collisions the first fix introduced | | 19 | `f307bdb` |
+> | 7 | `bfc22c2` | | 20 | this commit -- a 2026-09-14 re-check wrongly marked it fixed; `tuning.py` still fed `num_leaves` to the sklearn fallback |
+> | 8 | `f2ec505` | | 21 | `f3bd16b` |
+> | 9 | `f2ec505` | | 22 | `77045ca` + `e6dd651` |
+> | 10 | `6d36642` | | 23 | moot -- `CLAUDE.md` fully rewritten `d6eebab`; no freeze policy exists now (see README) |
+> | 11 | `d02e824` -- manual entrypoint by design; no DB for cron/CI to run against | | 24 | `84fdd21` |
+> | 12 | `d148f2f` | | 25 | `e6dd651` |
+> | 13 | `d148f2f` | | | |
+>
+> Found while closing these, not in the original report: the Spearman
+> "target > 0.65" had been measuring a 50-row cross-position slice (#17);
+> `pass_plays`/`rush_plays` were desynced for 2023-24 only (`b1e00ea`);
+> nflverse's live injury feed dropped `date_modified` (fails safe); the
+> first ADP fix put Jonathan Taylor at ADP 364 via a name collision.
+
 **Question audited:** does this repo deliver a robust, accurate fantasy football prediction system with a well-tested, optimized backend and a UI that gives real value to team owners?
 
 **Short answer:** not yet. The research core is careful and unusually honest, but the product that ships today is a static PPR draft board with duplicated rows and no bye weeks, the weekly ML model has never been shown on a full season to beat a trailing average, and the data write path silently destroys two of the inputs the model depends on. Week 1 of 2026 starts tomorrow and the calendar code thinks it is week 2.

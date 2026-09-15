@@ -35,6 +35,34 @@ python scripts/draft_advisor.py --mode spread --season 2025
 pytest
 ```
 
+## Keeping the site current (manual, weekly)
+
+Nothing runs on a schedule: the whole pipeline reads `data/nfl_data.db`,
+a gitignored local file, so there is no CI or cron to run it from. During
+the season, run this once a week after the games (Tuesday is a good
+default -- nflverse has usually published by then):
+
+```bash
+python scripts/refresh_site_data.py    # chains every step below, in order
+```
+
+It runs `src.data.auto_refresh` (rosters / weekly stats / schedule),
+`backfill_injuries.py` and `backfill_adp.py` for the current season,
+`generate_draft_data.py`, copies `data/players_*.json` into `docs/data/`,
+and `generate_weekly_data.py`. It does **not** commit or push -- review
+`git status docs/data data/players_*.json` first. Use `--skip` for partial
+runs (e.g. `--skip auto_refresh` when the DB is already fresh).
+
+What goes stale if you skip a week: the injury Risk/Probable badge on
+`docs/weekly.html` and `injury_flag` on the draft board (the report feed
+is per-week), market ADP, and the weekly page's `season_prorated` ->
+`weekly_model` switch, which flips automatically once the season's first
+completed game rows are ingested.
+
+The `ui-stable-v1` tag exists but points at 2026-05-18 and predates every
+site change since; it is not a usable recovery point for the current
+pages. There is currently no documented UI freeze policy.
+
 ## Project structure
 
 ```
