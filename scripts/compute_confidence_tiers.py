@@ -15,8 +15,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-BASE = Path("/Users/benrosen/nfl-player-projections/data/backtest_results")
-OUT_PATH = Path("/Users/benrosen/nfl-player-projections/docs/data/confidence_tiers.json")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+BASE = PROJECT_ROOT / "data" / "backtest_results"
+OUT_PATH = PROJECT_ROOT / "docs" / "data" / "confidence_tiers.json"
 POSITIONS = {"QB", "RB", "WR", "TE"}
 YEARS = list(range(2018, 2026))
 

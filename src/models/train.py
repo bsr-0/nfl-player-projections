@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config.settings import (
     POSITIONS,
+    PROJECT_ROOT,
     MODELS_DIR,
     DATA_DIR,
     MODEL_CONFIG,
@@ -1589,8 +1590,11 @@ def train_models(positions: list = None,
             "previous_feature_version": prev_metadata.get("feature_version"),
             "rollback_available": bool(prev_metadata.get("training_date")),
             "n_rollback_versions": len(version_history),
-            "horizon_status_file": str(MODELS_DIR / "horizon_model_status.json"),
-            "bounded_scaler_file": str(MODELS_DIR / "feature_scaler_bounded.joblib"),
+            # Repo-relative so the committed artifact doesn't embed one
+            # machine's home directory (AUDIT_REPORT.md #25). Nothing reads
+            # these back; they're pointers for a human.
+            "horizon_status_file": str((MODELS_DIR / "horizon_model_status.json").relative_to(PROJECT_ROOT)),
+            "bounded_scaler_file": str((MODELS_DIR / "feature_scaler_bounded.joblib").relative_to(PROJECT_ROOT)),
         }
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, default=str)
