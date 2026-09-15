@@ -22,3 +22,21 @@ def board_name(full) -> str:
     while len(parts) > 2 and parts[-1].lower().strip(".") in SUFFIXES:
         parts.pop()
     return f"{parts[0][0]}.{' '.join(parts[1:])}"
+
+
+def full_name_key(full) -> str:
+    """"Travis Etienne Jr." -> "travis etienne": a join key that keeps the
+    whole first name.
+
+    board_name() collapses to an initial, so "Travis Etienne" and "Trevor
+    Etienne" (or Bijan and Brian Robinson, both on ATL) become the same key
+    and any (name, position) join between two sources silently hands one
+    player the other's value. Use this when both sides have a full name --
+    rosters.player_name and FantasyPros ADP do -- and fall back to the
+    abbreviated key only where it is provably unambiguous.
+    """
+    parts = [w for w in str(full).split() if w]
+    while len(parts) > 2 and parts[-1].lower().strip(".") in SUFFIXES:
+        parts.pop()
+    return (" ".join(parts).lower()
+            .replace(".", "").replace("'", "").replace("-", " ").strip())

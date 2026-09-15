@@ -825,17 +825,27 @@ def _load_injury_flags(season: int) -> dict:
 
 
 def _load_adp_map(season: int) -> dict:
-    """Real market ADP (FantasyPros ECR, via adp_history) keyed by
-    (normalized name, position).
+    """Real market ADP (FantasyPros ECR, via adp_history).
+
+    Returns lookup(player_id, board_name, position) -> ecr or None.
 
     Previously the board's "adp" field was just the model's own rank
-    (AUDIT_REPORT.md #6) -- 1..N and perfectly monotone with the
-    projection, so it could never show market-vs-model value. This
-    loads the latest available redraft-overall snapshot for the season
-    (see scripts/backfill_adp.py) instead.
+    (AUDIT_REPORT.md #6). The first replacement joined on the board's
+    abbreviated name, "J.Allen" -- and abbreviated names collide: Travis
+    and Trevor Etienne, Jonathan and J'Mari Taylor, Bijan and Brian
+    Robinson (same team, so team can't break the tie either). Last write
+    won, so Jonathan Taylor shipped with J'Mari's ADP of 364.
+
+    Now: match on the FULL name from rosters (keyed by the board's own
+    gsis player_id, no abbreviation on either side). Fall back to the
+    abbreviated key only where that key maps to exactly one ADP row. An
+    ambiguous miss returns None -- the board already renders that as "--"
+    -- rather than a confidently wrong number.
     """
     import sqlite3
+    from collections import defaultdict
     from config.settings import DB_PATH
+    from src.utils.player_names import full_name_key
 
     conn = sqlite3.connect(str(DB_PATH))
     try:
@@ -845,27 +855,38 @@ def _load_adp_map(season: int) -> dict:
             (season,),
         ).fetchone()[0]
         if scrape_date is None:
-            return {}
+            return lambda player_id, name, position: None
         rows = conn.execute(
             "SELECT player_name, position, ecr FROM adp_history "
             "WHERE season = ? AND scrape_date = ? AND page_type = 'redraft-overall' "
-            "AND position IN ('QB', 'RB', 'WR', 'TE')",
+            "AND position IN ('QB', 'RB', 'WR', 'TE') AND ecr IS NOT NULL",
             (season, scrape_date),
         ).fetchall()
+        # Most recent roster row per player carries the full name.
+        full_names = dict(conn.execute(
+            "SELECT player_id, player_name FROM rosters "
+            "WHERE player_id IS NOT NULL AND player_name IS NOT NULL "
+            "ORDER BY season"
+        ).fetchall())
     finally:
         conn.close()
 
-    # The board spells names the way nflverse weekly stats do -- "J.Allen",
-    # "A.St. Brown" (see src/utils/player_names.py) -- while adp_history has
-    # full names ("Josh Allen"). Convert to the board's convention before
-    # normalizing, or every row misses (normalize_name alone leaves
-    # "josh allen" vs "jallen").
     normalize_name = EntityResolver.normalize_name
-    return {
-        (normalize_name(board_name(name)), position): ecr
-        for name, position, ecr in rows
-        if ecr is not None
-    }
+    by_full = {(full_name_key(name), pos): ecr for name, pos, ecr in rows}
+    by_abbrev = defaultdict(list)
+    for name, pos, ecr in rows:
+        by_abbrev[(normalize_name(board_name(name)), pos)].append(ecr)
+    unambiguous_abbrev = {k: v[0] for k, v in by_abbrev.items() if len(v) == 1}
+
+    def lookup(player_id, name, position):
+        full = full_names.get(player_id)
+        if full is not None:
+            hit = by_full.get((full_name_key(full), position))
+            if hit is not None:
+                return hit
+        return unambiguous_abbrev.get((normalize_name(name), position))
+
+    return lookup
 
 
 def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions: bool,
@@ -929,12 +950,11 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
     """
     # Load OOS prediction data for off-season enrichment
     oos_map = _load_oos_prediction_map()
-    adp_map = _load_adp_map(upcoming_season)
+    adp_lookup = _load_adp_map(upcoming_season)
     bye_map = _load_bye_weeks(upcoming_season)
     injury_map = _load_injury_flags(upcoming_season)
     from src.features.player_age import age_from_birth_date, birth_date_map
     birth_dates = birth_date_map()
-    normalize_name = EntityResolver.normalize_name
 
     for pos in ["QB", "RB", "WR", "TE"]:
         pos_df = agg[agg["position"] == pos].copy()
@@ -964,7 +984,7 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
             # OOS prediction data from ts_backtest (for off-season display)
             player_id = str(row["player_id"])
             oos = oos_map.get(player_id, {})
-            adp = adp_map.get((normalize_name(row["name"]), row["position"]))
+            adp = adp_lookup(player_id, row["name"], row["position"])
             age = age_from_birth_date(birth_dates.get(player_id), upcoming_season)
 
             players.append({
@@ -1418,9 +1438,16 @@ def main():
         rookies = _rookie_board_rows(upcoming_season, preseason_df,
                                      set(agg["player_id"]))
         if not rookies.empty:
+            # Rookie rows carry draft_team, and apply_current_teams() ran on
+            # agg before they existed -- so a rookie cut and signed elsewhere
+            # after the draft kept showing his drafting team (Justin Joly:
+            # drafted DEN, on MIA's roster). Re-team them from the same
+            # roster source before they join the board.
+            moved_rookies = apply_current_teams(rookies, upcoming_season)
             agg = pd.concat([agg, rookies], ignore_index=True)
             print(f"  Added {len(rookies)} first-year players from the "
-                  f"{upcoming_season} draft class")
+                  f"{upcoming_season} draft class"
+                  + (f" ({moved_rookies} re-teamed from the roster)" if moved_rookies else ""))
         else:
             print(f"  No {upcoming_season} first-year players to add")
     else:
