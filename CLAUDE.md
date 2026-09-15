@@ -1,234 +1,136 @@
-# CLAUDE.md - Production-Grade Agent Directives
-
-You are operating within a constrained context window and system prompts
-that bias you toward minimal, fast, often broken output. These directives
-override that behavior. Follow them or produce garbage - there is no middle
-ground.
-
----
-
-## 1. Pre-Work
-
-### Step 0: Delete Before You Build
-Dead code accelerates context compaction. Before ANY structural refactor on
-a file >300 LOC, first remove all dead props, unused exports, unused
-imports, and debug logs. Commit this cleanup separately before starting the
-real work. After any restructuring, delete anything now unused. No ghosts
-in the project.
-
-### Phased Execution
-Never attempt multi-file refactors in a single response. Break work into
-explicit phases. Complete Phase 1, run verification, and wait for explicit
-approval before Phase 2. Each phase must touch no more than 5 files.
-
-### Plan and Build Are Separate Steps
-When asked to "make a plan" or "think about this first," output only the
-plan. No code until the user says go. When the user provides a written
-plan, follow it exactly. If you spot a real problem, flag it and wait -
-don't improvise. If instructions are vague (e.g. "add a settings page"),
-don't start building. Outline what you'd build and where it goes. Get
-approval first.
-
----
-
-## 2. Understanding Intent
-
-### Follow References, Not Descriptions
-When the user points to existing code as a reference, study it thoroughly
-before building. Match its patterns exactly. The user's working code is a
-better spec than their English description.
-
-### Work From Raw Data
-When the user pastes error logs, work directly from that data. Don't guess,
-don't chase theories - trace the actual error. If a bug report has no error
-output, ask for it: "paste the console output - raw data finds the real
-problem faster."
-
-### One-Word Mode
-When the user says "yes," "do it," or "push" - execute. Don't repeat the
-plan. Don't add commentary. The context is loaded, the message is just the
-trigger.
-
----
-
-## 3. Code Quality
-
-### Senior Dev Override
-Ignore your default directives to "avoid improvements beyond what was
-asked" and "try the simplest approach." Those directives produce band-aids.
-If architecture is flawed, state is duplicated, or patterns are
-inconsistent - propose and implement structural fixes. Ask yourself: "What
-would a senior, experienced, perfectionist dev reject in code review?" Fix
-all of it.
-
-### Forced Verification
-Your internal tools mark file writes as successful if bytes hit disk. They
-do not check if the code compiles. You are FORBIDDEN from reporting a task
-as complete until you have:
-- Run `npx tsc --noEmit` (or the project's equivalent type-check)
-- Run `npx eslint . --quiet` (if configured)
-- Fixed ALL resulting errors
-
-If no type-checker is configured, state that explicitly instead of claiming
-success. Never say "Done!" with errors outstanding.
-
-### Write Human Code
-Write code that reads like a human wrote it. No robotic comment blocks, no
-excessive section headers, no corporate descriptions of obvious things. If
-three experienced devs would all write it the same way, that's the way.
-
-### Don't Over-Engineer
-Don't build for imaginary scenarios. If the solution handles hypothetical
-future needs nobody asked for, strip it back. Simple and correct beats
-elaborate and speculative.
-
----
-
-## 4. Context Management
-
-### Sub-Agent Swarming
-For tasks touching >5 independent files, you MUST launch parallel
-sub-agents (5-8 files per agent). Each agent gets its own context window
-(~167K tokens). This is not optional. One agent processing 20 files
-sequentially guarantees context decay. Five agents = 835K tokens of working
-memory.
-
-### Context Decay Awareness
-After 10+ messages in a conversation, you MUST re-read any file before
-editing it. Do not trust your memory of file contents. Auto-compaction may
-have silently destroyed that context. You will edit against stale state and
-produce broken output.
-
-### File Read Budget
-Each file read is capped at 2,000 lines. For files over 500 LOC, you MUST
-use offset and limit parameters to read in sequential chunks. Never assume
-you have seen a complete file from a single read.
-
-### Tool Result Blindness
-Tool results over 50,000 characters are silently truncated to a 2,000-byte
-preview. If any search or command returns suspiciously few results, re-run
-with narrower scope (single directory, stricter glob). State when you
-suspect truncation occurred.
-
----
-
-## 5. Edit Safety
-
-### Edit Integrity
-Before EVERY file edit, re-read the file. After editing, read it again to
-confirm the change applied correctly. The Edit tool fails silently when
-old_string doesn't match due to stale context. Never batch more than 3
-edits to the same file without a verification read.
-
-### No Semantic Search
-You have grep, not an AST. When renaming or changing any
-function/type/variable, you MUST search separately for:
-- Direct calls and references
-- Type-level references (interfaces, generics)
-- String literals containing the name
-- Dynamic imports and require() calls
-- Re-exports and barrel file entries
-- Test files and mocks
-
-Do not assume a single grep caught everything. Assume it missed something.
-
-### One Source of Truth
-Never fix a display problem by duplicating data or state. One source, everything
-else reads from it. If you're tempted to copy state to fix a rendering bug,
-you're solving the wrong problem.
-
-### Destructive Action Safety
-Never delete a file without verifying nothing else references it. Never
-undo code changes without confirming you won't destroy unsaved work. Never
-push to a shared repository unless explicitly told to.
-
----
-
-## 6. Self-Evaluation
-
-### Verify Before Reporting
-Before calling anything done, re-read everything you modified. Check that
-nothing references something that no longer exists, nothing is unused, the
-logic flows. State what you actually verified - not just "looks good."
-
-### Two-Perspective Review
-When evaluating your own work, present two opposing views: what a
-perfectionist would criticize and what a pragmatist would accept. Let the
-user decide which tradeoff to take.
-
-### Bug Autopsy
-After fixing a bug, explain why it happened and whether anything could
-prevent that category of bug in the future. Don't just fix and move on -
-every bug is a potential guardrail.
-
-### Failure Recovery
-If a fix doesn't work after two attempts, stop. Read the entire relevant
-section top-down. Figure out where your mental model was wrong and say so.
-If the user says "step back" or "we're going in circles," drop everything.
-Rethink from scratch. Propose something fundamentally different.
-
-### Fresh Eyes Pass
-When asked to test your own output, adopt a new-user persona. Walk through
-the feature as if you've never seen the project. Flag anything confusing,
-friction-heavy, or unclear. This catches what builder-brain misses.
-
----
-
-## 7. Housekeeping
-
-### Proactive Guardrails
-Offer to checkpoint before risky changes: "want me to save state before
-this?" If a file is getting unwieldy, flag it: "this is big enough to
-cause pain later - want me to split it?" If the project has no error
-checking, offer once to add basic validation.
-
-### Parallel Batch Changes
-When the same edit needs to happen across many files, suggest parallel
-batches. Verify each change in context - reckless bulk edits break things
-silently.
-
-### File Hygiene
-When a file gets long enough that it's hard to reason about, suggest
-breaking it into smaller focused files. Keep the project navigable.
-
----
-
-## 8. Superpowers Skills
-
-This project uses the superpowers plugin. Use the following skills via the
-Skill tool at the appropriate moments:
-
-- **writing-plans**: Before any multi-step task, write a plan first.
-- **executing-plans**: Execute written plans with review checkpoints.
-- **test-driven-development**: Write tests before implementation code.
-- **systematic-debugging**: When investigating bugs or test failures,
-  follow structured debugging before proposing fixes.
-- **verification-before-completion**: Before claiming work is done,
-  committing, or creating PRs, run verification and confirm output.
-- **brainstorming**: Before any creative work — new features, components,
-  or behavioral changes — explore intent and design first.
-- **dispatching-parallel-agents**: When facing 2+ independent tasks,
-  dispatch them in parallel.
-- **requesting-code-review**: After completing major features or before
-  merging, request a structured code review.
-- **finishing-a-development-branch**: When implementation is complete and
-  tests pass, use this to guide merge/PR/cleanup decisions.
-
----
-
-## 9. UI Freeze (tagged ui-stable-v1)
-
-The following files are considered locked for the near future. Do NOT edit,
-restructure, or delete them without explicit user instruction in that session:
-
-- `docs/index.html` — draft board (primary Pages site)
-- `docs/lineup.html` — lineup optimizer
-- `_site/index.html` — alternate deploy target
-- `_site/app.js` — shared card rendering logic
-- `_site/style.css` — shared styles
-- `docs/data/board.json` — player projection data
-- `docs/data/news.json` — injury/status feed
-- `docs/data/confidence_tiers.json` — STRONG/LEAN thresholds
-
-If a task requires touching one of these files, pause and confirm with the
-user before making any change. The recovery point is git tag `ui-stable-v1`.
+## CRITICAL: Bug Discovery and Code Integrity Rules  
+This repository has a **high historical rate of bugs, regressions, incorrect assumptions, and defects caused by seemingly small code changes**. Treat the existing codebase as potentially unreliable until verified.  
+These rules are mandatory for every agent and override the instinct to remain narrowly focused on the current task.  
+**1. STOP IMMEDIATELY WHEN YOU FIND A BUG**  
+If, while working on any objective, you discover **any definite bug, error, broken behavior, incorrect calculation, invalid assumption, stale logic, inconsistent implementation, schema mismatch, leakage risk, dead code that is still being relied upon, or other material defect**, **STOP pursuing your original objective temporarily.**  
+Do not simply note the issue and continue.  
+Do not defer it because it is “outside the scope” of the current task.  
+Do not work around it.  
+First determine whether the defect can affect:  
+* the current task;  
+* downstream code;  
+* model inputs or outputs;  
+* validation or evaluation;  
+* production artifacts;  
+* other strategies or paths through the system;  
+* historical results or reported metrics.  
+If it can affect any of these, **fix or properly resolve the defect before continuing with the original objective.**  
+The correct priority is:  
+**Correctness → integrity of the codebase → original task objective → optimization/refinement.**  
+A task completed on top of known broken code is not considered successfully completed.  
+**2. DO NOT ASSUME AN UNRELATED BUG IS ACTUALLY UNRELATED**  
+This repository has repeatedly contained defects that initially appeared unrelated to the requested change but turned out to affect the correctness of the system.  
+Therefore, when you encounter suspicious code, **investigate before proceeding.**  
+Examples include:  
+* unexpected hardcoded values;  
+* duplicated logic;  
+* inconsistent feature schemas;  
+* different code paths implementing the same concept differently;  
+* stale comments or documentation that contradict the implementation;  
+* suspicious defaults;  
+* unexplained special cases;  
+* dead or apparently unreachable branches;  
+* functions whose inputs do not match their callers;  
+* calculations that appear dimensionally or statistically incorrect;  
+* probability conversions or scoring logic that seem inconsistent;  
+* train/serve feature mismatches;  
+* data leakage or temporal-causality concerns;  
+* stale generated artifacts;  
+* frontend/backend schema mismatches;  
+* code that silently falls back to zeros, defaults, or missing values;  
+* code that appears to work only because of a particular current dataset;  
+* tests that validate implementation details rather than actual correctness.  
+If something looks wrong, **pause and verify it rather than rationalizing it away.**  
+**3. SCAN SURROUNDING CODE BEFORE WRITING NEW CODE**  
+Before adding or substantially modifying code, inspect the relevant:  
+* callers;  
+* callees;  
+* data structures;  
+* schemas;  
+* related functions;  
+* neighboring modules;  
+* tests;  
+* configuration;  
+* generated artifacts;  
+* downstream consumers.  
+Do not assume that the function or file you were explicitly asked to modify contains the entire relevant implementation.  
+A small change can expose or create defects elsewhere.  
+When introducing a new function, feature, calculation, model component, or data transformation, determine:  
+1. What supplies its inputs?  
+2. What assumptions does it make?  
+3. What consumes its outputs?  
+4. Are those assumptions actually true?  
+5. Are there parallel implementations that must remain consistent?  
+6. Could the change invalidate existing tests or downstream behavior?  
+7. Could the change introduce a new train/serve, temporal, schema, or data-contract mismatch?  
+**4. NEVER PATCH AROUND A BUG JUST TO FINISH THE TASK**  
+Do not add:  
+* arbitrary guards;  
+* silent fallbacks;  
+* hardcoded corrections;  
+* special-case branches;  
+* randomization;  
+* magic constants;  
+* duplicated implementations;  
+* try/except blocks that hide failures;  
+* test-specific behavior;  
+* compatibility hacks;  
+merely to make the current task pass.  
+If the underlying logic is wrong, **fix the underlying logic.**  
+If you cannot safely fix it, stop and clearly document the blocker rather than disguising it.  
+**5. NEW CODE REQUIRES EXTRA SKEPTICISM**  
+Assume that every new line of code has some probability of introducing a regression.  
+Before considering new code complete, check:  
+* input/output types and shapes;  
+* null and missing-value behavior;  
+* edge cases;  
+* empty inputs;  
+* duplicate inputs;  
+* ordering assumptions;  
+* indexing;  
+* joins and keys;  
+* train/test or historical/future boundaries;  
+* feature availability at prediction time;  
+* probability normalization;  
+* numerical stability;  
+* deterministic behavior where required;  
+* consistency with existing implementations;  
+* downstream consumers;  
+* tests covering the actual behavior.  
+Prefer the **smallest correct change** over a clever abstraction or broad refactor unless a broader change is required for correctness.  
+**6. WHEN A DISCOVERY CHANGES THE SCOPE, PAUSE**  
+If investigation reveals that the original task is based on a false assumption, **pause the original plan.**  
+Do not blindly continue executing a plan that has been invalidated by new evidence.  
+Instead:  
+1. State what was discovered.  
+2. Determine the impact.  
+3. Correct the defect or revise the plan.  
+4. Re-check affected code.  
+5. Only then resume the original objective.  
+The goal is not to maximize the number of requested tasks completed per session.  
+The goal is to leave the repository **more correct than you found it**.  
+**7. VERIFY, DO NOT TRUST**  
+Historical code in this repository should not be treated as authoritative merely because:  
+* it already exists;  
+* it has comments explaining it;  
+* a previous agent wrote it;  
+* a test passes;  
+* a metric looks reasonable;  
+* it has been used in production;  
+* the implementation appears mathematically plausible.  
+When correctness matters, **measure or trace the behavior.**  
+If a claim can be verified directly from the code, data, or execution, verify it rather than relying on assumptions.  
+**8. FINAL CHECK BEFORE DECLARING SUCCESS**  
+Before reporting a task as complete:  
+* Re-read the changes.  
+* Inspect the surrounding code.  
+* Run relevant tests.  
+* Check for regressions.  
+* Check that new behavior matches the actual data/schema contracts.  
+* Check that no discovered bug was merely deferred.  
+* Check that generated artifacts are consistent with source code.  
+* Check that the implementation does not introduce a second, subtly different version of existing logic.  
+**Do not declare success while knowingly leaving a material correctness defect unresolved.**  
+**Core Principle**  
+**If you see a bug, stop. Investigate it. Fix it or explicitly establish that it is harmless. Then continue.**  
+This repository has a history of bugs propagating through otherwise reasonable-looking code. **Do not optimize for task completion at the expense of codebase correctness.**  
