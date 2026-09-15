@@ -147,7 +147,8 @@ def baseline_standing() -> dict | None:
     return None
 
 KEEP = ["name", "position", "team", "opponent", "home_away",
-        "predicted_points", "prediction_ci80_lower", "prediction_ci80_upper"]
+        "predicted_points", "prediction_ci80_lower", "prediction_ci80_upper",
+        "injury_adjustment"]
 
 
 def completed_games(season: int) -> int:

@@ -22,46 +22,67 @@
     18
   ],
   "counts": {
-    "1": 534,
-    "2": 534,
-    "3": 534,
-    "4": 534,
-    "5": 498,
-    "6": 477,
-    "7": 462,
-    "8": 459,
-    "9": 500,
-    "10": 469,
-    "11": 436,
-    "12": 534,
-    "13": 469,
-    "14": 502,
-    "15": 534,
-    "16": 534,
-    "17": 534,
-    "18": 534
+    "1": 523,
+    "2": 523,
+    "3": 523,
+    "4": 523,
+    "5": 488,
+    "6": 467,
+    "7": 453,
+    "8": 452,
+    "9": 490,
+    "10": 461,
+    "11": 425,
+    "12": 523,
+    "13": 457,
+    "14": 491,
+    "15": 523,
+    "16": 523,
+    "17": 523,
+    "18": 523
   },
   "games_per_season": 17,
   "completed_game_rows": 0,
   "has_intervals": false,
-  "generated_at": "2026-09-06T18:12:16+00:00",
+  "generated_at": "2026-09-15T03:22:27+00:00",
   "measured": {
     "QB": {
-      "mae": 7.09,
-      "bias": -1.3
-    },
-    "RB": {
-      "mae": 4.43,
-      "bias": -1.62
-    },
-    "WR": {
-      "mae": 4.03,
-      "bias": -1.45
+      "mae": 6.86,
+      "bias": 0.74
     },
     "TE": {
-      "mae": 3.0,
-      "bias": -1.22
+      "mae": 3.03,
+      "bias": -0.55
+    },
+    "RB": {
+      "mae": 4.6,
+      "bias": -0.18
+    },
+    "WR": {
+      "mae": 4.34,
+      "bias": 0.66
+    },
+    "_source": {
+      "file": "backtest_2025_20260914.json",
+      "season": 2025,
+      "weeks": 18,
+      "model_type": "per_position_stacked_ensemble",
+      "feature_version": "36"
     }
+  },
+  "baseline_standing": {
+    "season": 2025,
+    "rmse_improvement_pct": {
+      "trailing_3g_avg": 6.08,
+      "trailing_5g_avg": 2.32,
+      "season_avg": 1.89,
+      "prior_season_rank": 7.81,
+      "blended_heuristic": -1.18,
+      "vegas_implied": 3.74
+    },
+    "beats_every_baseline": false,
+    "beat_all_baselines_by_20_pct": false,
+    "model_has_real_edge": "True"
   },
   "model": "season model (Step 8) total / 17"
 }
