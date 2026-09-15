@@ -6,6 +6,8 @@ roster -- must spell names the same way, so the rule lives here instead of in
 each caller.
 """
 
+import unicodedata
+
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 
@@ -38,5 +40,8 @@ def full_name_key(full) -> str:
     parts = [w for w in str(full).split() if w]
     while len(parts) > 2 and parts[-1].lower().strip(".") in SUFFIXES:
         parts.pop()
-    return (" ".join(parts).lower()
+    # Fold diacritics: rosters spell "Audric Estimé", FantasyPros "Audric Estime".
+    folded = unicodedata.normalize("NFKD", " ".join(parts))
+    folded = "".join(ch for ch in folded if not unicodedata.combining(ch))
+    return (folded.lower()
             .replace(".", "").replace("'", "").replace("-", " ").strip())

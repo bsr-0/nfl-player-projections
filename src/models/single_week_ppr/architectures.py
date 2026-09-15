@@ -36,6 +36,28 @@ _SKLEARN_LOSS_MAP = {
     "regression_l1": "absolute_error",
 }
 
+# LightGBM -> sklearn GradientBoostingRegressor parameter names. The tuning
+# search space (tuning.py) is written in LightGBM vocabulary and used to
+# reach the sklearn fallback untranslated, so the fallback raised TypeError
+# on `num_leaves` the first time it was ever actually needed
+# (AUDIT_REPORT.md #20). reg_alpha / reg_lambda have no sklearn GBR
+# equivalent and are dropped.
+_SKLEARN_PARAM_MAP = {
+    "num_leaves": "max_leaf_nodes",
+    "colsample_bytree": "max_features",
+    "min_child_samples": "min_samples_leaf",
+}
+_SKLEARN_DROP = {"reg_alpha", "reg_lambda"}
+
+
+def _to_sklearn_params(params: dict) -> dict:
+    out = {}
+    for k, v in params.items():
+        if k in _SKLEARN_DROP:
+            continue
+        out[_SKLEARN_PARAM_MAP.get(k, k)] = v
+    return out
+
 
 # ---------------------------------------------------------------------------
 # Naive baselines (next_focus.md Phase 2 §3)
@@ -93,7 +115,7 @@ class GBMRegressor:
         else:
             from sklearn.ensemble import GradientBoostingRegressor
             self.model = GradientBoostingRegressor(
-                loss=_SKLEARN_LOSS_MAP[self.objective], **self.params
+                loss=_SKLEARN_LOSS_MAP[self.objective], **_to_sklearn_params(self.params)
             )
         self.model.fit(X, y, sample_weight=sample_weight)
         return self

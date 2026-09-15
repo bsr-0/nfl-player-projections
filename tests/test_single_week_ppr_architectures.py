@@ -194,3 +194,39 @@ class TestNaiveBaselines:
             assert len(series) == len(df)
         # Week 5 recent-game baseline = week 4's value (20.0).
         assert result["baseline_recent_game"].iloc[4] == pytest.approx(20.0)
+
+
+class TestGBMSklearnFallback:
+    """The sklearn fallback receives tuning.py's LightGBM-vocabulary params
+    (num_leaves, colsample_bytree, ...). It raised TypeError on the first
+    one for a month after being marked fixed, because nothing exercised the
+    branch (AUDIT_REPORT.md #20). Built from the real search space so a new
+    LightGBM-only key added to tuning.py fails here, not in production."""
+
+    def _search_space_params(self):
+        # Exercise _gbm_search_space with a stub trial that returns the low bound.
+        from src.models.single_week_ppr.tuning import _gbm_search_space
+
+        class _Trial:
+            def suggest_int(self, name, lo, hi, step=1): return lo
+            def suggest_float(self, name, lo, hi, log=False): return lo
+        return _gbm_search_space(_Trial(), tune_huber_alpha=True)
+
+    def test_fallback_accepts_every_tuned_param(self, monkeypatch):
+        from src.models.single_week_ppr import architectures as a
+        monkeypatch.setattr(a, "HAS_LIGHTGBM", False)
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(rng.random((60, 3)))
+        y = pd.Series(rng.random(60))
+        params = self._search_space_params()
+        params["n_estimators"] = 20
+        model = a.GBMRegressor(objective="huber", **params).fit(X, y)
+        assert type(model.model).__name__ == "GradientBoostingRegressor"
+        assert model.predict(X).shape == (60,)
+
+    def test_translation_maps_not_drops_the_meaningful_ones(self):
+        from src.models.single_week_ppr.architectures import _to_sklearn_params
+        out = _to_sklearn_params(dict(num_leaves=31, colsample_bytree=0.7,
+                                      min_child_samples=8, reg_alpha=1.0, reg_lambda=1.0,
+                                      max_depth=4))
+        assert out == dict(max_leaf_nodes=31, max_features=0.7, min_samples_leaf=8, max_depth=4)

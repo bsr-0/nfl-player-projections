@@ -836,11 +836,15 @@ def _load_adp_map(season: int) -> dict:
     Robinson (same team, so team can't break the tie either). Last write
     won, so Jonathan Taylor shipped with J'Mari's ADP of 364.
 
-    Now: match on the FULL name from rosters (keyed by the board's own
-    gsis player_id, no abbreviation on either side). Fall back to the
-    abbreviated key only where that key maps to exactly one ADP row. An
-    ambiguous miss returns None -- the board already renders that as "--"
-    -- rather than a confidently wrong number.
+    Now: match on the FULL name (rosters via the board's gsis player_id, or
+    the rookie row's own full_name). If a full name is KNOWN and matches
+    nothing, that's a definitive miss -> None. The abbreviated key is used
+    only when no full name exists at all, and only where it maps to exactly
+    one ADP row. "Unambiguous in ADP" is not "correct for this player":
+    Josh Williams (backup) is the only board J.Williams RB with no ADP row,
+    and Javonte Williams is the only ADP J.Williams RB -- a fallback there
+    hands a backup ADP 31. The board renders None as "--", which beats a
+    confidently wrong number.
     """
     import sqlite3
     from collections import defaultdict
@@ -874,16 +878,35 @@ def _load_adp_map(season: int) -> dict:
     normalize_name = EntityResolver.normalize_name
     by_full = {(full_name_key(name), pos): ecr for name, pos, ecr in rows}
     by_abbrev = defaultdict(list)
+    by_surname = defaultdict(list)   # (surname, pos) -> [(first, ecr)]
     for name, pos, ecr in rows:
         by_abbrev[(normalize_name(board_name(name)), pos)].append(ecr)
+        key = full_name_key(name).split(" ", 1)
+        if len(key) == 2:
+            by_surname[(key[1], pos)].append((key[0], ecr))
     unambiguous_abbrev = {k: v[0] for k, v in by_abbrev.items() if len(v) == 1}
 
-    def lookup(player_id, name, position):
-        full = full_names.get(player_id)
-        if full is not None:
-            hit = by_full.get((full_name_key(full), position))
-            if hit is not None:
-                return hit
+    def _truncation_match(full_key, position):
+        # "josh palmer" vs "joshua palmer", "matthew hibner" vs "matt hibner":
+        # same surname, one first name a >=3-char prefix of the other. Tight
+        # enough to reject josh/javonte, david/dj, tyler/tez, jacardia/jaylen.
+        parts = full_key.split(" ", 1)
+        if len(parts) != 2:
+            return None
+        first, surname = parts
+        hits = [
+            ecr for cand_first, ecr in by_surname.get((surname, position), [])
+            if len(first) >= 3 and len(cand_first) >= 3
+            and (first.startswith(cand_first) or cand_first.startswith(first))
+        ]
+        return hits[0] if len(hits) == 1 else None
+
+    def lookup(player_id, name, position, full_name=None):
+        full = full_name if isinstance(full_name, str) and full_name else full_names.get(player_id)
+        if full:
+            key = full_name_key(full)
+            hit = by_full.get((key, position))
+            return hit if hit is not None else _truncation_match(key, position)
         return unambiguous_abbrev.get((normalize_name(name), position))
 
     return lookup
@@ -984,7 +1007,8 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
             # OOS prediction data from ts_backtest (for off-season display)
             player_id = str(row["player_id"])
             oos = oos_map.get(player_id, {})
-            adp = adp_lookup(player_id, row["name"], row["position"])
+            adp = adp_lookup(player_id, row["name"], row["position"],
+                             full_name=row.get("full_name"))
             age = age_from_birth_date(birth_dates.get(player_id), upcoming_season)
 
             players.append({
@@ -1261,8 +1285,12 @@ def _rookie_identities(draft: pd.DataFrame, ids: pd.DataFrame,
     out["player_id"] = out["gsis_id"].fillna(out["draft_id"])
     out["team"] = out["draft_team"].replace(PFR_TEAM_CODES)
     named = out[out["name"].notna()].copy()
+    # Keep the full name: rookies have no rosters row yet, and the ADP join
+    # needs a full name to avoid the initial+surname collisions that put
+    # Javonte Williams's ADP on Josh Williams.
+    named["full_name"] = named["name"]
     named["name"] = named["name"].map(board_name)
-    return named[["draft_id", "player_id", "name", "team", "position"]]
+    return named[["draft_id", "player_id", "name", "full_name", "team", "position"]]
 
 
 def _load_rookie_identities(upcoming_season: int) -> pd.DataFrame:
