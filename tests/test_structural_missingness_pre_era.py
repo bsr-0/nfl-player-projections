@@ -19,6 +19,7 @@ was median-filled while its sibling ngs_avg_cushion was preserved.
 """
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.features.feature_policy_registry import FeaturePolicyRegistry
 from src.features.utilization_score import (
