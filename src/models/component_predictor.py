@@ -49,9 +49,9 @@ class ComponentPredictor:
         self.feature_medians: Dict[str, float] = {}
         self.is_fitted = False
 
-        from config.settings import COMPONENT_TARGETS, PPR_SCORING_WEIGHTS
+        from config.settings import COMPONENT_TARGETS, SCORING
         self.components = COMPONENT_TARGETS.get(position, [])
-        self.scoring_weights = PPR_SCORING_WEIGHTS
+        self.scoring_weights = SCORING
 
     def _median_vector(self) -> Optional[np.ndarray]:
         """Train-fitted medians aligned to `feature_names`, or None if unfitted.

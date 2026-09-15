@@ -805,19 +805,13 @@ class AdvancedRookieProjector:
                 how='inner'
             )
             
-            # Calculate fantasy points if not present
+            # Calculate fantasy points if not present. Uses the canonical
+            # SCORING-backed helper rather than a second inline formula --
+            # the previous copy silently omitted fumbles_lost and
+            # two_point_conversions (AUDIT_REPORT.md #24).
             if 'fantasy_points' not in merged.columns:
-                # PPR scoring
-                merged['fantasy_points'] = (
-                    merged.get('passing_yards', 0) * 0.04 +
-                    merged.get('passing_tds', 0) * 4 +
-                    merged.get('interceptions', 0) * -2 +
-                    merged.get('rushing_yards', 0) * 0.1 +
-                    merged.get('rushing_tds', 0) * 6 +
-                    merged.get('receptions', 0) * 1 +
-                    merged.get('receiving_yards', 0) * 0.1 +
-                    merged.get('receiving_tds', 0) * 6
-                )
+                from src.utils.helpers import calculate_fantasy_points_df
+                merged['fantasy_points'] = calculate_fantasy_points_df(merged)
             
             # Calculate PPG
             if 'games' in merged.columns:

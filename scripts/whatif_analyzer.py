@@ -4,50 +4,28 @@ Analyze historical scenarios to learn from past decisions.
 "What if I drafted Player X in Round Y?"
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import pandas as pd
 import numpy as np
 import sqlite3
-from pathlib import Path
 from typing import Dict, List, Optional
 import warnings
 warnings.filterwarnings('ignore')
+
+from src.utils.helpers import calculate_fantasy_points_df
 
 
 class WhatIfAnalyzer:
     """
     Analyzes historical scenarios for fantasy decision-making.
     """
-    
+
     def __init__(self, db_path: str = "../data/nfl_data.db"):
         self.db_path = Path(db_path)
-        
-        # Fantasy scoring (standard PPR)
-        self.scoring = {
-            'passing_yard': 0.04,
-            'passing_td': 4,
-            'interception': -2,
-            'rushing_yard': 0.1,
-            'rushing_td': 6,
-            'reception': 1,
-            'receiving_yard': 0.1,
-            'receiving_td': 6,
-        }
-    
-    def calculate_fantasy_points(self, stats: pd.Series) -> float:
-        """Calculate fantasy points for a player-week."""
-        points = 0.0
-        
-        points += stats.get('passing_yards', 0) * self.scoring['passing_yard']
-        points += stats.get('passing_tds', 0) * self.scoring['passing_td']
-        points += stats.get('interceptions', 0) * self.scoring['interception']
-        points += stats.get('rushing_yards', 0) * self.scoring['rushing_yard']
-        points += stats.get('rushing_tds', 0) * self.scoring['rushing_td']
-        points += stats.get('receptions', 0) * self.scoring['reception']
-        points += stats.get('receiving_yards', 0) * self.scoring['receiving_yard']
-        points += stats.get('receiving_tds', 0) * self.scoring['receiving_td']
-        
-        return round(points, 2)
-    
+
     def get_player_season_stats(
         self, 
         player_name: str, 
@@ -79,11 +57,8 @@ class WhatIfAnalyzer:
         if weeks:
             df = df[df['week'].isin(weeks)]
         
-        df['fantasy_points'] = df.apply(
-            lambda row: self.calculate_fantasy_points(row), 
-            axis=1
-        )
-        
+        df['fantasy_points'] = calculate_fantasy_points_df(df)
+
         return df
     
     def compare_draft_picks(

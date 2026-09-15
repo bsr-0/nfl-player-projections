@@ -690,19 +690,6 @@ QB_PBP_FEATURES = [
     "ngs_avg_air_yards_to_sticks_roll3_mean",
 ]
 
-# PPR scoring weights: stat_column -> points_per_unit
-PPR_SCORING_WEIGHTS = {
-    "passing_yards": 0.04,
-    "passing_tds": 4.0,
-    "interceptions": -2.0,
-    "rushing_yards": 0.1,
-    "rushing_tds": 6.0,
-    "receiving_yards": 0.1,
-    "receiving_tds": 6.0,
-    "receptions": 1.0,
-    "fumbles_lost": -2.0,
-}
-
 # Which stat components to predict per position (only the meaningful ones)
 COMPONENT_TARGETS = {
     "QB": ["passing_yards", "passing_tds", "interceptions", "rushing_yards", "rushing_tds"],

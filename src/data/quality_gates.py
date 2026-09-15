@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from config.settings import DATA_DIR, MODELS_DIR, POSITIONS
+from config.settings import DATA_DIR, MODELS_DIR, POSITIONS, SCORING
 from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week
 
 EXPECTED_TEAMS = {
@@ -284,13 +284,11 @@ def validate_training_cache_integrity(
         if dupes > 0:
             failures.append(f"{dupes} duplicate (player_id, season, week) rows found")
 
-    # 3. Fantasy points formula consistency (PPR)
-    scoring_cols = {
-        "passing_yards": 0.04, "passing_tds": 4, "interceptions": -2,
-        "rushing_yards": 0.1, "rushing_tds": 6, "receiving_yards": 0.1,
-        "receiving_tds": 6, "receptions": 1.0, "fumbles_lost": -2,
-    }
-    available = {k: v for k, v in scoring_cols.items() if k in df.columns}
+    # 3. Fantasy points formula consistency (PPR). Built from the canonical
+    # SCORING dict rather than a second hardcoded copy -- a prior inline copy
+    # here omitted two_point_conversions, which meant this exact check could
+    # never have flagged a 2PC-related formula mismatch (AUDIT_REPORT.md #24).
+    available = {k: v for k, v in SCORING.items() if k in df.columns}
     if available and "fantasy_points" in df.columns:
         calc = sum(df[col].fillna(0) * w for col, w in available.items())
         actual = df["fantasy_points"].fillna(0)

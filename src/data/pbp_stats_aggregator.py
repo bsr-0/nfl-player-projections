@@ -541,51 +541,18 @@ class PBPStatsAggregator:
         )
         return merged
     
-    def calculate_fantasy_points(self, df: pd.DataFrame, ppr: float = 1.0) -> pd.DataFrame:
+    def calculate_fantasy_points(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate fantasy points (PPR scoring).
 
-        Uses the same formula as NFLDataLoader._calculate_fantasy_points and
-        config.settings.SCORING so PBP-sourced and weekly-sourced rows produce
-        consistent target values.
+        Delegates to src.utils.helpers.calculate_fantasy_points_df, the same
+        SCORING-backed formula NFLDataLoader._calculate_fantasy_points uses,
+        so PBP-sourced and weekly-sourced rows produce consistent target
+        values (AUDIT_REPORT.md #24 -- this used to be a fourth independent
+        copy of the formula).
         """
+        from src.utils.helpers import calculate_fantasy_points_df
         df = df.copy()
-
-        # Initialize
-        df['fantasy_points'] = 0.0
-
-        # Passing: 0.04 per yard, 4 per TD, -2 per INT
-        if 'passing_yards' in df.columns:
-            df['fantasy_points'] += df['passing_yards'].fillna(0) * 0.04
-        if 'passing_tds' in df.columns:
-            df['fantasy_points'] += df['passing_tds'].fillna(0) * 4
-        if 'interceptions' in df.columns:
-            df['fantasy_points'] -= df['interceptions'].fillna(0) * 2
-
-        # Rushing: 0.1 per yard, 6 per TD
-        if 'rushing_yards' in df.columns:
-            df['fantasy_points'] += df['rushing_yards'].fillna(0) * 0.1
-        if 'rushing_tds' in df.columns:
-            df['fantasy_points'] += df['rushing_tds'].fillna(0) * 6
-
-        # Receiving: 0.1 per yard, 6 per TD, PPR per reception
-        if 'receiving_yards' in df.columns:
-            df['fantasy_points'] += df['receiving_yards'].fillna(0) * 0.1
-        if 'receiving_tds' in df.columns:
-            df['fantasy_points'] += df['receiving_tds'].fillna(0) * 6
-        if 'receptions' in df.columns:
-            df['fantasy_points'] += df['receptions'].fillna(0) * ppr
-
-        # Fumbles lost: -2 per fumble (was missing — caused PBP targets to
-        # systematically overstate fantasy points vs weekly-sourced data)
-        if 'fumbles_lost' in df.columns:
-            df['fantasy_points'] -= df['fumbles_lost'].fillna(0) * 2
-
-        # Two-point conversions: +2 each
-        if 'two_point_conversions' in df.columns:
-            df['fantasy_points'] += df['two_point_conversions'].fillna(0) * 2
-
-        df['fantasy_points'] = df['fantasy_points'].round(1)
-
+        df['fantasy_points'] = calculate_fantasy_points_df(df).round(1)
         return df
     
     def aggregate_all_stats(self, season: int = None,
