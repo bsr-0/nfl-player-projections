@@ -612,7 +612,13 @@ class NFLDataLoader:
         if not all(c in df.columns for c in key_cols) or not all(c in pbp_df.columns for c in key_cols):
             return df
         adv_cols = [
-            "pass_plays", "rush_plays", "recv_targets",
+            # pass_plays/rush_plays/recv_targets deliberately excluded: they
+            # are defined to equal passing_attempts/rushing_attempts/targets
+            # (see feature_engineering.py's _plays() comment), not the PBP
+            # aggregator's own dropback/rusher-role counts. Merging the PBP
+            # values in here for whichever season happens to be "current" at
+            # refresh time is exactly what put 2023/2024 out of sync with
+            # every other season (AUDIT_REPORT.md play-count discrepancy).
             "pass_epa", "rush_epa", "recv_epa",
             "pass_wpa", "rush_wpa", "recv_wpa",
             "pass_success_rate", "rush_success_rate", "recv_success_rate",
