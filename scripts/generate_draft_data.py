@@ -29,6 +29,7 @@ import pandas as pd
 import numpy as np
 
 from src.utils.player_names import board_name
+from src.data.entity_resolver import EntityResolver
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 MODELS_DIR = DATA_DIR / "models"
@@ -748,6 +749,50 @@ def _load_oos_prediction_map():
         return {}
 
 
+def _load_adp_map(season: int) -> dict:
+    """Real market ADP (FantasyPros ECR, via adp_history) keyed by
+    (normalized name, position).
+
+    Previously the board's "adp" field was just the model's own rank
+    (AUDIT_REPORT.md #6) -- 1..N and perfectly monotone with the
+    projection, so it could never show market-vs-model value. This
+    loads the latest available redraft-overall snapshot for the season
+    (see scripts/backfill_adp.py) instead.
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        scrape_date = conn.execute(
+            "SELECT MAX(scrape_date) FROM adp_history "
+            "WHERE season = ? AND page_type = 'redraft-overall'",
+            (season,),
+        ).fetchone()[0]
+        if scrape_date is None:
+            return {}
+        rows = conn.execute(
+            "SELECT player_name, position, ecr FROM adp_history "
+            "WHERE season = ? AND scrape_date = ? AND page_type = 'redraft-overall' "
+            "AND position IN ('QB', 'RB', 'WR', 'TE')",
+            (season, scrape_date),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    # The board spells names the way nflverse weekly stats do -- "J.Allen",
+    # "A.St. Brown" (see src/utils/player_names.py) -- while adp_history has
+    # full names ("Josh Allen"). Convert to the board's convention before
+    # normalizing, or every row misses (normalize_name alone leaves
+    # "josh allen" vs "jallen").
+    normalize_name = EntityResolver.normalize_name
+    return {
+        (normalize_name(board_name(name)), position): ecr
+        for name, position, ecr in rows
+        if ecr is not None
+    }
+
+
 def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions: bool,
                         schedule_available: bool):
     """Pick a season-total projection for one player, preferring the
@@ -809,6 +854,8 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
     """
     # Load OOS prediction data for off-season enrichment
     oos_map = _load_oos_prediction_map()
+    adp_map = _load_adp_map(upcoming_season)
+    normalize_name = EntityResolver.normalize_name
 
     for pos in ["QB", "RB", "WR", "TE"]:
         pos_df = agg[agg["position"] == pos].copy()
@@ -838,6 +885,7 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
             # OOS prediction data from ts_backtest (for off-season display)
             player_id = str(row["player_id"])
             oos = oos_map.get(player_id, {})
+            adp = adp_map.get((normalize_name(row["name"]), row["position"]))
 
             players.append({
                 "player_id": player_id,
@@ -845,7 +893,8 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
                 "team": row["team"],
                 "position": row["position"],
                 "bye_week": None,
-                "adp": rank,
+                "adp": round(adp, 1) if adp is not None else None,
+                "model_rank": rank,
                 "projection_points_total": proj_total,
                 "projection_points_per_game": proj_ppg,
                 "projection_floor": proj_floor,
