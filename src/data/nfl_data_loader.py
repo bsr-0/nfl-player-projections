@@ -22,6 +22,7 @@ import os
 import ssl
 import uuid
 from typing import List, Optional
+from urllib.error import HTTPError
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -86,9 +87,47 @@ def get_pfr_to_gsis_map() -> dict:
 # ---------------------------------------------------------------------------
 # Retry-wrapped nfl-data-py functions (Directive V7 Section 19)
 # ---------------------------------------------------------------------------
+# nflverse moved weekly player stats from
+#   player_stats/player_stats_{year}.parquet   (what nfl_data_py 0.3.2 reads;
+#                                               kept for old years, no 2025+)
+# to
+#   stats_player/stats_player_week_{year}.parquet
+# with three renames. Without this, import_weekly_data 404s for 2025 and 2026,
+# every current-season load silently fell through to the PBP path, and that
+# path produces no fumbles_lost -- 2025 shipped with 0 league-wide, and 2026
+# week 1 did it again (caught by test_every_season_has_fumbles).
+_NFLVERSE_WEEKLY_URL = (
+    "https://github.com/nflverse/nflverse-data/releases/download/"
+    "stats_player/stats_player_week_{year}.parquet"
+)
+_NFLVERSE_WEEKLY_RENAMES = {
+    "team": "recent_team",
+    "passing_interceptions": "interceptions",
+    "sacks_suffered": "sacks",
+}
+
+
+def _fetch_weekly_from_release(seasons):
+    frames = []
+    for year in seasons:
+        df = pd.read_parquet(_NFLVERSE_WEEKLY_URL.format(year=year))
+        frames.append(df.rename(columns=_NFLVERSE_WEEKLY_RENAMES))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _weekly_data_once(seasons):
+    """One attempt, no retries: library first, then the current release asset."""
+    try:
+        return _get_nfl().import_weekly_data(seasons)
+    except HTTPError as e:
+        if e.code != 404:
+            raise
+        return _fetch_weekly_from_release(seasons)
+
+
 @retry_with_backoff(max_retries=3, base_delay=2.0)
 def _fetch_weekly_data(seasons):
-    return _get_nfl().import_weekly_data(seasons)
+    return _weekly_data_once(seasons)
 
 
 @retry_with_backoff(max_retries=3, base_delay=2.0)
@@ -238,14 +277,15 @@ class NFLDataLoader:
                     if pbp_df is not None and not pbp_df.empty:
                         df = pbp_df.copy()
                         print(f"  Current season {season}: loaded from PBP ({len(df)} records)")
-                        # Optionally merge with weekly if available (prefer weekly for same player/week).
-                        # Skip during offseason — PBP is already the complete season data, and the
-                        # nfl_data_py weekly parquet for the finished season often returns 404 until
-                        # the data provider re-publishes it. Use a direct (non-retrying) call.
+                        # Merge with weekly if available (prefer weekly for same player/week):
+                        # the release carries fumbles_lost / 2PC / sacks that the PBP
+                        # derivation does not. Skip during offseason — PBP is already the
+                        # complete season data. Non-retrying: a not-yet-published week is a
+                        # normal 404, not a transient failure.
                         try:
                             if is_offseason():
                                 raise RuntimeError("offseason — skip weekly merge")
-                            weekly_df = _get_nfl().import_weekly_data([season])
+                            weekly_df = _weekly_data_once([season])
                             if not weekly_df.empty and len(weekly_df) >= 10:
                                 weekly_df = self._standardize_weekly_columns(weekly_df)
                                 key_cols = ["player_id", "season", "week"]
@@ -534,11 +574,19 @@ class NFLDataLoader:
         if 'name' not in df.columns and 'display_name' in df.columns:
             df['name'] = df['display_name']
         
-        # Combine fumbles lost
+        # Combine fumbles lost. sack_fumbles_lost was renamed to fumbles_lost
+        # above, so the sum includes fumbles_lost itself -- which made this
+        # step non-idempotent: the current-season path standardizes the
+        # weekly frame once before merging with PBP and once after, and the
+        # second pass added the already-combined total to the still-present
+        # rushing/receiving components. Every 2026 week-1 fumbler was stored
+        # with exactly double (Gibbs 1 -> 2; league 20 -> 32). Consume the
+        # components so a second pass is a no-op.
         fumble_cols = ['fumbles_lost', 'rushing_fumbles_lost', 'receiving_fumbles_lost']
         existing_fumble_cols = [c for c in fumble_cols if c in df.columns]
         if existing_fumble_cols:
             df['fumbles_lost'] = df[existing_fumble_cols].fillna(0).sum(axis=1)
+            df = df.drop(columns=[c for c in existing_fumble_cols if c != 'fumbles_lost'])
         else:
             df['fumbles_lost'] = 0
 

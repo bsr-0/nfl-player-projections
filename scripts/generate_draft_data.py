@@ -291,12 +291,37 @@ def _auto_generate_ts_backtest(season: int):
         return False
 
 
-def generate_model_performance():
-    """Create model_performance.json showing previous season predictions vs actuals."""
+def _latest_completed_season() -> int:
+    """Most recent season whose regular season is fully in the DB.
+
+    generate_model_performance() used to start from the CURRENT season and
+    only fall back a year when a backtest for it couldn't be generated.
+    That fallback fired every time while the current season was empty, so
+    the page always showed the last full season -- until the first week of
+    2026 was ingested, the auto-backtest "succeeded" on one week of data,
+    and the Model Performance page reported J.Allen's season as one game
+    (predicted 20.8, actual 35.8). A season is a comparison basis only once
+    its regular season is complete.
+    """
+    import sqlite3
+    from config.settings import DB_PATH, regular_season_max_week
     from src.utils.nfl_calendar import get_current_nfl_season
-    current_season = get_current_nfl_season()
-    # Previous completed season
-    prev_season = current_season
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        rows = conn.execute(
+            "SELECT season, MAX(week) FROM player_weekly_stats GROUP BY season"
+        ).fetchall()
+    finally:
+        conn.close()
+    complete = [s for s, w in rows if w is not None and w >= regular_season_max_week(s)]
+    return max(complete) if complete else get_current_nfl_season() - 1
+
+
+def generate_model_performance():
+    """Create model_performance.json showing the last COMPLETED season's
+    predictions vs actuals."""
+    prev_season = _latest_completed_season()
 
     # Try ts-backtest predictions (per-player, per-week granularity)
     ts_preds = _load_ts_backtest_predictions(prev_season)
@@ -1376,7 +1401,13 @@ def main():
     from src.utils.database import DatabaseManager
 
     current_season = get_current_nfl_season()
-    prev_season = current_season
+    # The board's "prior season" baseline (ppg, total, games, risk score)
+    # must be a COMPLETED season. Starting from current_season and relying
+    # on load_season_data() coming back empty for the new year has already
+    # failed twice: prediction stubs made it non-empty on 2026-09-10, and
+    # week-1 actuals would have again -- one game of 2026 as every
+    # player's "season".
+    prev_season = _latest_completed_season()
     upcoming_season = current_season + 1 if is_offseason() else current_season
 
     print(f"Current NFL season: {current_season}")

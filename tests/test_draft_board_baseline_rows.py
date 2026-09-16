@@ -47,3 +47,36 @@ def test_risk_scores_survive_missing_volatility():
     assert out["risk_score"].notna().all()
     assert out["risk_score"].dtype.kind == "i"
     assert out.loc[1, "risk_score"] > out.loc[0, "risk_score"]   # one game is riskier than a full season
+
+
+def _db_with_weeks(tmp_path, monkeypatch, max_week_by_season):
+    """A DB whose player_weekly_stats has rows up to max_week for each season."""
+    import sqlite3
+    from config import settings
+    db = tmp_path / "t.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE player_weekly_stats (player_id TEXT, season INT, week INT)")
+    conn.executemany("INSERT INTO player_weekly_stats VALUES (?,?,?)",
+                     [("P1", s, w) for s, mw in max_week_by_season.items() for w in range(1, mw + 1)])
+    conn.commit(); conn.close()
+    monkeypatch.setattr(settings, "DB_PATH", db)
+
+
+def test_prior_season_is_the_last_completed_one(tmp_path, monkeypatch):
+    """Third time this bit: with one week of the new season ingested, the
+    board and the Model Performance page both treated 2026 as the prior
+    season -- J.Allen's 'season' became one game. A season only qualifies
+    once its regular season is fully in the DB."""
+    _db_with_weeks(tmp_path, monkeypatch, {2024: 22, 2025: 22, 2026: 1})
+    assert gdd._latest_completed_season() == 2025
+
+
+def test_incomplete_season_never_qualifies_even_if_latest(tmp_path, monkeypatch):
+    # 2025 stopped at week 17 (18 needed from 2021 on); 2024 is complete.
+    _db_with_weeks(tmp_path, monkeypatch, {2024: 18, 2025: 17})
+    assert gdd._latest_completed_season() == 2024
+
+
+def test_pre_2021_seasons_complete_at_week_17(tmp_path, monkeypatch):
+    _db_with_weeks(tmp_path, monkeypatch, {2020: 17, 2021: 17})
+    assert gdd._latest_completed_season() == 2020

@@ -34,6 +34,30 @@ from config.settings import (
 )
 
 
+def import_pbp(season: int) -> pd.DataFrame:
+    """nfl_data_py.import_pbp_data for one season, surviving a missing
+    participation file.
+
+    The library's default include_participation=True fetches
+    pbp_participation_{season}.parquet after the play-by-play itself, and
+    nflverse publishes that file later than the PBP (2026 week 1: PBP up,
+    participation 404). nfl_data_py 0.3.2 then dies in its own error
+    handler -- `except Error as e:` with `Error` undefined -- so the
+    HTTPError surfaces as a NameError and the whole current-season load
+    fails, which is what kept the weekly page on season_prorated after
+    week 1 had been played. Retry without participation; the personnel
+    features already treat missing offense_personnel/offense_players as
+    "no data" for that season.
+    """
+    import nfl_data_py as nfl
+    try:
+        return nfl.import_pbp_data([season])
+    except Exception as e:  # NameError from the library bug, or a plain HTTPError
+        print(f"  PBP participation unavailable for {season} ({type(e).__name__}); "
+              f"loading play-by-play without it -- personnel features will be empty")
+    return nfl.import_pbp_data([season], include_participation=False)
+
+
 def compute_team_snaps(snaps: pd.DataFrame) -> pd.DataFrame:
     """Team offensive play count per (season, week, team) from per-player snaps.
 
@@ -92,7 +116,7 @@ class PBPStatsAggregator:
         """Load PBP (required) and snap count (optional) data for a season. PBP-only path when snaps unavailable."""
         import nfl_data_py as nfl
         print(f"Loading play-by-play data for {season}...")
-        self.pbp_data = nfl.import_pbp_data([season])
+        self.pbp_data = import_pbp(season)
         print(f"  Loaded {len(self.pbp_data)} plays")
         
         self.snap_data = None
@@ -1332,8 +1356,7 @@ def get_personnel_groupings_from_pbp(season: int, use_cache: bool = True) -> pd.
         except Exception:
             print(f"  Warning: corrupt personnel-grouping cache for season {season}, rebuilding")
 
-    import nfl_data_py as nfl
-    pbp = nfl.import_pbp_data([season])
+    pbp = import_pbp(season)
     if pbp.empty or "offense_personnel" not in pbp.columns:
         return pd.DataFrame()
 
@@ -1413,8 +1436,7 @@ def get_pass_play_participation_from_pbp(season: int, use_cache: bool = True) ->
         except Exception:
             print(f"  Warning: corrupt pass-participation cache for season {season}, rebuilding")
 
-    import nfl_data_py as nfl
-    pbp = nfl.import_pbp_data([season])
+    pbp = import_pbp(season)
     if pbp.empty or "offense_players" not in pbp.columns:
         return pd.DataFrame()
 

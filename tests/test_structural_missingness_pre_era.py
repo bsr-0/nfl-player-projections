@@ -157,15 +157,20 @@ class TestFumblesLostPopulated:
 
     @requires_real_db
     def test_every_season_has_fumbles(self):
+        """Per-week rate, not a season total, so an in-progress season is
+        still guarded: the league loses ~14 fumbles a week, and the failure
+        mode this catches is a whole ingest path producing 0 (2025 via PBP;
+        2026 week 1 again, until the weekly release was re-wired)."""
         import sqlite3
         c = sqlite3.connect(str(DB_PATH))
         try:
             rows = c.execute(
-                "SELECT season, SUM(fumbles_lost) FROM player_weekly_stats "
-                "GROUP BY season HAVING SUM(fumbles_lost) < 100").fetchall()
+                "SELECT season, SUM(fumbles_lost), COUNT(DISTINCT week) "
+                "FROM player_weekly_stats GROUP BY season "
+                "HAVING SUM(fumbles_lost) * 1.0 / COUNT(DISTINCT week) < 5").fetchall()
         finally:
             c.close()
-        assert not rows, f"seasons with implausibly few fumbles lost: {rows}"
+        assert not rows, f"seasons averaging <5 fumbles lost per week (season, total, weeks): {rows}"
 
     @requires_real_db
     def test_fantasy_points_reconstructs_from_components(self):

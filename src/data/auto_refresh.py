@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.utils.database import DatabaseManager
 from config.settings import MODELS_DIR
-from src.data.nfl_data_loader import NFLDataLoader
+from src.data.nfl_data_loader import NFLDataLoader, _fetch_weekly_data
 from src.data.quality_gates import run_db_quality_gates
 from src.utils.nfl_calendar import (
     get_current_nfl_season as get_current_nfl_season_calendar,
@@ -77,7 +77,7 @@ class NFLDataRefresher:
         from config.settings import MIN_HISTORICAL_YEAR
         for year in range(MIN_HISTORICAL_YEAR, current_season + 2):  # Check up to next year
             try:
-                df = nfl.import_weekly_data([year])
+                df = _fetch_weekly_data([year])
                 if len(df) > 0:
                     available_seasons.append(year)
             except Exception:
@@ -127,7 +127,7 @@ class NFLDataRefresher:
         
         # Get remote max week
         try:
-            df = nfl.import_weekly_data([season])
+            df = _fetch_weekly_data([season])
             remote_max = df['week'].max() if len(df) > 0 else 0
         except Exception:
             remote_max = 0

@@ -189,6 +189,13 @@ class DataQualityGates:
                 "latest_row_count": int(weekly.iloc[-1]["row_count"]),
             }
 
+        # The baseline must also exclude postseason weeks, or the first week
+        # of every season is compared against the previous season's playoff
+        # rounds (2026 wk1: 313 rows vs a "baseline" of 61 = the 2025
+        # Super Bowl week) and fails by 5x every year.
+        reg = weekly["week"] <= weekly["season"].map(regular_season_max_week)
+        weekly = weekly[reg].reset_index(drop=True)
+
         weekly["baseline"] = (
             weekly["row_count"]
             .shift(1)
