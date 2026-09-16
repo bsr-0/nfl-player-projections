@@ -1,27 +1,35 @@
 {
-  "generated_at": "2026-09-15T04:55:12.309157+00:00",
+  "generated_at": "2026-09-16T02:28:04.117710+00:00",
   "status": "pass",
   "checks": {
     "completeness": {
       "passed": true,
       "latest_window": {
-        "season": 2025,
-        "week": 22
+        "season": 2026,
+        "week": 1
       },
       "missing_teams": [],
       "missing_positions": [],
-      "active_players": 17,
-      "note": "postseason week -- team-coverage check skipped"
+      "active_players": 343
     },
     "anomalies": {
       "passed": true,
-      "reason": "postseason week -- anomaly baseline not meaningful",
-      "latest_row_count": 17
+      "latest_window": {
+        "season": 2026,
+        "week": 1,
+        "row_count": 361
+      },
+      "baseline_row_count": 386.0,
+      "ratio_vs_baseline": 0.935,
+      "bounds": {
+        "lower": 0.6,
+        "upper": 1.6
+      }
     }
   },
   "latest_observed": {
-    "season": 2025,
-    "week": 22,
-    "rows": 123254
+    "season": 2026,
+    "week": 1,
+    "rows": 123615
   }
 }
