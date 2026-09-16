@@ -105,6 +105,12 @@ class AdvancedRookieProjector:
     # within a process (GAPS.md, 2026-08-06 perf fix).
     _combine_match_cache: dict = {}
 
+    # Same pattern for _load_historical_rookies: (min_season, max_season) ->
+    # the loaded DataFrame. Called once per (rookie, week) row via
+    # find_comparable_players -- without this it re-runs two DB queries plus
+    # an nfl_data_py fetch every time for what is the same result all season.
+    _historical_rookies_cache: dict = {}
+
     # Position-specific combine metric weightings
     # These weights determine how important each metric is for projecting success
     COMBINE_WEIGHTS = {
@@ -764,62 +770,118 @@ class AdvancedRookieProjector:
         return similarities[:top_n]
     
     def _load_historical_rookies(
-        self, 
-        min_season: int = 2015, 
+        self,
+        min_season: int = 2015,
+        max_season: int = CURRENT_NFL_SEASON
+    ) -> pd.DataFrame:
+        # Cached per (min_season, effective max_season): this runs once per
+        # (rookie, week) ROW via find_comparable_players -- hundreds of calls
+        # a training run, all wanting the identical two-query DB fetch. Not
+        # an lru_cache on the method itself (self, an AdvancedRookieProjector
+        # instance, isn't a stable cache key and would pin every instance in
+        # memory for the process lifetime); keyed on the same season bounds
+        # the query itself uses.
+        cache_key = (min_season, min(max_season, CURRENT_NFL_SEASON - 1))
+        if cache_key in self._historical_rookies_cache:
+            return self._historical_rookies_cache[cache_key].copy()
+        result = self._load_historical_rookies_uncached(min_season, max_season)
+        self._historical_rookies_cache[cache_key] = result
+        return result.copy()
+
+    def _load_historical_rookies_uncached(
+        self,
+        min_season: int = 2015,
         max_season: int = CURRENT_NFL_SEASON
     ) -> pd.DataFrame:
         """
         Load historical rookie performance data.
-        
+
         Returns DataFrame with rookie seasons including:
         - Player info (name, position, team)
         - Draft info (round, pick)
         - Performance (fantasy points, games played)
+
+        Was two live nfl_data_py calls (import_seasonal_data + import_
+        draft_picks) merged on player_name. Both were broken: (1)
+        import_seasonal_data 404s for any season nflverse has retired the
+        source asset for (2025+ -- the same migration already fixed for
+        weekly stats in nfl_data_loader.py's _fetch_weekly_from_release,
+        so a multi-season list including a retired year poisons the whole
+        call), and (2) even when it succeeds, its actual output (verified
+        directly) has no player_name column at all, so the merge this
+        function needs would KeyError on every call regardless of (1).
+        Both failures were silently swallowed by the try/except below, so
+        this path has likely returned empty since nfl_data_py dropped
+        player_name from that endpoint -- get_comparable_projection()
+        always fell through to the archetype-only baseline. Rebuilt on
+        data already in the local DB: draft_picks_v2 (player_id/round/pick,
+        no live fetch) resolved to GSIS ids via nfl.import_ids() (a
+        separate, working asset -- an id crosswalk, not stats), joined to
+        player_weekly_stats aggregated to season level using the same
+        SCORING-backed fantasy_points already in the table (AUDIT_REPORT.md
+        #24), rather than recomputing it from components a second time.
+        max_season is capped at CURRENT_NFL_SEASON - 1: a rookie CLASS is
+        only a valid comparable once its season is complete, and excluding
+        the in-progress season also avoids depending on it being ingested.
         """
+        max_season = min(max_season, CURRENT_NFL_SEASON - 1)
+        if max_season < min_season:
+            return pd.DataFrame()
         try:
-            import nfl_data_py as nfl
-            
-            # Load seasonal data
-            seasons = list(range(min_season, max_season + 1))
-            seasonal_df = nfl.import_seasonal_data(seasons)
-            
-            if seasonal_df.empty:
+            import sqlite3
+            from config.settings import DB_PATH
+
+            conn = sqlite3.connect(str(DB_PATH))
+            try:
+                draft_df = pd.read_sql(
+                    "SELECT player_id, position, draft_season, draft_round, "
+                    "draft_pick, pfr_player_id FROM draft_picks_v2 "
+                    "WHERE draft_season BETWEEN ? AND ?",
+                    conn, params=(min_season, max_season),
+                )
+                weekly = pd.read_sql(
+                    "SELECT player_id, season, week, fantasy_points "
+                    "FROM player_weekly_stats WHERE season BETWEEN ? AND ?",
+                    conn, params=(min_season, max_season),
+                )
+            finally:
+                conn.close()
+
+            if draft_df.empty or weekly.empty:
                 return pd.DataFrame()
-            
-            # Load draft data to identify rookies
-            draft_df = nfl.import_draft_picks(seasons)
-            
+
+            import nfl_data_py as nfl
+            ids = nfl.import_ids()[["pfr_id", "gsis_id", "name"]].dropna(subset=["pfr_id"])
+            draft_df = draft_df.merge(
+                ids.drop_duplicates("pfr_id"),
+                left_on="pfr_player_id", right_on="pfr_id", how="left",
+            )
+            # draft_picks_v2's own player_id is an nflverse draft-stub, not
+            # GSIS -- player_weekly_stats is GSIS-keyed, so the join below
+            # needs gsis_id, not draft_df's native player_id. Dropped (not
+            # just superseded) so the season_stats merge doesn't produce a
+            # player_id_x/player_id_y pair from two same-named columns.
+            draft_df = draft_df.dropna(subset=["gsis_id"]).drop(columns=["player_id", "pfr_id"])
             if draft_df.empty:
                 return pd.DataFrame()
-            
-            # Merge draft info onto seasonal data
-            # A rookie is a player in their draft year
-            draft_lookup = draft_df[['player_name', 'season', 'round', 'pick', 'position']].copy()
-            draft_lookup.columns = ['name', 'draft_season', 'draft_round', 'draft_pick', 'position']
-            
-            # Merge on player name and season
-            merged = seasonal_df.merge(
-                draft_lookup,
-                left_on=['player_name', 'season'],
-                right_on=['name', 'draft_season'],
-                how='inner'
+
+            season_stats = (
+                weekly.groupby(["player_id", "season"], as_index=False)
+                .agg(fantasy_points=("fantasy_points", "sum"), games=("week", "nunique"))
             )
-            
-            # Calculate fantasy points if not present. Uses the canonical
-            # SCORING-backed helper rather than a second inline formula --
-            # the previous copy silently omitted fumbles_lost and
-            # two_point_conversions (AUDIT_REPORT.md #24).
-            if 'fantasy_points' not in merged.columns:
-                from src.utils.helpers import calculate_fantasy_points_df
-                merged['fantasy_points'] = calculate_fantasy_points_df(merged)
-            
-            # Calculate PPG
-            if 'games' in merged.columns:
-                merged['fantasy_points_avg'] = merged['fantasy_points'] / merged['games'].clip(lower=1)
-            
+            merged = draft_df.merge(
+                season_stats,
+                left_on=["gsis_id", "draft_season"],
+                right_on=["player_id", "season"],
+                how="inner",
+            )
+            if merged.empty:
+                return pd.DataFrame()
+
+            merged["fantasy_points_avg"] = merged["fantasy_points"] / merged["games"].clip(lower=1)
             print(f"Loaded {len(merged)} historical rookie seasons")
             return merged
-            
+
         except Exception as e:
             print(f"Could not load historical rookies: {e}")
             return pd.DataFrame()
@@ -1135,16 +1197,17 @@ class AdvancedRookieProjector:
                 draft_round=draft_round,
                 draft_pick=draft_pick,
                 opportunity_score=opportunity_by_row.loc[idx],
-                # use_comparables=True triggers get_comparable_projection(),
-                # which calls _load_historical_rookies() — a fresh, uncached
-                # nfl_data_py network fetch PER ROOKIE (no caching at all),
-                # and one of its two calls (import_draft_picks for the
-                # current, not-yet-happened season) reliably 404s. Only
-                # rookie_opportunity_score/rookie_ceiling_ppg/rookie_floor_ppg
-                # consume the comparable-player blend, so disabling this costs
-                # nothing for the features actually promoted, and avoids
-                # wasted network I/O per rookie-week on every training run.
-                use_comparables=False,
+                # Re-enabled: _load_historical_rookies() was rebuilt on the
+                # local DB (draft_picks_v2 + player_weekly_stats, no live
+                # fetch for the two-query part) and is now cached at the
+                # class level -- see _historical_rookies_cache -- so this is
+                # one real DB read per process, not one nfl_data_py fetch per
+                # rookie-week. Only rookie_ceiling_ppg/rookie_floor_ppg
+                # actually change: get_comparable_projection() blends into
+                # project_rookie's floor/ceiling, but nothing here reads
+                # profile.projected_ppg, so the archetype/comp blend of the
+                # point estimate itself never reaches a stored feature.
+                use_comparables=True,
             )
 
             # Update this row only — not the whole player, since opportunity
