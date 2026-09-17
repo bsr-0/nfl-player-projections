@@ -81,8 +81,8 @@ def generate_app_data(save_daily: bool = False) -> bool:
     
     1. Load data from DB (or cached_features if exists)
     2. Run NFLPredictor to get predictions
-    3. Merge predicted_points, projection_1w, projection_4w (no projection_18w --
-       that horizon has no trained model; see MAX_TRAINED_HORIZON below)
+    3. Merge predicted_points and projection_1w (the only trained horizon --
+       4w and 18w were retired; see TRAINING_HORIZONS in config/settings.py)
     4. Save to data/cached_features.parquet (and optionally daily_predictions.parquet)
     
     Returns:
@@ -173,27 +173,17 @@ def generate_app_data(save_daily: bool = False) -> bool:
     if cur_week_num < 1:
         cur_week_num = 1
     MAX_TRAINED_HORIZON = MODEL_CONFIG.get("horizon_long_threshold", 9) - 1
-    # Default horizon: as much of the remaining season as is actually
-    # trained, capped at MAX_TRAINED_HORIZON weeks.
+    # default_horizon is the width of the "rest of season pace" window used
+    # for the label written to upcoming_week_meta.json below (e.g. "Weeks
+    # 3-8"). It is NOT a horizon anything predicts: only 1-week is trained
+    # (TRAINING_HORIZONS), and multi-week views are built by summing real
+    # per-week predictions in generate_weekly_data.py's build_weekly_model()
+    # -- not duplicated here. It used to also be appended to `horizons` and
+    # requested from predict(), which (a) never had a consumer and (b) is
+    # guaranteed to raise now that 4-8 have no model.
     default_horizon = (MAX_TRAINED_HORIZON if is_offseason()
                         else min(MAX_TRAINED_HORIZON, max(1, 18 - min(cur_week_num, 18) + 1)))
-    # default_horizon (a several-week "rest of season pace" window, e.g.
-    # weeks 3-8) is a display concept independent of which horizons are
-    # directly trained -- it can be anything from MAX_TRAINED_HORIZON's
-    # math. It always requests a real predict(n_weeks=default_horizon)
-    # call below, which will now fail (caught by the try/except, prints a
-    # warning, writes nothing for that horizon) unless it happens to equal
-    # 1, since only 1 has a trained model post-2026-09-16. Not fixed here:
-    # the right fix is summing real per-week 1-week predictions for that
-    # window (what generate_weekly_data.py's build_weekly_model() already
-    # does), not requesting a multi-week-ahead horizon directly -- a
-    # separate change, tracked rather than bolted on to the horizon-4
-    # removal. upcoming_week_meta.json's default_horizon/_label fields are
-    # unaffected either way (computed independently of whether the
-    # prediction call below succeeds) and are not read by the live site.
     horizons = [1]
-    if default_horizon not in horizons:
-        horizons.append(default_horizon)
     pred_dfs = {}
     
     for n_weeks in horizons:
@@ -383,12 +373,9 @@ def generate_app_data(save_daily: bool = False) -> bool:
                 print(f"  Aligned team with current-season roster ({pred_season}, {len(roster_team)} players)")
         except Exception as e:
             print(f"  Current-season roster refresh skipped: {e}")
-        # Merge projection_4w from the other trained horizon (see
-        # MAX_TRAINED_HORIZON above -- there is no projection_18w anymore).
-        for n_weeks in (4,):
-            if n_weeks in pred_dfs and not pred_dfs[n_weeks].empty and f"projection_{n_weeks}w" in pred_dfs[n_weeks].columns:
-                merge_df = pred_dfs[n_weeks][["player_id", f"projection_{n_weeks}w"]].drop_duplicates(subset=["player_id"])
-                upcoming_rows = upcoming_rows.merge(merge_df, on="player_id", how="left")
+        # (A projection_4w merge used to live here. Horizon 4 was retired
+        # 2026-09-16 -- see TRAINING_HORIZONS -- so pred_dfs only ever has
+        # key 1 and the loop was dead.)
         # Next-season roster: when horizon can span next season (e.g. SB week), attach team_next_season
         next_season = pred_season + 1
         try:
@@ -407,7 +394,7 @@ def generate_app_data(save_daily: bool = False) -> bool:
             upcoming_rows["team_next_season"] = np.nan
             print(f"  Next-season roster skipped: {e}")
         # Ensure projection_* and team_next_season exist in full_df so concat preserves them
-        for col in ["projection_1w", "projection_4w", "team_next_season",
+        for col in ["projection_1w", "team_next_season",
                     "expected_points", "injury_adjustment"]:
             if col not in full_df.columns:
                 full_df[col] = np.nan
@@ -440,12 +427,6 @@ def generate_app_data(save_daily: bool = False) -> bool:
                     full_df = full_df[~pred_week_mask]
         full_df = pd.concat([full_df, upcoming_rows], ignore_index=True)
         print(f"  Added {len(upcoming_rows)} prediction-target rows for {pred_season} week {pred_week}")
-        # Validation: log that 4w differs from 1w
-        if "projection_1w" in upcoming_rows.columns and "projection_4w" in upcoming_rows.columns:
-            u1 = upcoming_rows["projection_1w"].dropna()
-            u4 = upcoming_rows["projection_4w"].dropna()
-            if len(u1) > 0 and len(u4) > 0:
-                print(f"  Validation: projection_1w range [{u1.min():.1f}, {u1.max():.1f}], projection_4w range [{u4.min():.1f}, {u4.max():.1f}]")
 
     # projection_18w is retired (see MAX_TRAINED_HORIZON above) but a cache
     # or daily_predictions file built before this fix can still carry stale

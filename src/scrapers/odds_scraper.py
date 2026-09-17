@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -118,9 +118,45 @@ GAME_EXTRA_MARKETS = "team_totals,alternate_spreads,alternate_totals,h2h_h1,h2h_
 # US bookmakers we care about (used to filter responses and control credit spend)
 US_REGIONS = "us"
 
-# Snapshot time suffix appended to each NFL game date for historical calls.
-# 17:00 UTC = noon ET — before the earliest Sunday 1pm kickoffs.
-SNAPSHOT_TIME_SUFFIX = "T17:00:00Z"
+# Snapshot time suffix appended to each NFL game date for per-DATE historical
+# sweeps (one snapshot covers every game that day, so it must precede the
+# EARLIEST kickoff of the day).
+#
+# Was "T17:00:00Z" with the comment "17:00 UTC = noon ET -- before the
+# earliest Sunday 1pm kickoffs". That arithmetic is wrong for the NFL
+# season: US Eastern is EDT (UTC-4) through early November, so 17:00 UTC is
+# 1:00pm EDT -- exactly AT the 1pm kickoff, not before it (the API returned
+# snapshots ~5 minutes pre-kickoff for standard games), and hours AFTER the
+# 9:30am-ET London/early-window games. Measured 2026-09-16 in the data this
+# produced: 11 of 2,293 game_odds events and 6 of 682 player_props_odds
+# events had fetched_at after commence_time, worst by 205 minutes -- an
+# in-game line stored as a "pre-game closing" line.
+#
+# 12:00 UTC (8am EDT / 7am EST) precedes every kickoff the NFL schedules,
+# including the 9:30am-ET international slot, with ~90 minutes to spare on
+# the worst observed case. The cost is a gameday-morning line rather than
+# a true closing line for the per-date sweeps; the per-event props path
+# (scrape_historical_props) has each event's own commence_time and uses
+# pre_kickoff_snapshot() to get closer to close while staying pre-game.
+SNAPSHOT_TIME_SUFFIX = "T12:00:00Z"
+
+# Per-event snapshot: this many minutes before the event's own kickoff.
+PRE_KICKOFF_MARGIN_MINUTES = 30
+
+
+def pre_kickoff_snapshot(commence_time_iso: str,
+                         margin_minutes: int = PRE_KICKOFF_MARGIN_MINUTES) -> Optional[str]:
+    """ISO-8601 UTC timestamp `margin_minutes` before an event's kickoff, or
+    None if commence_time can't be parsed. Guarantees the requested snapshot
+    precedes the game, which a fixed clock time on the game DATE cannot."""
+    try:
+        kickoff = datetime.fromisoformat(str(commence_time_iso).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if kickoff.tzinfo is None:
+        kickoff = kickoff.replace(tzinfo=timezone.utc)
+    snap = kickoff.astimezone(timezone.utc) - timedelta(minutes=margin_minutes)
+    return snap.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # For Thursday/Saturday/Monday games the date itself is correct; Sunday sweeps all.
 # We use a single snapshot per gameday which covers all games on that date.
@@ -667,11 +703,16 @@ class NFLOddsScraper(BaseScraper):
             if event_id in existing_events:
                 continue
 
-            # Use commence_time date at 17:00 UTC as snapshot (pre-game)
-            date_str = commence_time[:10] if commence_time else None
-            if not date_str:
-                continue
-            snapshot = f"{date_str}T17:00:00Z"
+            # Snapshot PRE_KICKOFF_MARGIN_MINUTES before this event's own
+            # kickoff. Used to be the game DATE at a fixed 17:00 UTC, which is
+            # 1pm EDT -- at, not before, a standard kickoff, and 3+ hours into
+            # a 9:30am-ET London game (see SNAPSHOT_TIME_SUFFIX).
+            snapshot = pre_kickoff_snapshot(commence_time)
+            if snapshot is None:
+                date_str = commence_time[:10] if commence_time else None
+                if not date_str:
+                    continue
+                snapshot = f"{date_str}{SNAPSHOT_TIME_SUFFIX}"
 
             url = f"{BASE_URL}/historical/sports/{SPORT}/events/{event_id}/odds"
             params = {

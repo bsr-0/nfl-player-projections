@@ -61,6 +61,13 @@ from config.settings import regular_season_week_sql  # noqa: E402
 def _load_props(season: int) -> dict[tuple[str, str, int], list[float]]:
     """Return {(player_name, market, week): [point values]} for Over lines only."""
     markets_in = ",".join(f"'{m}'" for m in SCORING)
+    # fetched_at < commence_time: only lines captured BEFORE kickoff count as
+    # a market projection. The scraper used to snapshot at a fixed clock time
+    # that fell at/after kickoff for early-window games (6 events in the
+    # table as of 2026-09-16, up to 3.3h into the game -- see
+    # odds_scraper.SNAPSHOT_TIME_SUFFIX). The scraper is fixed; this guard
+    # keeps the rows it already wrote from being scored as pre-game until
+    # they're re-fetched.
     query = f"""
         SELECT player_name, market, week, point
         FROM player_props_odds
@@ -69,6 +76,7 @@ def _load_props(season: int) -> dict[tuple[str, str, int], list[float]]:
           AND {regular_season_week_sql()}
           AND point IS NOT NULL
           AND market IN ({markets_in})
+          AND fetched_at < commence_time
     """
     with sqlite3.connect(DB_PATH) as con:
         rows = con.execute(query, (season,)).fetchall()

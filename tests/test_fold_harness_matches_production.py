@@ -56,6 +56,18 @@ def _run(captured, test_season):
 
 
 def test_run_fold_passes_context_data(captured):
+    """2026-09-16: TRAINING_START_YEAR_DEFAULT moved to MIN_HISTORICAL_YEAR.
+    context_data is "seasons strictly before the training window" -- when
+    the window itself starts at the absolute floor of the database, there
+    is nothing before it by construction, in the harness or in production
+    (both call the same load_training_data). That's not the harness
+    silently diverging from production (this test's actual purpose); it's
+    an unavoidable property of training back to the floor, already priced
+    into the backtest that justified the window change. Assert on that
+    condition explicitly instead of assuming context always exists.
+    """
+    from config.settings import MIN_HISTORICAL_YEAR
+
     seen = _run(captured, 2024)
     ctx = seen.get("context_data")
 
@@ -63,7 +75,14 @@ def test_run_fold_passes_context_data(captured):
         "run_fold called _prepare_training_data without context_data; the "
         "harness is measuring a different pipeline from the one that ships"
     )
-    assert not ctx.empty, "context_data is empty; lookback windows stay cold"
+    if min(seen["train_seasons"]) <= MIN_HISTORICAL_YEAR:
+        assert ctx.empty, (
+            "training window starts at the historical floor, so there should "
+            "be no earlier seasons available for context -- non-empty here "
+            "would mean something leaked in from beyond the floor"
+        )
+    else:
+        assert not ctx.empty, "context_data is empty; lookback windows stay cold"
 
 
 def test_context_never_contains_the_held_out_season(captured):
