@@ -16,7 +16,7 @@ Chains, in order:
     5. copy data/players_{POS}.json -> docs/data/ (generate_draft_data.py
        does not do this itself -- see the ADP-fix session note in git log)
     6. scripts/generate_weekly_data.py -- writes docs/data/weekly_*.json
-       directly, auto-detects season_prorated vs weekly_model
+       directly; one blended path for every week (mode "weekly_blend")
 
 Does NOT commit or push anything. Review `git status`/`git diff` on
 docs/data and data/players_*.json yourself before committing.

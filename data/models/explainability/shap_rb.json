@@ -2,44 +2,44 @@
   "position": "RB",
   "top_shap_features": [
     {
-      "feature": "contract_apy_rank",
-      "mean_abs_shap": 0.046031494167448186
-    },
-    {
       "feature": "snap_share_accel",
-      "mean_abs_shap": 0.04221425404316246
-    },
-    {
-      "feature": "rush_share_pct_roll3_mean",
-      "mean_abs_shap": 0.02449643191973395
-    },
-    {
-      "feature": "snap_share_pct_roll3_mean",
-      "mean_abs_shap": 0.014097801102570407
-    },
-    {
-      "feature": "prev_season_ppg",
-      "mean_abs_shap": 0.013910745822019465
-    },
-    {
-      "feature": "spread",
-      "mean_abs_shap": 0.013111128332370185
+      "mean_abs_shap": 0.05088244796963755
     },
     {
       "feature": "targets_roll3_mean",
-      "mean_abs_shap": 0.011950878389760687
+      "mean_abs_shap": 0.0423931007668634
     },
     {
-      "feature": "yards_per_carry_roll3_mean",
-      "mean_abs_shap": 0.009111237189043142
+      "feature": "prev_season_ppg",
+      "mean_abs_shap": 0.03310617514243529
+    },
+    {
+      "feature": "depth_chart_rank",
+      "mean_abs_shap": 0.021245311230635822
+    },
+    {
+      "feature": "rushing_attempts_roll3_mean",
+      "mean_abs_shap": 0.01223039287490777
+    },
+    {
+      "feature": "rush_share_pct_roll3_mean",
+      "mean_abs_shap": 0.011548571157447165
     },
     {
       "feature": "speed_score",
-      "mean_abs_shap": 0.008369067847870853
+      "mean_abs_shap": 0.009427849851547258
     },
     {
-      "feature": "rb_ybc_avg_roll3_mean",
-      "mean_abs_shap": 0.006278669404879869
+      "feature": "catch_rate_roll3_mean",
+      "mean_abs_shap": 0.009205006410108359
+    },
+    {
+      "feature": "spread",
+      "mean_abs_shap": 0.008238576693315002
+    },
+    {
+      "feature": "rookie_ceiling_ppg",
+      "mean_abs_shap": 0.007361731469923381
     }
   ]
 }

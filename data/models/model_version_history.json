@@ -1,183 +1,5 @@
 [
   {
-    "training_date": "2026-09-02T23:02:05.695290",
-    "feature_version": "35",
-    "train_seasons": [
-      2018,
-      2019,
-      2020,
-      2021,
-      2022,
-      2023,
-      2024
-    ],
-    "test_season": 2025,
-    "positions_trained": [
-      "QB",
-      "RB",
-      "WR",
-      "TE"
-    ],
-    "oof_metrics": {
-      "QB": {
-        "1w": {
-          "rmse": 6.936101383969102,
-          "mae": 5.513642894306019,
-          "r2": 0.37062577799769314,
-          "target_space": "original"
-        },
-        "4w": {
-          "rmse": 17.8163412853216,
-          "mae": 14.162877647496796,
-          "r2": 0.5067242664914506,
-          "target_space": "original"
-        }
-      },
-      "RB": {
-        "1w": {
-          "rmse": 6.298554532265641,
-          "mae": 4.474295478615068,
-          "r2": 0.29523787576822247,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 16.912186536582524,
-          "mae": 12.660710333334622,
-          "r2": 0.49453388069346516,
-          "target_space": "log1p"
-        }
-      },
-      "WR": {
-        "1w": {
-          "rmse": 5.9925215029968175,
-          "mae": 4.172765373617436,
-          "r2": 0.36904684805730903,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 15.172697778471688,
-          "mae": 11.333686062782718,
-          "r2": 0.5809417821975134,
-          "target_space": "log1p"
-        }
-      },
-      "TE": {
-        "1w": {
-          "rmse": 4.375593077580822,
-          "mae": 2.789438487615083,
-          "r2": 0.36562864103792225,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 10.59996754974119,
-          "mae": 7.41362856276592,
-          "r2": 0.6417836933926517,
-          "target_space": "log1p"
-        }
-      }
-    },
-    "test_metrics": {
-      "QB": {
-        "FP (owner objective)": {
-          "rmse": 8.036287996501757,
-          "mae": 6.553221756974984,
-          "r2": 0.20909617314442008,
-          "within_7pt_pct": 60.15873015873016,
-          "within_10pt_pct": 77.46031746031747,
-          "n_samples": 630,
-          "mape": 88.60544879190508,
-          "spearman_rho": 0.4444758157714606,
-          "expert_benchmark_rmse": 7.5,
-          "vs_expert_pct": -7.2
-        }
-      },
-      "RB": {
-        "util": {
-          "rmse": 33.34547542895016,
-          "mae": 28.320944848616158,
-          "r2": -1.5338486641252906,
-          "within_7pt_pct": 14.755154639175258,
-          "within_10pt_pct": 19.84536082474227,
-          "n_samples": 1552,
-          "mape": 74.62267150282076,
-          "spearman_rho": 0.6847353278679142
-        },
-        "FP": {
-          "rmse": 6.325662651721953,
-          "mae": 4.609758409967343,
-          "r2": 0.38515208089652864,
-          "within_7pt_pct": 79.33474876150035,
-          "within_10pt_pct": 89.95046001415427,
-          "n_samples": 1413,
-          "mape": 69.01164452356022,
-          "spearman_rho": 0.6592515821215881,
-          "expert_benchmark_rmse": 8.5,
-          "vs_expert_pct": 25.6
-        }
-      },
-      "WR": {
-        "util": {
-          "rmse": 46.46552815045731,
-          "mae": 41.96673562013753,
-          "r2": -3.2215440755935605,
-          "within_7pt_pct": 10.931768158473956,
-          "within_10pt_pct": 12.619222303741745,
-          "n_samples": 2726,
-          "mape": 84.47507790079042,
-          "spearman_rho": 0.690714684446426
-        },
-        "FP": {
-          "rmse": 5.874886925017878,
-          "mae": 4.143222732601665,
-          "r2": 0.33810859882402744,
-          "within_7pt_pct": 81.6686722823907,
-          "within_10pt_pct": 90.45326915363017,
-          "n_samples": 2493,
-          "mape": 66.61567092228103,
-          "spearman_rho": 0.6276515455719829,
-          "expert_benchmark_rmse": 8.0,
-          "vs_expert_pct": 26.6
-        }
-      },
-      "TE": {
-        "util": {
-          "rmse": 42.42282831989862,
-          "mae": 38.37467339553691,
-          "r2": -3.2647403529351813,
-          "within_7pt_pct": 1.066350710900474,
-          "within_10pt_pct": 5.924170616113744,
-          "n_samples": 1688,
-          "mape": 91.76796993113358,
-          "spearman_rho": 0.7342088748382585
-        },
-        "FP": {
-          "rmse": 4.487224961519315,
-          "mae": 2.978730991531469,
-          "r2": 0.37996749363217797,
-          "within_7pt_pct": 88.4739214423696,
-          "within_10pt_pct": 95.42820347714101,
-          "n_samples": 1553,
-          "mape": 53.22955082996017,
-          "spearman_rho": 0.6590536619180546,
-          "expert_benchmark_rmse": 6.5,
-          "vs_expert_pct": 31.0
-        }
-      }
-    },
-    "n_features_per_position": {
-      "QB": 442,
-      "RB": 67,
-      "WR": 70,
-      "TE": 68
-    },
-    "previous_training_date": "2026-08-31T17:46:39.580130",
-    "previous_feature_version": "35",
-    "rollback_available": true,
-    "n_rollback_versions": 5,
-    "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
-    "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
-  },
-  {
     "training_date": "2026-09-03T00:22:07.529286",
     "feature_version": "35",
     "train_seasons": [
@@ -809,6 +631,196 @@
       "TE": 68
     },
     "previous_training_date": "2026-09-10T23:22:42.354051",
+    "previous_feature_version": "36",
+    "rollback_available": true,
+    "n_rollback_versions": 5,
+    "horizon_status_file": "data/models/horizon_model_status.json",
+    "bounded_scaler_file": "data/models/feature_scaler_bounded.joblib"
+  },
+  {
+    "training_date": "2026-09-16T09:27:20.571879",
+    "feature_version": "36",
+    "train_seasons": [
+      2006,
+      2007,
+      2008,
+      2009,
+      2010,
+      2011,
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "test_season": 2025,
+    "positions_trained": [
+      "QB",
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "oof_metrics": {
+      "QB": {
+        "1w": {
+          "rmse": 7.799670125304586,
+          "mae": 6.387160765176278,
+          "r2": 0.2856596999020877,
+          "target_space": "original"
+        },
+        "4w": {
+          "rmse": 20.208652280717043,
+          "mae": 15.978271506116958,
+          "r2": 0.37264770808870296,
+          "target_space": "original"
+        }
+      },
+      "RB": {
+        "1w": {
+          "rmse": 6.963493486986226,
+          "mae": 5.01498119153222,
+          "r2": 0.2715498304895465,
+          "target_space": "log1p"
+        },
+        "4w": {
+          "rmse": 19.170857858715845,
+          "mae": 14.567335709867107,
+          "r2": 0.4316541396686343,
+          "target_space": "log1p"
+        }
+      },
+      "WR": {
+        "1w": {
+          "rmse": 6.194228185362455,
+          "mae": 4.310675652030395,
+          "r2": 0.32065509139222736,
+          "target_space": "log1p"
+        },
+        "4w": {
+          "rmse": 15.172097101327397,
+          "mae": 11.320334855057249,
+          "r2": 0.5709990810968671,
+          "target_space": "log1p"
+        }
+      },
+      "TE": {
+        "1w": {
+          "rmse": 4.430170364653703,
+          "mae": 2.8306146117619178,
+          "r2": 0.33815181113842707,
+          "target_space": "log1p"
+        },
+        "4w": {
+          "rmse": 10.488939166850125,
+          "mae": 7.264553595862103,
+          "r2": 0.6183052692356567,
+          "target_space": "log1p"
+        }
+      }
+    },
+    "test_metrics": {
+      "QB": {
+        "FP (owner objective)": {
+          "rmse": 8.273437754123728,
+          "mae": 6.641823718559164,
+          "r2": 0.1590341471977752,
+          "within_7pt_pct": 58.730158730158735,
+          "within_10pt_pct": 77.14285714285715,
+          "n_samples": 630,
+          "mape": 88.88159985646885,
+          "spearman_rho": 0.44348520347085585,
+          "expert_benchmark_rmse": 7.5,
+          "vs_expert_pct": -10.3
+        }
+      },
+      "RB": {
+        "util": {
+          "rmse": 16.20644512207065,
+          "mae": 12.870593301262545,
+          "r2": -0.44027719230099227,
+          "within_7pt_pct": 35.136855506047105,
+          "within_10pt_pct": 46.02164226607257,
+          "n_samples": 1571,
+          "mape": 58.561884782341146,
+          "spearman_rho": 0.6550359786179755
+        },
+        "FP": {
+          "rmse": 6.4017286560466165,
+          "mae": 4.73737541291424,
+          "r2": 0.36851673704473864,
+          "within_7pt_pct": 77.83216783216783,
+          "within_10pt_pct": 87.90209790209789,
+          "n_samples": 1430,
+          "mape": 74.41800990313406,
+          "spearman_rho": 0.6642007405303387,
+          "expert_benchmark_rmse": 8.5,
+          "vs_expert_pct": 24.7
+        }
+      },
+      "WR": {
+        "util": {
+          "rmse": 36.37356979847902,
+          "mae": 32.8134756546369,
+          "r2": -2.7684912757083757,
+          "within_7pt_pct": 15.150403521643433,
+          "within_10pt_pct": 16.507703595011005,
+          "n_samples": 2726,
+          "mape": 77.94911424357083,
+          "spearman_rho": 0.7097344513696792
+        },
+        "FP": {
+          "rmse": 5.782306515972771,
+          "mae": 4.250921097510342,
+          "r2": 0.3610468443214764,
+          "within_7pt_pct": 81.1472121941436,
+          "within_10pt_pct": 91.13517849979944,
+          "n_samples": 2493,
+          "mape": 75.88265892238798,
+          "spearman_rho": 0.6366497390491738,
+          "expert_benchmark_rmse": 8.0,
+          "vs_expert_pct": 27.7
+        }
+      },
+      "TE": {
+        "util": {
+          "rmse": 34.360864072241554,
+          "mae": 30.86159317630603,
+          "r2": -2.9293541798480107,
+          "within_7pt_pct": 6.519138755980861,
+          "within_10pt_pct": 10.825358851674642,
+          "n_samples": 1672,
+          "mape": 89.29242692669354,
+          "spearman_rho": 0.7197298133099447
+        },
+        "FP": {
+          "rmse": 4.58434936277485,
+          "mae": 3.059589871040658,
+          "r2": 0.36367910164619477,
+          "within_7pt_pct": 88.29648894668401,
+          "within_10pt_pct": 94.92847854356306,
+          "n_samples": 1538,
+          "mape": 54.65782315794732,
+          "spearman_rho": 0.6586466317025994,
+          "expert_benchmark_rmse": 6.5,
+          "vs_expert_pct": 29.5
+        }
+      }
+    },
+    "n_features_per_position": {
+      "QB": 62,
+      "RB": 67,
+      "WR": 70,
+      "TE": 68
+    },
+    "previous_training_date": "2026-09-15T23:56:52.965896",
     "previous_feature_version": "36",
     "rollback_available": true,
     "n_rollback_versions": 5,

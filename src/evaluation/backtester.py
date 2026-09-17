@@ -1801,7 +1801,16 @@ def run_backtest(test_season: int = None, weeks: Optional[List[int]] = None) -> 
     report = backtester.generate_report(results)
     print(report)
 
-    backtester.save_results(results)
+    artifact_path = backtester.save_results(results)
+    # Persist the scored rows beside the summary. The summary alone cannot
+    # answer any question it did not pre-compute (2026-09-17: "does a
+    # games-played shrinkage toward the season pace beat the weekly model?"
+    # needed a 12-minute re-walk just to get the rows back).
+    rows_path = artifact_path.with_suffix(".rows.csv")
+    row_cols = ["player_id", "name", "position", "team", "opponent", "season", "week",
+                "fantasy_points", "predicted_points"] + [c for c in ci_cols if c in scored.columns]
+    scored[[c for c in row_cols if c in scored.columns]].to_csv(rows_path, index=False)
+    print(f"Scored rows saved to: {rows_path}")
     if not results["trust"]["trusted"]:
         print("Skipping advanced_model_results.json and visualizations: artifact is untrusted.")
         return results, report

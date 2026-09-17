@@ -414,6 +414,11 @@ class NFLPredictor:
                     stacklevel=2,
                 )
         
+        # Shrink toward the Step 8 season pace by games played this season.
+        # Must run before anything is derived from predicted_points below
+        # (predicted_ppg, availability-adjusted expected_points, CI widening).
+        results = self._blend_toward_season_pace(results, player_data, pred_season, n_weeks)
+
         # Cold-start handling deliberately does NOT live here any more.
         #
         # `_apply_cold_start_fallback` replaced every sub-MIN_GAMES_FOR_PREDICTION
@@ -584,7 +589,8 @@ class NFLPredictor:
             output_cols.append("util_tier")
         if "player_id" not in output_cols and "player_id" in results.columns:
             output_cols.insert(0, "player_id")
-        for inj_out in ["injury_prob_combined", "injury_adjustment", "expected_points"]:
+        for inj_out in ["injury_prob_combined", "injury_adjustment", "expected_points",
+                        "predicted_points_model", "pace_prior", "pace_weight", "games_played_season"]:
             if inj_out in results.columns and inj_out not in output_cols:
                 output_cols.append(inj_out)
 
@@ -761,6 +767,80 @@ class NFLPredictor:
         if "is_injured" not in refreshed.columns:
             refreshed["is_injured"] = 0
         return refreshed
+
+    _PACE_TABLE_CACHE: Optional[pd.DataFrame] = None
+
+    @classmethod
+    def _load_pace_table(cls) -> pd.DataFrame:
+        if cls._PACE_TABLE_CACHE is None:
+            from config.settings import STEP8_PACE_TABLE
+            if not STEP8_PACE_TABLE.exists():
+                # Loud on purpose: serving the unblended weekly model here
+                # would silently drop a measured 2.5% MAE gain and hand week 1
+                # a number the walk-forward showed is worse than the pace.
+                raise FileNotFoundError(
+                    f"{STEP8_PACE_TABLE} missing -- run "
+                    "`python scripts/build_step8_pace_table.py`")
+            t = pd.read_csv(STEP8_PACE_TABLE, usecols=["player_id", "season", "step8_pace"])
+            t["season"] = pd.to_numeric(t["season"], errors="coerce")
+            cls._PACE_TABLE_CACHE = t.drop_duplicates(["player_id", "season"])
+        return cls._PACE_TABLE_CACHE
+
+    def _blend_toward_season_pace(self, results: pd.DataFrame, history: pd.DataFrame,
+                                  pred_season: int, n_weeks: int) -> pd.DataFrame:
+        """served = w * weekly + (1 - w) * pace,  w = g / (g + PACE_BLEND_KAPPA).
+
+        `history` is the frame the features were built from -- already cut
+        to games completed before the target week when backtesting -- so g
+        counts exactly the games the model could see. `pace` is the Step 8
+        season-total projection / 17 for (player, pred_season), out-of-sample
+        by construction (config.settings.STEP8_PACE_TABLE), times n_weeks.
+
+        A player with no pace row (no prior season and not in the draft
+        class) keeps the weekly number: w = 1, pace_weight = 0. Interval
+        bounds move with the centre and, on blended rows, their half-widths
+        are scaled by PACE_BLEND_CI_SCALE: the weekly model's conformal width
+        was calibrated for its own residuals and covered 75% at nominal 80%
+        once merely shifted (see settings). The raw model number stays in
+        `predicted_points_model`.
+        """
+        from config.settings import PACE_BLEND_KAPPA, PACE_BLEND_CI_SCALE
+        if results is None or results.empty or "player_id" not in results.columns:
+            return results
+        table = self._load_pace_table()
+        pace = (table[table["season"] == float(pred_season)]
+                .set_index("player_id")["step8_pace"] * float(n_weeks))
+        if {"season", "player_id"} <= set(history.columns):
+            s = pd.to_numeric(history["season"], errors="coerce")
+            games = history.loc[s == pred_season].groupby("player_id").size()
+        else:
+            games = pd.Series(dtype=float)
+
+        out = results.copy()
+        raw = pd.to_numeric(out["predicted_points"], errors="coerce")
+        p = out["player_id"].map(pace)
+        g = out["player_id"].map(games).fillna(0).astype(float)
+        w = g / (g + float(PACE_BLEND_KAPPA))
+        w = w.where(p.notna(), 1.0)
+        blended = w * raw + (1.0 - w) * p.fillna(0.0)
+
+        out["predicted_points_model"] = raw
+        out["pace_prior"] = p
+        out["pace_weight"] = 1.0 - w
+        out["games_played_season"] = g
+        out["predicted_points"] = blended
+        scale = np.where(w < 1.0, float(PACE_BLEND_CI_SCALE), 1.0)
+        for lo_col, up_col in (("prediction_ci80_lower", "prediction_ci80_upper"),
+                               ("prediction_ci95_lower", "prediction_ci95_upper")):
+            if lo_col in out.columns and up_col in out.columns:
+                lo = pd.to_numeric(out[lo_col], errors="coerce")
+                up = pd.to_numeric(out[up_col], errors="coerce")
+                out[lo_col] = (blended - scale * (raw - lo)).clip(lower=0)
+                out[up_col] = blended + scale * (up - raw)
+        n_blend = int((w < 1.0).sum())
+        print(f"  pace blend: {n_blend}/{len(out)} players shrunk toward the Step 8 pace "
+              f"(kappa={PACE_BLEND_KAPPA:g}, mean weight on pace {float((1 - w).mean()):.2f})")
+        return out
 
     def _prepare_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """Prepare features for prediction."""

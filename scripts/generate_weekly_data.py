@@ -1,41 +1,36 @@
 """Emit per-week projections for docs/weekly.html.
 
-TWO MODES, chosen automatically from whether the season has started.
+ONE PATH for every week, before and after kickoff: the weekly ensemble via
+predict(as_of=(season, week)), which shrinks its number toward the Step 8
+season pace by games played this season (src/predict.py
+_blend_toward_season_pace, config.settings.PACE_BLEND_KAPPA):
 
-  season_prorated  -- before any game is played. The weekly model cannot
-                      differentiate weeks yet: opp_fpts_allowed comes from
-                      team_defense_stats (no rows for an unplayed season) and
-                      spread/implied_team_total come from betting lines that
-                      are not posted. Verified 2026-08-31: weeks 1 and 2
-                      produced byte-identical projections for all 795 players,
-                      mean |diff| 0.000. So instead of dressing one number up
-                      as eighteen forecasts, this mode publishes the SEASON
-                      model's total divided by 17 -- a season pace, labelled as
-                      one -- with each week's real opponent and byes removed.
+    served = w * weekly + (1 - w) * pace,   w = g / (g + 3)
 
-  weekly_model     -- once games exist. Runs the weekly ensemble per week via
-                      predict(as_of=(season, week)), which is the path
-                      validated against real 2025 outcomes on 2026-08-31.
+Before any game is played g = 0 for everyone and the served number IS the
+season total / 17 the page used to publish as a separate "season_prorated"
+mode. That mode existed because the weekly model cannot differentiate weeks
+before kickoff (opponent stats and betting lines do not exist yet; weeks 1
+and 2 were byte-identical for all 795 players, 2026-08-31) and its week-1
+number was worse than the pace (2025 walk-forward, 0 games played: MAE 4.47
+vs 4.00). The blend keeps that property at g = 0 and glides into the weekly
+model as games accumulate; the mode switch is gone.
 
-The mode is written into weekly_meta.json so the page can state which it is
-showing. Prorated rows deliberately carry NO confidence interval: a season
-floor/ceiling divided by 17 is a pace band, not a weekly outcome range, and
-presenting it as the latter would overstate precision.
+Measured on the 2025 serving-path walk-forward (scripts/
+run_pace_blend_experiment.py, 2026-09-17): MAE 4.467 -> 4.354 out-of-fold,
+paired-bootstrap CI95 on the difference [-0.156, -0.063], gains in every
+games-played bucket and every position. `/ 17` itself was the measured
+cold-start choice (2026-09-05): on 208 no-history players over 2021-2025,
+MAE 3.70, bias -0.18, beating four alternatives -- unchanged here, since at
+g = 0 the blend reproduces it exactly for every player with a Step 8 row.
 
-`/ 17` IS THE MEASURED CHOICE FOR COLD START, not a placeholder (2026-09-05).
-Scored against real week-1 PPR over 2021-2025, 208 players with no NFL
-history: MAE 3.70, bias -0.18, R2 +0.270. Four alternatives lost, each with a
-paired-bootstrap CI entirely on the wrong side of zero -- team-room output x a
-draft-round share (+0.58 MAE), that plus the week-1 opponent's defence
-(+0.32), a half-and-half blend with the published number (+0.23), and
-dividing by expected games instead of 17 (+0.77). See GAPS.md and
-scripts/run_week1_coldstart_experiment.py. Anything replacing this has to beat
-3.70 at -0.18 on cold start.
+Rows carry an 80% interval from the weekly model's conformal width, shifted
+to the blended centre (conservative: the blend's errors are smaller), plus
+`pace_weight` so a reader can see how much of a number is pace.
 
 Usage:
     python scripts/generate_weekly_data.py
     python scripts/generate_weekly_data.py --weeks 1 6
-    python scripts/generate_weekly_data.py --force-mode weekly_model
 """
 import argparse
 import json
@@ -50,10 +45,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 
-from config.settings import DB_PATH
+from config.settings import DB_PATH, PACE_BLEND_KAPPA
 
 OUT_DIR = Path("docs/data")
-GAMES_PER_SEASON = 17
 
 BACKTEST_DIR = Path("data/backtest_results")
 
@@ -148,7 +142,8 @@ def baseline_standing() -> dict | None:
 
 KEEP = ["name", "position", "team", "opponent", "home_away",
         "predicted_points", "prediction_ci80_lower", "prediction_ci80_upper",
-        "injury_adjustment"]
+        "injury_adjustment",
+        "predicted_points_model", "pace_prior", "pace_weight", "games_played_season"]
 
 
 def completed_games(season: int) -> int:
@@ -181,26 +176,6 @@ def schedule_by_week(season: int) -> dict:
     return out
 
 
-def season_rows() -> pd.DataFrame:
-    """Season-model projections from data/players_{POS}.json."""
-    frames = []
-    for pos in ("QB", "RB", "WR", "TE"):
-        p = Path(f"data/players_{pos}.json")
-        if not p.exists():
-            continue
-        d = json.loads(p.read_text())
-        rows = d if isinstance(d, list) else sum(d.values(), [])
-        df = pd.DataFrame(rows)
-        if df.empty:
-            continue
-        df["position"] = pos
-        frames.append(df)
-    if not frames:
-        return pd.DataFrame()
-    df = pd.concat(frames, ignore_index=True)
-    return df[df["projection_points_total"].notna()]
-
-
 def _clean(df: pd.DataFrame) -> list:
     cols = [c for c in KEEP if c in df.columns]
     out = df[cols].copy()
@@ -208,31 +183,6 @@ def _clean(df: pd.DataFrame) -> list:
         if pd.api.types.is_numeric_dtype(out[c]):
             out[c] = out[c].astype(float).round(2)
     return json.loads(out.to_json(orient="records"))
-
-
-def build_prorated(season, weeks, sched):
-    base = season_rows()
-    if base.empty:
-        print("no season projections in data/players_*.json")
-        return [], {}
-    base["predicted_points"] = base["projection_points_total"] / GAMES_PER_SEASON
-    written, counts = [], {}
-    for wk in weeks:
-        smap = sched.get(wk, {})
-        if not smap:
-            continue
-        df = base[base["team"].isin(smap)].copy()
-        if df.empty:
-            continue
-        df["opponent"] = df["team"].map(lambda t: smap[t][0])
-        df["home_away"] = df["team"].map(lambda t: smap[t][1])
-        df = df.sort_values("predicted_points", ascending=False)
-        (OUT_DIR / f"weekly_{season}_wk{wk}.json").write_text(json.dumps(_clean(df)))
-        written.append(wk); counts[str(wk)] = len(df)
-        print(f"  wk{wk}: {len(df):4d} players "
-              f"({len(base) - len(df)} on bye), pace median "
-              f"{df['predicted_points'].median():.1f}", flush=True)
-    return written, counts
 
 
 def build_weekly_model(season, weeks, top_n):
@@ -264,16 +214,13 @@ def main() -> int:
                     default=[1, 18])
     ap.add_argument("--season", type=int, default=None)
     ap.add_argument("--top-n", type=int, default=1200)
-    ap.add_argument("--force-mode", choices=["season_prorated", "weekly_model"],
-                    default=None)
     args = ap.parse_args()
 
     from src.predict import get_prediction_target_week
     season = args.season or get_prediction_target_week()[0]
 
     played = completed_games(season)
-    mode = args.force_mode or (
-        "weekly_model" if played > 0 else "season_prorated")
+    mode = "weekly_blend"
     print(f"{season}: {played} completed player-game rows -> mode={mode}")
 
     sched = schedule_by_week(season)
@@ -286,10 +233,7 @@ def main() -> int:
     for stale in OUT_DIR.glob(f"weekly_{season}_wk*.json"):
         stale.unlink()
 
-    if mode == "season_prorated":
-        written, counts = build_prorated(season, weeks, sched)
-    else:
-        written, counts = build_weekly_model(season, weeks, args.top_n)
+    written, counts = build_weekly_model(season, weeks, args.top_n)
 
     if not written:
         print("nothing written")
@@ -300,15 +244,15 @@ def main() -> int:
         "mode": mode,
         "weeks": written,
         "counts": counts,
-        "games_per_season": GAMES_PER_SEASON,
         "completed_game_rows": int(played),
-        "has_intervals": mode == "weekly_model",
+        "has_intervals": True,
+        "pace_blend_kappa": PACE_BLEND_KAPPA,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "measured": measured_accuracy(),
         "baseline_standing": baseline_standing(),
-        "model": ("season model (Step 8) total / 17"
-                  if mode == "season_prorated"
-                  else "weekly ensemble (1w horizon), log1p+smearing calibration"),
+        "model": ("weekly ensemble (1w horizon), log1p+smearing calibration, "
+                  "shrunk toward the Step 8 season pace by games played "
+                  f"(w = g / (g + {PACE_BLEND_KAPPA:g}))"),
     }
     (OUT_DIR / "weekly_meta.json").write_text(json.dumps(meta, indent=2))
     print(f"\nmode={mode}, wrote weeks {written[0]}-{written[-1]} for {season}")

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-16T09:27:11.684467",
+  "generated_at": "2026-09-17T03:27:16.084032",
   "train_seasons": [
     2006,
     2007,
@@ -23,42 +23,42 @@
   ],
   "status_by_position": {
     "QB": {
-      "hybrid_4w": "skipped_fast_mode",
-      "deep_18w": "skipped_fast_mode"
+      "hybrid_4w": "disabled_by_config",
+      "deep_18w": "disabled_by_config"
     },
     "RB": {
-      "hybrid_4w": "skipped_fast_mode",
-      "deep_18w": "skipped_fast_mode"
+      "hybrid_4w": "disabled_by_config",
+      "deep_18w": "disabled_by_config"
     },
     "WR": {
-      "hybrid_4w": "skipped_fast_mode",
-      "deep_18w": "skipped_fast_mode"
+      "hybrid_4w": "disabled_by_config",
+      "deep_18w": "disabled_by_config"
     },
     "TE": {
-      "hybrid_4w": "skipped_fast_mode",
-      "deep_18w": "skipped_fast_mode"
+      "hybrid_4w": "disabled_by_config",
+      "deep_18w": "disabled_by_config"
     }
   },
   "target_semantics": {
     "QB": {
-      "1w": "component",
-      "4w": "component",
-      "18w": "component"
+      "1w": "target_1w_or_target_util_1w_trainer_selected",
+      "4w": "target_util_4w_preferred_over_target_4w",
+      "18w": "target_util_18w_preferred_over_target_18w"
     },
     "RB": {
-      "1w": "component",
-      "4w": "component",
-      "18w": "component"
+      "1w": "target_1w_or_target_util_1w_trainer_selected",
+      "4w": "target_util_4w_preferred_over_target_4w",
+      "18w": "target_util_18w_preferred_over_target_18w"
     },
     "WR": {
-      "1w": "component",
-      "4w": "component",
-      "18w": "component"
+      "1w": "target_1w_or_target_util_1w_trainer_selected",
+      "4w": "target_util_4w_preferred_over_target_4w",
+      "18w": "target_util_18w_preferred_over_target_18w"
     },
     "TE": {
-      "1w": "component",
-      "4w": "component",
-      "18w": "component"
+      "1w": "target_1w_or_target_util_1w_trainer_selected",
+      "4w": "target_util_4w_preferred_over_target_4w",
+      "18w": "target_util_18w_preferred_over_target_18w"
     }
   }
 }

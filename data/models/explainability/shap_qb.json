@@ -2,44 +2,44 @@
   "position": "QB",
   "top_shap_features": [
     {
-      "feature": "player_emb_6",
-      "mean_abs_shap": 1.43857689408954
-    },
-    {
       "feature": "depth_chart_rank",
-      "mean_abs_shap": 0.29164505835279825
-    },
-    {
-      "feature": "ngs_avg_air_yards_to_sticks_roll3_mean",
-      "mean_abs_shap": 0.22951025850018233
-    },
-    {
-      "feature": "player_emb_0",
-      "mean_abs_shap": 0.14476576441533046
+      "mean_abs_shap": 0.41574465187414344
     },
     {
       "feature": "prev_season_ppg",
-      "mean_abs_shap": 0.09190518904509172
+      "mean_abs_shap": 0.2675394803189276
     },
     {
-      "feature": "team_drive_count",
-      "mean_abs_shap": 0.07806054646628517
+      "feature": "rushing_attempts_roll3_mean",
+      "mean_abs_shap": 0.2120299830945434
     },
     {
-      "feature": "matchup_scoring_edge",
-      "mean_abs_shap": 0.06624040064983341
+      "feature": "ngs_aggressiveness_roll3_mean",
+      "mean_abs_shap": 0.2033774145313955
     },
     {
-      "feature": "player_emb_4",
-      "mean_abs_shap": 0.05483355047619048
+      "feature": "passing_tds_roll3_mean",
+      "mean_abs_shap": 0.17545265167309954
     },
     {
-      "feature": "opp_fpts_allowed_dvoa_adjusted_lag1",
-      "mean_abs_shap": 0.03771426677784398
+      "feature": "contract_apy_rank",
+      "mean_abs_shap": 0.15583545508407334
     },
     {
-      "feature": "ngs_avg_air_yards_to_sticks",
-      "mean_abs_shap": 0.03629586643231431
+      "feature": "ngs_avg_time_to_throw_roll3_mean",
+      "mean_abs_shap": 0.14755641027994376
+    },
+    {
+      "feature": "is_power5",
+      "mean_abs_shap": 0.11989601527522298
+    },
+    {
+      "feature": "bayesian_prior_ppg",
+      "mean_abs_shap": 0.10869287803135787
+    },
+    {
+      "feature": "rushing_yards_roll3_mean",
+      "mean_abs_shap": 0.0825359525179375
     }
   ]
 }

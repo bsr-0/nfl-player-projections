@@ -155,3 +155,7 @@ data/espn_*.json
 
 # docs/ IS tracked: it is this project's site source. It is not deployed from
 # here -- the prediction_models hub pulls it at deploy time and serves it at /nfl/.
+# Model snapshots kept beside the live directory for A/B runs and rollback;
+# ~0.5 GB each. The backtest.json / rows.csv beside them ARE tracked.
+/data/models_v5_production_*/
+/data/experiments/pace_feature_ab/*/models/

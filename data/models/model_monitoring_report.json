@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-09-16T09:27:20.572724",
+  "generated_at": "2026-09-17T03:32:56.034833",
   "feature_version": "36",
-  "metadata_file": "/Users/benrosen/Documents/nfl-player-projections/data/models/model_metadata.json",
+  "metadata_file": "/Users/benrosen/Documents/prediction_models/nfl/nfl-player-projections/data/models/model_metadata.json",
   "training_metadata": {
-    "training_date": "2026-09-16T09:27:20.571879",
+    "training_date": "2026-09-17T03:32:56.033952",
     "feature_version": "36",
     "train_seasons": [
       2006,
@@ -36,57 +36,33 @@
     "oof_metrics": {
       "QB": {
         "1w": {
-          "rmse": 7.799670125304586,
-          "mae": 6.387160765176278,
-          "r2": 0.2856596999020877,
-          "target_space": "original"
-        },
-        "4w": {
-          "rmse": 20.208652280717043,
-          "mae": 15.978271506116958,
-          "r2": 0.37264770808870296,
+          "rmse": 7.8629655279865664,
+          "mae": 6.475189615318403,
+          "r2": 0.29191005921884283,
           "target_space": "original"
         }
       },
       "RB": {
         "1w": {
-          "rmse": 6.963493486986226,
-          "mae": 5.01498119153222,
-          "r2": 0.2715498304895465,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 19.170857858715845,
-          "mae": 14.567335709867107,
-          "r2": 0.4316541396686343,
+          "rmse": 6.755939321380964,
+          "mae": 4.884383508932071,
+          "r2": 0.2636729084994921,
           "target_space": "log1p"
         }
       },
       "WR": {
         "1w": {
-          "rmse": 6.194228185362455,
-          "mae": 4.310675652030395,
-          "r2": 0.32065509139222736,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 15.172097101327397,
-          "mae": 11.320334855057249,
-          "r2": 0.5709990810968671,
+          "rmse": 6.356996727063136,
+          "mae": 4.444136633307203,
+          "r2": 0.3127022090487067,
           "target_space": "log1p"
         }
       },
       "TE": {
         "1w": {
-          "rmse": 4.430170364653703,
-          "mae": 2.8306146117619178,
-          "r2": 0.33815181113842707,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 10.488939166850125,
-          "mae": 7.264553595862103,
-          "r2": 0.6183052692356567,
+          "rmse": 4.423981016716557,
+          "mae": 2.9333900667238955,
+          "r2": 0.35116166627875045,
           "target_space": "log1p"
         }
       }
@@ -94,86 +70,86 @@
     "test_metrics": {
       "QB": {
         "FP (owner objective)": {
-          "rmse": 8.273437754123728,
-          "mae": 6.641823718559164,
-          "r2": 0.1590341471977752,
-          "within_7pt_pct": 58.730158730158735,
-          "within_10pt_pct": 77.14285714285715,
+          "rmse": 8.16357692377028,
+          "mae": 6.610629933443011,
+          "r2": 0.18121979806703759,
+          "within_7pt_pct": 59.84126984126984,
+          "within_10pt_pct": 76.34920634920634,
           "n_samples": 630,
-          "mape": 88.88159985646885,
-          "spearman_rho": 0.44348520347085585,
+          "mape": 90.68761198914459,
+          "spearman_rho": 0.4367193107744765,
           "expert_benchmark_rmse": 7.5,
-          "vs_expert_pct": -10.3
+          "vs_expert_pct": -8.8
         }
       },
       "RB": {
         "util": {
-          "rmse": 16.20644512207065,
-          "mae": 12.870593301262545,
-          "r2": -0.44027719230099227,
-          "within_7pt_pct": 35.136855506047105,
-          "within_10pt_pct": 46.02164226607257,
+          "rmse": 16.18009146278004,
+          "mae": 12.844238354402698,
+          "r2": -0.43559686751524285,
+          "within_7pt_pct": 35.70973901973266,
+          "within_10pt_pct": 45.95798854232972,
           "n_samples": 1571,
-          "mape": 58.561884782341146,
-          "spearman_rho": 0.6550359786179755
+          "mape": 58.53541605267737,
+          "spearman_rho": 0.6545778118831032
         },
         "FP": {
-          "rmse": 6.4017286560466165,
-          "mae": 4.73737541291424,
-          "r2": 0.36851673704473864,
-          "within_7pt_pct": 77.83216783216783,
-          "within_10pt_pct": 87.90209790209789,
+          "rmse": 6.415490321923945,
+          "mae": 4.759516555091568,
+          "r2": 0.3657988454317993,
+          "within_7pt_pct": 77.90209790209789,
+          "within_10pt_pct": 88.18181818181819,
           "n_samples": 1430,
-          "mape": 74.41800990313406,
-          "spearman_rho": 0.6642007405303387,
+          "mape": 74.9178563333871,
+          "spearman_rho": 0.6643141735075874,
           "expert_benchmark_rmse": 8.5,
-          "vs_expert_pct": 24.7
+          "vs_expert_pct": 24.5
         }
       },
       "WR": {
         "util": {
-          "rmse": 36.37356979847902,
-          "mae": 32.8134756546369,
-          "r2": -2.7684912757083757,
-          "within_7pt_pct": 15.150403521643433,
+          "rmse": 36.27084490287781,
+          "mae": 32.7212186507695,
+          "r2": -2.747235664395187,
+          "within_7pt_pct": 15.223771093176817,
           "within_10pt_pct": 16.507703595011005,
           "n_samples": 2726,
-          "mape": 77.94911424357083,
-          "spearman_rho": 0.7097344513696792
+          "mape": 77.7722166332368,
+          "spearman_rho": 0.7093296081709004
         },
         "FP": {
-          "rmse": 5.782306515972771,
-          "mae": 4.250921097510342,
-          "r2": 0.3610468443214764,
-          "within_7pt_pct": 81.1472121941436,
-          "within_10pt_pct": 91.13517849979944,
+          "rmse": 5.8308833308647365,
+          "mae": 4.279465061200228,
+          "r2": 0.35026613438114373,
+          "within_7pt_pct": 81.10709987966305,
+          "within_10pt_pct": 90.5736060970718,
           "n_samples": 2493,
-          "mape": 75.88265892238798,
-          "spearman_rho": 0.6366497390491738,
+          "mape": 76.61203131734817,
+          "spearman_rho": 0.6352585280117854,
           "expert_benchmark_rmse": 8.0,
-          "vs_expert_pct": 27.7
+          "vs_expert_pct": 27.1
         }
       },
       "TE": {
         "util": {
-          "rmse": 34.360864072241554,
-          "mae": 30.86159317630603,
-          "r2": -2.9293541798480107,
-          "within_7pt_pct": 6.519138755980861,
-          "within_10pt_pct": 10.825358851674642,
+          "rmse": 34.17597719841402,
+          "mae": 30.68862543425886,
+          "r2": -2.8871822779539085,
+          "within_7pt_pct": 6.698564593301436,
+          "within_10pt_pct": 11.124401913875598,
           "n_samples": 1672,
-          "mape": 89.29242692669354,
-          "spearman_rho": 0.7197298133099447
+          "mape": 88.74942033102455,
+          "spearman_rho": 0.7195343702173824
         },
         "FP": {
-          "rmse": 4.58434936277485,
-          "mae": 3.059589871040658,
-          "r2": 0.36367910164619477,
-          "within_7pt_pct": 88.29648894668401,
-          "within_10pt_pct": 94.92847854356306,
+          "rmse": 4.581302314661857,
+          "mae": 3.08553772889908,
+          "r2": 0.3645246986465015,
+          "within_7pt_pct": 88.81664499349804,
+          "within_10pt_pct": 95.12353706111834,
           "n_samples": 1538,
-          "mape": 54.65782315794732,
-          "spearman_rho": 0.6586466317025994,
+          "mape": 56.445503105083446,
+          "spearman_rho": 0.6578403781706921,
           "expert_benchmark_rmse": 6.5,
           "vs_expert_pct": 29.5
         }
@@ -185,7 +161,7 @@
       "WR": 70,
       "TE": 68
     },
-    "previous_training_date": "2026-09-15T23:56:52.965896",
+    "previous_training_date": "2026-09-16T09:27:20.571879",
     "previous_feature_version": "36",
     "rollback_available": true,
     "n_rollback_versions": 5,
@@ -196,209 +172,217 @@
     "QB": [
       {
         "feature": "passing_attempts_roll3_mean",
-        "importance": 153.55517007409904
+        "importance": 45.30276001903966
       },
       {
         "feature": "contract_apy_rank",
-        "importance": 149.8034775196751
-      },
-      {
-        "feature": "yards_per_attempt_roll3_mean",
-        "importance": 120.01948742600493
-      },
-      {
-        "feature": "prev_season_ppg",
-        "importance": 113.2987741032849
+        "importance": 44.2958331707968
       },
       {
         "feature": "rushing_attempts_roll3_mean",
-        "importance": 112.01189139816717
+        "importance": 38.26172629057441
       },
       {
-        "feature": "spread",
-        "importance": 101.76995569214452
+        "feature": "prev_season_ppg",
+        "importance": 31.051387367604306
       },
       {
-        "feature": "bayesian_prior_ppg",
-        "importance": 87.28422600531695
-      },
-      {
-        "feature": "rushing_yards_roll3_mean",
-        "importance": 81.7620391567049
-      },
-      {
-        "feature": "age_curve",
-        "importance": 71.50574394736692
+        "feature": "yards_per_attempt_roll3_mean",
+        "importance": 27.517380822683545
       },
       {
         "feature": "passing_tds_roll3_mean",
-        "importance": 68.02159200709058
+        "importance": 26.770263641267526
+      },
+      {
+        "feature": "bayesian_prior_ppg",
+        "importance": 25.78338519433404
+      },
+      {
+        "feature": "rushing_yards_roll3_mean",
+        "importance": 22.76445887781145
+      },
+      {
+        "feature": "spread",
+        "importance": 22.763340349538687
+      },
+      {
+        "feature": "completion_pct_roll3_mean",
+        "importance": 16.767842131862185
       }
     ],
     "RB": [
       {
-        "feature": "contract_apy_rank",
-        "importance": 212.50807556354582
+        "feature": "targets_roll3_mean",
+        "importance": 161.5294726847195
       },
       {
         "feature": "rush_share_pct_roll3_mean",
-        "importance": 203.36305130654617
+        "importance": 140.3409454822692
       },
       {
-        "feature": "targets_roll3_mean",
-        "importance": 193.77899396329872
+        "feature": "contract_apy_rank",
+        "importance": 134.50848435376722
       },
       {
         "feature": "snap_share_accel",
-        "importance": 182.00541609319305
+        "importance": 118.50548869525531
       },
       {
         "feature": "prev_season_ppg",
-        "importance": 166.77464234656222
+        "importance": 111.53126820735366
       },
       {
         "feature": "yards_per_carry_roll3_mean",
-        "importance": 166.51198187462484
-      },
-      {
-        "feature": "snap_share_pct_roll3_mean",
-        "importance": 166.01115472121214
+        "importance": 107.76523994709183
       },
       {
         "feature": "age_curve",
-        "importance": 157.00688086231116
+        "importance": 105.25609131247252
       },
       {
-        "feature": "fp_volatility_roll5",
-        "importance": 145.76506118677858
+        "feature": "snap_share_pct_roll3_mean",
+        "importance": 105.01564170784121
+      },
+      {
+        "feature": "rushing_attempts_roll3_mean",
+        "importance": 94.56273003941355
       },
       {
         "feature": "speed_score",
-        "importance": 135.75436166147009
+        "importance": 87.0040252119582
       }
     ],
     "WR": [
       {
-        "feature": "contract_apy_rank",
-        "importance": 227.00575387866698
-      },
-      {
         "feature": "prev_season_ppg",
-        "importance": 216.28223885926926
-      },
-      {
-        "feature": "wopr_roll3",
-        "importance": 165.8769858382568
-      },
-      {
-        "feature": "snap_share_accel",
-        "importance": 164.50406538142605
-      },
-      {
-        "feature": "fp_volatility_roll5",
-        "importance": 150.25819552236175
+        "importance": 87.78286340791308
       },
       {
         "feature": "receptions_roll3_mean",
-        "importance": 145.583223468133
+        "importance": 77.33512960604646
       },
       {
-        "feature": "bayesian_prior_ppg",
-        "importance": 142.51435768114433
+        "feature": "wopr_roll3",
+        "importance": 73.87417687251418
+      },
+      {
+        "feature": "contract_apy_rank",
+        "importance": 65.75518974189177
       },
       {
         "feature": "snap_share_pct_roll3_mean",
-        "importance": 141.04305711147143
+        "importance": 57.54348190632417
       },
       {
-        "feature": "age_curve",
-        "importance": 113.00297033557675
+        "feature": "snap_share_accel",
+        "importance": 47.75394642627114
       },
       {
-        "feature": "speed_score",
-        "importance": 106.50237070795974
+        "feature": "fp_volatility_roll5",
+        "importance": 45.50806949905058
+      },
+      {
+        "feature": "depth_chart_rank",
+        "importance": 44.010953905421886
+      },
+      {
+        "feature": "yards_per_target_roll3_mean",
+        "importance": 31.005052721021045
+      },
+      {
+        "feature": "availability_3yr",
+        "importance": 23.503034101786437
       }
     ],
     "TE": [
       {
         "feature": "prev_season_ppg",
-        "importance": 134.27330302848915
+        "importance": 92.02881168904922
       },
       {
         "feature": "wopr_roll3",
-        "importance": 121.36160312569575
+        "importance": 81.3390055669186
       },
       {
         "feature": "pbp_pass_play_participation_pct_roll3_mean",
-        "importance": 89.01364500709846
-      },
-      {
-        "feature": "depth_chart_rank",
-        "importance": 87.75911789869387
-      },
-      {
-        "feature": "draft_pick",
-        "importance": 81.25511641297392
-      },
-      {
-        "feature": "fp_volatility_roll5",
-        "importance": 73.25603959506431
-      },
-      {
-        "feature": "snap_share_accel",
-        "importance": 69.2547180035315
-      },
-      {
-        "feature": "snap_share_pct_roll3_mean",
-        "importance": 68.51571494635277
+        "importance": 77.269307104087
       },
       {
         "feature": "age_curve",
-        "importance": 65.75437447595363
+        "importance": 76.75406901615911
+      },
+      {
+        "feature": "snap_share_accel",
+        "importance": 68.75459564596376
+      },
+      {
+        "feature": "fp_volatility_roll5",
+        "importance": 66.00670415322057
+      },
+      {
+        "feature": "contract_apy_rank",
+        "importance": 65.0054782255013
       },
       {
         "feature": "bayesian_prior_ppg",
-        "importance": 63.0135420616724
+        "importance": 57.265802697405114
+      },
+      {
+        "feature": "team_te_target_share_roll3_mean",
+        "importance": 57.253863986304474
+      },
+      {
+        "feature": "snap_share_pct_roll3_mean",
+        "importance": 55.77433193721178
       }
     ]
   },
   "feature_importance_stability": {
     "QB": {
-      "overlap_pct": 100.0,
-      "stable": true,
-      "new_features": [],
-      "dropped_features": []
-    },
-    "RB": {
-      "overlap_pct": 80.0,
+      "overlap_pct": 90.0,
       "stable": true,
       "new_features": [
-        "age_curve",
-        "speed_score"
+        "completion_pct_roll3_mean"
       ],
       "dropped_features": [
-        "catch_rate_roll3_mean",
+        "age_curve"
+      ]
+    },
+    "RB": {
+      "overlap_pct": 90.0,
+      "stable": true,
+      "new_features": [
         "rushing_attempts_roll3_mean"
+      ],
+      "dropped_features": [
+        "fp_volatility_roll5"
       ]
     },
     "WR": {
-      "overlap_pct": 90.0,
+      "overlap_pct": 70.0,
       "stable": true,
       "new_features": [
-        "age_curve"
+        "availability_3yr",
+        "depth_chart_rank",
+        "yards_per_target_roll3_mean"
       ],
       "dropped_features": [
-        "current_qb_epa_per_att"
+        "age_curve",
+        "bayesian_prior_ppg",
+        "speed_score"
       ]
     },
     "TE": {
-      "overlap_pct": 90.0,
+      "overlap_pct": 80.0,
       "stable": true,
       "new_features": [
-        "pbp_pass_play_participation_pct_roll3_mean"
+        "contract_apy_rank",
+        "team_te_target_share_roll3_mean"
       ],
       "dropped_features": [
-        "targets_roll3_mean"
+        "depth_chart_rank",
+        "draft_pick"
       ]
     }
   },

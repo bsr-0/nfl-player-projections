@@ -32,6 +32,31 @@ for dir_path in [RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR, ESPN_PRIVATE_DIR]
 
 # Database
 DB_PATH = DATA_DIR / "nfl_data.db"
+# Step 8 season-total projection / 17 per (player, season), refit out-of-sample
+# per season by scripts/build_step8_pace_table.py. The shrinkage target for
+# NFLPredictor.predict()'s games-played blend (PACE_BLEND_KAPPA).
+STEP8_PACE_TABLE = DATA_DIR / "step8_pace_by_season.csv"
+# Games-played shrinkage of the weekly ensemble toward that pace:
+#   served = w * weekly + (1 - w) * pace,   w = g / (g + PACE_BLEND_KAPPA)
+# with g the player's games played so far this season. kappa=3 was chosen
+# out-of-sample (two player folds, both picked 3) on the 2025 serving-path
+# walk-forward: MAE 4.467 -> 4.354, paired-bootstrap CI95 on the difference
+# [-0.156, -0.063]; it still helped at 9+ games played. The same pace as a
+# model FEATURE did nothing (-0.010, CI spans 0): only ~20% of training rows
+# have it (2021+) and the trees never split on it. Both measured 2026-09-17,
+# scripts/run_pace_blend_experiment.py and scripts/compare_ab_rows.py.
+# This replaces the weekly page's pre-kickoff "season total / 17" mode: at
+# g=0 the blend IS that number, so one path serves every week.
+PACE_BLEND_KAPPA = 3.0
+# The weekly model's conformal interval is calibrated for ITS residuals, not
+# the blend's: shifting it to the blended centre covered 75.0% at nominal 80%
+# on the 2025 walk-forward (79.2% before blending). One multiplier on the
+# half-widths of blended rows, fit out-of-fold over two player folds (chose
+# 1.05 / 1.10, OOF coverage 79.8%). 1.10 in-sample: 80.2% overall, 80.5% on
+# blended rows; unblended rows keep the weekly width (78.2%). Applied to the
+# 95% band too, which is NOT separately measured -- the backtester only
+# scores the 80% band.
+PACE_BLEND_CI_SCALE = 1.10
 
 # Scraping settings
 SCRAPER_DELAY = 2.0  # Seconds between requests
