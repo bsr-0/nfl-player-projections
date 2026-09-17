@@ -152,3 +152,4 @@ data/espn_*.json
 # the folder vanishes from the tree entirely.
 /data/espn_private/*
 !/data/espn_private/.gitkeep
+docs/
