@@ -34,6 +34,28 @@ VALIDATION_PCT = MODEL_CONFIG.get("validation_pct", 0.2)
 EARLY_STOPPING_ROUNDS = MODEL_CONFIG.get("early_stopping_rounds", 25)
 
 
+def _pseudo_huber_base_score(y: np.ndarray, sample_weight: Optional[np.ndarray] = None) -> float:
+    """Start XGBoost's pseudo-Huber boosting at the target mean, not 0.5.
+
+    xgboost 2.0.x does not estimate an intercept for reg:pseudohubererror,
+    so boosting starts from base_score=0.5. Pseudo-Huber's gradient is
+    capped at +/-huber_slope and its hessian falls off as slope^3/|r|^3, so
+    when the target sits far from 0.5 the summed hessian is below any
+    min_child_weight >= 1 and no split is ever legal: every tree is a
+    root-only stump and the model predicts one constant for every row.
+
+    That is exactly what the QB utilization model (mean ~46) did on
+    2026-09-16 -- all 100 Optuna trials returned an identical 9828 MSE
+    (RMSE ~99 against a target sd of 17) and the member was dead weight
+    in the stack. FP-scale (~15) and log1p-scale (~2.7) targets stayed
+    close enough to 0.5 to escape, which is why it only surfaced on QB.
+    """
+    y = np.asarray(y, dtype=np.float64)
+    if sample_weight is not None and len(sample_weight) == len(y):
+        return float(np.average(y, weights=np.asarray(sample_weight, dtype=np.float64)))
+    return float(np.mean(y))
+
+
 class TargetTransformer:
     """Log1p target transformation for right-skewed fantasy point distributions.
 
@@ -1119,9 +1141,9 @@ class PositionModel:
             # under sklearn>=1.6 by running manual CV.
             fold_mse = []
             for train_idx, test_idx in cv.split(X_tune, y_tune):
-                model = xgb.XGBRegressor(**params)
                 X_train, y_train = X_tune[train_idx], y_tune[train_idx]
                 X_test, y_test = X_tune[test_idx], y_tune[test_idx]
+                model = xgb.XGBRegressor(base_score=_pseudo_huber_base_score(y_train), **params)
                 model.fit(X_train, y_train)
                 preds = model.predict(X_test)
                 fold_mse.append(mean_squared_error(y_test, preds))
@@ -1255,6 +1277,7 @@ class PositionModel:
         params["n_jobs"] = 1  # Avoid macOS fork deadlock with sequential position training
         params["objective"] = "reg:pseudohubererror"
         params["huber_slope"] = HUBER_DELTA
+        params["base_score"] = _pseudo_huber_base_score(y, sample_weight)
         # XGBoost 3.x moved eval_metric from fit() to constructor
         params["eval_metric"] = "rmse"
         model = xgb.XGBRegressor(**params)
