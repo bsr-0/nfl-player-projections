@@ -152,4 +152,6 @@ data/espn_*.json
 # the folder vanishes from the tree entirely.
 /data/espn_private/*
 !/data/espn_private/.gitkeep
-docs/
+
+# docs/ IS tracked: it is this project's site source. It is not deployed from
+# here -- the prediction_models hub pulls it at deploy time and serves it at /nfl/.

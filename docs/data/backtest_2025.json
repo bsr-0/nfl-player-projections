@@ -1,0 +1,852 @@
+{
+  "source_file": "backtest_2025_20260911.json",
+  "model_source": "production_ensemble",
+  "model_type": "per_position_stacked_ensemble",
+  "model_type_by_position": {
+    "QB": "stacked(RidgeCV meta)[lightgbm+random_forest+ridge+xgboost] horizons=[1, 2, 3, 4, 5, 6, 7, 8]",
+    "RB": "stacked(RidgeCV meta)[lightgbm+random_forest+ridge+xgboost] horizons=[1, 2, 3, 4, 5, 6, 7, 8]",
+    "WR": "stacked(RidgeCV meta)[lightgbm+random_forest+ridge+xgboost] horizons=[1, 2, 3, 4, 5, 6, 7, 8]",
+    "TE": "stacked(RidgeCV meta)[lightgbm+random_forest+ridge+xgboost] horizons=[1, 2, 3, 4, 5, 6, 7, 8]"
+  },
+  "feature_version": "36",
+  "is_served_model": true,
+  "backtest_date": "2026-09-11T23:38:29.835713",
+  "season": 2025,
+  "n_predictions": 6356,
+  "overall": {
+    "rmse": 6.1,
+    "mae": 4.3,
+    "r2": 0.395,
+    "correlation": 0.636,
+    "mape": 71.7,
+    "mae_rmse_ratio": 0.705,
+    "mae_rmse_healthy": "True",
+    "directional_accuracy_pct": 77.0,
+    "within_3_pts_pct": 52.7,
+    "within_5_pts_pct": 69.4,
+    "within_7_pts_pct": 79.8,
+    "within_10_pts_pct": 89.9,
+    "spearman_rho": -0.186,
+    "tier_classification_accuracy": 0.607,
+    "boom_bust": {
+      "boom_prevalence": 0.07929515418502203,
+      "bust_prevalence": 0.5327249842668345,
+      "boom_precision": 0.4016393442622951,
+      "boom_recall": 0.09722222222222222,
+      "boom_f1": 0.15654952076677317,
+      "bust_precision": 0.798242861625353,
+      "bust_recall": 0.7513290017720023,
+      "bust_f1": 0.7740757644910999
+    },
+    "vor_rank_correlation": 0.672,
+    "avg_actual": 6.98,
+    "avg_predicted": 7.01,
+    "std_actual": 7.84,
+    "std_predicted": 5.76,
+    "p95_abs_error": 13.07,
+    "p95_underprediction": 16.13
+  },
+  "by_position": {
+    "QB": {
+      "rmse": 8.32,
+      "mae": 6.87,
+      "r2": 0.207,
+      "correlation": 0.462,
+      "mape": 104.4,
+      "mae_rmse_ratio": 0.825,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 66.7,
+      "within_3_pts_pct": 24.2,
+      "within_5_pts_pct": 39.2,
+      "within_7_pts_pct": 55.3,
+      "within_10_pts_pct": 76.4,
+      "spearman_rho": 0.004,
+      "tier_classification_accuracy": 0.306,
+      "boom_bust": {
+        "boom_prevalence": 0.24665676077265974,
+        "bust_prevalence": 0.24814264487369986,
+        "boom_precision": 0.3888888888888889,
+        "boom_recall": 0.04216867469879518,
+        "boom_f1": 0.07608695652173912,
+        "bust_precision": 1.0,
+        "bust_recall": 0.03592814371257485,
+        "bust_f1": 0.06936416184971098
+      },
+      "vor_rank_correlation": 0.441,
+      "avg_actual": 13.11,
+      "avg_predicted": 13.72,
+      "std_actual": 9.35,
+      "std_predicted": 3.89,
+      "p95_abs_error": 15.36,
+      "p95_underprediction": 16.54,
+      "n_players": 80
+    },
+    "TE": {
+      "rmse": 4.72,
+      "mae": 3.03,
+      "r2": 0.364,
+      "correlation": 0.613,
+      "mape": 53.5,
+      "mae_rmse_ratio": 0.642,
+      "mae_rmse_healthy": "False",
+      "directional_accuracy_pct": 79.6,
+      "within_3_pts_pct": 67.4,
+      "within_5_pts_pct": 80.2,
+      "within_7_pts_pct": 88.7,
+      "within_10_pts_pct": 95.4,
+      "spearman_rho": 0.129,
+      "tier_classification_accuracy": 0.74,
+      "boom_bust": {
+        "boom_prevalence": 0.0273972602739726,
+        "bust_prevalence": 0.674346201743462,
+        "boom_precision": 0.0,
+        "boom_recall": 0.0,
+        "boom_f1": 0.0,
+        "bust_precision": 0.8363148479427549,
+        "bust_recall": 0.863342566943675,
+        "bust_f1": 0.8496138119036801
+      },
+      "vor_rank_correlation": 0.655,
+      "avg_actual": 4.42,
+      "avg_predicted": 3.78,
+      "std_actual": 5.92,
+      "std_predicted": 3.61,
+      "p95_abs_error": 9.7,
+      "p95_underprediction": 13.48,
+      "n_players": 140
+    },
+    "RB": {
+      "rmse": 6.43,
+      "mae": 4.57,
+      "r2": 0.387,
+      "correlation": 0.624,
+      "mape": 69.5,
+      "mae_rmse_ratio": 0.711,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 76.6,
+      "within_3_pts_pct": 49.6,
+      "within_5_pts_pct": 68.5,
+      "within_7_pts_pct": 80.1,
+      "within_10_pts_pct": 89.7,
+      "spearman_rho": 0.181,
+      "tier_classification_accuracy": 0.57,
+      "boom_bust": {
+        "boom_prevalence": 0.08657718120805369,
+        "bust_prevalence": 0.4684563758389262,
+        "boom_precision": 0.3,
+        "boom_recall": 0.06976744186046512,
+        "boom_f1": 0.11320754716981132,
+        "bust_precision": 0.752906976744186,
+        "bust_recall": 0.7421203438395415,
+        "bust_f1": 0.7474747474747475
+      },
+      "vor_rank_correlation": 0.667,
+      "avg_actual": 7.98,
+      "avg_predicted": 7.83,
+      "std_actual": 8.22,
+      "std_predicted": 5.5,
+      "p95_abs_error": 13.48,
+      "p95_underprediction": 17.94,
+      "n_players": 148
+    },
+    "WR": {
+      "rmse": 5.97,
+      "mae": 4.26,
+      "r2": 0.326,
+      "correlation": 0.605,
+      "mape": 75.6,
+      "mae_rmse_ratio": 0.714,
+      "mae_rmse_healthy": "True",
+      "directional_accuracy_pct": 76.6,
+      "within_3_pts_pct": 52.6,
+      "within_5_pts_pct": 71.0,
+      "within_7_pts_pct": 80.4,
+      "within_10_pts_pct": 90.1,
+      "spearman_rho": -0.162,
+      "tier_classification_accuracy": 0.625,
+      "boom_bust": {
+        "boom_prevalence": 0.06378044066486277,
+        "bust_prevalence": 0.5558562040974101,
+        "boom_precision": 0.44594594594594594,
+        "boom_recall": 0.2,
+        "boom_f1": 0.27615062761506276,
+        "bust_precision": 0.7890909090909091,
+        "bust_recall": 0.7545201668984701,
+        "bust_f1": 0.7714184145040882
+      },
+      "vor_rank_correlation": 0.629,
+      "avg_actual": 6.39,
+      "avg_predicted": 6.81,
+      "std_actual": 7.28,
+      "std_predicted": 5.78,
+      "p95_abs_error": 12.95,
+      "p95_underprediction": 15.55,
+      "n_players": 239
+    }
+  },
+  "baselines": {},
+  "strong_baseline_comparison": {
+    "trailing_3g_avg": {
+      "baseline_rmse": 6.5223,
+      "baseline_mae": 4.5115,
+      "model_rmse": 6.1018,
+      "model_mae": 4.3036,
+      "rmse_improvement_pct": 6.45,
+      "mae_improvement_pct": 4.61,
+      "model_beats_baseline": true,
+      "n_compared": 6320
+    },
+    "trailing_5g_avg": {
+      "baseline_rmse": 6.2712,
+      "baseline_mae": 4.3843,
+      "model_rmse": 6.1018,
+      "model_mae": 4.3036,
+      "rmse_improvement_pct": 2.7,
+      "mae_improvement_pct": 1.84,
+      "model_beats_baseline": true,
+      "n_compared": 6320
+    },
+    "season_avg": {
+      "baseline_rmse": 6.2778,
+      "baseline_mae": 4.3215,
+      "model_rmse": 6.129,
+      "model_mae": 4.3099,
+      "rmse_improvement_pct": 2.37,
+      "mae_improvement_pct": 0.27,
+      "model_beats_baseline": true,
+      "n_compared": 5862
+    },
+    "prior_season_rank": {
+      "baseline_rmse": 6.633,
+      "baseline_mae": 4.9301,
+      "model_rmse": 6.0959,
+      "model_mae": 4.2989,
+      "rmse_improvement_pct": 8.1,
+      "mae_improvement_pct": 12.8,
+      "model_beats_baseline": true,
+      "n_compared": 6354
+    },
+    "blended_heuristic": {
+      "baseline_rmse": 6.0472,
+      "baseline_mae": 4.3175,
+      "model_rmse": 6.0959,
+      "model_mae": 4.2989,
+      "rmse_improvement_pct": -0.81,
+      "mae_improvement_pct": 0.43,
+      "model_beats_baseline": false,
+      "n_compared": 6354
+    },
+    "vegas_implied": {
+      "baseline_rmse": 6.3546,
+      "baseline_mae": 4.4275,
+      "model_rmse": 6.0959,
+      "model_mae": 4.2989,
+      "rmse_improvement_pct": 4.07,
+      "mae_improvement_pct": 2.9,
+      "model_beats_baseline": true,
+      "n_compared": 6354
+    }
+  },
+  "decision_quality_source": {
+    "source_file": "ts_backtest_2025_20260809_001736.json",
+    "model_type": "ridge (unrecorded)",
+    "backtest_date": "2026-08-08T23:50:34.157272"
+  },
+  "decision_quality": {
+    "n_weeks": 22,
+    "avg_model_score": 110.44,
+    "avg_projection_error": 0.72,
+    "vs_oracle": {
+      "win_rate": 0.0,
+      "wins": 0,
+      "losses": 22,
+      "p_value": 1.0,
+      "significant_at_05": false,
+      "avg_margin": -73.12,
+      "worst_loss": -104.1,
+      "best_win": -7.0,
+      "roi": -1.0
+    },
+    "vs_hindsight": {
+      "win_rate": 0.6818,
+      "wins": 15,
+      "losses": 7,
+      "p_value": 0.0669,
+      "significant_at_05": false,
+      "avg_margin": 18.5,
+      "worst_loss": -47.5,
+      "best_win": 82.2,
+      "roi": 0.2273
+    },
+    "vs_replacement": {
+      "win_rate": 1.0,
+      "wins": 22,
+      "losses": 0,
+      "p_value": 0.0,
+      "significant_at_05": true,
+      "avg_margin": 56.29,
+      "worst_loss": 0.8,
+      "best_win": 106.5,
+      "roi": 0.8
+    },
+    "weekly_results": [
+      {
+        "week": 1,
+        "model_actual": 80.6,
+        "oracle_actual": 163.8,
+        "hindsight_actual": 80.6,
+        "replacement_actual": 50.1
+      },
+      {
+        "week": 2,
+        "model_actual": 97.9,
+        "oracle_actual": 191.3,
+        "hindsight_actual": 70.4,
+        "replacement_actual": 74.0
+      },
+      {
+        "week": 3,
+        "model_actual": 100.3,
+        "oracle_actual": 187.6,
+        "hindsight_actual": 96.3,
+        "replacement_actual": 34.2
+      },
+      {
+        "week": 4,
+        "model_actual": 145.4,
+        "oracle_actual": 187.3,
+        "hindsight_actual": 63.2,
+        "replacement_actual": 65.7
+      },
+      {
+        "week": 5,
+        "model_actual": 132.9,
+        "oracle_actual": 176.9,
+        "hindsight_actual": 95.6,
+        "replacement_actual": 88.9
+      },
+      {
+        "week": 6,
+        "model_actual": 87.0,
+        "oracle_actual": 191.1,
+        "hindsight_actual": 90.6,
+        "replacement_actual": 36.3
+      },
+      {
+        "week": 7,
+        "model_actual": 143.6,
+        "oracle_actual": 212.7,
+        "hindsight_actual": 83.2,
+        "replacement_actual": 37.1
+      },
+      {
+        "week": 8,
+        "model_actual": 94.3,
+        "oracle_actual": 183.3,
+        "hindsight_actual": 125.3,
+        "replacement_actual": 46.5
+      },
+      {
+        "week": 9,
+        "model_actual": 121.7,
+        "oracle_actual": 214.3,
+        "hindsight_actual": 74.0,
+        "replacement_actual": 73.7
+      },
+      {
+        "week": 10,
+        "model_actual": 108.0,
+        "oracle_actual": 193.5,
+        "hindsight_actual": 85.4,
+        "replacement_actual": 56.6
+      },
+      {
+        "week": 11,
+        "model_actual": 114.0,
+        "oracle_actual": 205.8,
+        "hindsight_actual": 113.6,
+        "replacement_actual": 44.7
+      },
+      {
+        "week": 12,
+        "model_actual": 132.0,
+        "oracle_actual": 207.1,
+        "hindsight_actual": 94.2,
+        "replacement_actual": 68.4
+      },
+      {
+        "week": 13,
+        "model_actual": 92.2,
+        "oracle_actual": 167.8,
+        "hindsight_actual": 72.0,
+        "replacement_actual": 60.3
+      },
+      {
+        "week": 14,
+        "model_actual": 104.2,
+        "oracle_actual": 199.5,
+        "hindsight_actual": 77.7,
+        "replacement_actual": 30.5
+      },
+      {
+        "week": 15,
+        "model_actual": 133.7,
+        "oracle_actual": 222.2,
+        "hindsight_actual": 109.1,
+        "replacement_actual": 76.7
+      },
+      {
+        "week": 16,
+        "model_actual": 104.7,
+        "oracle_actual": 204.5,
+        "hindsight_actual": 152.2,
+        "replacement_actual": 10.9
+      },
+      {
+        "week": 17,
+        "model_actual": 127.7,
+        "oracle_actual": 199.7,
+        "hindsight_actual": 132.9,
+        "replacement_actual": 46.9
+      },
+      {
+        "week": 18,
+        "model_actual": 106.7,
+        "oracle_actual": 176.6,
+        "hindsight_actual": 64.1,
+        "replacement_actual": 41.2
+      },
+      {
+        "week": 19,
+        "model_actual": 101.3,
+        "oracle_actual": 167.0,
+        "hindsight_actual": 115.6,
+        "replacement_actual": 77.4
+      },
+      {
+        "week": 20,
+        "model_actual": 97.7,
+        "oracle_actual": 149.7,
+        "hindsight_actual": 72.0,
+        "replacement_actual": 50.6
+      },
+      {
+        "week": 21,
+        "model_actual": 129.2,
+        "oracle_actual": 136.2,
+        "hindsight_actual": 72.4,
+        "replacement_actual": 46.8
+      },
+      {
+        "week": 22,
+        "model_actual": 74.5,
+        "oracle_actual": 100.3,
+        "hindsight_actual": 82.2,
+        "replacement_actual": 73.7
+      }
+    ]
+  },
+  "prediction_accuracy": {
+    "aggregate_metrics": {
+      "mae": 4.720412445766246,
+      "rmse": 6.319801579855899,
+      "r2": 0.35884114594809335,
+      "mape": 169.170522182612,
+      "n": 5612
+    },
+    "by_position": {
+      "QB": {
+        "mae": 6.449195959512243,
+        "rmse": 7.962974658985406,
+        "r2": 0.24193672633352759,
+        "mape": 251.08441519649097,
+        "n": 685
+      },
+      "RB": {
+        "mae": 4.7620860989577185,
+        "rmse": 6.457520231343736,
+        "r2": 0.38021637729224167,
+        "mape": 253.4686210872956,
+        "n": 1486
+      },
+      "TE": {
+        "mae": 3.8104962900208723,
+        "rmse": 5.187454138299132,
+        "r2": 0.27990056657890494,
+        "mape": 102.15749913986734,
+        "n": 1212
+      },
+      "WR": {
+        "mae": 4.656112143031771,
+        "rmse": 6.216067783909132,
+        "r2": 0.28514231049796723,
+        "mape": 117.62217136822284,
+        "n": 2229
+      }
+    },
+    "biggest_underestimates": [
+      {
+        "player_id": "00-0039075",
+        "name": "P.Nacua",
+        "position": "WR",
+        "team": "LA",
+        "predicted_total": 319.7,
+        "actual_total": 454.6,
+        "predicted_ppg": 16.8,
+        "actual_ppg": 23.9,
+        "games": 19,
+        "error": -134.9
+      },
+      {
+        "player_id": "00-0038543",
+        "name": "J.Smith-Njigba",
+        "position": "WR",
+        "team": "SEA",
+        "predicted_total": 313.4,
+        "actual_total": 410.8,
+        "predicted_ppg": 15.7,
+        "actual_ppg": 20.5,
+        "games": 20,
+        "error": -97.4
+      },
+      {
+        "player_id": "00-0039851",
+        "name": "D.Maye",
+        "position": "QB",
+        "team": "NE",
+        "predicted_total": 335.7,
+        "actual_total": 430.4,
+        "predicted_ppg": 16.0,
+        "actual_ppg": 20.5,
+        "games": 21,
+        "error": -94.7
+      },
+      {
+        "player_id": "00-0033280",
+        "name": "C.McCaffrey",
+        "position": "RB",
+        "team": "SF",
+        "predicted_total": 370.3,
+        "actual_total": 456.4,
+        "predicted_ppg": 19.5,
+        "actual_ppg": 24.0,
+        "games": 19,
+        "error": -86.1
+      },
+      {
+        "player_id": "00-0037239",
+        "name": "C.Olave",
+        "position": "WR",
+        "team": "NO",
+        "predicted_total": 185.1,
+        "actual_total": 268.0,
+        "predicted_ppg": 11.6,
+        "actual_ppg": 16.8,
+        "games": 16,
+        "error": -82.9
+      },
+      {
+        "player_id": "00-0038606",
+        "name": "P.Washington",
+        "position": "WR",
+        "team": "JAX",
+        "predicted_total": 120.7,
+        "actual_total": 196.6,
+        "predicted_ppg": 7.5,
+        "actual_ppg": 12.3,
+        "games": 16,
+        "error": -75.9
+      },
+      {
+        "player_id": "00-0037744",
+        "name": "T.McBride",
+        "position": "TE",
+        "team": "ARI",
+        "predicted_total": 242.2,
+        "actual_total": 315.9,
+        "predicted_ppg": 14.2,
+        "actual_ppg": 18.6,
+        "games": 17,
+        "error": -73.7
+      },
+      {
+        "player_id": "00-0026498",
+        "name": "M.Stafford",
+        "position": "QB",
+        "team": "LA",
+        "predicted_total": 348.3,
+        "actual_total": 419.7,
+        "predicted_ppg": 17.4,
+        "actual_ppg": 21.0,
+        "games": 20,
+        "error": -71.4
+      },
+      {
+        "player_id": "00-0036223",
+        "name": "J.Taylor",
+        "position": "RB",
+        "team": "IND",
+        "predicted_total": 292.5,
+        "actual_total": 362.3,
+        "predicted_ppg": 17.2,
+        "actual_ppg": 21.3,
+        "games": 17,
+        "error": -69.8
+      },
+      {
+        "player_id": "00-0040691",
+        "name": "J.Dart",
+        "position": "QB",
+        "team": "NYG",
+        "predicted_total": 177.0,
+        "actual_total": 244.0,
+        "predicted_ppg": 12.6,
+        "actual_ppg": 17.4,
+        "games": 14,
+        "error": -67.0
+      },
+      {
+        "player_id": "00-0039139",
+        "name": "J.Gibbs",
+        "position": "RB",
+        "team": "DET",
+        "predicted_total": 303.8,
+        "actual_total": 368.6,
+        "predicted_ppg": 17.9,
+        "actual_ppg": 21.7,
+        "games": 17,
+        "error": -64.8
+      },
+      {
+        "player_id": "00-0036971",
+        "name": "T.Lawrence",
+        "position": "QB",
+        "team": "JAX",
+        "predicted_total": 298.6,
+        "actual_total": 362.5,
+        "predicted_ppg": 16.6,
+        "actual_ppg": 20.1,
+        "games": 18,
+        "error": -63.9
+      },
+      {
+        "player_id": "00-0037247",
+        "name": "G.Pickens",
+        "position": "WR",
+        "team": "DAL",
+        "predicted_total": 228.3,
+        "actual_total": 289.9,
+        "predicted_ppg": 13.4,
+        "actual_ppg": 17.1,
+        "games": 17,
+        "error": -61.6
+      },
+      {
+        "player_id": "00-0038559",
+        "name": "M.Wilson",
+        "position": "WR",
+        "team": "ARI",
+        "predicted_total": 159.1,
+        "actual_total": 220.6,
+        "predicted_ppg": 9.4,
+        "actual_ppg": 13.0,
+        "games": 17,
+        "error": -61.5
+      },
+      {
+        "player_id": "00-0038124",
+        "name": "C.Watson",
+        "position": "WR",
+        "team": "GB",
+        "predicted_total": 83.8,
+        "actual_total": 145.0,
+        "predicted_ppg": 7.6,
+        "actual_ppg": 13.2,
+        "games": 11,
+        "error": -61.2
+      }
+    ],
+    "biggest_overestimates": [
+      {
+        "player_id": "00-0030565",
+        "name": "G.Smith",
+        "position": "QB",
+        "team": "LV",
+        "predicted_total": 232.4,
+        "actual_total": 174.5,
+        "predicted_ppg": 15.5,
+        "actual_ppg": 11.6,
+        "games": 15,
+        "error": 57.9
+      },
+      {
+        "player_id": "00-0040122",
+        "name": "A.Jeanty",
+        "position": "RB",
+        "team": "LV",
+        "predicted_total": 297.9,
+        "actual_total": 247.1,
+        "predicted_ppg": 17.5,
+        "actual_ppg": 14.5,
+        "games": 17,
+        "error": 50.8
+      },
+      {
+        "player_id": "00-0036407",
+        "name": "J.Jeudy",
+        "position": "WR",
+        "team": "CLE",
+        "predicted_total": 168.6,
+        "actual_total": 122.7,
+        "predicted_ppg": 9.9,
+        "actual_ppg": 7.2,
+        "games": 17,
+        "error": 45.9
+      },
+      {
+        "player_id": "00-0039342",
+        "name": "X.Legette",
+        "position": "WR",
+        "team": "CAR",
+        "predicted_total": 128.1,
+        "actual_total": 91.1,
+        "predicted_ppg": 8.0,
+        "actual_ppg": 5.7,
+        "games": 16,
+        "error": 37.0
+      },
+      {
+        "player_id": "00-0035261",
+        "name": "T.Pollard",
+        "position": "RB",
+        "team": "TEN",
+        "predicted_total": 228.4,
+        "actual_total": 191.8,
+        "predicted_ppg": 13.4,
+        "actual_ppg": 11.3,
+        "games": 17,
+        "error": 36.6
+      },
+      {
+        "player_id": "00-0036322",
+        "name": "J.Jefferson",
+        "position": "WR",
+        "team": "MIN",
+        "predicted_total": 237.8,
+        "actual_total": 201.5,
+        "predicted_ppg": 14.0,
+        "actual_ppg": 11.9,
+        "games": 17,
+        "error": 36.3
+      },
+      {
+        "player_id": "00-0033906",
+        "name": "A.Kamara",
+        "position": "RB",
+        "team": "NO",
+        "predicted_total": 141.0,
+        "actual_total": 104.7,
+        "predicted_ppg": 12.8,
+        "actual_ppg": 9.5,
+        "games": 11,
+        "error": 36.3
+      },
+      {
+        "player_id": "00-0038797",
+        "name": "E.Wilson",
+        "position": "RB",
+        "team": "GB",
+        "predicted_total": 126.4,
+        "actual_total": 92.8,
+        "predicted_ppg": 7.4,
+        "actual_ppg": 5.5,
+        "games": 17,
+        "error": 33.6
+      },
+      {
+        "player_id": "00-0034844",
+        "name": "S.Barkley",
+        "position": "RB",
+        "team": "PHI",
+        "predicted_total": 279.7,
+        "actual_total": 248.4,
+        "predicted_ppg": 16.5,
+        "actual_ppg": 14.6,
+        "games": 17,
+        "error": 31.3
+      },
+      {
+        "player_id": "00-0036252",
+        "name": "M.Pittman",
+        "position": "WR",
+        "team": "IND",
+        "predicted_total": 230.8,
+        "actual_total": 201.3,
+        "predicted_ppg": 13.6,
+        "actual_ppg": 11.8,
+        "games": 17,
+        "error": 29.5
+      },
+      {
+        "player_id": "00-0034791",
+        "name": "N.Chubb",
+        "position": "RB",
+        "team": "HOU",
+        "predicted_total": 122.4,
+        "actual_total": 94.5,
+        "predicted_ppg": 7.2,
+        "actual_ppg": 5.6,
+        "games": 17,
+        "error": 27.9
+      },
+      {
+        "player_id": "00-0036290",
+        "name": "C.Kmet",
+        "position": "TE",
+        "team": "CHI",
+        "predicted_total": 116.4,
+        "actual_total": 88.9,
+        "predicted_ppg": 6.5,
+        "actual_ppg": 4.9,
+        "games": 18,
+        "error": 27.5
+      },
+      {
+        "player_id": "00-0034753",
+        "name": "M.Andrews",
+        "position": "TE",
+        "team": "BAL",
+        "predicted_total": 158.1,
+        "actual_total": 131.0,
+        "predicted_ppg": 9.3,
+        "actual_ppg": 7.7,
+        "games": 17,
+        "error": 27.1
+      },
+      {
+        "player_id": "00-0036924",
+        "name": "M.Carter",
+        "position": "RB",
+        "team": "ARI",
+        "predicted_total": 125.5,
+        "actual_total": 99.0,
+        "predicted_ppg": 9.7,
+        "actual_ppg": 7.6,
+        "games": 13,
+        "error": 26.5
+      },
+      {
+        "player_id": "00-0040676",
+        "name": "C.Ward",
+        "position": "QB",
+        "team": "TEN",
+        "predicted_total": 228.1,
+        "actual_total": 201.7,
+        "predicted_ppg": 13.4,
+        "actual_ppg": 11.9,
+        "games": 17,
+        "error": 26.4
+      }
+    ]
+  }
+}

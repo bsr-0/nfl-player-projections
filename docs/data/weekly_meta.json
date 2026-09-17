@@ -1,0 +1,88 @@
+{
+  "season": 2026,
+  "mode": "weekly_model",
+  "weeks": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "counts": {
+    "1": 654,
+    "2": 700,
+    "3": 700,
+    "4": 700,
+    "5": 651,
+    "6": 616,
+    "7": 612,
+    "8": 607,
+    "9": 661,
+    "10": 622,
+    "11": 574,
+    "12": 700,
+    "13": 606,
+    "14": 651,
+    "15": 700,
+    "16": 700,
+    "17": 700,
+    "18": 700
+  },
+  "games_per_season": 17,
+  "completed_game_rows": 361,
+  "has_intervals": true,
+  "generated_at": "2026-09-16T02:36:02+00:00",
+  "measured": {
+    "QB": {
+      "mae": 6.86,
+      "bias": 0.74
+    },
+    "TE": {
+      "mae": 3.03,
+      "bias": -0.55
+    },
+    "RB": {
+      "mae": 4.6,
+      "bias": -0.18
+    },
+    "WR": {
+      "mae": 4.34,
+      "bias": 0.66
+    },
+    "_source": {
+      "file": "backtest_2025_20260914.json",
+      "season": 2025,
+      "weeks": 18,
+      "model_type": "per_position_stacked_ensemble",
+      "feature_version": "36"
+    }
+  },
+  "baseline_standing": {
+    "season": 2025,
+    "rmse_improvement_pct": {
+      "trailing_3g_avg": 6.08,
+      "trailing_5g_avg": 2.32,
+      "season_avg": 1.89,
+      "prior_season_rank": 7.81,
+      "blended_heuristic": -1.18,
+      "vegas_implied": 3.74
+    },
+    "beats_every_baseline": false,
+    "beat_all_baselines_by_20_pct": false,
+    "model_has_real_edge": "True"
+  },
+  "model": "weekly ensemble (1w horizon), log1p+smearing calibration"
+}
