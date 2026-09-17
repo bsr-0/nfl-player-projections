@@ -115,11 +115,21 @@ class TestComputeRecencyWeights:
         assert np.all(np.diff(w) > 0)  # strictly increasing with season
 
     def test_exponential_matches_production_formula(self, seasons):
-        """Must reuse the exact formula already live in
+        """Must reuse the exact formula from
         src/models/position_models.py:_horizon_recency_weights, not a
-        reinvented one."""
+        reinvented one -- decay = 0.5**((max-season)/halflife), normalized.
+
+        2026-09-16: MODEL_CONFIG["horizon_recency_halflife"]/
+        ["recency_decay_halflife"] were set to {}/None (Phase 3, the
+        experiment this module supports, found exponential decay the
+        worst-performing scheme). Reading production's live config here
+        would test against "disabled" rather than the formula; compare
+        against windows._REFERENCE_HALFLIFE, the pinned last-real-value
+        this module itself falls back to, instead.
+        """
+        from src.models.single_week_ppr.windows import _REFERENCE_HALFLIFE
         w = compute_recency_weights(seasons, "exponential")
-        halflife = MODEL_CONFIG["horizon_recency_halflife"][1]
+        halflife = MODEL_CONFIG.get("horizon_recency_halflife", {}).get(1) or _REFERENCE_HALFLIFE
         seasons_arr = seasons.to_numpy(dtype=float)
         expected_decay = np.power(0.5, (seasons_arr.max() - seasons_arr) / halflife)
         expected = expected_decay / expected_decay.max()

@@ -290,9 +290,14 @@ def _warn_on_probable_era_span(injuries: pd.DataFrame) -> None:
     near 1,300, so in the modern regime those players are simply unlisted at
     1.0 -- which argues for the remap but does not establish it.
 
-    `TRAINING_START_YEAR_DEFAULT = 2018` keeps the default window clear of
-    this. The warning exists so the "full" 2006+ preset cannot cross the
-    boundary without saying so.
+    `TRAINING_START_YEAR_DEFAULT` was 2018, partly to keep the default
+    window clear of this. Moved to MIN_HISTORICAL_YEAR (2006) on
+    2026-09-16 after a real backtest -- with injury_score already in the
+    feature set -- showed a net improvement from the wider window despite
+    the gap (see the settings.py comment on TRAINING_START_YEAR_DEFAULT for
+    the numbers). The remap question below is still open; this warning
+    still exists so that crossing the boundary is never silent, default
+    window or not.
     """
     if "season" not in injuries.columns or "report_status" not in injuries.columns:
         return

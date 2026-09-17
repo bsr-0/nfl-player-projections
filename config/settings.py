@@ -258,11 +258,16 @@ MODEL_CONFIG = {
     "correlation_threshold": 0.92,  # Drop one of pair if correlation exceeds this
     "vif_threshold": 10,  # Iteratively drop features with VIF above this
     "adaptive_feature_count": True,  # Scale n_features_per_position by sqrt(n_samples)
-    "recency_decay_halflife": 1.5,  # Seasons: weight halves every 1.5 seasons (tightened from 2.0 for 2027 focus)
-    # Horizon-aware recency: longer horizons should decay more slowly.
-    # Defaults: 1w=1.5 seasons, 4w=2.5 seasons, 18w=3.5 seasons.
-    # If a horizon is missing, falls back to recency_decay_halflife.
-    "horizon_recency_halflife": {1: 1.5, 4: 2.5, 18: 3.5},
+    # No recency weighting: next_focus.md Phase 3 (single_week_ppr, the
+    # module season_step8.py's serving path actually imports from) tested
+    # none/linear/exponential across 4 positions x 5 windows. Exponential --
+    # the only scheme ever live here -- won 1 of 20 combos; uniform won 13.
+    # Both keys must be falsy: every consumer (position_models.py:1513-1517,
+    # ensemble.py:924/1046/1261) does `horizon_map.get(n_weeks, base)`, so a
+    # non-None per-horizon entry for 1 or 4 (the only trained horizons)
+    # would keep exponential decay alive regardless of the base value.
+    "recency_decay_halflife": None,
+    "horizon_recency_halflife": {},
     "cv_gap_seasons": 1,  # Gap between train and val for purged CV (1 = purge last season before test)
     # Per-position target override: "fp" trains directly on fantasy points (no util conversion),
     # "util" trains on utilization score then converts to FP (original two-stage approach).
@@ -292,7 +297,15 @@ MODEL_CONFIG = {
     # causal features and C_gbm_mae. See GAPS.md 2026-08-29.
     "position_target_type": {"QB": "fp", "RB": "fp", "WR": "fp", "TE": "fp"},
     # Horizon-specific models (per requirements): 4w LSTM+ARIMA, 18w deep feedforward
-    "use_4w_hybrid": True,   # Use Hybrid4WeekModel for n_weeks in 4w band when TF available
+    # 4w RETIRED 2026-09-16, same treatment as 18w below: unconsumed
+    # (projection_4w never reaches players_{pos}.json/the site) and never
+    # validated against summing real per-week predictions, which is what
+    # generate_weekly_data.py's build_weekly_model() already does for the
+    # actual "next N weeks" UI. See TRAINING_HORIZONS in the training-window
+    # section for the full writeup. Also drops a full second Optuna tuning
+    # pass (RF/XGBoost/LightGBM) plus the separate LSTM+ARIMA training run
+    # this flag gated, on every non-fast retrain.
+    "use_4w_hybrid": False,   # was True
     # 18w RETIRED 2026-08-29. Two independent reasons:
     #
     # 1. The target is undefined on 90.7% of rows. An 18-game forward sum needs
@@ -707,11 +720,38 @@ COMPONENT_TARGETS = {
 #   - 2011-2019: Pass-first revolution, RPO emergence
 #   - 2020+: RPO explosion, increased passing efficiency
 #
-# Training on older data (pre-2018) teaches outdated patterns from a
-# fundamentally different era of NFL football (council recommendation:
-# drop pre-2018 data).  The modern passing game, RPO schemes, and rule
-# changes make pre-2018 data actively harmful for generalization.
-TRAINING_START_YEAR_DEFAULT = 2018   # Modern NFL era (council: drop pre-2018)
+# The hard 2018+ floor below was the "council recommendation" that
+# pre-2018 data is actively harmful. next_focus.md Phase 3 tested that
+# directly (single_week_ppr, 4 positions x 5 windows x 3 weightings, 2026-
+# 08-11): MAE improved MONOTONICALLY from 3y to all-history for QB/RB/TE
+# (QB 6.58->6.37, RB 4.79->4.71, TE 3.70->3.65) once pre-2018 rows'
+# structurally-missing feature families (NGS/EPA/modern snap share, absent
+# before those stats existed) were handled via LightGBM's native NaN
+# splits rather than fillna(0) -- see PRESERVE_HISTORY_MISSINGNESS. WR was
+# flat/mixed past 5y (within noise).
+#
+# CORRECTION 2026-09-16: applying all-history globally and re-backtesting
+# the actual served model (src/models/ensemble.py's EnsemblePredictor, not
+# the single_week_ppr harness Phase 3 ran) on a controlled same-population
+# comparison (n=6356 both runs) showed TE DID regress: R2 0.367->0.355,
+# RMSE 4.69->4.75, MAE 3.03->3.10. WR improved the most (R2 0.308->0.357),
+# QB/RB roughly flat. This matches Phase 3's own "best single config per
+# position" table, which recommended a 10-year window for TE specifically
+# and all-history for QB/RB/WR -- a distinction the previous version of
+# this comment glossed over. See TRAINING_WINDOW_YEARS_BY_POSITION below,
+# applied in ensemble.py at the per-position data slice, for the actual
+# per-position fix. Don't trust this comment over a fresh backtest either.
+#
+# This also means the default now crosses the 2015/2016 "Probable"
+# injury-status rule change (src/features/feature_engineering.py,
+# PROBABLE_ABOLISHED_AFTER_SEASON / _warn_on_probable_era_span) -- 2018 was
+# partly chosen to avoid that. Decision: keep 2006, on the same logic as
+# above -- the backtest already had injury_score in the feature set and
+# still improved, so the empirical result already reflects this gap's real
+# cost. The "Probable"->1.0 remap the original author left open is still
+# untested, not resolved by this choice; _warn_on_probable_era_span still
+# fires so the tradeoff stays visible rather than disappearing.
+TRAINING_START_YEAR_DEFAULT = MIN_HISTORICAL_YEAR   # was 2018; see above
 TRAINING_END_YEAR_DEFAULT = CURRENT_NFL_SEASON   # Latest season (same as CURRENT_NFL_SEASON)
 TRAINING_YEARS = {
     "start_year": TRAINING_START_YEAR_DEFAULT,
@@ -719,6 +759,15 @@ TRAINING_YEARS = {
     "test_years": [TRAINING_END_YEAR_DEFAULT],   # Latest season held out for testing
     "min_years": 3,
 }
+
+# Per-position override on top of TRAINING_START_YEAR_DEFAULT: N most
+# recent seasons, or None to use the full window above. Applied in
+# ensemble.py's train_models() at the per-position data slice (not a
+# separate load), so QB/RB/WR still see the full 2006+ frame while TE is
+# truncated to its own better-performing window. Only positions with a
+# measured, position-specific reason belong here -- this is not a general
+# tuning knob.
+TRAINING_WINDOW_YEARS_BY_POSITION = {"TE": 10}
 
 # Requirement-derived minimum training seasons per horizon (see docs/fantasy requirements)
 MIN_TRAINING_SEASONS_1W = 3   # 1-week model: min 3, optimal 5+
@@ -731,8 +780,38 @@ MIN_TRAINING_SEASONS_18W = 5  # 18-week model: min 5 (adjusted for 2018+ window)
 # 18 was removed 2026-08-29: its label is undefined on 90.7% of rows (an
 # 18-game forward sum needs more future games than a 17-game season leaves) and
 # nothing consumed its output. See MODEL_CONFIG["use_18w_deep"].
-TRAINING_HORIZONS = [1, 4]
-MIN_TRAINING_SEASONS_4W = 4   # 4-week horizon (LSTM+ARIMA): min 4
+#
+# 4 removed 2026-09-16 for the same two reasons, found asking "why train this
+# at all instead of summing four real per-week predictions":
+#
+# 1. Nothing consumes it. projection_4w is computed (generate_app_data.py,
+#    generate_draft_data.py) and merged into intermediate frames, but every
+#    player dict actually written to players_{pos}.json sources its number
+#    from the Step 8 season-total model instead -- grep the site
+#    (docs/*.html) for projection_4w or "4w": zero hits.
+# 2. The one controlled test this repo has run for "direct multi-week model
+#    vs. summed single-week predictions" is Phase 8 (next_focus.md) -- for
+#    18-week, not 4-week, and summed-weekly won by 26-40% (MAE 25.08 vs
+#    50.89), which is why 18w was removed. The 4-week model rode on the same
+#    untested assumption. Separately, GAPS.md 2026-08 already documents
+#    MultiWeekModel's 4w/18w R2 as a "variable-window artifact" likely
+#    inflated by rolling-sum-target mechanics, not real skill: "treat
+#    MultiWeekModel's reported 4w/18w R2 anywhere in this repo as
+#    unreliable/inflated; only the 1w horizon is currently trustworthy."
+#
+# The real "next N weeks" path already exists and doesn't need this:
+# scripts/generate_weekly_data.py's build_weekly_model() calls the 1-week
+# model once per real upcoming week with that week's actual opponent
+# (predict(n_weeks=1, as_of=(season, wk))) -- exactly "sum real per-week
+# predictions", using matchup information no single 4-week-ahead model can
+# have (it can't know the mix of 4 specific future opponents).
+#
+# Also cut two full extra training passes per position that this horizon
+# was paying for regardless of whether anyone used it: doubled Optuna
+# tuning (RF/XGBoost/LightGBM again for horizon 4) and, by default, a
+# separate LSTM+ARIMA Hybrid4WeekModel (MODEL_CONFIG["use_4w_hybrid"]).
+TRAINING_HORIZONS = [1]
+MIN_TRAINING_SEASONS_4W = 4   # kept: MultiWeekModel/Hybrid4WeekModel classes are dormant, not deleted
 # Per-position minimum players for training (requirements: ~30 QB, 60 RB, 70 WR, 30 TE)
 MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30}
 

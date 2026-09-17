@@ -153,15 +153,19 @@ def generate_app_data(save_daily: bool = False) -> bool:
         print(f"Could not load predictor: {e}")
         return False
     
-    # Get predictions for multiple horizons (1w, 4w, plus dynamic default).
-    # No horizon >= MAX_TRAINED_HORIZON is requested: TRAINING_HORIZONS
-    # (config/settings.py) only trains the 1-week and 4-week representative
-    # models, so MultiWeekModel has nothing registered for weeks
-    # horizon_long_threshold-18 ("long" in MultiWeekModel.horizon_groups) and
-    # now raises for them (see position_models.MultiWeekModel.predict)
-    # instead of silently substituting the 4-week model's unscaled output
-    # under an "18w" label, which is what produced e.g. QB predicted_ppg
-    # values off by roughly 4/18.
+    # Get predictions for the 1-week horizon only. TRAINING_HORIZONS
+    # (config/settings.py) trains 1-week only as of 2026-09-16 -- 4 was
+    # retired the same way 18 was on 2026-08-29 (unconsumed: projection_4w
+    # never reached players_{pos}.json/the site; never validated against
+    # summing real per-week predictions, which is what
+    # generate_weekly_data.py's build_weekly_model() already does for the
+    # actual "next N weeks" UI). MultiWeekModel.predict raises for any
+    # n_weeks with no trained representative (position_models.py) instead
+    # of silently substituting the nearest one's unscaled output under the
+    # wrong label -- which is what produced e.g. QB predicted_ppg values
+    # off by roughly 4/18 before that guard existed. Requesting only 1 here
+    # avoids relying on that guard rather than just not asking for horizons
+    # nothing trains.
     from src.utils.nfl_calendar import get_current_nfl_week, is_offseason
     from config.settings import MODEL_CONFIG
     week_info = get_current_nfl_week()
@@ -173,7 +177,21 @@ def generate_app_data(save_daily: bool = False) -> bool:
     # trained, capped at MAX_TRAINED_HORIZON weeks.
     default_horizon = (MAX_TRAINED_HORIZON if is_offseason()
                         else min(MAX_TRAINED_HORIZON, max(1, 18 - min(cur_week_num, 18) + 1)))
-    horizons = [1, 4]
+    # default_horizon (a several-week "rest of season pace" window, e.g.
+    # weeks 3-8) is a display concept independent of which horizons are
+    # directly trained -- it can be anything from MAX_TRAINED_HORIZON's
+    # math. It always requests a real predict(n_weeks=default_horizon)
+    # call below, which will now fail (caught by the try/except, prints a
+    # warning, writes nothing for that horizon) unless it happens to equal
+    # 1, since only 1 has a trained model post-2026-09-16. Not fixed here:
+    # the right fix is summing real per-week 1-week predictions for that
+    # window (what generate_weekly_data.py's build_weekly_model() already
+    # does), not requesting a multi-week-ahead horizon directly -- a
+    # separate change, tracked rather than bolted on to the horizon-4
+    # removal. upcoming_week_meta.json's default_horizon/_label fields are
+    # unaffected either way (computed independently of whether the
+    # prediction call below succeeds) and are not read by the live site.
+    horizons = [1]
     if default_horizon not in horizons:
         horizons.append(default_horizon)
     pred_dfs = {}

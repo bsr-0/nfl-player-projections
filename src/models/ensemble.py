@@ -18,6 +18,8 @@ from config.settings import (
     QB_TARGET_CHOICE_FILENAME,
     FEATURE_VERSION,
     FEATURE_VERSION_FILENAME,
+    TRAINING_WINDOW_YEARS_BY_POSITION,
+    TRAINING_HORIZONS,
 )
 from src.models.position_models import PositionModel, MultiWeekModel, VALIDATION_PCT
 from src.models.utilization_to_fp import UtilizationToFPConverter
@@ -793,7 +795,11 @@ class ModelTrainer:
             Dict of trained models
         """
         positions = positions or POSITIONS
-        n_weeks_list = n_weeks_list or [1, 4, 18]  # Short, medium, season-long
+        # Dead in practice (the one caller, feature_preparation.py, always
+        # passes n_weeks_list=TRAINING_HORIZONS explicitly) but kept correct
+        # rather than stale: this used to default to [1, 4, 18], both of
+        # which have since been retired from TRAINING_HORIZONS.
+        n_weeks_list = n_weeks_list or list(TRAINING_HORIZONS)
         
         for position in positions:
             print(f"\n{'='*60}")
@@ -804,7 +810,22 @@ class ModelTrainer:
             pos_data = data[data["position"] == position].copy()
             if "season" in pos_data.columns and "week" in pos_data.columns:
                 pos_data = pos_data.sort_values(["season", "week"]).reset_index(drop=True)
-            
+
+            # Per-position training-window override (config/settings.py
+            # TRAINING_WINDOW_YEARS_BY_POSITION): a truncation on top of the
+            # already-loaded frame, not a separate load, so QB/RB/WR still
+            # see the full window while an overridden position doesn't.
+            # Exists because a single global window measurably regressed TE
+            # (2026-09-16 backtest) while helping WR/being flat for QB/RB --
+            # see the settings.py comment for the numbers.
+            window_years = TRAINING_WINDOW_YEARS_BY_POSITION.get(position)
+            if window_years and "season" in pos_data.columns and len(pos_data):
+                max_season = pos_data["season"].max()
+                before = len(pos_data)
+                pos_data = pos_data[pos_data["season"] >= max_season - window_years + 1].copy()
+                print(f"  {position}: training window capped to last {window_years} seasons "
+                      f"({before} -> {len(pos_data)} rows)")
+
             if len(pos_data) < 100:
                 print(f"Insufficient data for {position} ({len(pos_data)} samples). Skipping.")
                 continue

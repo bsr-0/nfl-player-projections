@@ -73,8 +73,30 @@ def test_malformed_input_does_not_raise():
         _warn_on_probable_era_span(df)
 
 
-def test_default_training_window_avoids_the_boundary():
-    """The reason this is a warning and not an error."""
-    from config.settings import TRAINING_START_YEAR_DEFAULT
+def test_default_training_window_crosses_the_boundary_with_warning_intact():
+    """2026-09-16: reconsidered, not reverted.
 
-    assert TRAINING_START_YEAR_DEFAULT > PROBABLE_ABOLISHED_AFTER_SEASON
+    TRAINING_START_YEAR_DEFAULT moved to MIN_HISTORICAL_YEAR (2006) after a
+    real backtest -- which already had injury_score in the feature set --
+    showed a net improvement from the wider window despite this exact
+    comparability gap. The empirical result already reflects whatever cost
+    the gap imposes; it wasn't enough to erase the gain. What must NOT
+    happen is losing the signal silently: this used to assert the default
+    stayed clear of the boundary, which stopped being true when the window
+    changed. The guard itself (_warn_on_probable_era_span) is not
+    weakened -- confirm it still fires for the real default window,
+    so the tradeoff stays visible to whoever revisits this next rather
+    than disappearing along with the test that used to assert against it.
+    """
+    from config.settings import MIN_HISTORICAL_YEAR, TRAINING_START_YEAR_DEFAULT
+
+    assert TRAINING_START_YEAR_DEFAULT <= PROBABLE_ABOLISHED_AFTER_SEASON, (
+        "this test's premise is that the default crosses the boundary -- "
+        "if it no longer does, restore test_default_training_window_avoids_the_boundary instead"
+    )
+    assert TRAINING_START_YEAR_DEFAULT == MIN_HISTORICAL_YEAR
+
+    with pytest.warns(RuntimeWarning, match="Probable"):
+        _warn_on_probable_era_span(_injuries(
+            [(TRAINING_START_YEAR_DEFAULT, "Probable"), (2019, "Questionable")]
+        ))

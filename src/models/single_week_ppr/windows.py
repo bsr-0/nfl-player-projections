@@ -52,6 +52,13 @@ def window_to_season_list(window: str, test_season: int, available_seasons: Sequ
     return prior_seasons[-n_years:]
 
 
+# Last real value MODEL_CONFIG["recency_decay_halflife"] held in production
+# before it was disabled 2026-09-16 (Phase 3 found it the worst-performing
+# scheme). See compute_recency_weights's exponential branch for why this
+# needs to be a fixed reference rather than read live from MODEL_CONFIG.
+_REFERENCE_HALFLIFE = 1.5
+
+
 def compute_recency_weights(seasons: pd.Series, scheme: str) -> Optional[np.ndarray]:
     """Per-row sample weights for a given recency-weighting scheme.
 
@@ -85,6 +92,19 @@ def compute_recency_weights(seasons: pd.Series, scheme: str) -> Optional[np.ndar
         return raw / raw.max()
 
     # exponential
-    halflife = MODEL_CONFIG.get("horizon_recency_halflife", {}).get(1) or MODEL_CONFIG.get("recency_decay_halflife")
+    # Production's own halflife is not a valid fallback anymore: Phase 3
+    # (the experiment this module supports) is what found exponential
+    # decay performing worst of the three schemes, and that finding is why
+    # MODEL_CONFIG["recency_decay_halflife"]/["horizon_recency_halflife"]
+    # were set to None/{} on 2026-09-16 -- reading them here would make a
+    # tool for evaluating "what would exponential weighting do" silently
+    # inherit "disabled" the moment production stopped using it, which
+    # breaks re-running this exact comparison later. _REFERENCE_HALFLIFE
+    # pins the last real value production held (config/settings.py history,
+    # 2026-09-16) so this stays a stable, reproducible baseline independent
+    # of whatever production currently defaults to.
+    halflife = (MODEL_CONFIG.get("horizon_recency_halflife", {}).get(1)
+                or MODEL_CONFIG.get("recency_decay_halflife")
+                or _REFERENCE_HALFLIFE)
     decay = np.power(0.5, (max_season - seasons_arr) / float(halflife))
     return decay / decay.max()
