@@ -783,14 +783,19 @@ class NFLPredictor:
 
         data = self._apply_snap_imputation(data)
 
-        # Keep train/serve parity for advanced rookie/injury features.
-        try:
-            from src.features.advanced_rookie_injury import add_advanced_rookie_injury_features
-            data = add_advanced_rookie_injury_features(data)
-        except Exception as e:
-            # Non-fatal, but never silent: a stage that vanishes here is a
-            # train/serve skew nobody can see in the output.
-            print(f"  WARNING: advanced rookie/injury features skipped at serving: {type(e).__name__}: {e}")
+        # The SAME wrapper training uses (_prepare_training_data calls
+        # add_advanced_features(add_engineered_features(d))), not the inner
+        # add_advanced_rookie_injury_features it used to call. The wrapper also
+        # restores debut-week history NaN and re-applies the fitted rookie
+        # prior; skipping it meant a debut row was served with fabricated
+        # veteran-median history (wopr_roll3 = 0.19 for a player with no
+        # games) and prev_season_ppg = NaN -- the exact inverse of the row the
+        # model was fit on. Found 2026-09-16 by the serving-vs-training parity
+        # test. Not wrapped in try/except: add_advanced_features raises by
+        # design (see its docstring), and a stage that silently vanishes here
+        # is a train/serve skew nobody can see in the output.
+        from src.models.feature_preparation import add_advanced_features
+        data = add_advanced_features(data)
 
         # Train-fitted bounded scaler, applied exactly as training applied it
         # to its test frame (column reconciliation, NaN preserved) and never

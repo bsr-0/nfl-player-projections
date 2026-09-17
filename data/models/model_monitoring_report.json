@@ -1,11 +1,23 @@
 {
-  "generated_at": "2026-09-10T23:22:42.354926",
+  "generated_at": "2026-09-16T09:27:20.572724",
   "feature_version": "36",
   "metadata_file": "/Users/benrosen/Documents/nfl-player-projections/data/models/model_metadata.json",
   "training_metadata": {
-    "training_date": "2026-09-10T23:22:42.354051",
+    "training_date": "2026-09-16T09:27:20.571879",
     "feature_version": "36",
     "train_seasons": [
+      2006,
+      2007,
+      2008,
+      2009,
+      2010,
+      2011,
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
       2018,
       2019,
       2020,
@@ -24,57 +36,57 @@
     "oof_metrics": {
       "QB": {
         "1w": {
-          "rmse": 6.8994034523151,
-          "mae": 5.453223505433328,
-          "r2": 0.3772680198383399,
+          "rmse": 7.799670125304586,
+          "mae": 6.387160765176278,
+          "r2": 0.2856596999020877,
           "target_space": "original"
         },
         "4w": {
-          "rmse": 17.63508864560976,
-          "mae": 13.976826156681243,
-          "r2": 0.5167097891552644,
+          "rmse": 20.208652280717043,
+          "mae": 15.978271506116958,
+          "r2": 0.37264770808870296,
           "target_space": "original"
         }
       },
       "RB": {
         "1w": {
-          "rmse": 6.3915176961725235,
-          "mae": 4.48650993799582,
-          "r2": 0.29644498122332585,
+          "rmse": 6.963493486986226,
+          "mae": 5.01498119153222,
+          "r2": 0.2715498304895465,
           "target_space": "log1p"
         },
         "4w": {
-          "rmse": 17.699353957024787,
-          "mae": 13.067703658202662,
-          "r2": 0.46188247453175957,
+          "rmse": 19.170857858715845,
+          "mae": 14.567335709867107,
+          "r2": 0.4316541396686343,
           "target_space": "log1p"
         }
       },
       "WR": {
         "1w": {
-          "rmse": 6.056654266648343,
-          "mae": 4.194353956992138,
-          "r2": 0.35585434727684906,
+          "rmse": 6.194228185362455,
+          "mae": 4.310675652030395,
+          "r2": 0.32065509139222736,
           "target_space": "log1p"
         },
         "4w": {
-          "rmse": 15.799194021178613,
-          "mae": 11.627790163900983,
-          "r2": 0.5508615370771501,
+          "rmse": 15.172097101327397,
+          "mae": 11.320334855057249,
+          "r2": 0.5709990810968671,
           "target_space": "log1p"
         }
       },
       "TE": {
         "1w": {
-          "rmse": 4.3271699475910745,
-          "mae": 2.7775445356859825,
-          "r2": 0.3703763729184123,
+          "rmse": 4.430170364653703,
+          "mae": 2.8306146117619178,
+          "r2": 0.33815181113842707,
           "target_space": "log1p"
         },
         "4w": {
-          "rmse": 10.463689521437907,
-          "mae": 7.2084115853685855,
-          "r2": 0.637199156098355,
+          "rmse": 10.488939166850125,
+          "mae": 7.264553595862103,
+          "r2": 0.6183052692356567,
           "target_space": "log1p"
         }
       }
@@ -82,345 +94,311 @@
     "test_metrics": {
       "QB": {
         "FP (owner objective)": {
-          "rmse": 8.109235011129089,
-          "mae": 6.566788573490667,
-          "r2": 0.1946726175307577,
-          "within_7pt_pct": 62.22222222222222,
-          "within_10pt_pct": 77.77777777777779,
+          "rmse": 8.273437754123728,
+          "mae": 6.641823718559164,
+          "r2": 0.1590341471977752,
+          "within_7pt_pct": 58.730158730158735,
+          "within_10pt_pct": 77.14285714285715,
           "n_samples": 630,
-          "mape": 84.35486240324823,
-          "spearman_rho": 0.4323247860606777,
+          "mape": 88.88159985646885,
+          "spearman_rho": 0.44348520347085585,
           "expert_benchmark_rmse": 7.5,
-          "vs_expert_pct": -8.1
+          "vs_expert_pct": -10.3
         }
       },
       "RB": {
         "util": {
-          "rmse": 32.70157124094072,
-          "mae": 27.754950163607443,
-          "r2": -1.4242890840802942,
-          "within_7pt_pct": 15.369897959183673,
-          "within_10pt_pct": 20.34438775510204,
-          "n_samples": 1568,
-          "mape": 74.20879704138486,
-          "spearman_rho": 0.6972509541062787
+          "rmse": 16.20644512207065,
+          "mae": 12.870593301262545,
+          "r2": -0.44027719230099227,
+          "within_7pt_pct": 35.136855506047105,
+          "within_10pt_pct": 46.02164226607257,
+          "n_samples": 1571,
+          "mape": 58.561884782341146,
+          "spearman_rho": 0.6550359786179755
         },
         "FP": {
-          "rmse": 6.380933504155352,
-          "mae": 4.638164237764975,
-          "r2": 0.3727590675728285,
-          "within_7pt_pct": 78.0812324929972,
-          "within_10pt_pct": 88.72549019607843,
-          "n_samples": 1428,
-          "mape": 69.74854006935776,
-          "spearman_rho": 0.6622404271486749,
+          "rmse": 6.4017286560466165,
+          "mae": 4.73737541291424,
+          "r2": 0.36851673704473864,
+          "within_7pt_pct": 77.83216783216783,
+          "within_10pt_pct": 87.90209790209789,
+          "n_samples": 1430,
+          "mape": 74.41800990313406,
+          "spearman_rho": 0.6642007405303387,
           "expert_benchmark_rmse": 8.5,
-          "vs_expert_pct": 24.9
+          "vs_expert_pct": 24.7
         }
       },
       "WR": {
         "util": {
-          "rmse": 45.59041241128888,
-          "mae": 41.20043336351938,
-          "r2": -3.063998335175757,
-          "within_7pt_pct": 10.968451944240645,
-          "within_10pt_pct": 12.692589875275129,
+          "rmse": 36.37356979847902,
+          "mae": 32.8134756546369,
+          "r2": -2.7684912757083757,
+          "within_7pt_pct": 15.150403521643433,
+          "within_10pt_pct": 16.507703595011005,
           "n_samples": 2726,
-          "mape": 83.14304438512531,
-          "spearman_rho": 0.6979592260360546
+          "mape": 77.94911424357083,
+          "spearman_rho": 0.7097344513696792
         },
         "FP": {
-          "rmse": 5.899268121528034,
-          "mae": 4.216037252601664,
-          "r2": 0.3326034066954452,
-          "within_7pt_pct": 80.3449659045327,
-          "within_10pt_pct": 90.17248295226634,
+          "rmse": 5.782306515972771,
+          "mae": 4.250921097510342,
+          "r2": 0.3610468443214764,
+          "within_7pt_pct": 81.1472121941436,
+          "within_10pt_pct": 91.13517849979944,
           "n_samples": 2493,
-          "mape": 72.09753008280404,
-          "spearman_rho": 0.6351090167297913,
+          "mape": 75.88265892238798,
+          "spearman_rho": 0.6366497390491738,
           "expert_benchmark_rmse": 8.0,
-          "vs_expert_pct": 26.3
+          "vs_expert_pct": 27.7
         }
       },
       "TE": {
         "util": {
-          "rmse": 42.440552613838356,
-          "mae": 38.433460377138694,
-          "r2": -3.2931185819245146,
-          "within_7pt_pct": 1.1961722488038278,
-          "within_10pt_pct": 5.801435406698564,
+          "rmse": 34.360864072241554,
+          "mae": 30.86159317630603,
+          "r2": -2.9293541798480107,
+          "within_7pt_pct": 6.519138755980861,
+          "within_10pt_pct": 10.825358851674642,
           "n_samples": 1672,
-          "mape": 91.22555710809974,
-          "spearman_rho": 0.7298121327119196
+          "mape": 89.29242692669354,
+          "spearman_rho": 0.7197298133099447
         },
         "FP": {
-          "rmse": 4.490560145355836,
-          "mae": 3.039295880290542,
-          "r2": 0.38225404208300395,
-          "within_7pt_pct": 88.94668400520156,
-          "within_10pt_pct": 95.38361508452536,
+          "rmse": 4.58434936277485,
+          "mae": 3.059589871040658,
+          "r2": 0.36367910164619477,
+          "within_7pt_pct": 88.29648894668401,
+          "within_10pt_pct": 94.92847854356306,
           "n_samples": 1538,
-          "mape": 55.503795131557624,
-          "spearman_rho": 0.6571374159071047,
+          "mape": 54.65782315794732,
+          "spearman_rho": 0.6586466317025994,
           "expert_benchmark_rmse": 6.5,
-          "vs_expert_pct": 30.9
+          "vs_expert_pct": 29.5
         }
       }
     },
     "n_features_per_position": {
-      "QB": 442,
+      "QB": 62,
       "RB": 67,
       "WR": 70,
       "TE": 68
     },
-    "previous_training_date": "2026-09-03T13:51:39.623471",
-    "previous_feature_version": "35",
+    "previous_training_date": "2026-09-15T23:56:52.965896",
+    "previous_feature_version": "36",
     "rollback_available": true,
     "n_rollback_versions": 5,
-    "horizon_status_file": "/Users/benrosen/Documents/nfl-player-projections/data/models/horizon_model_status.json",
-    "bounded_scaler_file": "/Users/benrosen/Documents/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
+    "horizon_status_file": "data/models/horizon_model_status.json",
+    "bounded_scaler_file": "data/models/feature_scaler_bounded.joblib"
   },
   "top10_features_per_position": {
     "QB": [
       {
-        "feature": "player_emb_1",
-        "importance": 57.760584178148456
+        "feature": "passing_attempts_roll3_mean",
+        "importance": 153.55517007409904
       },
       {
-        "feature": "player_emb_0",
-        "importance": 33.01000441219395
+        "feature": "contract_apy_rank",
+        "importance": 149.8034775196751
       },
       {
-        "feature": "player_emb_6",
-        "importance": 28.05676365177965
-      },
-      {
-        "feature": "snap_share",
-        "importance": 26.287307371771238
-      },
-      {
-        "feature": "team_a_points_per_drive",
-        "importance": 26.003501832264888
+        "feature": "yards_per_attempt_roll3_mean",
+        "importance": 120.01948742600493
       },
       {
         "feature": "prev_season_ppg",
-        "importance": 22.757269774815168
+        "importance": 113.2987741032849
       },
       {
-        "feature": "player_emb_5",
-        "importance": 21.25288192735694
+        "feature": "rushing_attempts_roll3_mean",
+        "importance": 112.01189139816717
       },
       {
-        "feature": "ngs_avg_air_yards_to_sticks_roll3_mean",
-        "importance": 17.751884603508245
+        "feature": "spread",
+        "importance": 101.76995569214452
       },
       {
-        "feature": "td_rate_roll3_mean",
-        "importance": 15.502809153355347
+        "feature": "bayesian_prior_ppg",
+        "importance": 87.28422600531695
       },
       {
-        "feature": "snap_count",
-        "importance": 15.264496661580996
+        "feature": "rushing_yards_roll3_mean",
+        "importance": 81.7620391567049
+      },
+      {
+        "feature": "age_curve",
+        "importance": 71.50574394736692
+      },
+      {
+        "feature": "passing_tds_roll3_mean",
+        "importance": 68.02159200709058
       }
     ],
     "RB": [
       {
-        "feature": "snap_share_pct_roll3_mean",
-        "importance": 104.5883263909466
-      },
-      {
         "feature": "contract_apy_rank",
-        "importance": 96.01282355343837
-      },
-      {
-        "feature": "prev_season_ppg",
-        "importance": 76.5245542403281
-      },
-      {
-        "feature": "yards_per_carry_roll3_mean",
-        "importance": 75.26175100452
+        "importance": 212.50807556354582
       },
       {
         "feature": "rush_share_pct_roll3_mean",
-        "importance": 69.05513171753442
+        "importance": 203.36305130654617
       },
       {
-        "feature": "bayesian_prior_ppg",
-        "importance": 50.76943759479176
+        "feature": "targets_roll3_mean",
+        "importance": 193.77899396329872
       },
       {
         "feature": "snap_share_accel",
-        "importance": 43.75550643206523
+        "importance": 182.00541609319305
       },
       {
-        "feature": "team_motion_rate",
-        "importance": 40.755558319029646
+        "feature": "prev_season_ppg",
+        "importance": 166.77464234656222
       },
       {
-        "feature": "availability_3yr",
-        "importance": 40.50534167133824
+        "feature": "yards_per_carry_roll3_mean",
+        "importance": 166.51198187462484
       },
       {
-        "feature": "rush_epa_per_play_roll3_mean",
-        "importance": 40.25580887884129
+        "feature": "snap_share_pct_roll3_mean",
+        "importance": 166.01115472121214
+      },
+      {
+        "feature": "age_curve",
+        "importance": 157.00688086231116
+      },
+      {
+        "feature": "fp_volatility_roll5",
+        "importance": 145.76506118677858
+      },
+      {
+        "feature": "speed_score",
+        "importance": 135.75436166147009
       }
     ],
     "WR": [
       {
         "feature": "contract_apy_rank",
-        "importance": 75.00956973573174
+        "importance": 227.00575387866698
       },
       {
         "feature": "prev_season_ppg",
-        "importance": 71.024217392388
-      },
-      {
-        "feature": "availability_3yr",
-        "importance": 66.2547779437664
-      },
-      {
-        "feature": "snap_share_pct_roll3_mean",
-        "importance": 50.273257316626314
-      },
-      {
-        "feature": "yards_per_target_roll3_mean",
-        "importance": 49.50665783554615
-      },
-      {
-        "feature": "current_qb_epa_per_att",
-        "importance": 48.25339467410704
-      },
-      {
-        "feature": "receptions_roll3_mean",
-        "importance": 48.05853150377646
-      },
-      {
-        "feature": "pbp_pass_play_participation_pct_roll3_mean",
-        "importance": 46.53473382233263
+        "importance": 216.28223885926926
       },
       {
         "feature": "wopr_roll3",
-        "importance": 44.057427366102125
+        "importance": 165.8769858382568
       },
       {
         "feature": "snap_share_accel",
-        "importance": 43.00402638109201
+        "importance": 164.50406538142605
+      },
+      {
+        "feature": "fp_volatility_roll5",
+        "importance": 150.25819552236175
+      },
+      {
+        "feature": "receptions_roll3_mean",
+        "importance": 145.583223468133
+      },
+      {
+        "feature": "bayesian_prior_ppg",
+        "importance": 142.51435768114433
+      },
+      {
+        "feature": "snap_share_pct_roll3_mean",
+        "importance": 141.04305711147143
+      },
+      {
+        "feature": "age_curve",
+        "importance": 113.00297033557675
+      },
+      {
+        "feature": "speed_score",
+        "importance": 106.50237070795974
       }
     ],
     "TE": [
       {
-        "feature": "pbp_pass_play_participation_pct_roll3_mean",
-        "importance": 90.3425130610676
-      },
-      {
         "feature": "prev_season_ppg",
-        "importance": 69.51632820030783
+        "importance": 134.27330302848915
       },
       {
         "feature": "wopr_roll3",
-        "importance": 45.81523816337955
+        "importance": 121.36160312569575
       },
       {
-        "feature": "contract_apy_rank",
-        "importance": 38.00778146245882
+        "feature": "pbp_pass_play_participation_pct_roll3_mean",
+        "importance": 89.01364500709846
       },
       {
-        "feature": "team_motion_rate",
-        "importance": 36.25304363541661
+        "feature": "depth_chart_rank",
+        "importance": 87.75911789869387
       },
       {
         "feature": "draft_pick",
-        "importance": 34.25577538957021
+        "importance": 81.25511641297392
       },
       {
-        "feature": "team_pct_13_personnel_roll3_mean",
-        "importance": 29.754603431361133
+        "feature": "fp_volatility_roll5",
+        "importance": 73.25603959506431
       },
       {
-        "feature": "targets_roll3_mean",
-        "importance": 28.551598288828586
+        "feature": "snap_share_accel",
+        "importance": 69.2547180035315
       },
       {
-        "feature": "availability_3yr",
-        "importance": 27.75463611579117
+        "feature": "snap_share_pct_roll3_mean",
+        "importance": 68.51571494635277
       },
       {
-        "feature": "rookie_draft_value",
-        "importance": 26.503046523602574
+        "feature": "age_curve",
+        "importance": 65.75437447595363
+      },
+      {
+        "feature": "bayesian_prior_ppg",
+        "importance": 63.0135420616724
       }
     ]
   },
   "feature_importance_stability": {
     "QB": {
-      "overlap_pct": 20.0,
-      "stable": false,
-      "new_features": [
-        "player_emb_0",
-        "player_emb_1",
-        "player_emb_5",
-        "player_emb_6",
-        "snap_count",
-        "snap_share",
-        "td_rate_roll3_mean",
-        "team_a_points_per_drive"
-      ],
-      "dropped_features": [
-        "bayesian_prior_ppg",
-        "contract_apy_rank",
-        "ngs_aggressiveness_roll3_mean",
-        "opp_fpts_allowed",
-        "spread",
-        "team_neutral_pass_rate_oe_roll3_mean",
-        "team_pace_sec_per_play_roll3_mean",
-        "yards_per_attempt_roll3_mean"
-      ]
+      "overlap_pct": 100.0,
+      "stable": true,
+      "new_features": [],
+      "dropped_features": []
     },
     "RB": {
       "overlap_pct": 80.0,
       "stable": true,
       "new_features": [
-        "availability_3yr",
-        "yards_per_carry_roll3_mean"
+        "age_curve",
+        "speed_score"
       ],
       "dropped_features": [
-        "team_pace_sec_per_play_roll3_mean",
-        "team_play_action_rate"
+        "catch_rate_roll3_mean",
+        "rushing_attempts_roll3_mean"
       ]
     },
     "WR": {
-      "overlap_pct": 60.0,
+      "overlap_pct": 90.0,
       "stable": true,
       "new_features": [
-        "availability_3yr",
-        "current_qb_epa_per_att",
-        "receptions_roll3_mean",
-        "yards_per_target_roll3_mean"
+        "age_curve"
       ],
       "dropped_features": [
-        "bayesian_prior_ppg",
-        "fp_volatility_roll5",
-        "team_motion_rate",
-        "team_neutral_pass_rate_oe_roll3_mean"
+        "current_qb_epa_per_att"
       ]
     },
     "TE": {
-      "overlap_pct": 40.0,
-      "stable": false,
+      "overlap_pct": 90.0,
+      "stable": true,
       "new_features": [
-        "availability_3yr",
-        "draft_pick",
-        "rookie_draft_value",
-        "targets_roll3_mean",
-        "team_motion_rate",
-        "team_pct_13_personnel_roll3_mean"
+        "pbp_pass_play_participation_pct_roll3_mean"
       ],
       "dropped_features": [
-        "opp_fpts_allowed",
-        "recv_epa_per_target_roll3_mean",
-        "snap_share_accel",
-        "team_neutral_pass_rate_oe_roll3_mean",
-        "team_pace_sec_per_play_roll3_mean",
-        "team_target_concentration_roll3_mean"
+        "targets_roll3_mean"
       ]
     }
   },

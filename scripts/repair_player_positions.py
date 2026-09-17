@@ -39,7 +39,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.settings import DB_PATH, POSITIONS
+from config.settings import DB_PATH
 
 AUDIT_PATH = PROJECT_ROOT / "data" / "experiments" / "position_repair_audit.csv"
 
@@ -80,10 +80,13 @@ def build_report(conn: sqlite3.Connection, roster: dict, feed: dict) -> pd.DataF
     df["feed_position"] = df.player_id.map(feed)
     # Roster wins: it is week-specific, the player index is a single snapshot.
     df["correct_position"] = df.roster_position.fillna(df.feed_position)
+    # A correction OUT of the skill positions is a repair too: the authority
+    # map now resolves never-skill players (linemen, punters, kickers) to
+    # their real roster position, and a tackle stored as WR must stop being
+    # served as a one-game rookie receiver.
     df["needs_repair"] = (
         df.correct_position.notna()
         & (df.correct_position != df.position)
-        & df.correct_position.isin(POSITIONS)
     )
     df["sources_disagree"] = (
         df.roster_position.notna() & df.feed_position.notna()

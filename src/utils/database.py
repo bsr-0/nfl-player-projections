@@ -1455,12 +1455,23 @@ class DatabaseManager:
             return count
 
     def get_authoritative_player_positions(self) -> Dict[str, str]:
-        """Return authoritative skill-position labels keyed by ``player_id``.
+        """Return authoritative position labels keyed by ``player_id``.
 
         Priority order:
         1. ``weekly_rosters_v2`` latest (season, week) snapshot
         2. ``weekly_rosters`` latest (season, week) snapshot
         3. ``rosters`` latest season snapshot
+
+        A player who has EVER held a skill position (QB/RB/WR/TE) on a roster
+        gets their latest skill-position row, so a TE who later converted to
+        LB keeps the label their stats were earned under. A player whose
+        roster history NEVER shows a skill position gets their latest roster
+        row verbatim (``OL``, ``P``, ``K``, ``DB``, ...). Until 2026-09-16
+        those players were invisible to this map, so a tackle who recovered
+        one fumble and was stamped WR by the PBP aggregator stayed WR
+        forever: 29 linemen/punters/kickers were served as one-game rookie
+        skill players, and the training path handed each a draft-round
+        rookie prior (a 2017 first-round tackle drew the rd1 WR prior).
         """
         def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
             row = conn.execute(
@@ -1475,12 +1486,17 @@ class DatabaseManager:
             *,
             season_col: str = "season",
             week_col: Optional[str] = "week",
+            skill_only: bool = True,
         ) -> List[Tuple[str, str]]:
             if not _table_exists(conn, table_name):
                 return []
             order_by = f"{season_col} DESC"
             if week_col is not None:
                 order_by += f", {week_col} DESC"
+            position_filter = (
+                "position IN ('QB','RB','WR','TE')" if skill_only
+                else "position IS NOT NULL AND TRIM(position) != ''"
+            )
             query = f"""
                 SELECT player_id, position
                 FROM (
@@ -1491,7 +1507,7 @@ class DatabaseManager:
                                ORDER BY {order_by}
                            ) AS rn
                     FROM {table_name}
-                    WHERE position IN ('QB','RB','WR','TE')
+                    WHERE {position_filter}
                       AND player_id IS NOT NULL
                       AND TRIM(player_id) != ''
                 )
@@ -1499,19 +1515,29 @@ class DatabaseManager:
             """
             return conn.execute(query).fetchall()
 
+        tables = [
+            ("weekly_rosters_v2", "week"),
+            ("weekly_rosters", "week"),
+            ("rosters", None),
+        ]
         pos_map: Dict[str, str] = {}
         with self._get_connection() as conn:
-            for table_name, week_col in [
-                ("weekly_rosters_v2", "week"),
-                ("weekly_rosters", "week"),
-                ("rosters", None),
-            ]:
+            for table_name, week_col in tables:
                 for player_id, position in _latest_rows(
-                    conn,
-                    table_name,
-                    week_col=week_col,
+                    conn, table_name, week_col=week_col, skill_only=True,
                 ):
                     pos_map.setdefault(player_id, position)
+            # Never-skill players: latest roster row of any position. FB/HB
+            # fold into RB here, as the ingest pipeline does
+            # (pbp_stats_aggregator), so a career fullback is not evicted
+            # from RB by reconcile_player_positions_from_rosters.
+            for table_name, week_col in tables:
+                for player_id, position in _latest_rows(
+                    conn, table_name, week_col=week_col, skill_only=False,
+                ):
+                    pos_map.setdefault(
+                        player_id, {"FB": "RB", "HB": "RB"}.get(position, position)
+                    )
         return pos_map
 
     def reconcile_player_positions_from_rosters(self) -> int:

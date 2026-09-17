@@ -72,8 +72,13 @@ def _model_features(p):
 
 def test_model_features_agree_between_paths(preps):
     p, a, b = preps
-    feats = [f for f in _model_features(p) if f in a.columns and f in b.columns]
-    assert len(feats) > 300
+    model_feats = _model_features(p)
+    feats = [f for f in model_feats if f in a.columns and f in b.columns]
+    # Causal mode caps each position at its CAUSAL_FEATURES list (~65), so
+    # the union is ~100, not the 465-column full matrix. What matters is
+    # that (nearly) every feature a model was fit on exists on both paths.
+    missing = sorted(set(model_feats) - set(feats))
+    assert len(feats) >= 0.95 * len(model_feats), missing
     disagreeing = []
     for f in feats:
         x, y = pd.to_numeric(a[f], errors="coerce"), pd.to_numeric(b[f], errors="coerce")

@@ -146,3 +146,47 @@ def test_fullback_is_not_flagged_as_a_mismatched_running_back(tmp_path, monkeypa
     monkeypatch.setattr(DatabaseManager, "get_authoritative_player_positions",
                         lambda self: {"a": "FB"})
     assert quality_gates.check_position_integrity(db_path=tmp_path / "g3.db")["passed"]
+
+
+def _seed_rosters(d, rows):
+    with d._get_connection() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS weekly_rosters_v2 "
+                     "(season INTEGER, week INTEGER, team TEXT, position TEXT, player_id TEXT)")
+        conn.executemany("INSERT INTO weekly_rosters_v2 VALUES (?,?,?,?,?)", rows)
+        conn.commit()
+
+
+def test_authority_covers_players_who_were_never_skill_players(db):
+    """A tackle who recovered one fumble was stamped WR by the aggregator and
+    stayed WR forever, because the authority map only looked at roster rows
+    with a skill position. Never-skill players must resolve to their real
+    roster position so reconcile/quality-gate/repair can see them."""
+    _seed_rosters(db, [
+        (2024, 1, "DEN", "OL", "tackle"), (2025, 7, "DEN", "OL", "tackle"),
+        (2025, 3, "PHI", "P", "punter"),
+        (2025, 3, "SF", "FB", "fullback"),
+    ])
+    for pid, pos in [("tackle", "WR"), ("punter", "QB"), ("fullback", "RB")]:
+        db.insert_player({"player_id": pid, "name": pid, "position": pos})
+
+    m = db.get_authoritative_player_positions()
+    assert m["tackle"] == "OL"
+    assert m["punter"] == "P"
+    assert m["fullback"] == "RB", "FB folds into RB, as ingestion does"
+
+    assert db.reconcile_player_positions_from_rosters() == 2
+    assert _position(db, "tackle") == "OL"
+    assert _position(db, "punter") == "P"
+    assert _position(db, "fullback") == "RB"
+
+
+def test_authority_keeps_the_stats_era_label_for_position_switchers(db):
+    """A TE whose latest roster row says LB earned his stats as a TE; the
+    latest SKILL row wins whenever one exists."""
+    _seed_rosters(db, [
+        (2018, 1, "HOU", "TE", "switcher"), (2020, 17, "ARI", "TE", "switcher"),
+        (2023, 1, "ARI", "LB", "switcher"),
+    ])
+    db.insert_player({"player_id": "switcher", "name": "J.Thomas", "position": "TE"})
+    assert db.get_authoritative_player_positions()["switcher"] == "TE"
+    assert db.reconcile_player_positions_from_rosters() == 0

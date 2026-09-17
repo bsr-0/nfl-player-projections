@@ -1,32 +1,32 @@
 {
   "RB": {
-    "snap_share": 0.8403933865402375,
-    "rush_share": 0.0320764543214557,
-    "target_share": 0.030000000000000002,
+    "snap_share": 0.26512042858163926,
+    "rush_share": 0.10727814161427744,
+    "target_share": 0.37589141350510363,
     "redzone_share": 0.030000000000000002,
-    "touch_share": 0.03569052442918036,
-    "high_value_touch": 0.031839634709126395
+    "touch_share": 0.1701171086894872,
+    "high_value_touch": 0.05159290760949255
   },
   "WR": {
-    "target_share": 0.1549520493176118,
-    "air_yards_share": 0.20298802119862044,
-    "snap_share": 0.339426357405573,
-    "redzone_targets": 0.029999999999999992,
-    "route_participation": 0.2726335720781947,
-    "high_value_touch": 0.0
+    "target_share": 0.4266049568463431,
+    "air_yards_share": 0.2574914468194743,
+    "snap_share": 0.15543413371010212,
+    "redzone_targets": 0.030000000000000002,
+    "route_participation": 0.12385152659225297,
+    "high_value_touch": 0.006617936031827554
   },
   "TE": {
-    "target_share": 0.029999999999999992,
-    "snap_share": 0.687885481776181,
-    "redzone_targets": 0.029999999999999992,
-    "air_yards_share": 0.029999999999999992,
-    "inline_rate": 0.18940078695035356,
-    "high_value_touch": 0.03271373127346528
+    "target_share": 0.24084335776778001,
+    "snap_share": 0.42734173576777146,
+    "redzone_targets": 0.03,
+    "air_yards_share": 0.05651647783906373,
+    "inline_rate": 0.22447922795516154,
+    "high_value_touch": 0.02081920067022325
   },
   "QB": {
     "dropback_rate": 0.03,
-    "rush_attempt_share": 0.20027562870058882,
-    "redzone_opportunity": 0.2461423092946946,
-    "play_volume": 0.5235820620047166
+    "rush_attempt_share": 0.21179386922013094,
+    "redzone_opportunity": 0.2222293796803124,
+    "play_volume": 0.5359767510995567
   }
 }

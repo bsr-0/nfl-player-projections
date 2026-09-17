@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-10T23:18:15.469429",
+  "generated_at": "2026-09-16T09:27:11.683827",
   "strict_requirements": false,
-  "training_seasons": 7,
+  "training_seasons": 19,
   "min_training_seasons": {
     "1w": 3,
     "4w": 4,
@@ -13,10 +13,10 @@
     "18w_pass": true
   },
   "players_per_position": {
-    "QB": 139,
-    "RB": 317,
-    "WR": 507,
-    "TE": 284
+    "QB": 250,
+    "RB": 648,
+    "WR": 921,
+    "TE": 508
   },
   "min_players_per_position": {
     "QB": 30,

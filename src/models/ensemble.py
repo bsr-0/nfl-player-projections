@@ -1296,17 +1296,32 @@ class ModelTrainer:
                 decay = np.power(0.5, (max_season - seasons_f) / float(halflife))
                 sample_weight = decay / decay.max()
 
-        n_features = MODEL_CONFIG.get("n_features_per_position", 50)
-        corr_thresh = MODEL_CONFIG.get("correlation_threshold", 0.92)
-        if len(X.columns) > n_features:
-            # Feature selection on training portion only to avoid leakage into val
-            val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
-            fs_split = int(len(X) * (1 - val_pct))
-            _, selected_cols = select_features_simple(
-                X.iloc[:fs_split], y_dict_util[1].iloc[:fs_split],
-                n_features=n_features, correlation_threshold=corr_thresh
-            )
-            X = X[selected_cols] if selected_cols else X
+        # Feature selection: causal mode uses the predefined QB list, exactly
+        # as the single-model path does for RB/WR/TE. Until 2026-09-16 this
+        # path skipped that step and leaned on select_features_simple, which
+        # is a no-op in causal mode -- so whenever QB had enough holdout rows
+        # to reach the dual path it trained on every numeric column (465)
+        # instead of CAUSAL_FEATURES["QB"] (62).
+        from config.settings import FEATURE_MODE, CAUSAL_FEATURES
+        if FEATURE_MODE == "causal":
+            causal_cols = CAUSAL_FEATURES.get("QB", [])
+            available_causal = [c for c in causal_cols if c in X.columns]
+            if available_causal:
+                X = X[available_causal]
+            print(f"  Causal mode: using {len(X.columns)} features for QB (dual path): "
+                  f"{list(X.columns)}", flush=True)
+        else:
+            n_features = MODEL_CONFIG.get("n_features_per_position", 50)
+            corr_thresh = MODEL_CONFIG.get("correlation_threshold", 0.92)
+            if len(X.columns) > n_features:
+                # Feature selection on training portion only to avoid leakage into val
+                val_pct = float(MODEL_CONFIG.get("validation_pct", 0.2))
+                fs_split = int(len(X) * (1 - val_pct))
+                _, selected_cols = select_features_simple(
+                    X.iloc[:fs_split], y_dict_util[1].iloc[:fs_split],
+                    n_features=n_features, correlation_threshold=corr_thresh
+                )
+                X = X[selected_cols] if selected_cols else X
 
         # --- Use a VALIDATION SPLIT from training data for model selection ---
         # Never use the held-out test set to pick between model variants.
