@@ -9,9 +9,8 @@ at all four positions) a zero-variance column, along with `age_factor`,
 `age_expected_games`, `decline_rate`, `years_from_peak` and `is_in_prime`.
 See GAPS.md 2026-08-19.
 
-Age is taken as of Sept 1 of the season, matching
-`preseason_projector.PreseasonProjector._season_start`, so a single player
-has one age for the whole season rather than one that ticks over mid-year.
+Age is taken as of Sept 1 of the season, so a single player has one age
+for the whole season rather than one that ticks over mid-year.
 Birth date is static and known years in advance, so this introduces no
 look-ahead.
 

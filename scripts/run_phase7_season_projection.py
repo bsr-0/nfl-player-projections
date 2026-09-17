@@ -39,7 +39,7 @@ def main():
     parser.add_argument(
         "--preseason-mode", action="store_true",
         help="Score as a TRUE preseason (August) forecast, information-matched "
-             "to the three arms in walk_forward_preseason.py: no week is treated "
+             "to the three arms in the (since deleted) walk_forward_preseason.py: no week is treated "
              "as known-played, carry-forward is restricted to prior seasons, and "
              "opponents are graded on last season's defense. See "
              "run_season_projection's docstring for the full list of closed leaks.")

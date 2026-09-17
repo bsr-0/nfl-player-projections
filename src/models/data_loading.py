@@ -8,8 +8,6 @@ from config.settings import (
     POSITIONS,
     MODEL_CONFIG,
     MIN_TRAINING_SEASONS_1W,
-    MIN_TRAINING_SEASONS_18W,
-    MIN_TRAINING_SEASONS_4W,
     MIN_PLAYERS_PER_POSITION,
 )
 from src.utils.database import DatabaseManager
@@ -180,20 +178,11 @@ def load_training_data(positions: list = None, min_games: int = 4,
         print(f"  Training: {len(train_data)} records from seasons {train_seasons}")
         print(f"  Testing: {len(test_data)} records from season {auto_test_season}")
     n_seasons = len(train_seasons)
-    # Requirement-derived minimums: warn (or fail in strict mode) when below
-    # (1w min 3, 4w min 5, 18w min 8)
+    # Requirement-derived minimum: warn (or fail in strict mode) when below
     requirement_failures = []
     if n_seasons < MIN_TRAINING_SEASONS_1W:
         msg = f"1-week model requires >= {MIN_TRAINING_SEASONS_1W} training seasons (have {n_seasons})"
         print(f"  WARNING: {msg}. Accuracy may suffer.")
-        requirement_failures.append(msg)
-    if MODEL_CONFIG.get("use_18w_deep", True) and n_seasons < MIN_TRAINING_SEASONS_18W:
-        msg = f"18-week deep model requires >= {MIN_TRAINING_SEASONS_18W} training seasons (have {n_seasons})"
-        print(f"  WARNING: {msg}. Consider skipping or adding data.")
-        requirement_failures.append(msg)
-    if MODEL_CONFIG.get("use_4w_hybrid", True) and n_seasons < MIN_TRAINING_SEASONS_4W:
-        msg = f"4-week hybrid model benefits from >= {MIN_TRAINING_SEASONS_4W} training seasons (have {n_seasons})"
-        print(f"  WARNING: {msg}.")
         requirement_failures.append(msg)
     # Per-position player minimums (requirements: QB 30+, RB 60+, WR 70+, TE 30+)
     train_players_per_pos = train_data.groupby("position")["player_id"].nunique()

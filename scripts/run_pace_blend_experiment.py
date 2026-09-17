@@ -16,8 +16,9 @@ possible consolidation: one scalar, no retrain.
 Inputs, both out-of-fold with respect to the season scored:
   * the latest trusted serving-path walk-forward rows
     (data/backtest_results/backtest_<season>_<date>.rows.csv), and
-  * the step8 arm of data/experiments/walk_forward_player_predictions.csv,
-    a season total projected before the season from prior seasons only.
+  * data/step8_pace_by_season.csv (scripts/build_step8_pace_table.py): the
+    Step 8 season total / 17, refit strictly on prior seasons -- the same
+    number NFLPredictor.predict() shrinks toward.
 
 kappa is chosen out-of-sample: players are split in two by id, kappa is
 fit on one half and scored on the other, both ways. The in-sample curve is
@@ -42,13 +43,12 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.settings import DB_PATH  # noqa: E402
+from config.settings import DB_PATH, STEP8_PACE_TABLE  # noqa: E402
 
 GAMES_PER_SEASON = 17
 KAPPAS = [0.0, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 20.0, np.inf]
 OUT_DIR = PROJECT_ROOT / "data" / "experiments"
 BACKTEST_DIR = PROJECT_ROOT / "data" / "backtest_results"
-WF_PATH = OUT_DIR / "walk_forward_player_predictions.csv"
 
 
 def latest_rows(season: int) -> Path:
@@ -124,15 +124,14 @@ def main() -> int:
 
     rows_path = args.rows or latest_rows(args.season)
     rows = pd.read_csv(rows_path)
-    wf = pd.read_csv(WF_PATH)
-    s8 = wf[(wf["arm"] == "step8") & (wf["season"] == args.season)][["player_id", "pred"]]
-    s8 = s8.rename(columns={"pred": "step8_total"})
+    s8 = pd.read_csv(STEP8_PACE_TABLE)
+    s8 = s8[s8["season"] == args.season][["player_id", "step8_pace"]]
 
     df = rows.merge(s8, on="player_id", how="inner")
     df = df.merge(games_before(args.season), on=["player_id", "week"], how="left")
     df = df[df["predicted_points"].notna() & df["games_before"].notna()].copy()
     df["weekly"] = df["predicted_points"].astype(float)
-    df["pace"] = df["step8_total"].astype(float) / GAMES_PER_SEASON
+    df["pace"] = df["step8_pace"].astype(float)
     df["fold"] = df["player_id"].map(fold_of)
     y = df["fantasy_points"].to_numpy()
 

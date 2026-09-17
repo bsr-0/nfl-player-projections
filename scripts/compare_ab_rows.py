@@ -26,8 +26,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
+from config.settings import STEP8_PACE_TABLE  # noqa: E402
 from run_pace_blend_experiment import (  # noqa: E402
-    GAMES_PER_SEASON, WF_PATH, games_before, mae, paired_bootstrap, rmse,
+    games_before, mae, paired_bootstrap, rmse,
 )
 
 KAPPA = 3.0
@@ -91,10 +92,9 @@ def main() -> int:
         print(f"  {pos}  n={m['n']:5d}   {m[args.label_a]:.3f} / {m[args.label_b]:.3f}")
 
     # --- blend on top of each arm ------------------------------------------
-    wf = pd.read_csv(WF_PATH)
-    s8 = wf[(wf.arm == "step8") & (wf.season == season)][["player_id", "pred"]]
+    s8 = pd.read_csv(STEP8_PACE_TABLE)
+    s8 = s8[s8.season == season][["player_id", "step8_pace"]].rename(columns={"step8_pace": "pace"})
     sub = df.merge(s8, on="player_id", how="inner").copy()
-    sub["pace"] = sub["pred"] / GAMES_PER_SEASON
     g = sub["games_before"].to_numpy(dtype=float)
     w = g / (g + KAPPA)
     yy = sub.fantasy_points.to_numpy()

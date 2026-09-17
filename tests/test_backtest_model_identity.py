@@ -31,10 +31,6 @@ class _MultiWeek:
         self.models = {h: pm for h in horizons}
 
 
-class _Component:
-    pass
-
-
 def test_describe_model_type_is_derived_from_fitted_objects(tmp_path, monkeypatch):
     import src.evaluation.backtester as bt
     monkeypatch.setattr(bt, "MODELS_DIR", tmp_path)
@@ -42,14 +38,11 @@ def test_describe_model_type_is_derived_from_fitted_objects(tmp_path, monkeypatc
 
     out = describe_model_type(
         {"QB": _MultiWeek(["xgboost", "ridge"], meta=True),
-         "RB": _MultiWeek(["random_forest"], meta=False, horizons=(1,)),
-         "TE": None},
-        component_predictors={"TE": _Component()},
+         "RB": _MultiWeek(["random_forest"], meta=False, horizons=(1,))},
     )
     assert out["model_type"] == "per_position_stacked_ensemble"
     assert out["model_type_by_position"]["QB"] == "stacked(RidgeCV meta)[ridge+xgboost] horizons=[1, 2, 3, 4]"
     assert out["model_type_by_position"]["RB"] == "weighted_blend[random_forest] horizons=[1]"
-    assert out["model_type_by_position"]["TE"] == "component_predictor:_Component"
     assert out["models_feature_version"] == "35"
     assert out["feature_version"]  # the code's, always present
 

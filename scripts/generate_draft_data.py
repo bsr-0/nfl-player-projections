@@ -20,7 +20,6 @@ Usage:
 """
 import json
 import sys
-import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -37,6 +36,14 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 
 # Floor/ceiling spread formula for _resolve_projection() (GAPS.md §7.4
 # follow-up, 2026-08-05).
+#
+# OPEN (2026-09-17): every constant below was fit to PreseasonProjector
+# residuals, and the board has served Step 8 since 2026-08-28. The
+# PreseasonProjector model and scripts/calibrate_floor_ceiling.py were
+# deleted 2026-09-17, so the bands cannot be refit as-is; a refit needs the
+# Step 8 walk-forward residuals (scripts/build_step8_pace_table.py produces
+# the out-of-sample Step 8 projections per season). Until then these bands
+# are a different model's error distribution applied to Step 8's numbers.
 #
 # History: the original formula was `spread = 1.5 * fp_std * sqrt(17)`,
 # where fp_std is a player's own prior-season week-to-week volatility.
@@ -633,8 +640,8 @@ def _load_ml_predictions(upcoming_season: int):
         ]
         if upcoming.empty:
             return None
-        # Check if these are actual ML predictions (have projection_18w column with non-null values)
-        proj_cols = [c for c in ["projection_1w", "projection_4w", "projection_18w"] if c in upcoming.columns]
+        # Only the 1-week horizon is trained (TRAINING_HORIZONS); 4w/18w were retired.
+        proj_cols = [c for c in ["projection_1w"] if c in upcoming.columns]
         if not proj_cols:
             return None
         has_predictions = False
@@ -649,7 +656,6 @@ def _load_ml_predictions(upcoming_season: int):
         return None
 
 
-PRESEASON_MODEL = os.getenv("NFL_PRESEASON_MODEL", "step8")
 
 
 def _load_step8_projections(upcoming_season: int):
@@ -699,63 +705,18 @@ def _load_step8_projections(upcoming_season: int):
 
 
 def _load_preseason_projections(upcoming_season: int, prev_season: int):
-    """Season-total projections for the draft board.
+    """Step 8 season-total projections for the draft board, or None.
 
-    Dispatches on PRESEASON_MODEL (env NFL_PRESEASON_MODEL, default "step8").
-    The PreseasonProjector path below is retained for comparison and rollback;
-    it is DEMOTED and last of four arms -- see that module's docstring.
+    Step 8 has been the only season model since 2026-09-17. The
+    PreseasonProjector rollback branch (env NFL_PRESEASON_MODEL) was deleted
+    with that model: it ranked last of four arms on the 2026-08-28
+    walk-forward and had not been served since 2026-08-28.
     """
-    if PRESEASON_MODEL == "step8":
-        try:
-            df = _load_step8_projections(upcoming_season)
-        except Exception:
-            return None
-        return df if df is not None and not df.empty else None
-    return _load_preseason_projector_projections(upcoming_season, prev_season)
-
-
-def _load_preseason_projector_projections(upcoming_season: int, prev_season: int):
-    """Load PreseasonProjector season-total predictions for upcoming_season.
-
-    DEMOTED 2026-08-28 -- retained for rollback/comparison only. Reachable via
-    NFL_PRESEASON_MODEL=preseason_projector.
-
-    Reuses scripts/snake_draft_sim.py's load_preseason_projections() rather
-    than re-deriving the DB query it depends on — that function's feature
-    query exactly mirrors PreseasonProjector's training-time query on
-    purpose (see the comment above it): a simplified/partial query silently
-    produces severely under-estimated projections (missing features
-    zero-fill, which after StandardScaler centering skews everything low).
-
-    Returns a DataFrame indexed by player_id with pred_total (and
-    confidence_score/support_class when available), or None if the
-    projector/DB path fails for any reason — callers should treat that as
-    "fall back to the existing projection_18w tier", not an error.
-    """
-    from scripts.snake_draft_sim import load_preseason_projections
-
-    # season - 1 is queried internally as the "prior" (completed) season, so
-    # passing prev_season + 1 guarantees it queries prev_season itself, even
-    # when main()'s own prev_season fallback (prev_season - 1) has fired
-    # because the naive prev_season had no weekly data yet.
-    #
-    # projection_mode="ml" (not "auto") is deliberate: "auto" silently
-    # degrades to ppg*17 internally when the model file is missing/broken,
-    # and its return value doesn't distinguish that from a real ML
-    # prediction — which would make every player in this file look like it
-    # came from "preseason_model" even when the model was never loaded.
-    # "ml" raises instead, so a missing/broken model surfaces here and this
-    # function can correctly report "no preseason projections" and let the
-    # caller fall through to the projection_18w/ppg tiers.
     try:
-        df = load_preseason_projections(
-            season=prev_season + 1, adp_df=None, projection_mode="ml",
-        )
+        df = _load_step8_projections(upcoming_season)
     except Exception:
         return None
-    if df is None or df.empty or "pred_total" not in df.columns:
-        return None
-    return df
+    return df if df is not None and not df.empty else None
 
 
 def _load_oos_prediction_map():
@@ -937,19 +898,15 @@ def _load_adp_map(season: int) -> dict:
     return lookup
 
 
-def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions: bool,
-                        schedule_available: bool):
-    """Pick a season-total projection for one player, preferring the
-    PreseasonProjector season-total model over the projection_18w fallback.
+def _resolve_projection(row, has_preseason_projection: bool):
+    """Season-total projection for one player from the Step 8 season model.
 
-    Returns (proj_total, proj_ppg, proj_floor, proj_ceiling, source_label).
-
-    PreseasonProjector consumes no schedule/matchup data (it's trained on
-    prior-season aggregate stats only), so unlike projection_18w it is NOT
-    gated behind schedule_available — that's a deliberate behavior change:
-    players get a real number earlier in the offseason, before the
-    schedule drops, instead of waiting on a tier that doesn't actually need
-    the schedule to begin with.
+    Returns (proj_total, proj_ppg, proj_floor, proj_ceiling, source_label);
+    all None when the player has no Step 8 row (the frontend shows "pending").
+    Step 8 consumes no schedule/matchup data, so it is not gated behind the
+    schedule being released. The old fallback tier -- a single-week
+    prediction scaled to 18 weeks under the "weekly_18w" label -- was
+    deleted 2026-09-17 with the 18-week horizon it depended on.
     """
     if has_preseason_projection:
         preseason_total = row.get("preseason_projection_total")
@@ -963,20 +920,6 @@ def _resolve_projection(row, has_preseason_projection: bool, has_ml_predictions:
             proj_ceiling = round(ceiling, 1)
             return proj_total, proj_ppg, proj_floor, proj_ceiling, "preseason_model"
 
-    if has_ml_predictions and schedule_available:
-        p18 = row.get("projection_18w")
-        if pd.notna(p18):
-            total = float(p18)
-            proj_total = round(total, 1)
-            proj_ppg = round(total / 17, 1)
-            # No per-player confidence_score available on this path (that's
-            # specific to PreseasonProjector's predict_with_details) --
-            # _floor_ceiling falls back to FLOOR_CEILING_DEFAULT_CONFIDENCE.
-            floor, ceiling = _floor_ceiling(total, None, row.get("position"))
-            proj_floor = round(floor, 1)
-            proj_ceiling = round(ceiling, 1)
-            return proj_total, proj_ppg, proj_floor, proj_ceiling, "weekly_18w"
-
     return None, None, None, None, None
 
 
@@ -985,13 +928,9 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
                           has_preseason_projection: bool = False):
     """Write per-position JSON files.
 
-    Season-total projections prefer the PreseasonProjector season-total
-    model (see _resolve_projection); projection_18w (a single-week
-    prediction scaled by 18, not a season-level model) is the fallback when
-    the preseason projector is unavailable for a player/position. When no
-    schedule is available for the upcoming season, projection_18w-sourced
-    fields are null so the frontend shows a "pending" state — the preseason
-    model's fields are not schedule-gated (see _resolve_projection).
+    Season-total projections come from the Step 8 season model (see
+    _resolve_projection); a player without a Step 8 row gets null projection
+    fields so the frontend shows a "pending" state.
 
     During the off-season, enriches each player with out-of-sample prediction
     data from the previous season (model_predicted_total, actual_total, error).
@@ -1007,7 +946,7 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
     for pos in ["QB", "RB", "WR", "TE"]:
         pos_df = agg[agg["position"] == pos].copy()
 
-        # Sort: prefer preseason-model projection, then projection_18w, then previous-season PPG
+        # Sort: season-model projection, then previous-season PPG
         pos_has_preseason = (
             has_preseason_projection
             and "preseason_projection_total" in pos_df.columns
@@ -1016,17 +955,13 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
         if pos_has_preseason:
             sort_col = "preseason_projection_total"
             pos_df = pos_df.sort_values(sort_col, ascending=False, na_position="last")
-        elif has_ml_predictions and "projection_18w" in pos_df.columns:
-            sort_col = "projection_18w"
-            pos_df = pos_df.sort_values(sort_col, ascending=False, na_position="last")
         else:
             pos_df = pos_df.sort_values("ppg", ascending=False, na_position="last")
 
         players = []
         for rank, (_, row) in enumerate(pos_df.iterrows(), 1):
             proj_total, proj_ppg, proj_floor, proj_ceiling, projection_source = (
-                _resolve_projection(row, has_preseason_projection, has_ml_predictions,
-                                   schedule_available)
+                _resolve_projection(row, has_preseason_projection)
             )
 
             # OOS prediction data from ts_backtest (for off-season display)
@@ -1053,7 +988,7 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
                 "expected_games": (round(float(row["expected_games"]), 2)
                                    if pd.notna(row.get("expected_games"))
                                    else None),
-                "projection_model": PRESEASON_MODEL,
+                "projection_model": "step8",
                 "risk_score": int(row["risk_score"]) if pd.notna(row.get("risk_score")) else None,
                 "injury_flag": injury_map.get(player_id, False),
                 "age": round(age, 1) if pd.notna(age) else None,
@@ -1074,10 +1009,8 @@ def output_position_files(agg, upcoming_season: int, schedule_available: bool,
         with open(out_path, "w") as f:
             json.dump(_json_safe(players), f, indent=2, allow_nan=False)
         n_preseason = sum(1 for p in players if p["projection_source"] == "preseason_model")
-        n_weekly = sum(1 for p in players if p["projection_source"] == "weekly_18w")
         print(f"  Wrote {len(players)} players to {out_path.name}"
-              f" (preseason model: {n_preseason}, weekly_18w fallback: {n_weekly},"
-              f" pending: {len(players) - n_preseason - n_weekly})")
+              f" (season model: {n_preseason}, pending: {len(players) - n_preseason})")
 
 
 def generate_schedule_impact(upcoming_season: int, schedule_available: bool):
@@ -1461,7 +1394,7 @@ def main():
     ml_df = _load_ml_predictions(upcoming_season)
     if ml_df is not None and not ml_df.empty:
         # Merge ML predictions into agg
-        for col in ["projection_1w", "projection_4w", "projection_18w"]:
+        for col in ["projection_1w"]:
             if col in ml_df.columns:
                 pred_map = ml_df.groupby("player_id")[col].last().to_dict()
                 agg[col] = agg["player_id"].map(pred_map)
@@ -1470,8 +1403,7 @@ def main():
     else:
         print(f"  No ML predictions available for {upcoming_season} season")
 
-    # Preseason season-total model (PreseasonProjector) — preferred over
-    # projection_18w when available; see _load_preseason_projections().
+    # Step 8 season-total model; see _load_preseason_projections().
     has_preseason_projection = False
     preseason_df = None
     try:

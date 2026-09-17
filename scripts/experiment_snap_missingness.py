@@ -81,7 +81,11 @@ def main() -> int:
             t0 = time.time()
             pred, metrics = run_ts_backtest(
                 season=season, positions=POSITIONS,
-                target_mode="component", verbose=False,
+                # The 2026-08 run of this A/B used target_mode="component",
+                # then the production target; that mode was retired
+                # 2026-08-29 and deleted 2026-09-17. A rerun measures the
+                # direct-FP arm, which is what production trains now.
+                target_mode="fp", verbose=False,
             )
             pred["variant"] = variant
             pred.to_csv(out, index=False)

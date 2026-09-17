@@ -66,25 +66,9 @@ def check_config_contract() -> List[CheckResult]:
         )
     )
 
-    # Multi-horizon model config contract
-    model_cfg = getattr(settings, "MODEL_CONFIG", {})
-    has_cfg, missing_cfg = _has_all_keys(
-        model_cfg,
-        [
-            "use_4w_hybrid",
-            "use_18w_deep",
-            "lstm_weight",
-            "arima_weight",
-            "deep_blend_traditional",
-        ],
-    )
-    out.append(
-        CheckResult(
-            name="model_config_multi_horizon_keys",
-            passed=has_cfg,
-            details=f"missing={missing_cfg}" if not has_cfg else "all keys present",
-        )
-    )
+    # (The multi-horizon config contract -- use_4w_hybrid / use_18w_deep /
+    # LSTM+ARIMA weights -- was dropped 2026-09-17 with those models; only
+    # the 1-week horizon is trained, see TRAINING_HORIZONS.)
 
     # Production retraining config contract
     retraining_cfg = getattr(settings, "RETRAINING_CONFIG", {})
@@ -108,7 +92,6 @@ def check_model_architecture_contract() -> List[CheckResult]:
     out: List[CheckResult] = []
 
     position_models = _import("src.models.position_models")
-    horizon_models = _import("src.models.horizon_models")
     util_converter = _import("src.models.utilization_to_fp")
 
     out.append(
@@ -119,16 +102,6 @@ def check_model_architecture_contract() -> List[CheckResult]:
                 for cls_name in ["PositionModel", "MultiWeekModel"]
             ),
             details="PositionModel + MultiWeekModel must exist",
-        )
-    )
-    out.append(
-        CheckResult(
-            name="horizon_model_classes",
-            passed=all(
-                hasattr(horizon_models, cls_name)
-                for cls_name in ["Hybrid4WeekModel", "DeepSeasonLongModel"]
-            ),
-            details="Hybrid4WeekModel + DeepSeasonLongModel must exist",
         )
     )
     out.append(

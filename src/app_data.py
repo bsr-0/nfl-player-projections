@@ -172,12 +172,10 @@ def load_optimal_training_config() -> Optional[Dict[str, Any]]:
         return None
 
 
-# Standard projection columns and display labels (1w, 4w, 5w, 18w supported)
+# Projection columns and display labels. Only the 1-week horizon is trained
+# (TRAINING_HORIZONS); the 4w/18w models were retired and deleted 2026-09-17.
 PROJECTION_LABELS = {
     "projection_1w": "1 week",
-    "projection_4w": "4 weeks",
-    "projection_5w": "5 weeks",
-    "projection_18w": "18 weeks",
     "predicted_points": "1 week",
 }
 

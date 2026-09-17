@@ -547,16 +547,15 @@ def _attach_actual_totals(
 def load_preseason_projections(
     season: int,
     adp_df: pd.DataFrame = None,
-    projection_mode: str = "auto",
     actuals_season: int | None = None,
-    projector_path: Path | None = None,
 ) -> pd.DataFrame:
-    """Build preseason projections from prior-season stats.
+    """Build preseason projections from prior-season stats: PPG x 17.
 
-    ``projection_mode``:
-      - ``auto``: try the trained preseason projector, then fall back to PPG x 17
-      - ``ml``: require the trained preseason projector
-      - ``ppg17``: use prior-season fantasy points per game x 17
+    This is the FALLBACK frame (draft advisor, dashboard rookies/unmatched
+    ADP rows), not the board. The board's season totals come from Step 8 via
+    scripts/generate_draft_data.py. The ``ml`` mode that read
+    preseason_projector.json (PreseasonProjector, last of four arms on the
+    2026-08-28 walk-forward) was deleted with that model on 2026-09-17.
 
     If ``actuals_season`` is provided, overwrite ``actual_total`` with the
     realized totals from that season so the frame can drive a historical
@@ -565,10 +564,7 @@ def load_preseason_projections(
     from src.utils.database import DatabaseManager
     prior = season - 1
     with DatabaseManager()._get_connection() as conn:
-        # Full feature query — matches PreseasonProjector._build_season_pairs() so
-        # that predict() receives all the features it was trained on (not just ppg).
-        # Missing features in a minimal query get filled with 0, which after
-        # StandardScaler centering produces severely under-estimated projections.
+        # Per-game aggregates of the prior season; ppg x 17 is the projection.
         prior_df = pd.read_sql(
             """
             SELECT pws.player_id,
@@ -618,66 +614,9 @@ def load_preseason_projections(
         prior_df["actual_total"] = 0.0
 
     if not prior_df.empty:
-        if projection_mode not in {"auto", "ml", "ppg17"}:
-            raise ValueError(f"unknown projection_mode={projection_mode!r}")
-
-        if projection_mode == "ppg17":
-            prior_df["model_rank_value"] = prior_df["ppg"] * 17
-            prior_df["pred_total"] = prior_df["model_rank_value"]
-            prior_df = prior_df.drop(columns=["ppg"])
-        else:
-            # Try ML season-total projector first; optionally fall back to PPG × 17.
-            try:
-                from pathlib import Path as _Path
-                _projector_path = (
-                    _Path(projector_path)
-                    if projector_path is not None
-                    else _Path(__file__).resolve().parent.parent / "data" / "models" / "preseason_projector.json"
-                )
-                if _projector_path.exists():
-                    from src.models.preseason_projector import PreseasonProjector
-                    _proj = PreseasonProjector.load(_projector_path)
-                    _ml_preds = []
-                    _ml_conf = []
-                    _ml_support = []
-                    for pos in ("QB", "RB", "WR", "TE"):
-                        pos_mask = prior_df["position"] == pos
-                        if pos_mask.any() and pos in _proj.models:
-                            pos_df = prior_df[pos_mask].copy()
-                            # predict_with_details() also carries confidence_score/
-                            # support_class, which predict() (a thin wrapper around
-                            # it, see preseason_projector.py) discards — callers that
-                            # want per-player confidence for e.g. floor/ceiling
-                            # sizing need this richer form.
-                            details = _proj.predict_with_details(pos_df, pos)
-                            for idx, pred, conf, support in zip(
-                                pos_df.index, details["pred"],
-                                details["confidence_score"], details["support_class"],
-                            ):
-                                _ml_preds.append((idx, pred))
-                                _ml_conf.append((idx, conf))
-                                _ml_support.append((idx, support))
-                    if _ml_preds:
-                        ml_series = {idx: val for idx, val in _ml_preds}
-                        conf_series = {idx: val for idx, val in _ml_conf}
-                        support_series = {idx: val for idx, val in _ml_support}
-                        prior_df["model_rank_value"] = prior_df.index.map(
-                            lambda i: ml_series.get(i, prior_df.loc[i, "ppg"] * 17)
-                        )
-                        prior_df["pred_total"] = prior_df["model_rank_value"]
-                        prior_df["confidence_score"] = prior_df.index.map(conf_series)
-                        prior_df["support_class"] = prior_df.index.map(support_series)
-                        prior_df = prior_df.drop(columns=["ppg"])
-                    else:
-                        raise ValueError("No ML predictions produced")
-                else:
-                    raise FileNotFoundError("preseason_projector.json not found")
-            except Exception:
-                if projection_mode == "ml":
-                    raise
-                prior_df["model_rank_value"] = prior_df["ppg"] * 17
-                prior_df["pred_total"] = prior_df["model_rank_value"]
-                prior_df = prior_df.drop(columns=["ppg"])
+        prior_df["model_rank_value"] = prior_df["ppg"] * 17
+        prior_df["pred_total"] = prior_df["model_rank_value"]
+        prior_df = prior_df.drop(columns=["ppg"])
 
     # Add rookies/unmatched ADP players
     if adp_df is not None and not adp_df.empty:

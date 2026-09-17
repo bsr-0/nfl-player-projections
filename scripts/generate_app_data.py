@@ -172,17 +172,16 @@ def generate_app_data(save_daily: bool = False) -> bool:
     cur_week_num = int(week_info.get("week_num", pred_week or 1) or 1)
     if cur_week_num < 1:
         cur_week_num = 1
-    MAX_TRAINED_HORIZON = MODEL_CONFIG.get("horizon_long_threshold", 9) - 1
     # default_horizon is the width of the "rest of season pace" window used
     # for the label written to upcoming_week_meta.json below (e.g. "Weeks
     # 3-8"). It is NOT a horizon anything predicts: only 1-week is trained
     # (TRAINING_HORIZONS), and multi-week views are built by summing real
     # per-week predictions in generate_weekly_data.py's build_weekly_model()
-    # -- not duplicated here. It used to also be appended to `horizons` and
-    # requested from predict(), which (a) never had a consumer and (b) is
-    # guaranteed to raise now that 4-8 have no model.
-    default_horizon = (MAX_TRAINED_HORIZON if is_offseason()
-                        else min(MAX_TRAINED_HORIZON, max(1, 18 - min(cur_week_num, 18) + 1)))
+    # -- not duplicated here. The 8-week cap is the old
+    # MODEL_CONFIG["horizon_long_threshold"] - 1, kept as a label width only.
+    MAX_LABEL_HORIZON = 8
+    default_horizon = (MAX_LABEL_HORIZON if is_offseason()
+                        else min(MAX_LABEL_HORIZON, max(1, 18 - min(cur_week_num, 18) + 1)))
     horizons = [1]
     pred_dfs = {}
     

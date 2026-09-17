@@ -285,8 +285,8 @@ class TimeSeriesBacktester:
             verbose: Print progress.
             target_mode: Target variable for training.  "fp" = fantasy points
                   (default), "util" = utilization score with in-fold conversion
-                  back to FP, "component" = predict stat components separately
-                  and assemble FP via PPR weights.
+                  back to FP. ("component" -- per-stat models assembled via
+                  PPR weights -- was retired 2026-08-29 and deleted 2026-09-17.)
         """
         self.data = data.copy()
         # Ensure chronological sort
@@ -295,8 +295,8 @@ class TimeSeriesBacktester:
         else:
             self.data = self.data.sort_values(["season", "week"])
 
-        if target_mode not in ("fp", "util", "component"):
-            raise ValueError(f"target_mode must be 'fp', 'util', or 'component', got {target_mode!r}")
+        if target_mode not in ("fp", "util"):
+            raise ValueError(f"target_mode must be 'fp' or 'util', got {target_mode!r}")
         self.target_mode = target_mode
         self.model_factory = model_factory
         self.season = season_to_backtest
@@ -477,14 +477,6 @@ class TimeSeriesBacktester:
                     if self.target_mode == "util":
                         preds = self._fit_predict_util(
                             model, pos_train, X_train_s, X_test_s, position
-                        )
-                    elif self.target_mode == "component":
-                        # Raw (unscaled) frames -- ComponentPredictor does its
-                        # own per-component StandardScaler internally, same
-                        # as production. Passing the pre-scaled X_train_s/
-                        # X_test_s here would double-scale on top of that.
-                        preds = self._fit_predict_component(
-                            pos_train, X_train, X_test, position
                         )
                     else:
                         y_train = pos_train["fantasy_points"]
@@ -949,11 +941,10 @@ class TimeSeriesBacktester:
         Calls the real src.models.utilization_to_fp.UtilizationToFPConverter
         (GAPS.md §7.4 follow-up, 2026-08-05) instead of a separate inline
         Ridge(alpha=1000) reimplementation -- same "test the real class, not
-        a parallel copy" fix already applied to _fit_predict_component.
+        a parallel copy" principle.
         Note: util mode is NOT currently the live serving path in this
-        project (position_target_type is "component" for every position),
-        so unlike the component-mode fix this isn't correcting a
-        drifted-from-production bug in the strict sense -- but
+        project (position_target_type is "fp" for every position), so this
+        isn't correcting a drifted-from-production bug in the strict sense -- but
         UtilizationToFPConverter is real production code (loaded by
         EnsemblePredictor for whichever positions might use it), so this
         still tests the real converter rather than a simplified stand-in.
@@ -1033,43 +1024,6 @@ class TimeSeriesBacktester:
                 efficiency_df[col] = pos_train[col].mean()
         return converter.predict(util_preds, efficiency_df=efficiency_df)
 
-    def _fit_predict_component(self, pos_train, X_train, X_test, position):
-        """Train separate Ridge per stat component, assemble FP via PPR weights.
-
-        Calls the real src.models.component_predictor.ComponentPredictor
-        directly (GAPS.md §7.4 follow-up, 2026-08-05) instead of a separate
-        inline reimplementation. The previous inline version had drifted
-        from production in three ways, none caught until directly compared
-        line-by-line against the real class:
-        1. Hardcoded alpha=RIDGE_DEFAULT_ALPHA (10,000) for every component
-           Ridge, ignoring this backtester's own --alpha/ridge_alpha
-           override entirely. Real production hardcodes alpha=1.0.
-        2. Missing the final `total_fp = max(total_fp, 0)` clamp after
-           summing weighted components -- could emit negative fantasy-point
-           predictions that production never would.
-        Calling the real class directly means this backtest mode can never
-        drift from production again the same way -- it either tests the
-        actual code path or doesn't compile.
-        """
-        from src.models.component_predictor import ComponentPredictor
-        from config.settings import COMPONENT_TARGETS
-
-        components = COMPONENT_TARGETS.get(position, [])
-        y_components = {
-            comp: pos_train[comp].fillna(0)
-            for comp in components
-            if comp in pos_train.columns and pos_train[comp].std() > 1e-6
-        }
-        if not y_components:
-            return np.zeros(len(X_test))
-
-        cp = ComponentPredictor(position)
-        cp.fit(X_train, y_components)
-        if not cp.is_fitted:
-            return np.zeros(len(X_test))
-        return cp.predict(X_test)
-
-    # ------------------------------------------------------------------
     def get_results_dict(self) -> Dict[str, Any]:
         """Return results as a JSON-serializable dict."""
         pred_df = pd.DataFrame(self.predictions)

@@ -856,7 +856,7 @@ def run_season_projection(
     play-rate prior even though P(plays)=1 was already known for them.
 
     `preseason_mode`: scores this as a TRUE preseason forecast, information-
-    matched to the three arms in `scripts/walk_forward_preseason.py`
+    matched to the three arms in `scripts/walk_forward_preseason.py` (deleted 2026-09-17)
     (PreseasonProjector, the multi-year Ridge candidate, Step 8A), which see
     only prior-season player aggregates plus destination team. Four
     target-season leaks are closed together, since closing any subset still

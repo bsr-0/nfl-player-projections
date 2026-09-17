@@ -46,19 +46,6 @@ warnings.filterwarnings(
 if InconsistentVersionWarning is not None:
     warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
-# Optional horizon-specific models (4w LSTM+ARIMA, 18w deep)
-try:
-    from src.models.horizon_models import (
-        Hybrid4WeekModel,
-        DeepSeasonLongModel,
-        HAS_TF,
-        HAS_ARIMA,
-    )
-    HAS_HORIZON_MODELS = True
-except ImportError:
-    HAS_HORIZON_MODELS = False
-    HAS_TF = False
-    HAS_ARIMA = False
 
 
 class FeatureVersionMismatch(RuntimeError):
@@ -154,12 +141,8 @@ class EnsemblePredictor:
     def __init__(self):
         self.position_models: Dict[str, MultiWeekModel] = {}
         self.single_week_models: Dict[str, PositionModel] = {}
-        self.component_predictors: Dict[str, Any] = {}  # ComponentPredictor per position
         self.util_to_fp: Dict[str, UtilizationToFPConverter] = {}
-        self.hybrid_4w: Dict[str, Any] = {}
-        self.deep_18w: Dict[str, Any] = {}
         self.qb_target: str = "util"
-        self.horizon_availability: Dict[str, Dict[str, Any]] = {}
         self.adaptive_weights: Dict[str, Dict[str, float]] = {}
         self.is_loaded = False
 
@@ -185,7 +168,6 @@ class EnsemblePredictor:
         """
         positions = positions or POSITIONS
         self.qb_target = self._load_qb_target_choice()
-        self.horizon_availability = {}
         
         for position in positions:
             try:
@@ -224,18 +206,6 @@ class EnsemblePredictor:
             except Exception as e:
                 print(f"Warning: Could not load model for {position}: {e}")
 
-            # Try to load component predictor
-            comp_path = MODELS_DIR / f"component_{position.lower()}.json"
-            if comp_path.exists():
-                try:
-                    import json
-                    from src.models.component_predictor import ComponentPredictor
-                    with open(comp_path) as f:
-                        self.component_predictors[position] = ComponentPredictor.from_dict(json.load(f))
-                    print(f"Loaded component predictor for {position}")
-                except Exception as e:
-                    print(f"Warning: Could not load component predictor for {position}: {e}")
-
         for pos in POSITIONS:
             try:
                 c = UtilizationToFPConverter.load(pos)
@@ -244,90 +214,14 @@ class EnsemblePredictor:
             except Exception:
                 pass
 
-        # Horizon-specific models (4w hybrid, 18w deep) when enabled
-        if not HAS_HORIZON_MODELS:
-            print("Warning: horizon models unavailable (module import failed).")
-        if MODEL_CONFIG.get("use_4w_hybrid", True) and not HAS_ARIMA:
-            print("Warning: 4-week hybrid requires statsmodels (ARIMA) but it is unavailable.")
-        if MODEL_CONFIG.get("use_4w_hybrid", True) and not HAS_TF:
-            print("Warning: 4-week hybrid requires TensorFlow (LSTM) but it is unavailable.")
-        if MODEL_CONFIG.get("use_18w_deep", True) and not HAS_TF:
-            print("Warning: 18-week deep model requires TensorFlow but it is unavailable.")
-
-        horizon_4w_weeks = tuple(MODEL_CONFIG.get("horizon_4w_weeks", (4, 5, 6, 7, 8)))
-        if MODEL_CONFIG.get("use_4w_hybrid", True) and HAS_HORIZON_MODELS and HAS_TF and HAS_ARIMA:
-            for position in positions:
-                self.horizon_availability.setdefault(position, {})
-                try:
-                    h = Hybrid4WeekModel.load(position)
-                    if getattr(h, "is_fitted", False):
-                        self.hybrid_4w[position] = h
-                        self.horizon_availability[position]["hybrid_4w"] = "loaded"
-                        print(f"Loaded 4-week hybrid model for {position}")
-                    else:
-                        self.horizon_availability[position]["hybrid_4w"] = "not_fitted"
-                except Exception as e:
-                    self.horizon_availability[position]["hybrid_4w"] = f"load_failed: {e}"
-        elif MODEL_CONFIG.get("use_4w_hybrid", True):
-            for position in positions:
-                self.horizon_availability.setdefault(position, {})
-                reasons = []
-                if not HAS_TF:
-                    reasons.append("tensorflow_missing")
-                if not HAS_ARIMA:
-                    reasons.append("statsmodels_missing")
-                if not HAS_HORIZON_MODELS:
-                    reasons.append("horizon_module_missing")
-                self.horizon_availability[position]["hybrid_4w"] = "disabled_or_unavailable:" + ",".join(reasons)
-        if MODEL_CONFIG.get("use_18w_deep", True) and HAS_HORIZON_MODELS and HAS_TF:
-            for position in positions:
-                self.horizon_availability.setdefault(position, {})
-                try:
-                    d = DeepSeasonLongModel.load(position)
-                    if getattr(d, "is_fitted", False):
-                        self.deep_18w[position] = d
-                        self.horizon_availability[position]["deep_18w"] = "loaded"
-                        print(f"Loaded 18-week deep model for {position}")
-                    else:
-                        self.horizon_availability[position]["deep_18w"] = "not_fitted"
-                except Exception as e:
-                    self.horizon_availability[position]["deep_18w"] = f"load_failed: {e}"
-        elif MODEL_CONFIG.get("use_18w_deep", True):
-            for position in positions:
-                self.horizon_availability.setdefault(position, {})
-                reasons = []
-                if not HAS_TF:
-                    reasons.append("tensorflow_missing")
-                if not HAS_HORIZON_MODELS:
-                    reasons.append("horizon_module_missing")
-                self.horizon_availability[position]["deep_18w"] = "disabled_or_unavailable:" + ",".join(reasons)
-
-        # A weekly model is REQUIRED for is_loaded. Component predictors alone
-        # are not enough, and used to be.
-        #
-        # On 2026-08-30 the multiweek/1w .joblib artifacts were destroyed
-        # mid-session (fold runs writing into the real MODELS_DIR). load_models
-        # then reported is_loaded=True on the strength of component_*.json
-        # written 2026-08-29 13:56 -- artifacts of a mode retired earlier that
-        # same day -- and predict() silently served them. A backtest was run
-        # against those stale models and reported as validation of the current
-        # ones. Reporting success with zero weekly models is what made that
-        # possible.
+        # A weekly model is REQUIRED for is_loaded. (The retired component
+        # predictors used to satisfy this on their own: on 2026-08-30 the
+        # weekly .joblib artifacts were destroyed mid-session, load_models
+        # reported is_loaded=True on stale component_*.json, and a backtest
+        # against them was reported as validation of the current models.
+        # Component mode and its loader were deleted 2026-09-17.)
         _has_weekly = len(self.position_models) > 0 or len(self.single_week_models) > 0
         self.is_loaded = _has_weekly
-
-        _ptc = MODEL_CONFIG.get("position_target_type", {})
-        _component_positions = [p for p, t in _ptc.items() if t == "component"]
-        if self.component_predictors and not _component_positions:
-            # Loaded, but nothing is configured to use them. Say so rather than
-            # letting them stand in for models that are missing.
-            print(
-                f"WARNING: found component predictors for "
-                f"{sorted(self.component_predictors)} but no position is in "
-                f"component mode (position_target_type={_ptc}). These are stale "
-                f"artifacts of a retired mode and will NOT be used."
-            )
-            self.component_predictors = {}
 
         if not self.is_loaded:
             missing = [p for p in positions
@@ -451,14 +345,6 @@ class EnsemblePredictor:
             
             pos_data = results[mask].copy()
 
-            # Component prediction path: predict stat components, assemble FP
-            if position in self.component_predictors:
-                cp = self.component_predictors[position]
-                fp_pred = cp.predict(pos_data)
-                results.loc[mask, "predicted_points"] = fp_pred * n_weeks
-                results.loc[mask, "predicted_utilization"] = fp_pred * n_weeks
-                continue
-
             # Ensure feature consistency: fill missing columns with training medians
             def _fill_missing_features(data, pm):
                 pos_model = pm.models.get(1) or list(pm.models.values())[0]
@@ -477,42 +363,7 @@ class EnsemblePredictor:
             
             if position in self.position_models:
                 model = self.position_models[position]
-                traditional_pred = model.predict(pos_data, n_weeks)
-                predictions = traditional_pred.copy()
-                horizon_4w_weeks = tuple(MODEL_CONFIG.get("horizon_4w_weeks", (4, 5, 6, 7, 8)))
-                horizon_long = MODEL_CONFIG.get("horizon_long_threshold", 9)
-                # 4-week band: use hybrid LSTM+ARIMA when available
-                if n_weeks in horizon_4w_weeks and position in self.hybrid_4w:
-                    hybrid = self.hybrid_4w[position]
-                    fcols = getattr(hybrid, "feature_names", None) or (getattr(hybrid.lstm, "feature_names", []) if getattr(hybrid, "lstm", None) else [])
-                    if fcols:
-                        for fn in fcols:
-                            if fn not in pos_data.columns:
-                                pos_data[fn] = 0
-                        try:
-                            player_ids = pos_data["player_id"].values if "player_id" in pos_data.columns else np.arange(len(pos_data))
-                            # pos_data contains lagged/rolling utilization features that
-                            # the Hybrid4WeekModel uses to provide ARIMA with recent
-                            # target history for dynamic forecasting.
-                            hy_pred = hybrid.predict(pos_data, player_ids, fcols, traditional_pred, n_weeks=n_weeks)
-                            use_hy = np.isfinite(hy_pred)
-                            predictions = np.where(use_hy, hy_pred, traditional_pred)
-                        except Exception:
-                            pass
-                # Long horizon: blend 70% deep + 30% traditional when available
-                if n_weeks >= horizon_long and position in self.deep_18w:
-                    deep = self.deep_18w[position]
-                    dcols = getattr(deep, "feature_names", [])
-                    if dcols:
-                        for fn in dcols:
-                            if fn not in pos_data.columns:
-                                pos_data[fn] = 0
-                        X = pos_data.reindex(columns=dcols, fill_value=0).values.astype(np.float64)
-                        X = np.nan_to_num(X, nan=0.0)
-                        try:
-                            predictions = deep.predict(X, traditional_pred, blend_traditional=0.3)
-                        except Exception:
-                            pass
+                predictions = model.predict(pos_data, n_weeks)
                 results.loc[mask, "predicted_utilization"] = predictions
                 results.loc[mask, "predicted_points"] = predictions
                 # Convert util->FP only for positions trained on utilization targets.
@@ -536,9 +387,9 @@ class EnsemblePredictor:
                 # uncertainty is propagated via quadrature.
                 try:
                     # Use the SAME model that produced the point prediction
-                    # above (`model.predict(pos_data, n_weeks)` -> whichever
-                    # of the 1w/4w/18w representative models covers this
-                    # horizon), not always the 1-week model. That model was
+                    # above (`model.predict(pos_data, n_weeks)` -> the
+                    # representative model for this horizon), not always the
+                    # 1-week model. That model was
                     # fit directly against the true historical n-week-sum
                     # target, so its own conformal calibration already
                     # reflects real n-week variance -- no separate scaling
@@ -759,17 +610,11 @@ class EnsemblePredictor:
         
         return results.sort_values("predicted_points", ascending=False)
 
-    def get_horizon_availability(self) -> Dict[str, Dict[str, Any]]:
-        """Return loaded/disabled status for 4w and 18w horizon models per position."""
-        return self.horizon_availability
-
-
 class ModelTrainer:
     """Handles training of all position models."""
     
     def __init__(self):
         self.trained_models: Dict[str, PositionModel] = {}
-        self.component_predictors: Dict[str, Any] = {}
         self.training_metrics: Dict[str, Dict] = {}
 
     def train_all_positions(self, data: pd.DataFrame,
@@ -875,108 +720,9 @@ class ModelTrainer:
             # Single model path (RB, WR, TE or QB fallback)
             multi_model = MultiWeekModel(position)
 
-            # Determine target type: "fp", "util", or "component"
+            # Determine target type: "fp" or "util"
             pos_target_cfg = MODEL_CONFIG.get("position_target_type", {})
             target_type = pos_target_cfg.get(position, "util")
-
-            # Component prediction path: predict stat lines, assemble FP
-            if target_type == "component":
-                from src.models.component_predictor import ComponentPredictor
-                from config.settings import COMPONENT_TARGETS
-                comp_pred = ComponentPredictor(position)
-                comp_targets = COMPONENT_TARGETS.get(position, [])
-
-                # Build component targets: next-week stat values
-                y_components = {}
-                for comp in comp_targets:
-                    if comp in pos_data.columns:
-                        y_components[comp] = pos_data.groupby("player_id")[comp].transform(
-                            lambda x: x.shift(-1)
-                        )
-
-                # Get feature columns (same logic as fp/util path below)
-                exclude_cols = [
-                    "player_id", "name", "position", "team", "season", "week",
-                    "fantasy_points", "target", "opponent", "home_away",
-                    "created_at", "updated_at", "id", "birth_date", "college",
-                    "game_id", "game_time",
-                    "fp_over_expected", "expected_fp",
-                    "utilization_score",
-                ]
-                feature_cols = [c for c in pos_data.columns
-                                if c not in exclude_cols
-                                and not c.startswith("target_")
-                                and pos_data[c].dtype in ("int64", "float64", "int32", "float32")]
-                from src.utils.leakage import filter_feature_columns
-                feature_cols = filter_feature_columns(feature_cols)
-
-                # Apply causal feature filter if active
-                from config.settings import FEATURE_MODE, CAUSAL_FEATURES
-                if FEATURE_MODE == "causal":
-                    causal_cols = CAUSAL_FEATURES.get(position, [])
-                    feature_cols = [c for c in causal_cols if c in pos_data.columns]
-
-                # Filter to rows with valid targets for at least one component.
-                #
-                # Deliberately NOT `& pos_data[feature_cols].notna().all(axis=1)`,
-                # which is what this was. That required EVERY feature to be
-                # present and so deleted any row touching a structurally missing
-                # column -- FTN charting (starts 2022), NGS (2016), PFR (2018),
-                # snaps/depth chart/injuries (2013). Measured on 2013-2024 it
-                # kept 10.8% of QB rows, 7.3% RB, 7.3% WR, 4.4% TE: the
-                # production models were training on ~850-2,200 rows instead of
-                # 7,900-30,200.
-                #
-                # The other two training paths in this file (fp at ~line 964,
-                # util at ~line 1154) drop on TARGET validity only and impute
-                # the features. Component mode was the outlier. NaN is now left
-                # for ComponentPredictor.fit to impute from train-fitted
-                # medians -- one imputation, in one place, fitted on train.
-                any_valid = pd.Series(False, index=pos_data.index)
-                for comp, y in y_components.items():
-                    any_valid = any_valid | y.notna()
-                valid_mask = any_valid
-
-                X = pos_data.loc[valid_mask, feature_cols]
-                y_comp_valid = {k: v[valid_mask] for k, v in y_components.items()}
-
-                # Recency weighting (same as fp/util path)
-                sample_weight = None
-                halflife = MODEL_CONFIG.get("recency_decay_halflife")
-                if halflife and "season" in pos_data.columns:
-                    seasons = pos_data.loc[valid_mask, "season"]
-                    max_season = seasons.max()
-                    if max_season > seasons.min():
-                        decay = np.power(0.5, (max_season - seasons.values.astype(float)) / float(halflife))
-                        sample_weight = decay / decay.max()
-
-                print(f"  {position}: component mode — training {len(comp_targets)} "
-                      f"component models on {len(X)} rows with {len(feature_cols)} features",
-                      flush=True)
-
-                comp_pred.fit(
-                    X,
-                    y_comp_valid,
-                    sample_weight=sample_weight,
-                )
-
-                if comp_pred.is_fitted:
-                    self.component_predictors[position] = comp_pred
-                    self.trained_models[position] = None  # placeholder
-                    # Save component predictor
-                    import json as _json
-                    comp_save_path = MODELS_DIR / f"component_{position.lower()}.json"
-                    with open(comp_save_path, "w") as f:
-                        _json.dump(comp_pred.to_dict(), f, indent=2)
-                    print(f"  {position}: component models trained: "
-                          f"{list(comp_pred.models.keys())}", flush=True)
-                else:
-                    print(f"  WARNING: {position} component prediction failed, "
-                          f"falling back to fp mode", flush=True)
-                    target_type = "fp"  # fall through to normal path
-
-            if target_type == "component" and position in self.component_predictors:
-                continue
 
             # Prepare targets
             y_dict = {}

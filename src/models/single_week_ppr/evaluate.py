@@ -280,18 +280,12 @@ def _existing_methodology_predictions(trainer, test_df: pd.DataFrame, position: 
     if pos_mask.sum() < 5:
         return preds_out
 
-    if multi_model is None:
-        comp = trainer.component_predictors.get(position)
-        if comp is None:
-            return preds_out
-        preds = comp.predict(test_df.loc[pos_mask].copy())
-    else:
-        base = multi_model.models.get(1) or list(multi_model.models.values())[0]
-        medians = getattr(base, "feature_medians", {})
-        for fn in getattr(base, "feature_names", []):
-            if fn not in test_df.columns:
-                test_df.loc[pos_mask, fn] = medians.get(fn, 0)
-        preds = multi_model.predict(test_df.loc[pos_mask].copy(), n_weeks=1)
+    base = multi_model.models.get(1) or list(multi_model.models.values())[0]
+    medians = getattr(base, "feature_medians", {})
+    for fn in getattr(base, "feature_names", []):
+        if fn not in test_df.columns:
+            test_df.loc[pos_mask, fn] = medians.get(fn, 0)
+    preds = multi_model.predict(test_df.loc[pos_mask].copy(), n_weeks=1)
 
     preds_out.loc[pos_mask] = preds
 

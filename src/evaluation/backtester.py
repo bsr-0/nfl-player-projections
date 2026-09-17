@@ -1584,8 +1584,7 @@ def assess_artifact_trust(results: Dict) -> Dict[str, Any]:
     return {"trusted": not reasons, "reasons": reasons}
 
 
-def describe_model_type(position_models: Dict[str, Any],
-                        component_predictors: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def describe_model_type(position_models: Dict[str, Any]) -> Dict[str, Any]:
     """What was actually scored, derived from the fitted objects.
 
     A backtest artifact with no model identity is what let published accuracy
@@ -1593,7 +1592,7 @@ def describe_model_type(position_models: Dict[str, Any],
     stacked GBM ensemble (AUDIT_REPORT.md #16). Derived, not hardcoded, so the
     label tracks whatever the trainer built: base learner keys straight from
     PositionModel.models, "stacked(RidgeCV meta)" only when a meta-learner was
-    actually fitted, and component mode reported as such.
+    actually fitted.
     """
     from config.settings import FEATURE_VERSION, FEATURE_VERSION_FILENAME
 
@@ -1608,9 +1607,7 @@ def describe_model_type(position_models: Dict[str, Any],
     per_position = {}
     for pos, mw in (position_models or {}).items():
         if mw is None:
-            comp = (component_predictors or {}).get(pos)
-            per_position[pos] = (f"component_predictor:{type(comp).__name__}"
-                                 if comp is not None else "component_predictor")
+            per_position[pos] = "unknown"
             continue
         pm = getattr(mw, "models", {}).get(1) or next(iter(getattr(mw, "models", {}).values()), None)
         if pm is None:
@@ -1760,7 +1757,7 @@ def run_backtest(test_season: int = None, weeks: Optional[List[int]] = None) -> 
     results["partial_season"] = partial_season   # a --weeks quick check is never the season headline
     ens = getattr(predictor, "predictor", None)
     position_models = getattr(ens, "position_models", {}) or {}
-    results.update(describe_model_type(position_models, getattr(ens, "component_predictors", None)))
+    results.update(describe_model_type(position_models))
     results["feature_counts"] = {
         pos: len(getattr(mw.models.get(1) or next(iter(mw.models.values()), None), "feature_names", []))
         for pos, mw in position_models.items() if mw is not None and getattr(mw, "models", None)

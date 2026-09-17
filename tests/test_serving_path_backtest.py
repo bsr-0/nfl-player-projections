@@ -45,7 +45,6 @@ def private_db(tmp_path, monkeypatch):
 
 class _FakeEnsemble:
     position_models = {}
-    component_predictors = {}
 
 
 class _FakePredictor:

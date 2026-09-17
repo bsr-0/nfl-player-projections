@@ -296,7 +296,9 @@ MODEL_CONFIG = {
     "cv_gap_seasons": 1,  # Gap between train and val for purged CV (1 = purge last season before test)
     # Per-position target override: "fp" trains directly on fantasy points (no util conversion),
     # "util" trains on utilization score then converts to FP (original two-stage approach).
-    # Target type per position: "fp" (direct), "util" (two-stage), "component" (predict stats, assemble FP).
+    # Target type per position: "fp" (direct) or "util" (two-stage). A third
+    # mode, "component" (predict stat lines, assemble FP), was retired
+    # 2026-08-29 and its code deleted 2026-09-17.
     #
     # SWITCHED TO "fp" 2026-08-29. Component mode was measured WORSE at every
     # position, in 12 of 12 folds, on identical frames:
@@ -321,55 +323,6 @@ MODEL_CONFIG = {
     # not contradicted: that predates the data corrections, the row-gate fix,
     # causal features and C_gbm_mae. See GAPS.md 2026-08-29.
     "position_target_type": {"QB": "fp", "RB": "fp", "WR": "fp", "TE": "fp"},
-    # Horizon-specific models (per requirements): 4w LSTM+ARIMA, 18w deep feedforward
-    # 4w RETIRED 2026-09-16, same treatment as 18w below: unconsumed
-    # (projection_4w never reaches players_{pos}.json/the site) and never
-    # validated against summing real per-week predictions, which is what
-    # generate_weekly_data.py's build_weekly_model() already does for the
-    # actual "next N weeks" UI. See TRAINING_HORIZONS in the training-window
-    # section for the full writeup. Also drops a full second Optuna tuning
-    # pass (RF/XGBoost/LightGBM) plus the separate LSTM+ARIMA training run
-    # this flag gated, on every non-fast retrain.
-    "use_4w_hybrid": False,   # was True
-    # 18w RETIRED 2026-08-29. Two independent reasons:
-    #
-    # 1. The target is undefined on 90.7% of rows. An 18-game forward sum needs
-    #    18 future games; a season is 17, so only the first weeks of a season
-    #    can carry a real label. True coverage is 9.3% (2,806 rows across all
-    #    four positions). It read as 100% only because _impute_missing was
-    #    median-filling the label -- see GAPS.md 2026-08-29.
-    # 2. Nothing consumes it. All 620 rows on the shipped draft board come from
-    #    the season model (projection_model == "step8" for every one).
-    #
-    # The season model already answers "how will this player do over a long
-    # stretch", and answers it without this data problem. Long horizons are
-    # otherwise obtained by predicting N single weeks and summing them, which
-    # needs no separately trained long-horizon model.
-    "use_18w_deep": False,
-    "horizon_4w_weeks": (4, 5, 6, 7, 8),   # n_weeks that use 4-week hybrid model
-    "horizon_long_threshold": 9,   # n_weeks >= this use 18-week deep model when available
-    
-    # 4-week LSTM hyperparameters (Section IV.A of requirements)
-    "lstm_sequence_length": 10,        # Sequence length 8-12 weeks
-    "lstm_units": 256,                 # First LSTM layer units (128-256)
-    "lstm_dropout": 0.25,              # Dropout between LSTM layers (0.2-0.3)
-    "lstm_learning_rate": 0.001,       # Adam optimizer learning rate
-    "lstm_epochs": 80,                 # Training epochs (50-100)
-    "lstm_batch_size": 32,             # Batch size (32-64)
-    "lstm_weight": 0.6,               # LSTM component weight in hybrid (60%)
-    "arima_weight": 0.4,              # ARIMA component weight in hybrid (40%)
-    "lstm_optuna_trials": 15,         # Optuna trials for LSTM hyperparameter tuning
-    "arima_order": (2, 1, 2),         # ARIMA (p, d, q) order
-    
-    # 18-week residual feedforward hyperparameters
-    "deep_n_features": 150,            # Expected input features (150-200)
-    "deep_hidden_units": None,         # None = auto-generate 2-stage residual net (256→64)
-    "deep_dropout": 0.35,              # Dropout per layer (0.3-0.5)
-    "deep_learning_rate": 0.0005,      # Adam learning rate (0.0001-0.01)
-    "deep_epochs": 100,                # Training epochs
-    "deep_batch_size": 64,             # Batch size (16-128)
-    "deep_blend_traditional": 0.3,     # 30% traditional + 70% deep
-    "deep_optuna_trials": 15,          # Optuna trials for deep model hyperparameter tuning
     # Training gate policy: when True, fail-fast on requirement minimums
     # (training seasons and per-position player counts) instead of warning only.
     "strict_requirements_default": False,
@@ -711,32 +664,6 @@ CAUSAL_FEATURES = {
 }
 
 # =============================================================================
-# COMPONENT PREDICTION (predict stat lines, assemble fantasy points)
-# =============================================================================
-# Council Phase 2: predict stable components separately (targets, receptions,
-# yards, TDs) then assemble FP from those predictions.  Each component has
-# higher autocorrelation and lower touchdown contamination than raw FP.
-
-# PBP/NGS features that are only available 2018+.  For pre-2018 rows these
-# should be NaN (not 0) so HistGradientBoosting can treat them as missing.
-QB_PBP_FEATURES = [
-    "pass_epa_per_play_roll3_mean", "pass_success_rate_roll3_mean",
-    "pass_wpa_per_play_roll3_mean", "rush_epa_per_play_roll3_mean",
-    "ngs_completion_percentage_above_expectation_roll3_mean",
-    "ngs_avg_time_to_throw_roll3_mean",
-    "ngs_aggressiveness_roll3_mean",
-    "ngs_avg_air_yards_to_sticks_roll3_mean",
-]
-
-# Which stat components to predict per position (only the meaningful ones)
-COMPONENT_TARGETS = {
-    "QB": ["passing_yards", "passing_tds", "interceptions", "rushing_yards", "rushing_tds"],
-    "RB": ["rushing_yards", "rushing_tds", "receptions", "receiving_yards", "receiving_tds"],
-    "WR": ["receptions", "receiving_yards", "receiving_tds"],
-    "TE": ["receptions", "receiving_yards", "receiving_tds"],
-}
-
-# =============================================================================
 # TRAINING DATA WINDOW
 # =============================================================================
 #
@@ -796,7 +723,6 @@ TRAINING_WINDOW_YEARS_BY_POSITION = {"TE": 10}
 
 # Requirement-derived minimum training seasons per horizon (see docs/fantasy requirements)
 MIN_TRAINING_SEASONS_1W = 3   # 1-week model: min 3, optimal 5+
-MIN_TRAINING_SEASONS_18W = 5  # 18-week model: min 5 (adjusted for 2018+ window)
 
 # Horizons the weekly model is TRAINED on. Multi-week projections are built by
 # predicting N single weeks and summing them, so a horizon only belongs here if
@@ -804,7 +730,7 @@ MIN_TRAINING_SEASONS_18W = 5  # 18-week model: min 5 (adjusted for 2018+ window)
 #
 # 18 was removed 2026-08-29: its label is undefined on 90.7% of rows (an
 # 18-game forward sum needs more future games than a 17-game season leaves) and
-# nothing consumed its output. See MODEL_CONFIG["use_18w_deep"].
+# nothing consumed its output.
 #
 # 4 removed 2026-09-16 for the same two reasons, found asking "why train this
 # at all instead of summing four real per-week predictions":
@@ -833,10 +759,10 @@ MIN_TRAINING_SEASONS_18W = 5  # 18-week model: min 5 (adjusted for 2018+ window)
 #
 # Also cut two full extra training passes per position that this horizon
 # was paying for regardless of whether anyone used it: doubled Optuna
-# tuning (RF/XGBoost/LightGBM again for horizon 4) and, by default, a
-# separate LSTM+ARIMA Hybrid4WeekModel (MODEL_CONFIG["use_4w_hybrid"]).
+# tuning (RF/XGBoost/LightGBM again for horizon 4) and a separate LSTM+ARIMA
+# Hybrid4WeekModel. The 4w/18w model classes (src/models/horizon_models.py)
+# and their loaders were deleted 2026-09-17.
 TRAINING_HORIZONS = [1]
-MIN_TRAINING_SEASONS_4W = 4   # kept: MultiWeekModel/Hybrid4WeekModel classes are dormant, not deleted
 # Per-position minimum players for training (requirements: ~30 QB, 60 RB, 70 WR, 30 TE)
 MIN_PLAYERS_PER_POSITION = {"QB": 30, "RB": 60, "WR": 70, "TE": 30}
 

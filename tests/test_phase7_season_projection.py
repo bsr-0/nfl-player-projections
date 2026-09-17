@@ -305,7 +305,7 @@ class TestBuildSyntheticWeekRow:
 class TestPreseasonModeLeakInvariants:
     """Behavioural guards for `preseason_mode` (the August-legal arm used to
     compare Phase 7 against the three preseason models in
-    scripts/walk_forward_preseason.py).
+    scripts/walk_forward_preseason.py, deleted 2026-09-17).
 
     Written behaviourally rather than as "this column is excluded", matching
     the exposure-leakage contract's reasoning in GAPS.md: the point is that

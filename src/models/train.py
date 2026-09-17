@@ -34,8 +34,6 @@ from config.settings import (
     FEATURE_VERSION,
     FEATURE_VERSION_FILENAME,
     MIN_TRAINING_SEASONS_1W,
-    MIN_TRAINING_SEASONS_18W,
-    MIN_TRAINING_SEASONS_4W,
     MIN_PLAYERS_PER_POSITION,
     RETRAINING_CONFIG,
 )
@@ -122,7 +120,7 @@ def _predictions_are_fantasy_points(position: str, converters: dict, qb_target: 
     """Return whether 1-week predictions for this position are in fantasy-point units."""
     pos_target_cfg = MODEL_CONFIG.get("position_target_type", {})
     target_type = pos_target_cfg.get(position, "util")
-    if target_type in {"fp", "component"}:
+    if target_type == "fp":
         return True
     if position == "QB" and qb_target == "fp":
         return True
@@ -213,21 +211,10 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
         if len(pos_test) < 10:
             continue
 
-        # Component mode: multi_model is None placeholder
-        if multi_model is None:
-            # Use component predictor feature names if available
-            comp = trainer.component_predictors.get(position)
-            if comp is None:
-                continue
-            feature_names = getattr(comp, "feature_names", [])
-            available = [c for c in feature_names if c in pos_test.columns]
-            if len(available) < max(len(feature_names) * 0.5, 1):
-                continue
-        else:
-            model = multi_model.models.get(1) or list(multi_model.models.values())[0]
-            available = [c for c in model.feature_names if c in pos_test.columns]
-            if len(available) < len(model.feature_names) * 0.5:
-                continue
+        model = multi_model.models.get(1) or list(multi_model.models.values())[0]
+        available = [c for c in model.feature_names if c in pos_test.columns]
+        if len(available) < len(model.feature_names) * 0.5:
+            continue
         
         def _compute_metrics(pos, label, y_true, y_pred):
             rmse = float((mean_squared_error(y_true, y_pred)) ** 0.5)
@@ -249,20 +236,6 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
                 m["spearman_rho"] = float(rho)
             test_metrics.setdefault(pos, {})[label] = m
         
-        # Component mode: use component predictor directly for FP predictions
-        if multi_model is None:
-            comp = trainer.component_predictors.get(position)
-            if comp is None:
-                continue
-            if "target_1w" in pos_test.columns:
-                y_test = pos_test["target_1w"]
-                valid = ~y_test.isna()
-                if valid.sum() >= 5:
-                    pos_subset = pos_test.loc[valid]
-                    preds_fp = comp.predict(pos_subset)
-                    _compute_metrics(position, "FP (component)", y_test[valid], preds_fp)
-            continue
-
         # QB: report owner-facing FP metric (convert util->FP when needed).
         if position == "QB":
             if "target_1w" not in pos_test.columns and "target_util_1w" not in pos_test.columns:
@@ -373,21 +346,13 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         if len(pos_test) < 5:
             continue
 
-        # Component mode: multi_model is None placeholder
-        if multi_model is None:
-            comp = trainer.component_predictors.get(position)
-            if comp is None:
-                continue
-            pos_test = test_data.loc[pos_mask].copy()
-            preds = comp.predict(pos_test)
-        else:
-            model = multi_model.models.get(1) or list(multi_model.models.values())[0]
-            medians = getattr(model, "feature_medians", {})
-            for fn in getattr(model, "feature_names", []):
-                if fn not in pos_test.columns:
-                    test_data.loc[pos_mask, fn] = medians.get(fn, 0)
-            pos_test = test_data.loc[pos_mask].copy()
-            preds = multi_model.predict(pos_test, n_weeks=1)
+        model = multi_model.models.get(1) or list(multi_model.models.values())[0]
+        medians = getattr(model, "feature_medians", {})
+        for fn in getattr(model, "feature_names", []):
+            if fn not in pos_test.columns:
+                test_data.loc[pos_mask, fn] = medians.get(fn, 0)
+        pos_test = test_data.loc[pos_mask].copy()
+        preds = multi_model.predict(pos_test, n_weeks=1)
         _n_predicted += len(pos_test)
         test_data.loc[pos_mask, "predicted_utilization"] = preds
         # Default: set points equal to raw model output.
@@ -432,34 +397,26 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 pos_train = train_data[train_data["position"] == position].copy()
                 if len(pos_train) < 20:
                     continue
-                if multi_model is None:
-                    comp = trainer.component_predictors.get(position)
-                    if comp is None:
-                        continue
-                    train_preds = comp.predict(pos_train)
-                    train_actual = _select_backtest_actual_series(pos_train, position, converters, qb_target)
-                    preds_for_cal = train_preds
-                else:
-                    model = multi_model.models.get(1) or list(multi_model.models.values())[0]
-                    fnames = getattr(model, "feature_names", [])
-                    medians = getattr(model, "feature_medians", {})
-                    for fn in fnames:
-                        if fn not in pos_train.columns:
-                            pos_train[fn] = medians.get(fn, 0)
-                    train_preds = multi_model.predict(pos_train, n_weeks=1)
-                    train_actual = _select_backtest_actual_series(pos_train, position, converters, qb_target)
-                    preds_for_cal = train_preds
-                    _ptc = MODEL_CONFIG.get("position_target_type", {})
-                    should_convert = (position in converters
-                                      and _ptc.get(position, "util") == "util"
-                                      and (position != "QB" or qb_target == "util"))
-                    if should_convert:
-                        eff_df = pos_train.copy()
-                        eff_df["utilization_score"] = train_preds
-                        try:
-                            preds_for_cal = converters[position].predict(train_preds, efficiency_df=eff_df)
-                        except Exception:
-                            pass
+                model = multi_model.models.get(1) or list(multi_model.models.values())[0]
+                fnames = getattr(model, "feature_names", [])
+                medians = getattr(model, "feature_medians", {})
+                for fn in fnames:
+                    if fn not in pos_train.columns:
+                        pos_train[fn] = medians.get(fn, 0)
+                train_preds = multi_model.predict(pos_train, n_weeks=1)
+                train_actual = _select_backtest_actual_series(pos_train, position, converters, qb_target)
+                preds_for_cal = train_preds
+                _ptc = MODEL_CONFIG.get("position_target_type", {})
+                should_convert = (position in converters
+                                  and _ptc.get(position, "util") == "util"
+                                  and (position != "QB" or qb_target == "util"))
+                if should_convert:
+                    eff_df = pos_train.copy()
+                    eff_df["utilization_score"] = train_preds
+                    try:
+                        preds_for_cal = converters[position].predict(train_preds, efficiency_df=eff_df)
+                    except Exception:
+                        pass
 
                 if train_actual is not None:
                     residuals = (train_actual.values - np.asarray(preds_for_cal, dtype=float))
@@ -504,17 +461,13 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
     results["test_season"] = actual_test_season
     results["model_source"] = "production_ensemble"
     from src.evaluation.backtester import describe_model_type
-    results.update(describe_model_type(trainer.trained_models, trainer.component_predictors))
+    results.update(describe_model_type(trainer.trained_models))
     # feature_version.txt is written at the very end of training, so the
     # on-disk value describe_model_type read is the PREVIOUS run's; the
     # models scored here were just built at the code's version.
     results["models_feature_version"] = str(FEATURE_VERSION)
     results["feature_counts"] = {
-        pos: (
-            len(getattr(trainer.component_predictors.get(pos), "feature_names", []))
-            if m is None
-            else len(getattr(m.models.get(1) or list(m.models.values())[0], "feature_names", []))
-        )
+        pos: len(getattr(m.models.get(1) or list(m.models.values())[0], "feature_names", []))
         for pos, m in trainer.trained_models.items()
     }
     baseline_comp = backtester.compare_to_baseline(
@@ -652,12 +605,8 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
         for position in trainer.trained_models:
             try:
                 multi_model = trainer.trained_models[position]
-                if multi_model is None:
-                    comp = trainer.component_predictors.get(position)
-                    fnames = getattr(comp, "feature_names", []) if comp else []
-                else:
-                    base = multi_model.models.get(1) or list(multi_model.models.values())[0]
-                    fnames = getattr(base, "feature_names", [])
+                base = multi_model.models.get(1) or list(multi_model.models.values())[0]
+                fnames = getattr(base, "feature_names", [])
                 if len(fnames) < 5:
                     continue
                 pos_train = train_data[train_data["position"] == position].copy()
@@ -688,11 +637,7 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 from sklearn.metrics import mean_squared_error as _mse
                 ridge_rmse = float(np.sqrt(_mse(y_te, ridge_preds)))
                 # Ensemble
-                if multi_model is None:
-                    comp = trainer.component_predictors.get(position)
-                    ensemble_preds = comp.predict(valid_test) if comp is not None else np.full(len(valid_test), np.nan)
-                else:
-                    ensemble_preds = multi_model.predict(valid_test, n_weeks=1)
+                ensemble_preds = multi_model.predict(valid_test, n_weeks=1)
                 ensemble_rmse = float(np.sqrt(_mse(y_te, ensemble_preds)))
                 improvement = ((ridge_rmse - ensemble_rmse) / ridge_rmse * 100) if ridge_rmse > 0 else 0
                 status = "JUSTIFIED" if improvement > 0 else "NOT JUSTIFIED"
@@ -861,20 +806,13 @@ def _run_one_fold(
         pos_test = test_data.loc[pos_mask]
         if len(pos_test) < 5:
             continue
-        if multi_model is None:
-            comp = trainer.component_predictors.get(position)
-            if comp is None:
-                continue
-            pos_test = test_data.loc[pos_mask].copy()
-            preds = comp.predict(pos_test)
-        else:
-            base = multi_model.models.get(1) or list(multi_model.models.values())[0]
-            medians = getattr(base, "feature_medians", {})
-            for fn in getattr(base, "feature_names", []):
-                if fn not in pos_test.columns:
-                    test_data.loc[pos_mask, fn] = medians.get(fn, 0)
-            pos_test = test_data.loc[pos_mask].copy()
-            preds = multi_model.predict(pos_test, n_weeks=1)
+        base = multi_model.models.get(1) or list(multi_model.models.values())[0]
+        medians = getattr(base, "feature_medians", {})
+        for fn in getattr(base, "feature_names", []):
+            if fn not in pos_test.columns:
+                test_data.loc[pos_mask, fn] = medians.get(fn, 0)
+        pos_test = test_data.loc[pos_mask].copy()
+        preds = multi_model.predict(pos_test, n_weeks=1)
         test_data.loc[pos_mask, "predicted_utilization"] = preds
         test_data.loc[pos_mask, "predicted_points"] = preds
         _ptc2 = MODEL_CONFIG.get("position_target_type", {})
@@ -1179,16 +1117,8 @@ def train_models(positions: list = None,
         "generated_at": datetime.now().isoformat(),
         "strict_requirements": bool(strict_requirements),
         "training_seasons": len(train_seasons),
-        "min_training_seasons": {
-            "1w": MIN_TRAINING_SEASONS_1W,
-            "4w": MIN_TRAINING_SEASONS_4W,
-            "18w": MIN_TRAINING_SEASONS_18W,
-        },
-        "seasons_gate": {
-            "1w_pass": len(train_seasons) >= MIN_TRAINING_SEASONS_1W,
-            "4w_pass": (not MODEL_CONFIG.get("use_4w_hybrid", True)) or len(train_seasons) >= MIN_TRAINING_SEASONS_4W,
-            "18w_pass": (not MODEL_CONFIG.get("use_18w_deep", True)) or len(train_seasons) >= MIN_TRAINING_SEASONS_18W,
-        },
+        "min_training_seasons": {"1w": MIN_TRAINING_SEASONS_1W},
+        "seasons_gate": {"1w_pass": len(train_seasons) >= MIN_TRAINING_SEASONS_1W},
         "players_per_position": train_players_per_pos,
         "min_players_per_position": MIN_PLAYERS_PER_POSITION,
         "players_gate": {
@@ -1197,159 +1127,6 @@ def train_models(positions: list = None,
         },
     }
     _write_json_artifact(MODELS_DIR / "training_requirements_gate.json", requirement_gates, "requirements gate report")
-
-    # Horizon-specific models: 4-week LSTM+ARIMA hybrid, 18-week deep (when enabled)
-    # Skip in fast mode: PyTorch/statsmodels horizon models trigger segfaults from
-    # native memory corruption when run after heavy XGBoost/RF component training.
-    horizon_status: Dict[str, Dict[str, str]] = {pos: {} for pos in positions}
-    target_semantics: Dict[str, Dict[str, str]] = {pos: {} for pos in positions}
-    if fast:
-        print("\n[4c/5] Horizon-specific models skipped (fast mode)")
-        for pos in positions:
-            horizon_status[pos] = {"hybrid_4w": "skipped_fast_mode", "deep_18w": "skipped_fast_mode"}
-            target_semantics[pos] = {"1w": "component", "4w": "component", "18w": "component"}
-    else:
-        print("\n[4c/5] Training horizon-specific models (4w hybrid, 18w deep)...")
-        try:
-            from src.models.horizon_models import (
-                Hybrid4WeekModel,
-                DeepSeasonLongModel,
-                HAS_TF,
-                HAS_ARIMA,
-            )
-            n_seasons = len(train_seasons)
-            if not HAS_TF:
-                print("  Horizon note: PyTorch unavailable; LSTM/deep components disabled.")
-            if not HAS_ARIMA:
-                print("  Horizon note: statsmodels unavailable; ARIMA component disabled.")
-            for position in positions:
-                if position not in trainer.trained_models:
-                    horizon_status[position]["hybrid_4w"] = "base_model_missing"
-                    horizon_status[position]["deep_18w"] = "base_model_missing"
-                    target_semantics[position]["1w"] = "base_model_missing"
-                    target_semantics[position]["4w"] = "base_model_missing"
-                    target_semantics[position]["18w"] = "base_model_missing"
-                    continue
-                multi = trainer.trained_models[position]
-                if multi is None:
-                    # Component mode: use component predictor features for horizon models
-                    comp = trainer.component_predictors.get(position)
-                    feature_cols = getattr(comp, "feature_names", []) if comp else []
-                    if not feature_cols:
-                        horizon_status[position]["hybrid_4w"] = "component_mode_no_features"
-                        horizon_status[position]["deep_18w"] = "component_mode_no_features"
-                        target_semantics[position]["1w"] = "component"
-                        target_semantics[position]["4w"] = "component"
-                        target_semantics[position]["18w"] = "component"
-                        continue
-                else:
-                    base = multi.models.get(1) or list(multi.models.values())[0]
-                    feature_cols = getattr(base, "feature_names", [])
-                # Track semantically intended targets: QB may be fp/util; skill positions are utilization-first.
-                target_semantics[position]["1w"] = "target_1w_or_target_util_1w_trainer_selected"
-                target_semantics[position]["4w"] = "target_util_4w_preferred_over_target_4w"
-                target_semantics[position]["18w"] = "target_util_18w_preferred_over_target_18w"
-                if len(feature_cols) < 5:
-                    horizon_status[position]["hybrid_4w"] = "insufficient_features"
-                    horizon_status[position]["deep_18w"] = "insufficient_features"
-                    continue
-                pos_data = train_data[train_data["position"] == position].copy()
-                pos_data = pos_data.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
-                X_pos = pos_data[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0)
-                player_ids = pos_data["player_id"].values
-                seasons_arr = pos_data["season"].values if "season" in pos_data.columns else None
-    
-                if MODEL_CONFIG.get("use_4w_hybrid", True) and n_seasons >= MIN_TRAINING_SEASONS_4W:
-                    y_4w = pos_data.get("target_util_4w", pos_data.get("target_4w"))
-                    if not HAS_TF or not HAS_ARIMA:
-                        reason = []
-                        if not HAS_TF:
-                            reason.append("tensorflow_missing")
-                        if not HAS_ARIMA:
-                            reason.append("statsmodels_missing")
-                        horizon_status[position]["hybrid_4w"] = "unavailable:" + ",".join(reason)
-                    elif y_4w is not None and y_4w.notna().sum() >= 100:
-                        try:
-                            hybrid = Hybrid4WeekModel(position)
-                            hybrid.fit(pos_data, y_4w, player_ids, feature_cols,
-                                      epochs=MODEL_CONFIG.get("lstm_epochs", 80),
-                                      seasons=seasons_arr)
-                            if hybrid.is_fitted:
-                                hybrid.save()
-                                horizon_status[position]["hybrid_4w"] = "trained_and_saved"
-                                print(f"  {position}: 4-week hybrid model saved")
-                            else:
-                                horizon_status[position]["hybrid_4w"] = "fit_not_converged"
-                        except Exception as e:
-                            horizon_status[position]["hybrid_4w"] = f"fit_failed:{e}"
-                            print(f"  4-week hybrid skip for {position}: {e}")
-                    else:
-                        horizon_status[position]["hybrid_4w"] = "insufficient_targets"
-                elif not MODEL_CONFIG.get("use_4w_hybrid", True):
-                    horizon_status[position]["hybrid_4w"] = "disabled_by_config"
-                else:
-                    horizon_status[position]["hybrid_4w"] = "insufficient_training_seasons"
-    
-                if MODEL_CONFIG.get("use_18w_deep", True) and n_seasons >= MIN_TRAINING_SEASONS_18W:
-                    y_18w = pos_data.get("target_util_18w", pos_data.get("target_18w"))
-                    if not HAS_TF:
-                        horizon_status[position]["deep_18w"] = "unavailable:tensorflow_missing"
-                    elif y_18w is not None and y_18w.notna().sum() >= 80:
-                        try:
-                            deep = DeepSeasonLongModel(position, n_features=min(150, len(feature_cols)))
-                            X_arr = X_pos.values.astype(np.float64)
-                            y_arr = y_18w.values.astype(np.float64)
-                            valid = np.isfinite(y_arr) & np.all(np.isfinite(X_arr), axis=1)
-                            if valid.sum() >= 80:
-                                seasons_18w = seasons_arr[valid] if seasons_arr is not None else None
-                                deep.fit(
-                                    X_arr[valid], y_arr[valid],
-                                    feature_names=feature_cols,
-                                    epochs=MODEL_CONFIG.get("deep_epochs", 100),
-                                    batch_size=MODEL_CONFIG.get("deep_batch_size", 64),
-                                    seasons=seasons_18w,
-                                )
-                                if deep.is_fitted:
-                                    deep.save()
-                                    horizon_status[position]["deep_18w"] = "trained_and_saved"
-                                    print(f"  {position}: 18-week deep model saved")
-                                else:
-                                    horizon_status[position]["deep_18w"] = "fit_not_converged"
-                            else:
-                                horizon_status[position]["deep_18w"] = "insufficient_valid_rows"
-                        except Exception as e:
-                            horizon_status[position]["deep_18w"] = f"fit_failed:{e}"
-                            print(f"  18-week deep skip for {position}: {e}")
-                    else:
-                        horizon_status[position]["deep_18w"] = "insufficient_targets"
-                elif not MODEL_CONFIG.get("use_18w_deep", True):
-                    horizon_status[position]["deep_18w"] = "disabled_by_config"
-                else:
-                    horizon_status[position]["deep_18w"] = "insufficient_training_seasons"
-        except ImportError:
-            print("  Horizon models skipped (TensorFlow not available).")
-            for position in positions:
-                horizon_status[position]["hybrid_4w"] = "unavailable:horizon_module_import_error"
-                horizon_status[position]["deep_18w"] = "unavailable:horizon_module_import_error"
-        except Exception as e:
-            print(f"  Horizon-specific training skipped: {e}")
-            for position in positions:
-                horizon_status[position]["hybrid_4w"] = f"unexpected_error:{e}"
-                horizon_status[position]["deep_18w"] = f"unexpected_error:{e}"
-    try:
-        with open(MODELS_DIR / "horizon_model_status.json", "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "generated_at": datetime.now().isoformat(),
-                    "train_seasons": train_seasons,
-                    "status_by_position": horizon_status,
-                    "target_semantics": target_semantics,
-                },
-                f,
-                indent=2,
-            )
-    except Exception as e:
-        print(f"  Horizon status write skipped: {e}")
 
     # Top-10 feature importance per position (explainability)
     try:
@@ -1513,21 +1290,6 @@ def train_models(positions: list = None,
     summary = trainer.get_training_summary()
     print(summary.to_string(index=False))
 
-    # Train preseason projector (season-total model for draft tool)
-    print("\nTraining preseason projector (season-total model)...")
-    try:
-        from src.models.preseason_projector import PreseasonProjector
-        proj, pairs_df = PreseasonProjector.train(seasons=train_seasons + [actual_test_season])
-        projector_path = MODELS_DIR / "preseason_projector.json"
-        proj.save(projector_path)
-        for pos, model in proj.models.items():
-            n = int((pairs_df["position"] == pos).sum())
-            coef_top = sorted(zip(proj.feature_names[pos], model.coef_.tolist()), key=lambda x: abs(x[1]), reverse=True)[:3]
-            print(f"  {pos}: {n} samples, top features: {coef_top}")
-        print(f"  Preseason projector saved to {projector_path}")
-    except Exception as e:
-        print(f"  WARNING: Preseason projector training failed: {e}")
-
     print("\nModels saved to:", MODELS_DIR)
     # Persist feature version so prediction path can detect stale (old-feature) models
     version_path = MODELS_DIR / FEATURE_VERSION_FILENAME
@@ -1576,14 +1338,10 @@ def train_models(positions: list = None,
             "oof_metrics": oof_metrics,
             "test_metrics": held_out_test_metrics,
             "n_features_per_position": {
-                pos: (
-                    len(getattr(trainer.component_predictors.get(pos), "feature_names", []))
-                    if m is None
-                    else len(getattr(
-                        (m.models.get(1) or list(m.models.values())[0]) if hasattr(m, "models") else m,
-                        "feature_names", []
-                    ))
-                )
+                pos: len(getattr(
+                    (m.models.get(1) or list(m.models.values())[0]) if hasattr(m, "models") else m,
+                    "feature_names", []
+                ))
                 for pos, m in trainer.trained_models.items()
             },
             "previous_training_date": prev_metadata.get("training_date"),
@@ -1593,7 +1351,6 @@ def train_models(positions: list = None,
             # Repo-relative so the committed artifact doesn't embed one
             # machine's home directory (AUDIT_REPORT.md #25). Nothing reads
             # these back; they're pointers for a human.
-            "horizon_status_file": str((MODELS_DIR / "horizon_model_status.json").relative_to(PROJECT_ROOT)),
             "bounded_scaler_file": str((MODELS_DIR / "feature_scaler_bounded.joblib").relative_to(PROJECT_ROOT)),
         }
         with open(metadata_path, "w", encoding="utf-8") as f:

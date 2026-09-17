@@ -4,7 +4,7 @@ Traces real rows through every stage that can destroy missingness:
 
     snap_count/team_snaps -> snap_share_pct -> calculate_all_scores' blanket
     fill -> roll3 mean -> roll3 known -> persisted imputation -> the
-    backtester's X.fillna(0) -> ComponentPredictor._prepare_array
+    backtester's X.fillna(0)
 
 Unit tests of each stage all passed while the pipeline as a whole still
 zeroed the value: calculate_all_scores fills NaN before feature engineering
@@ -124,10 +124,10 @@ def test_unknown_row_reaches_the_model_as_the_imputed_value(tmp_path):
     assert unknown[SNAP_ROLL3_COL].iloc[-1] != 0.0, "reverted to fabricated zero"
 
 
-def test_value_survives_the_downstream_fillna_and_prepare_array(tmp_path):
-    """Two more stages that convert NaN to 0. Because the value is already
-    imputed, both must be no-ops for it."""
-    from src.models.component_predictor import ComponentPredictor
+def test_value_survives_the_downstream_fillna(tmp_path):
+    """One more stage that converts NaN to 0. Because the value is already
+    imputed, it must be a no-op for it. (A second stage, the retired
+    ComponentPredictor._prepare_array, was deleted 2026-09-17.)"""
 
     df = _through_feature_engineering(_through_utilization(_raw_frame()))
     train = df[df.player_id == KNOWN]
@@ -138,7 +138,7 @@ def test_value_survives_the_downstream_fillna_and_prepare_array(tmp_path):
 
     cols = [SNAP_ROLL3_COL, SNAP_KNOWN_COL]
     X = df[cols].fillna(0)                       # ts_backtester stage
-    prepared = ComponentPredictor("WR")._prepare_array(X.to_numpy(dtype=float))
+    prepared = X.to_numpy(dtype=float)
 
     unknown_idx = df.index[df.player_id == UNKNOWN]
     final = prepared[[df.index.get_loc(i) for i in unknown_idx], 0]

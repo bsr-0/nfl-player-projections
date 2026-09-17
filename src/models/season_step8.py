@@ -1,6 +1,7 @@
 """Step 8 season projection as a production model: E[games] x E[PPR/game].
 
-Extracted from `_step8_arm` in scripts/walk_forward_preseason.py, which was an
+Extracted from `_step8_arm` in scripts/walk_forward_preseason.py (the four-arm
+harness, deleted 2026-09-17 with the PreseasonProjector arms), which was an
 EVALUATION harness -- it required the target-season actuals to exist, so it
 could not project a season that had not happened yet.
 
@@ -10,8 +11,8 @@ of four, and it is best on rookies specifically.
     mean MAE rank   step8 1.25 | candidate 1.75 | phase7 3.00 | production 4.00
     rookies (n=1012) step8 39.81 | candidate 40.56 | phase7 44.96 | production 53.29
 
-The arm the UI currently ships (`PreseasonProjector`, the "production" arm)
-is last on both.
+The arm the UI shipped until 2026-08-28 (`PreseasonProjector`, the
+"production" arm) was last on both; it was deleted 2026-09-17.
 
 ### The two halves
 
