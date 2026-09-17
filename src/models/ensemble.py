@@ -1278,13 +1278,22 @@ class ModelTrainer:
         y_dict_util = {k: v[valid_mask] for k, v in y_dict_util.items()}
         y_dict_fp = {k: v[valid_mask] for k, v in y_dict_fp.items()}
 
+        # Season labels for the season-aware CV inside PositionModel.fit.
+        # Until 2026-09-16 this path never passed them, so every QB tuning
+        # and OOF-stacking fold fell back to a plain TimeSeriesSplit: mid-
+        # season cuts, no purge gap, while RB/WR/TE got the gapped
+        # season-aware splitter from the single-model path below.
+        seasons_arr = None
+        if "season" in pos_data.columns:
+            seasons_arr = pos_data.loc[valid_mask, "season"].values
+
         sample_weight = None
         halflife = MODEL_CONFIG.get("recency_decay_halflife")
-        if halflife and "season" in pos_data.columns:
-            seasons = pos_data.loc[valid_mask, "season"]
-            max_season = seasons.max()
-            if max_season > seasons.min():
-                decay = np.power(0.5, (max_season - seasons.values.astype(float)) / float(halflife))
+        if halflife and seasons_arr is not None:
+            seasons_f = seasons_arr.astype(float)
+            max_season = seasons_f.max()
+            if max_season > seasons_f.min():
+                decay = np.power(0.5, (max_season - seasons_f) / float(halflife))
                 sample_weight = decay / decay.max()
 
         n_features = MODEL_CONFIG.get("n_features_per_position", 50)
@@ -1313,13 +1322,16 @@ class ModelTrainer:
         y_dict_util_val = {k: v.iloc[split_idx:] for k, v in y_dict_util.items()}
         y_dict_fp_val = {k: v.iloc[split_idx:] for k, v in y_dict_fp.items()}
         sw_train_sel = sample_weight[:split_idx] if sample_weight is not None else None
+        seasons_train_sel = seasons_arr[:split_idx] if seasons_arr is not None else None
 
         # Train both model variants on training portion only
         multi_util_sel = MultiWeekModel("QB")
-        multi_util_sel.fit(X_train_sel, y_dict_util_train, tune_hyperparameters=tune_hyperparameters, sample_weight=sw_train_sel)
+        multi_util_sel.fit(X_train_sel, y_dict_util_train, tune_hyperparameters=tune_hyperparameters,
+                           sample_weight=sw_train_sel, seasons=seasons_train_sel)
 
         multi_fp_sel = MultiWeekModel("QB")
-        multi_fp_sel.fit(X_train_sel, y_dict_fp_train, tune_hyperparameters=tune_hyperparameters, sample_weight=sw_train_sel)
+        multi_fp_sel.fit(X_train_sel, y_dict_fp_train, tune_hyperparameters=tune_hyperparameters,
+                         sample_weight=sw_train_sel, seasons=seasons_train_sel)
 
         # Evaluate on validation portion
         for fn in (list(multi_util_sel.models.values())[0].feature_names if multi_util_sel.models else []):
@@ -1379,7 +1391,8 @@ class ModelTrainer:
 
         # --- Retrain winner on ALL training data for final model ---
         winner = MultiWeekModel("QB")
-        winner.fit(X, y_dict_winner, tune_hyperparameters=tune_hyperparameters, sample_weight=sample_weight)
+        winner.fit(X, y_dict_winner, tune_hyperparameters=tune_hyperparameters,
+                   sample_weight=sample_weight, seasons=seasons_arr)
         if qb_target == "util" and qb_conv.is_fitted:
             # Refit converter on full training data
             conv_full = pos_data.loc[valid_mask].copy()
