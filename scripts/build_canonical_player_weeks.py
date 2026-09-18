@@ -40,6 +40,8 @@ from config.settings import DB_PATH, POSITIONS, regular_season_max_week
 from src.data.nfl_data_loader import get_pfr_to_gsis_map
 
 TABLE_NAME = "canonical_player_weeks"
+POSITION_ALIASES = {"FB": "RB", "HB": "RB"}
+
 TEAM_ALIASES = {
     "ARZ": "ARI", "BLT": "BAL", "CLV": "CLE", "HST": "HOU",
     "OAK": "LV", "SD": "LAC", "SL": "LA", "STL": "LA",
@@ -91,6 +93,8 @@ def load_stats(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=keep + ["has_stats_row"])
     df["team"] = _norm_team(df["team"])
+    if "position" in df.columns:
+        df["position"] = df["position"].replace(POSITION_ALIASES)
     df["has_stats_row"] = 1
     return df.drop_duplicates(["player_id","season","week"], keep="last")
 
@@ -111,6 +115,7 @@ def load_snaps(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     if snaps.empty:
         return snaps.assign(player_id=[], has_snap_row=[])
     snaps["team"] = _norm_team(snaps["team"])
+    snaps["position"] = snaps["position"].replace(POSITION_ALIASES)
     snaps["player_id"] = snaps["pfr_player_id"].map(get_pfr_to_gsis_map())
     snaps = snaps.dropna(subset=["player_id"]).copy()
     snaps = snaps[snaps["position"].isin(POSITIONS)].copy()
@@ -146,6 +151,7 @@ def load_rosters(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
             continue
         if "game_type" in df.columns:
             df = df[df["game_type"].fillna("REG").eq("REG")]
+        df["position"] = df["position"].replace(POSITION_ALIASES)
         df = df[df["position"].isin(POSITIONS)].copy()
         df["team"] = _norm_team(df["team"])
         df["player_name"] = df[name_col] if name_col in df.columns else None
@@ -177,6 +183,7 @@ def load_player_positions(conn: sqlite3.Connection) -> pd.DataFrame:
     if not {"player_id", "position"}.issubset(cols):
         return pd.DataFrame(columns=["player_id", "player_position"])
     out = pd.read_sql("SELECT player_id, position AS player_position FROM players", conn)
+    out["player_position"] = out["player_position"].replace(POSITION_ALIASES)
     out = out[out["player_position"].isin(POSITIONS)].drop_duplicates("player_id")
     return out
 
