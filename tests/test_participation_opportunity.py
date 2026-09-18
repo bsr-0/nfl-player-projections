@@ -6,6 +6,7 @@ from src.models.participation_opportunity import (
     FEATURES, add_targets, build_causal_features, expanding_season_folds,
     normalize_snap_share, target_name, validate_causal_contract,
     predict_preseason,
+    predict_asof_week,
 )
 from scripts.run_phase2_participation import evaluate, summarize
 
@@ -129,6 +130,19 @@ def test_preseason_prediction_excludes_target_season_from_training():
     frame = build_causal_features(panel)
     prediction = predict_preseason(frame, 2025)
     assert prediction.season.eq(2025).all()
+    assert prediction.week.eq(1).all()
     assert {"participation_probability", "conditional_snap_share", "expected_snap_share"} <= set(prediction)
     assert prediction.participation_probability.between(0, 1).all()
     assert prediction.expected_snap_share.between(0, 1).all()
+
+
+def test_asof_week_prediction_excludes_target_week_outcome():
+    panel = _panel()
+    panel = pd.concat([panel.assign(player_id=panel.player_id + f"_{copy}") for copy in range(10)], ignore_index=True)
+    before = build_causal_features(panel)
+    prediction_before = predict_asof_week(before, 2025, 2)
+    mask = (panel.season.eq(2025) & panel.week.eq(2))
+    panel.loc[mask, ["offense_snaps", "offense_pct"]] = [0, 0]
+    after = build_causal_features(panel)
+    prediction_after = predict_asof_week(after, 2025, 2)
+    pd.testing.assert_frame_equal(prediction_before, prediction_after)

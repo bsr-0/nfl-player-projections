@@ -24,7 +24,7 @@ from config.settings import DB_PATH
 from src.models.participation_opportunity import (
     FEATURES, PRIMARY_THRESHOLD, TARGET_THRESHOLDS, build_causal_features,
     expanding_season_folds, feature_columns_for_ablation, make_classifier,
-    make_opportunity_regressor, predict_preseason, target_name, validate_causal_contract,
+    make_opportunity_regressor, predict_asof_week, target_name, validate_causal_contract,
 )
 
 
@@ -201,7 +201,9 @@ def main() -> int:
     ap.add_argument("--min-train-seasons", type=int, default=3)
     ap.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "data" / "experiments" / "phase2")
     ap.add_argument("--predict-season", type=int, default=None,
-                    help="also fit only seasons before S and write Phase 2 predictions for S")
+                    help="also write Phase 2 predictions for a target season/week")
+    ap.add_argument("--predict-week", type=int, default=1,
+                    help="target week for --predict-season; Week 1 is the pre-season path")
     args = ap.parse_args()
     with sqlite3.connect(args.db) as conn:
         exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_player_weeks'").fetchone()
@@ -216,9 +218,9 @@ def main() -> int:
     predictions.to_csv(args.output_dir / "oof_predictions.csv", index=False)
     (args.output_dir / "evaluation.json").write_text(json.dumps(report, indent=2, default=str) + "\n")
     if args.predict_season is not None:
-        future = predict_preseason(frame, args.predict_season)
-        future.to_csv(args.output_dir / f"predictions_{args.predict_season}.csv", index=False)
-        print(f"wrote {len(future):,} strictly pre-season prediction rows for {args.predict_season}")
+        future = predict_asof_week(frame, args.predict_season, args.predict_week)
+        future.to_csv(args.output_dir / f"predictions_{args.predict_season}_week_{args.predict_week}.csv", index=False)
+        print(f"wrote {len(future):,} strictly as-of prediction rows for {args.predict_season} week {args.predict_week}")
     print(json.dumps(report["summary"], indent=2))
     print(f"wrote {len(predictions):,} OOF prediction rows to {args.output_dir}")
     return 0

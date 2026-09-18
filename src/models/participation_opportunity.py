@@ -180,30 +180,31 @@ def make_opportunity_regressor(random_state: int = 42) -> Pipeline:
     ])
 
 
-def fit_preseason_models(frame: pd.DataFrame, predict_season: int, random_state: int = 42) -> tuple[Pipeline, Pipeline]:
-    """Fit primary participation/opportunity models using seasons before ``S``.
-
-    This is the safe deployment boundary for an upcoming season.  It refuses
-    to train on any row from ``predict_season``; callers wanting in-season
-    updating need a separately audited as-of-week protocol.
-    """
+def fit_asof_week_models(
+    frame: pd.DataFrame, predict_season: int, predict_week: int, random_state: int = 42,
+) -> tuple[Pipeline, Pipeline]:
+    """Fit only outcomes available before ``(predict_season, predict_week)``."""
     validate_causal_contract(frame)
-    train = frame[(frame["season"] < predict_season) & frame["label_observed"].eq(1)]
+    historical = frame["season"].lt(predict_season)
+    same_season_past = frame["season"].eq(predict_season) & frame["week"].lt(predict_week)
+    train = frame[(historical | same_season_past) & frame["label_observed"].eq(1)]
     primary = target_name(PRIMARY_THRESHOLD)
     if train.empty or train[primary].nunique() < 2:
-        raise ValueError(f"insufficient observed primary labels before season {predict_season}")
+        raise ValueError(f"insufficient observed primary labels before {predict_season} week {predict_week}")
     classifier = make_classifier("hist_gbm", random_state).fit(train[FEATURES], train[primary].astype(int))
     positive = train[train[primary].eq(1)]
     if len(positive) < 100:
-        raise ValueError(f"insufficient meaningful-participation rows before season {predict_season}")
+        raise ValueError(f"insufficient meaningful-participation rows before {predict_season} week {predict_week}")
     regressor = make_opportunity_regressor(random_state).fit(positive[FEATURES], positive["snap_share"])
     return classifier, regressor
 
 
-def predict_preseason(frame: pd.DataFrame, predict_season: int, random_state: int = 42) -> pd.DataFrame:
-    """Produce pre-season Phase 2 predictions without modifying PPR outputs."""
-    classifier, regressor = fit_preseason_models(frame, predict_season, random_state)
-    target = frame[frame["season"].eq(predict_season)].copy()
+def predict_asof_week(
+    frame: pd.DataFrame, predict_season: int, predict_week: int, random_state: int = 42,
+) -> pd.DataFrame:
+    """Predict one week using only labels and features knowable before kickoff."""
+    classifier, regressor = fit_asof_week_models(frame, predict_season, predict_week, random_state)
+    target = frame[frame["season"].eq(predict_season) & frame["week"].eq(predict_week)].copy()
     if target.empty:
         return pd.DataFrame(columns=KEY + ["team", "position", "participation_probability",
                                             "conditional_snap_share", "expected_snap_share"])
@@ -214,6 +215,16 @@ def predict_preseason(frame: pd.DataFrame, predict_season: int, random_state: in
         conditional_snap_share=conditional,
         expected_snap_share=probability * conditional,
     )
+
+
+def fit_preseason_models(frame: pd.DataFrame, predict_season: int, random_state: int = 42) -> tuple[Pipeline, Pipeline]:
+    """Compatibility wrapper for a true pre-season (Week 1) fit."""
+    return fit_asof_week_models(frame, predict_season, predict_week=1, random_state=random_state)
+
+
+def predict_preseason(frame: pd.DataFrame, predict_season: int, random_state: int = 42) -> pd.DataFrame:
+    """Produce Week 1-only pre-season predictions; later weeks use ``predict_asof_week``."""
+    return predict_asof_week(frame, predict_season, predict_week=1, random_state=random_state)
 
 
 @dataclass(frozen=True)
