@@ -39,7 +39,29 @@ The builder reports:
 - participation-state counts;
 - missing stats rows;
 - confirmed played weeks with no stats row;
-- confirmed zero-snap weeks with no stats row.
+- confirmed zero-snap weeks with no stats row;
+- a season/position audit table written by default to
+  `data/experiments/canonical_player_weeks_audit.csv`.
+
+## Phase 1 acceptance gates
+
+The build fails rather than silently continuing when:
+- `(player_id, season, week)` is duplicated;
+- team/opponent or QB/RB/WR/TE identity is unresolved;
+- a confirmed-played row has non-positive snaps;
+- a confirmed-zero row is not exactly zero snaps;
+- a missing stats row receives fabricated fantasy points;
+- a mapped snap row is classified as unknown;
+- an existing `player_weekly_stats.fantasy_points` value changes.
+
+FB/HB source positions are normalized to RB consistently with the rest of the
+ingest pipeline.
+
+Phase 1 is complete when these gates pass on the repository database and the
+season/position audit has been inspected for unexpected discontinuities. The
+audit intentionally does not impose arbitrary maximum rates on `unknown` or
+missing-stat rows; those are measurements to carry into Phase 2, not defects to
+hide.
 
 ## Phase 1 non-goals
 
