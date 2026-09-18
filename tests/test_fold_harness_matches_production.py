@@ -27,6 +27,24 @@ pytestmark = pytest.mark.skipif(
 def captured(monkeypatch):
     """Intercept _prepare_training_data and record how it was called."""
     import src.models.feature_preparation as fp
+    import src.models.data_loading as loading
+    import src.utils.data_manager as data_manager
+    from src.utils.database import DatabaseManager
+
+    # These tests inspect fold boundaries on the existing database. Refreshing
+    # live NFL data is unrelated and can hang offline or mutate the test input
+    # -- and, observed intermittently in a full-suite run (2026-09-18), can
+    # trip a REAL DataQualityGateBlocked from live/concurrent data activity
+    # this test has nothing to do with. `auto_refresh_data` is DEFINED in
+    # data_manager and merely re-imported into data_loading's namespace
+    # (`from src.utils.data_manager import ... auto_refresh_data`); patching
+    # only the re-exported copy left the origin reachable from any other
+    # caller that imports it directly, or after a module reimport rebinds
+    # data_loading's copy. Patch both so no path can reach the real one.
+    seasons = DatabaseManager().get_seasons_with_data()
+    fake_refresh = lambda: {"latest_season": max(seasons), "available_seasons": seasons}
+    monkeypatch.setattr(loading, "auto_refresh_data", fake_refresh)
+    monkeypatch.setattr(data_manager, "auto_refresh_data", fake_refresh)
 
     seen = {}
 
