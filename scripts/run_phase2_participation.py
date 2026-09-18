@@ -229,6 +229,17 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     predictions.to_csv(args.output_dir / "oof_predictions.csv", index=False)
     (args.output_dir / "evaluation.json").write_text(json.dumps(report, indent=2, default=str) + "\n")
+    manifest = {
+        "system": "participation_opportunity", "phase": 2,
+        "panel_source": "canonical_player_weeks", "oof_file": "oof_predictions.csv",
+        "oof_provenance_columns": ["phase2_test_season", "phase2_train_max_season"],
+        "feature_columns": FEATURES,
+        "include_pregame_injury": bool(args.include_pregame_injury),
+        "target_thresholds": list(TARGET_THRESHOLDS),
+        "primary_threshold": PRIMARY_THRESHOLD,
+        "min_train_seasons": args.min_train_seasons,
+    }
+    (args.output_dir / "phase2_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if args.predict_season is not None:
         future = predict_asof_week(frame, args.predict_season, args.predict_week)
         future.to_csv(args.output_dir / f"predictions_{args.predict_season}_week_{args.predict_week}.csv", index=False)

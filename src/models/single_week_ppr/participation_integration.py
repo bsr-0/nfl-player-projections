@@ -59,6 +59,26 @@ def validate_phase2_oof(oof: pd.DataFrame, model: str = P2_MODEL) -> pd.DataFram
     return out[KEY + ["p2_participation_probability", "p2_expected_snap_share", *PROVENANCE]]
 
 
+def validate_phase2_manifest(oof_path: Path) -> dict:
+    """Require canonical Phase 2 output, never the raw-snap smoke artifact."""
+    path = Path(oof_path).parent / "phase2_manifest.json"
+    if not path.exists():
+        raise ValueError(f"missing Phase 2 manifest beside OOF file: {path}")
+    try:
+        manifest = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid Phase 2 manifest: {path}") from exc
+    if manifest.get("system") != "participation_opportunity" or manifest.get("phase") != 2:
+        raise ValueError("Phase 2 manifest identifies the wrong system or phase")
+    if manifest.get("panel_source") != "canonical_player_weeks":
+        raise ValueError("Phase 3 requires canonical_player_weeks, not a raw-snap smoke artifact")
+    if manifest.get("oof_file") != Path(oof_path).name:
+        raise ValueError("Phase 2 manifest OOF filename does not match requested artifact")
+    if set(PROVENANCE) - set(manifest.get("oof_provenance_columns", [])):
+        raise ValueError("Phase 2 manifest does not declare required OOF provenance")
+    return manifest
+
+
 def attach_phase2_oof(ppr: pd.DataFrame, oof: pd.DataFrame) -> pd.DataFrame:
     """Inner-join one PPR population to valid Phase 2 OOF predictions.
 
@@ -120,6 +140,7 @@ def run_participation_integration(
     from src.utils.leakage import filter_feature_columns
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    phase2_manifest = validate_phase2_manifest(oof_path)
     oof = validate_phase2_oof(pd.read_csv(oof_path))
     positions = list(positions) if positions is not None else list(POSITIONS)
     fold_loader = fold_loader or run_fold
@@ -181,7 +202,8 @@ def run_participation_integration(
                 paired.append({"position": position, "season": season, "arm": arm, **result})
             aggregate = paired_bootstrap_mae_delta(joined, n_bootstrap=n_bootstrap)
             paired.append({"position": "ALL", "season": "ALL", "arm": arm, **aggregate})
-    report = {"phase": "Phase 3 participation integration", "selected_phase2_model": P2_MODEL,
+    report = {"system": "participation_opportunity", "phase": 3,
+              "phase2_manifest": phase2_manifest, "selected_phase2_model": P2_MODEL,
               "arms": ARMS, "failures": failures, "all_requested_folds_completed": not failures,
               "selection_rule": "No production change. A future adoption decision requires complete folds, a negative aggregate paired-bootstrap CI, and review by position.",
               "paired_bootstrap": paired}

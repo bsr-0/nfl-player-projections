@@ -366,12 +366,14 @@ def main() -> int:
     ap.add_argument("--seasons", nargs=2, type=int, metavar=("LO","HI"), default=[2013, 2026])
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--db", type=Path, default=DB_PATH,
+                    help="SQLite database containing source tables and canonical output")
     ap.add_argument("--csv", type=Path, default=None)
     ap.add_argument("--audit-csv", type=Path, default=PROJECT_ROOT / "data" / "experiments" / "canonical_player_weeks_audit.csv")
     args = ap.parse_args()
     lo, hi = sorted(args.seasons)
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(args.db))
     panel = build_panel(conn, lo, hi)
     summary = audit_panel(conn, panel, lo, hi)
 
