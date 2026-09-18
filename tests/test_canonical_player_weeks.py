@@ -9,17 +9,17 @@ from scripts.build_canonical_player_weeks import audit_panel, validate_panel
 def _base():
     return pd.DataFrame([
         {
-            "player_id":"p1","season":2025,"week":1,
+            "player_id":"p1","season":2025,"week":1,"team":"KC","opponent":"LV","position":"QB",
             "participation_state":"confirmed_played","offense_snaps":40,
             "has_stats_row":1,"fantasy_points":12.0,
         },
         {
-            "player_id":"p2","season":2025,"week":1,
+            "player_id":"p2","season":2025,"week":1,"team":"KC","opponent":"LV","position":"RB",
             "participation_state":"confirmed_zero_snaps","offense_snaps":0,
             "has_stats_row":0,"fantasy_points":pd.NA,
         },
         {
-            "player_id":"p3","season":2025,"week":1,
+            "player_id":"p3","season":2025,"week":1,"team":"KC","opponent":"LV","position":"WR",
             "participation_state":"unknown","offense_snaps":pd.NA,
             "has_stats_row":0,"fantasy_points":pd.NA,
         },
@@ -59,9 +59,6 @@ def test_player_week_key_is_unique():
 
 def _full_base():
     df = _base().copy()
-    df["team"] = "KC"
-    df["opponent"] = "LV"
-    df["position"] = ["QB", "RB", "WR"]
     df["has_snap_row"] = [1, 1, 0]
     return df
 
