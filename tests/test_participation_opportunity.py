@@ -122,6 +122,8 @@ def test_evaluation_harness_produces_strict_oof_metrics():
     assert not predictions.empty
     assert "unknown" not in set(predictions.player_id)
     assert predictions.season.min() >= 2023
+    assert (predictions.phase2_train_max_season < predictions.season).all()
+    assert predictions.phase2_test_season.equals(predictions.season)
     summary = summarize(report)
     assert any(
         row["threshold"] == .10 and row["model"] == "logistic" and row["segment"] == "all"

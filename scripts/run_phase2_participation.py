@@ -123,6 +123,8 @@ def evaluate(frame: pd.DataFrame, min_train_seasons: int = 3) -> tuple[pd.DataFr
                     pred["participation_probability"] = p
                     pred["participation_actual"] = y_test.to_numpy()
                     pred["model"] = kind
+                    pred["phase2_test_season"] = fold.test_season
+                    pred["phase2_train_max_season"] = int(train["season"].max())
                     predictions.append(pred)
 
         # Conditional opportunity uses only primary-positive rows.  Evaluation

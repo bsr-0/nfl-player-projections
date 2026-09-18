@@ -7,6 +7,10 @@ on:
       - 'scripts/run_phase2_participation.py'
       - 'tests/test_participation_opportunity.py'
       - 'docs/PHASE2_PARTICIPATION_OPPORTUNITY.md'
+      - 'src/models/single_week_ppr/participation_integration.py'
+      - 'scripts/run_phase3_participation_integration.py'
+      - 'tests/test_phase3_participation_integration.py'
+      - 'docs/PHASE3_PARTICIPATION_INTEGRATION.md'
       - '.github/workflows/phase2-participation.yml'
   push:
     paths:
@@ -23,4 +27,4 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install pandas==2.1.4 numpy==1.26.3 scikit-learn==1.4.0 pytest==7.4.4
-      - run: pytest -q tests/test_canonical_player_weeks.py tests/test_participation_opportunity.py
+      - run: pytest -q tests/test_canonical_player_weeks.py tests/test_participation_opportunity.py tests/test_phase3_participation_integration.py
