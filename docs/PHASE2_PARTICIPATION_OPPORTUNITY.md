@@ -43,10 +43,12 @@ shifted by at least one player-game:
 - cold-start and history-availability indicators;
 - schedule week and home/away.
 
-Current status, same-week depth chart, injuries, team/opponent identity, PPR,
-snaps, and snap share are excluded. Historical injury/depth-chart features may
-be added only after their source timestamps prove they were available before
-kickoff. A retrospective depth chart is leakage, not a role feature.
+Current status, same-week depth chart, team/opponent identity, PPR, snaps, and
+snap share are excluded. The default model also neutralizes injury score. The
+optional `--include-pregame-injury` ablation reuses the repository's existing
+kickoff-filtered `player_injuries` cache; it drops reports modified after
+kickoff. Historical depth-chart features remain excluded: a retrospective
+depth chart is leakage, not a role feature.
 
 The previous team/position rank is an objective usage measurement, not a
 manual RB1/WR1 label. Human-readable labels may eventually be derived for the
@@ -80,6 +82,7 @@ python scripts/build_canonical_player_weeks.py --write --seasons 2013 2026
 python scripts/run_phase2_participation.py
 python scripts/run_phase2_participation.py --predict-season 2026
 python scripts/run_phase2_participation.py --predict-season 2026 --predict-week 4
+python scripts/run_phase2_participation.py --include-pregame-injury
 ```
 
 Outputs (gitignored experiment data):
@@ -116,7 +119,8 @@ until Phase 3 measures it on identical held-out player-weeks.
 
 ## Known incomplete inputs
 
-- Pregame injuries: excluded until timestamp provenance is enforced.
+- Pregame injuries: available only through the opt-in, kickoff-filtered cache
+  ablation; its incremental out-of-season value must be measured.
 - Historical depth charts: excluded until snapshots are demonstrably pregame.
 - Routes: the repo has pass-play participation for some seasons, but it is not
   yet part of this first objective snap target and has uneven coverage.

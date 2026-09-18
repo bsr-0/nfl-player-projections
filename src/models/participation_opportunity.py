@@ -35,6 +35,7 @@ NUMERIC_FEATURES = [
     "snap_share_lag1", "snap_share_roll3", "snap_share_roll5",
     "snap_share_roll3_known", "played_lag1", "played_roll3",
     "team_position_rank_lag1", "cold_start",
+    "injury_score",
 ]
 CATEGORICAL_FEATURES = ["position", "status_lag1"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -82,7 +83,7 @@ def target_name(threshold: float) -> str:
     return "meaningful_any_snap" if threshold == 0 else f"meaningful_snap_share_{int(round(threshold * 100)):02d}"
 
 
-def build_causal_features(panel: pd.DataFrame) -> pd.DataFrame:
+def build_causal_features(panel: pd.DataFrame, include_pregame_injury: bool = False) -> pd.DataFrame:
     """Build player-history features with a strict one-game minimum lag.
 
     The function sorts internally and restores chronological order.  A future
@@ -94,6 +95,13 @@ def build_causal_features(panel: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("duplicate player/season/week rows")
     out = out.sort_values(KEY).reset_index(drop=True)
     out["is_home"] = out.get("home_away", pd.Series(index=out.index, dtype="object")).eq("home").astype("int8")
+    # Injury score is a same-week feature only when it was enriched through
+    # the repository's kickoff-filtered cache path.  Otherwise neutralize it
+    # rather than accidentally trusting an unproven column from a caller.
+    if include_pregame_injury and "injury_score" in out:
+        out["injury_score"] = pd.to_numeric(out["injury_score"], errors="coerce").clip(0, 1).fillna(1.0)
+    else:
+        out["injury_score"] = 1.0
 
     # Rank is measured after each game, then lagged with the rest of player
     # history.  It is not a retrospective/manual WR1/RB1 label.

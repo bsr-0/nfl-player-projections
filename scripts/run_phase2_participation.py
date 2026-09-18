@@ -195,6 +195,12 @@ def summarize(report: dict) -> dict:
     return out
 
 
+def add_kickoff_filtered_injury_score(panel: pd.DataFrame) -> pd.DataFrame:
+    """Reuse the one repository-authoritative pregame injury-cache guard."""
+    from src.features.feature_engineering import FeatureEngineer
+    return FeatureEngineer()._merge_injury_data_from_cache(panel.copy())
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", type=Path, default=DB_PATH)
@@ -204,6 +210,8 @@ def main() -> int:
                     help="also write Phase 2 predictions for a target season/week")
     ap.add_argument("--predict-week", type=int, default=1,
                     help="target week for --predict-season; Week 1 is the pre-season path")
+    ap.add_argument("--include-pregame-injury", action="store_true",
+                    help="include only kickoff-filtered player_injuries cache scores as an optional ablation")
     args = ap.parse_args()
     with sqlite3.connect(args.db) as conn:
         exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_player_weeks'").fetchone()
@@ -211,7 +219,9 @@ def main() -> int:
             raise SystemExit("canonical_player_weeks is missing; run Phase 1 builder with --write first")
         panel = pd.read_sql("SELECT * FROM canonical_player_weeks", conn)
 
-    frame = build_causal_features(panel)
+    if args.include_pregame_injury:
+        panel = add_kickoff_filtered_injury_score(panel)
+    frame = build_causal_features(panel, include_pregame_injury=args.include_pregame_injury)
     predictions, report = evaluate(frame, args.min_train_seasons)
     report["summary"] = summarize(report)
     args.output_dir.mkdir(parents=True, exist_ok=True)

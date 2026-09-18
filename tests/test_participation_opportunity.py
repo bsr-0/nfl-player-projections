@@ -66,6 +66,15 @@ def test_features_never_include_current_outcome_columns():
     assert not ({"offense_snaps", "snap_share", "fantasy_points", "status"} & set(FEATURES))
 
 
+def test_injury_score_requires_explicit_kickoff_filtered_opt_in():
+    panel = _panel()
+    panel["injury_score"] = 0.0
+    neutral = build_causal_features(panel)
+    opted_in = build_causal_features(panel, include_pregame_injury=True)
+    assert neutral.injury_score.eq(1.0).all()
+    assert opted_in.injury_score.eq(0.0).all()
+
+
 def test_first_player_row_is_cold_start_and_has_no_usage_history():
     frame = build_causal_features(_panel())
     first = frame[frame.player_id.eq("lead")].sort_values(["season", "week"]).iloc[0]
