@@ -338,7 +338,7 @@ function loadWeek(week) {
   const weeks = META.weeks;
   $("prev").disabled = weeks.indexOf(WEEK) <= 0;
   $("next").disabled = weeks.indexOf(WEEK) >= weeks.length - 1;
-  return fetch(`data/weekly_${SEASON}_wk${WEEK}.json`)
+  return fetch(`data/weekly_${SEASON}_wk${week}.json`)
     .then(r => r.ok ? r.json() : [])
     .then(rows => {
       RAW = (rows || []).filter(r => r && r.predicted_points != null);

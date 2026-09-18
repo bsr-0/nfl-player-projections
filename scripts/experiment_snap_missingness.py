@@ -44,7 +44,10 @@ import pandas as pd
 
 SEASONS = [2016, 2017, 2018, 2024]
 POSITIONS = ["RB", "WR", "TE"]
-OUT_DIR = Path("data/experiments/snap_missingness_v2")
+# v2 (2026-08-20) ran under target_mode="component", then the production
+# target; that mode was retired 2026-08-29 and deleted 2026-09-17. v3_fp is
+# the same pre-registered A/B under the direct-FP target production trains.
+OUT_DIR = Path("data/experiments/snap_missingness_v3_fp")
 
 
 def configure(variant: str) -> None:
@@ -81,10 +84,6 @@ def main() -> int:
             t0 = time.time()
             pred, metrics = run_ts_backtest(
                 season=season, positions=POSITIONS,
-                # The 2026-08 run of this A/B used target_mode="component",
-                # then the production target; that mode was retired
-                # 2026-08-29 and deleted 2026-09-17. A rerun measures the
-                # direct-FP arm, which is what production trains now.
                 target_mode="fp", verbose=False,
             )
             pred["variant"] = variant

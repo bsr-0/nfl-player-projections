@@ -37,8 +37,15 @@ def main() -> int:
     from run_week1_coldstart_experiment import step8_pace
     from src.utils.data_manager import DataManager
 
+    from src.utils.database import DatabaseManager
     latest = max(DataManager().get_available_seasons_from_db())
-    seasons = list(range(FIRST_SEASON, latest + 2))   # +1 = the upcoming season
+    seasons = list(range(FIRST_SEASON, latest + 1))
+    # The next season only once its schedule exists (i.e. the offseason
+    # before it). With the 3-season anchor window, pairs can be built for
+    # any future season, so without this cap the table grew a "2027" that
+    # nothing serves and that a reader could mistake for a projection.
+    if DatabaseManager().has_schedule_for_season(latest + 1):
+        seasons.append(latest + 1)
     frames = []
     for season in seasons:
         df = step8_pace(season)

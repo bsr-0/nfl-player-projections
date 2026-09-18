@@ -40,7 +40,14 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
-MIN_GAMES = 6
+# A player-season needs at least one game to yield per-game rates. This was
+# 6 until 2026-09-17, which silently dropped every non-rookie whose prior
+# season was short (Nabers, Hill, Murray, Watson, Richardson entering 2026:
+# 178 of 628 week-1 players had no season projection). The sample size of a
+# prior season is information, not a filter: games_played_y1 is a feature
+# and training is weighted by target-season games, so the model can
+# discount a 3-game rate itself.
+MIN_GAMES = 1
 # Undrafted encoding, matching advanced_rookie_injury so the two feature
 # sources cannot disagree about what "undrafted" looks like.
 UNDRAFTED_ROUND = 8
@@ -277,15 +284,11 @@ def _cold_start_rows(curr_totals: pd.DataFrame, season_agg: pd.DataFrame,
     there was no last season, and the Ridge arms' in-fold imputer plus
     indicator columns can then represent that honestly.
     """
-    # Prior existence is checked against RAW history, not season_agg. season_agg
-    # drops player-seasons under MIN_GAMES, so a player with 3 games last year
-    # has no aggregate row and would be misread as a rookie -- that alone
-    # inflated the 2025 WR cold-start population from 38 to 82. A thin prior
-    # season is not the same as no NFL career.
-    #
-    # Those sub-threshold players stay dropped, exactly as before this change.
-    # That is a real pre-existing population gap, but widening it here would
-    # silently mix two different fixes into one measurement.
+    # Prior existence is checked against RAW history, not season_agg, so a
+    # thin prior season is never misread as no NFL career (that alone once
+    # inflated the 2025 WR cold-start population from 38 to 82). Since
+    # 2026-09-17 such players get a veteran row anchored on their most
+    # recent season in the lookback window; see build_multiyear_season_pairs.
     prior_ids = set(history.loc[history["season"] < target, "player_id"])
     rookie_ids = sorted(set(curr_totals["player_id"]) - prior_ids)
     if not rookie_ids:
@@ -367,11 +370,10 @@ def build_multiyear_season_pairs(db, seasons: List[int],
                 ignore_index=True)
     dest_profiles = _destination_team_profiles(history, inference_season)
 
-    # Real experience: count of distinct prior seasons this player
-    # appears in, computed once over full history (fixes the
-    # always-empty `rosters` table join in PreseasonProjector).
+    # years_exp (distinct prior seasons in player_weekly_stats -- the
+    # `rosters` join PreseasonProjector used was always empty) is computed
+    # per target below, from raw history, so a one-game season counts.
     season_agg = season_agg.sort_values(["player_id", "season"])
-    season_agg["years_exp"] = season_agg.groupby("player_id").cumcount()
 
     season_list = sorted(seasons)
     # Targets to build. `inference_season` adds one whose actuals do not exist
@@ -393,29 +395,34 @@ def build_multiyear_season_pairs(db, seasons: List[int],
         if has_label and curr_totals.empty:
             continue
 
-        # Season N (immediately prior to target) is the anchor row --
-        # keeps player_name/position/birth_date/years_exp from there.
-        anchor = season_agg[season_agg["season"] == target - 1].copy()
-        if anchor.empty:
+        # Anchor: every player who appears in ANY season of the lookback
+        # window, with name/position/birth_date from their most recent one.
+        # Until 2026-09-17 the anchor was season N alone, so a player who
+        # missed N entirely (Watson's 2025) or played it briefly had no row
+        # and no projection. Lags stay by calendar year -- `_y1` is season N
+        # whether or not the player took a snap in it -- so a missed season
+        # is a NaN lag, not a shifted history; years_of_history and the
+        # recency-weighted PPG below already read the NaN pattern.
+        meta_cols = ["player_id", "player_name", "position", "birth_date"]
+        stat_cols = [c for c in season_agg.columns if c not in meta_cols + ["season"]]
+        window = season_agg[(season_agg["season"] >= target - lookback_years)
+                            & (season_agg["season"] <= target - 1)]
+        if window.empty:
             continue
-
-        row = anchor.rename(columns={
-            c: f"{c}_y1" for c in anchor.columns
-            if c not in ("player_id", "player_name", "position", "birth_date", "season", "years_exp")
-        })
-        row = row.rename(columns={"games_played_y1": "games_played_y1"})
+        anchor = (window.sort_values("season", kind="mergesort")
+                        .groupby("player_id", sort=False).tail(1))
+        row = anchor[meta_cols].copy()
+        row["season"] = target - 1          # anchor convention
+        row["years_exp"] = row["player_id"].map(
+            history.loc[history["season"] < target].groupby("player_id")["season"].nunique()
+        ).fillna(0).astype(int)
         row["target_season"] = target
 
-        # Prior seasons 2 and 3 (season N-1, N-2), suffixed _y2/_y3.
-        for lag in range(2, lookback_years + 1):
+        # Prior seasons N, N-1, N-2, suffixed _y1/_y2/_y3.
+        for lag in range(1, lookback_years + 1):
             prior_season = target - lag
-            lag_df = season_agg[season_agg["season"] == prior_season][
-                ["player_id"] + [c for c in season_agg.columns
-                                  if c not in ("player_id", "player_name", "position", "birth_date", "season", "years_exp")]
-            ].copy()
-            lag_df = lag_df.rename(columns={
-                c: f"{c}_y{lag}" for c in lag_df.columns if c != "player_id"
-            })
+            lag_df = season_agg[season_agg["season"] == prior_season][["player_id"] + stat_cols].copy()
+            lag_df = lag_df.rename(columns={c: f"{c}_y{lag}" for c in stat_cols})
             row = row.merge(lag_df, on="player_id", how="left")
 
         # Trend features: year-over-year PPG delta, recency-weighted
