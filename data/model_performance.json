@@ -2105,18 +2105,6 @@
       "error": -6.0
     },
     {
-      "player_id": "00-0029604",
-      "name": "K.Cousins",
-      "position": "QB",
-      "team": "ATL",
-      "predicted_total": 120.7,
-      "actual_total": 106.6,
-      "predicted_ppg": 12.1,
-      "actual_ppg": 10.7,
-      "games": 10,
-      "error": 14.1
-    },
-    {
       "player_id": "00-0037112",
       "name": "J.Tonges",
       "position": "TE",
@@ -2127,6 +2115,18 @@
       "actual_ppg": 9.7,
       "games": 11,
       "error": -43.7
+    },
+    {
+      "player_id": "00-0029604",
+      "name": "K.Cousins",
+      "position": "QB",
+      "team": "ATL",
+      "predicted_total": 120.7,
+      "actual_total": 106.6,
+      "predicted_ppg": 12.1,
+      "actual_ppg": 10.7,
+      "games": 10,
+      "error": 14.1
     },
     {
       "player_id": "00-0033906",

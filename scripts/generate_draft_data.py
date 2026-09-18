@@ -37,13 +37,22 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 # Floor/ceiling spread formula for _resolve_projection() (GAPS.md §7.4
 # follow-up, 2026-08-05).
 #
-# OPEN (2026-09-17): every constant below was fit to PreseasonProjector
-# residuals, and the board has served Step 8 since 2026-08-28. The
-# PreseasonProjector model and scripts/calibrate_floor_ceiling.py were
-# deleted 2026-09-17, so the bands cannot be refit as-is; a refit needs the
-# Step 8 walk-forward residuals (scripts/build_step8_pace_table.py produces
-# the out-of-sample Step 8 projections per season). Until then these bands
-# are a different model's error distribution applied to Step 8's numbers.
+# --- Refit to Step 8's own residuals, 2026-09-17 ---
+#
+# Everything in the history below was fit to PreseasonProjector residuals,
+# and the board has served Step 8 since 2026-08-28. Measured on Step 8's
+# out-of-sample 2021-2025 projections (2,253 player-seasons with >= 1 game),
+# those bands breached the floor 31.3% of the time against a 25% target
+# (ceiling 23.6%): Step 8 over-projects the median player by ~18% (median
+# actual/pred - 1 = -0.14 to -0.24 by season), so floors sized for a
+# different model sat too high. Refit with the same method
+# (scripts/calibrate_floor_ceiling.py, now driven by walk-forward Step 8
+# refits): holdout fit 2021-2023 / test 2024-2025, floor breached 23.0%,
+# ceiling 27.2%, per-side miscalibration 0.043; final fit on all five
+# seasons 25.1% / 25.1% in-sample. Coefficients and the holdout record are
+# in data/models/floor_ceiling_step8_calibration.json. The
+# PreseasonProjector-era coefficient sets (50% and 86.6%) were removed with
+# that model; they described a distribution nothing serves.
 #
 # History: the original formula was `spread = 1.5 * fp_std * sqrt(17)`,
 # where fp_std is a player's own prior-season week-to-week volatility.
@@ -87,8 +96,8 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 # tight ~5pp range). Cheap to add and a clear improvement, so shipped.
 # --- Asymmetric floor/ceiling (GAPS.md §11.2.C follow-up, 2026-08-06) ---
 #
-# The formula above (still kept, see FLOOR_CEILING_REL_SPREAD_* below) was
-# symmetric: one relative spread applied equally above and below the point
+# The formula above (removed 2026-09-17 with the rest of the
+# PreseasonProjector-era constants) was symmetric: one relative spread applied equally above and below the point
 # total. Checked whether that's the right shape by testing real 2025
 # backtest residuals for bimodality (Pfister's coefficient, all 4
 # positions) -- not classically bimodal (all well below the 0.555
@@ -129,22 +138,12 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 # of how uncertain a season-total projection actually is (MAE ~43 on a mean
 # actual near 100). The previous coefficients are preserved below.
 FLOOR_ASYM_COEF = {
-    "const": -1.464328, "log_pred": 0.172331, "confidence_score": 0.347607,
-    "pos_RB": -0.073935, "pos_WR": -0.050796, "pos_TE": -0.032941,
+    "const": -1.708546, "log_pred": 0.226416, "confidence_score": 0.114702,
+    "pos_RB": 0.006243, "pos_WR": 0.034230, "pos_TE": 0.119145,
 }
 CEILING_ASYM_COEF = {
-    "const": 1.493868, "log_pred": -0.238032, "confidence_score": 0.187379,
-    "pos_RB": -0.179821, "pos_WR": -0.122886, "pos_TE": -0.274811,
-}
-# Superseded 86.6%-coverage coefficients, kept so the wider interval can be
-# restored or compared without re-running the fit.
-FLOOR_ASYM_COEF_866 = {
-    "const": -1.307583, "log_pred": 0.108491, "confidence_score": 0.072483,
-    "pos_RB": -0.071201, "pos_WR": -0.017547, "pos_TE": 0.033451,
-}
-CEILING_ASYM_COEF_866 = {
-    "const": 4.383422, "log_pred": -0.662733, "confidence_score": -0.081698,
-    "pos_RB": -0.126647, "pos_WR": -0.306856, "pos_TE": -0.369531,
+    "const": 1.017653, "log_pred": -0.123057, "confidence_score": -0.078285,
+    "pos_RB": -0.034622, "pos_WR": -0.088492, "pos_TE": -0.063972,
 }
 FLOOR_CEILING_DEFAULT_CONFIDENCE = 0.7
 # Sanity clamps on the fitted relative error -- guards against extreme
@@ -176,37 +175,6 @@ def _floor_ceiling(total: float, confidence, position: str = None) -> tuple:
     ceiling = max(total, total * (1 + ceiling_rel))
     floor = min(floor, total)
     return floor, ceiling
-
-
-# --- Legacy symmetric formula, kept for reference/rollback only; no
-# longer called anywhere in this file as of the asymmetric fix above. ---
-FLOOR_CEILING_REL_SPREAD_INTERCEPT = 2.620
-FLOOR_CEILING_REL_SPREAD_LOG_PRED_COEF = -0.335
-FLOOR_CEILING_REL_SPREAD_CONF_COEF = 0.022
-FLOOR_CEILING_REL_SPREAD_POSITION_COEF = {"QB": 0.0, "RB": -0.121, "WR": -0.172, "TE": -0.295}
-FLOOR_CEILING_REL_SPREAD_MIN = 0.15
-FLOOR_CEILING_REL_SPREAD_MAX = 3.0
-
-
-def _floor_ceiling_spread(total: float, confidence, position: str = None) -> float:
-    """Absolute spread for floor/ceiling, given a season-total projection,
-    (optionally) a per-player model confidence score, and position. See
-    FLOOR_CEILING_REL_SPREAD_* above for how these coefficients were derived."""
-    conf = (
-        FLOOR_CEILING_DEFAULT_CONFIDENCE
-        if confidence is None or pd.isna(confidence)
-        else float(confidence)
-    )
-    pos_coef = FLOOR_CEILING_REL_SPREAD_POSITION_COEF.get(position, 0.0)
-    log_total = np.log(max(float(total), 1.0))
-    rel_spread = (
-        FLOOR_CEILING_REL_SPREAD_INTERCEPT
-        + FLOOR_CEILING_REL_SPREAD_LOG_PRED_COEF * log_total
-        + FLOOR_CEILING_REL_SPREAD_CONF_COEF * conf
-        + pos_coef
-    )
-    rel_spread = max(FLOOR_CEILING_REL_SPREAD_MIN, min(FLOOR_CEILING_REL_SPREAD_MAX, rel_spread))
-    return rel_spread * float(total)
 
 
 def _load_authoritative_position_map():

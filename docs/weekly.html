@@ -2,26 +2,26 @@
 <meta charset="utf-8">
 <title>Weekly Projections</title>
 <!--
-  Weekly projections from the weekly ensemble model (1w horizon).
+  Weekly projections: the weekly ensemble (1w horizon) shrunk toward the
+  Step 8 season pace by games played this season. One path for every week;
+  see scripts/generate_weekly_data.py and src/predict.py
+  (_blend_toward_season_pace).
 
-  NEW FILE. docs/index.html and the other files named in CLAUDE.md section 9
-  are frozen and untouched; this follows docs/draft.html's pattern of adding a
-  page rather than editing one.
-
-  Source: docs/data/weekly_{POS}.json via scripts/generate_weekly_data.py,
-  which calls NFLPredictor -- the serving path validated against real 2025
-  outcomes on 2026-08-31. NOT generate_weekly_projections.py, which is a
-  dormant season-projection-times-multiplier approach.
+  Source: docs/data/weekly_{season}_wk{N}.json + weekly_meta.json, written by
+  scripts/generate_weekly_data.py, which calls NFLPredictor -- the serving
+  path validated against real 2025 outcomes week by week.
 
   Design point: the range leads, not the number. Measured prediction spread is
-  roughly half the spread of real outcomes (QB predictions std 4.27 vs actual
-  9.00), so point estimates systematically understate ceilings. Showing a bare
-  number would imply a precision the model does not have.
+  roughly half the spread of real outcomes, so point estimates systematically
+  understate ceilings. Showing a bare number would imply a precision the model
+  does not have. Each row also shows what the number is made of (season pace
+  vs. in-season form), and once a week is played, what actually happened.
 -->
 <style>
   :root { --bg:#0f1216; --panel:#171b21; --line:#252b33; --fg:#e6e9ee; --dim:#98a2b0;
           --qb:#c084fc; --rb:#4ade80; --wr:#60a5fa; --te:#fbbf24;
-          --warn:#f87171; --bar:#2b3a4a; --bar-fill:#3b82f6; }
+          --warn:#f87171; --good:#4ade80; --bar:#2b3a4a; --bar-fill:#3b82f6;
+          --pace:#a78bfa; --form:#3b82f6; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--fg);
          font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
@@ -29,19 +29,27 @@
   h1 { margin:0 0 4px; font-size:20px; font-weight:600; }
   .sub { color:var(--dim); font-size:13px; }
   .banner { margin:12px 24px 0; padding:10px 14px; border-radius:6px;
-            background:#2a2113; border:1px solid #5a4520; color:#f0d9a0;
+            background:#1a2230; border:1px solid #2c3e55; color:#c9d6e6;
             font-size:13px; max-width:900px; }
+  .banner.result { background:#152219; border-color:#25452c; color:#c6e6cc; }
   .controls { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end;
               padding:14px 24px; border-bottom:1px solid var(--line); background:var(--panel); }
   .ctl label { display:block; font-size:11px; text-transform:uppercase;
                letter-spacing:.04em; color:var(--dim); margin-bottom:4px; }
-  select,input { background:#0d1014; color:var(--fg); border:1px solid var(--line);
+  select,input,button { background:#0d1014; color:var(--fg); border:1px solid var(--line);
                  border-radius:6px; padding:6px 8px; font-size:13px; }
+  button { cursor:pointer; } button:disabled { opacity:.35; cursor:default; }
+  .weeknav { display:flex; gap:4px; align-items:center; }
   table { border-collapse:collapse; width:100%; }
   th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line);
           white-space:nowrap; }
   th { position:sticky; top:0; background:var(--panel); font-size:11px;
        text-transform:uppercase; letter-spacing:.04em; color:var(--dim); }
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { color:var(--fg); }
+  th.sorted { color:var(--fg); }
+  th.sorted::after { content:" ▾"; }
+  th.sorted.asc::after { content:" ▴"; }
   td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
   tr:hover td { background:#1b2027; }
   .pos { font-weight:600; padding:1px 6px; border-radius:4px; font-size:12px; }
@@ -52,12 +60,25 @@
            border-radius:3px; overflow:hidden; }
   .fill { position:absolute; top:0; bottom:0; background:var(--bar-fill); opacity:.55; }
   .point { position:absolute; top:-2px; bottom:-2px; width:2px; background:#e6e9ee; }
+  .actual { position:absolute; top:2px; bottom:2px; width:6px; margin-left:-3px;
+            border-radius:3px; background:var(--good); }
+  .actual.miss { background:var(--warn); }
   .rangetext { color:var(--dim); font-size:11px; margin-top:2px;
                font-variant-numeric:tabular-nums; }
   .risk { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px;
           font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
   .risk.hi { color:var(--warn); border:1px solid var(--warn); }
   .risk.lo { color:var(--dim); border:1px solid var(--line); }
+  .tag { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px;
+         font-size:10px; font-weight:600; letter-spacing:.03em;
+         color:var(--pace); border:1px solid var(--pace); }
+  /* What the number is made of: pace share (left, purple) vs form (right, blue). */
+  .mixcell { width:120px; }
+  .mix { position:relative; height:8px; background:var(--form); border-radius:3px; overflow:hidden; }
+  .mix .pace { position:absolute; left:0; top:0; bottom:0; background:var(--pace); }
+  .mixtext { color:var(--dim); font-size:11px; margin-top:2px; font-variant-numeric:tabular-nums; }
+  td.miss { font-variant-numeric:tabular-nums; }
+  .over { color:var(--warn); } .under { color:var(--good); }
   .note { padding:16px 24px 40px; color:var(--dim); font-size:12px; max-width:900px; }
   .note strong { color:var(--fg); }
   .note code { background:#0d1014; padding:1px 4px; border-radius:3px; }
@@ -67,6 +88,8 @@
                font-size:13px; text-decoration:none; }
   .sitenav a.current { color:var(--fg); border-color:#3b82f6; font-weight:600; }
   #tbl-wrap { max-height:68vh; overflow:auto; }
+  .legend { display:inline-block; width:10px; height:10px; border-radius:2px;
+            vertical-align:middle; margin-right:4px; }
 </style>
 
 <header>
@@ -78,9 +101,15 @@
   </nav>
 </header>
 <div id="banner"></div>
+<div id="resultbanner"></div>
 
 <div class="controls">
-  <div class="ctl"><label>Week</label><select id="week"></select></div>
+  <div class="ctl"><label>Week</label>
+    <div class="weeknav">
+      <button id="prev" title="previous week">‹</button>
+      <select id="week"></select>
+      <button id="next" title="next week">›</button>
+    </div></div>
   <div class="ctl"><label>Position</label>
     <select id="filter"><option value="ALL">All</option><option>QB</option>
     <option>RB</option><option>WR</option><option>TE</option></select></div>
@@ -94,7 +123,13 @@
   <table>
     <thead><tr>
       <th class="num">#</th><th>Player</th><th>Pos</th><th>Team</th><th>Opp</th>
-      <th class="num">Proj</th><th class="rangecell">Likely range (80%)</th>
+      <th class="num sortable" data-key="predicted_points" title="sort by projection">Proj</th>
+      <th class="num sortable" data-key="prediction_ci80_lower" title="sort by floor">Floor</th>
+      <th class="num sortable" data-key="prediction_ci80_upper" title="sort by upside">Upside</th>
+      <th class="rangecell">Likely range (80%)</th>
+      <th class="mixcell sortable" data-key="pace_weight" title="sort by pace share">Pace · Form</th>
+      <th class="num sortable actual-col" data-key="actual_points" title="sort by actual">Actual</th>
+      <th class="num sortable actual-col" data-key="_miss" title="sort by miss">Miss</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
@@ -103,10 +138,23 @@
 <div class="note">
   <p id="rangenote"><strong>The range matters more than the number.</strong>
   The bar shows the 80% interval: the outcome lands inside it about four times
-  in five. The white tick is the point projection. Measured prediction spread is
-  roughly half the spread of real outcomes, so a single number understates how
-  high a good week can go — two players with the same projection and different
-  ranges are not the same bet.</p>
+  in five. The white tick is the point projection; for a played week the green
+  (inside the range) or red (outside) block is what actually happened. Measured
+  prediction spread is roughly half the spread of real outcomes, so a single
+  number understates how high a good week can go — two players with the same
+  projection and different ranges are not the same bet.</p>
+
+  <p><strong>What the number is made of.</strong> Each projection is the weekly
+  model shrunk toward the player's season pace (the season model's projected
+  total ÷ 17) by games played this season:
+  <code>w = games / (games + 3)</code> on the weekly model, the rest on the
+  pace. The <span class="legend" style="background:var(--pace)"></span>purple
+  share of the small bar is pace, the <span class="legend" style="background:var(--form)"></span>blue
+  share is in-season form. Before a player's first game the number <em>is</em>
+  the pace (tagged <span class="tag" style="margin:0">no games yet</span>); by
+  game 8 it is three-quarters weekly model. Hover the bar for both inputs.
+  Measured on a full replay of 2025, this shrinkage cut average error from
+  4.35 to 4.24 points and helped at every stage of the season.</p>
 
   <p id="accnote2"><strong>How far off, and in which direction.</strong> Measured
   against real 2025 results by replaying every week of that season through the
@@ -117,92 +165,194 @@
 
   <p id="accnote"><strong>Accuracy.</strong> Average absolute error per
   player-week on that same held-out season: <span id="maeline">—</span>. Ranking
-  is more reliable than the absolute values.</p>
+  is more reliable than the absolute values. For weeks of the current season
+  that have been played, the banner above the table shows this week's own
+  numbers.</p>
 
   <p id="baselinenote"><strong>How much the model beats guessing.</strong>
   <span id="baselineline">—</span></p>
 
-  <p><strong>What changes between weeks.</strong> <span id="varnote">Each week
-  uses that player's real opponent from the schedule.</span> Players on bye are
-  omitted for that week.</p>
+  <p><strong>What changes between weeks.</strong> Each week uses that player's
+  real opponent from the schedule, the injury report as of that week, and only
+  the games played before it. Players on bye are omitted for that week.</p>
 
-  <p>Source: weekly ensemble, 1-week horizon, from
+  <p>Source: weekly ensemble, 1-week horizon, blended toward the season pace, from
   <code>docs/data/weekly_{season}_wk{N}.json</code>. Season-long projections
   live on the <a href="draft.html" style="color:#60a5fa">draft board</a>, which
-  uses a different model.</p>
+  uses the season model directly.</p>
 </div>
 
 <script>
 const POS = ["QB","RB","WR","TE"];
-let RAW = [], META = null;
+let RAW = [], META = null, SEASON = null, WEEK = null;
+let SORT = { key: "predicted_points", asc: false };
+
+const $ = id => document.getElementById(id);
+const fmt1 = v => (v == null || isNaN(v)) ? "—" : (+v).toFixed(1);
+
+function played() {
+  return RAW.some(r => r.actual_points != null);
+}
 
 function render() {
-  const filter = document.getElementById("filter").value;
-  const q = document.getElementById("q").value.trim().toLowerCase();
-  const limit = +document.getElementById("limit").value;
+  const filter = $("filter").value;
+  const q = $("q").value.trim().toLowerCase();
+  const limit = +$("limit").value;
+  const isPlayed = played();
+  const anyPlayed = RAW.some(r => (r.games_played_season ?? 0) > 0);
 
   let rows = RAW.slice();
   if (filter !== "ALL") rows = rows.filter(r => r.position === filter);
   if (q) rows = rows.filter(r =>
     (r.name||"").toLowerCase().includes(q) || (r.team||"").toLowerCase().includes(q));
-  rows.sort((a,b) => (b.predicted_points ?? -1) - (a.predicted_points ?? -1));
+  for (const r of rows)
+    r._miss = (r.actual_points != null && r.predicted_points != null)
+      ? r.predicted_points - r.actual_points : null;
+  const key = SORT.key, dir = SORT.asc ? 1 : -1;
+  rows.sort((a, b) => {
+    const av = a[key], bv = b[key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;            // missing always last
+    if (bv == null) return -1;
+    return (av - bv) * dir;
+  });
   rows = rows.slice(0, limit);
 
-  // One shared scale so bars are comparable down the column.
-  const hi = Math.max(1, ...rows.map(r => r.prediction_ci80_upper ?? r.predicted_points ?? 0));
+  document.querySelectorAll("th.sortable").forEach(th => {
+    th.classList.toggle("sorted", th.dataset.key === key);
+    th.classList.toggle("asc", th.dataset.key === key && SORT.asc);
+  });
+  document.querySelectorAll(".actual-col").forEach(el => el.style.display = isPlayed ? "" : "none");
 
-  document.getElementById("rows").innerHTML = rows.map((r,i) => {
+  // One shared scale so bars are comparable down the column.
+  const hi = Math.max(1, ...rows.map(r => Math.max(
+    r.prediction_ci80_upper ?? 0, r.predicted_points ?? 0, r.actual_points ?? 0)));
+
+  $("rows").innerHTML = rows.map((r, i) => {
     const lo = r.prediction_ci80_lower ?? null, up = r.prediction_ci80_upper ?? null;
     const pt = r.predicted_points ?? 0;
+    const act = r.actual_points ?? null;
+
     // Availability flag from injury_adjustment (0-1, real practice-report
-    // signal from src/predict.py). Missing in season_prorated mode -- no
-    // real per-week injury report exists that far out, so no badge there.
-    // Threshold matches predict.py's own CI-widening cutoff (<0.7) so the
-    // visual flag agrees with how the model already treats the risk.
+    // signal from src/predict.py). Threshold matches predict.py's own
+    // CI-widening cutoff (<0.7) so the flag agrees with how the model
+    // already treats the risk.
     const avail = r.injury_adjustment;
-    let riskBadge = "";
+    let badges = "";
     if (avail != null && avail < 0.85) {
       const pct = Math.round(avail * 100);
       const cls = avail < 0.7 ? "hi" : "lo";
-      const label = avail < 0.7 ? `Risk ${pct}%` : `Probable ${pct}%`;
-      riskBadge = `<span class="risk ${cls}">${label}</span>`;
+      badges += `<span class="risk ${cls}">${avail < 0.7 ? "Risk" : "Probable"} ${pct}%</span>`;
     }
+    // Only informative once the field has started playing: at week 1 every
+    // row is pace-only and the Pace · Form column already says so.
+    if (anyPlayed && r.games_played_season === 0 && r.pace_weight > 0)
+      badges += `<span class="tag" title="No ${SEASON} games yet: this is the season pace, not a form read">no games yet</span>`;
+
     let bar = '<span class="rangetext">—</span>';
-    if (META && META.has_intervals === false) {
-      bar = '<span class="rangetext">n/a — season pace</span>';
-    } else if (lo != null && up != null && up > lo) {
+    if (lo != null && up != null && up > lo) {
       const l = 100*lo/hi, w = 100*(up-lo)/hi, p = 100*pt/hi;
+      let actMark = "";
+      if (act != null) {
+        const inside = act >= lo && act <= up;
+        actMark = `<div class="actual${inside ? "" : " miss"}" style="left:${100*act/hi}%"
+                        title="actual ${fmt1(act)}"></div>`;
+      }
       bar = `<div class="track">
                <div class="fill" style="left:${l}%;width:${w}%"></div>
-               <div class="point" style="left:${p}%"></div>
+               <div class="point" style="left:${p}%"></div>${actMark}
              </div>
              <div class="rangetext">${lo.toFixed(1)} – ${up.toFixed(1)}</div>`;
     }
+
+    // Pace vs form. pace_weight is the share of the served number that came
+    // from the season pace; missing when the player has no season projection.
+    let mix = '<span class="mixtext">weekly only</span>';
+    if (r.pace_weight != null) {
+      const pw = Math.round(r.pace_weight * 100);
+      const title = `season pace ${fmt1(r.pace_prior)} × ${pw}%  +  weekly model ${fmt1(r.predicted_points_model)} × ${100-pw}%  =  ${fmt1(pt)}`
+        + (r.games_played_season != null ? `  (${r.games_played_season} game${r.games_played_season === 1 ? "" : "s"} played)` : "");
+      mix = `<div class="mix" title="${title}"><div class="pace" style="width:${pw}%"></div></div>
+             <div class="mixtext" title="${title}">pace ${pw}% · form ${100-pw}%</div>`;
+    }
+
+    const missCell = isPlayed
+      ? `<td class="num">${fmt1(act)}</td>
+         <td class="num miss">${r._miss == null ? "—"
+            : `<span class="${r._miss > 0 ? "over" : "under"}">${r._miss > 0 ? "+" : ""}${r._miss.toFixed(1)}</span>`}</td>`
+      : "";
+
     return `<tr>
       <td class="num">${i+1}</td>
-      <td>${r.name ?? ""}${riskBadge}</td>
+      <td>${r.name ?? ""}${badges}</td>
       <td><span class="pos ${r.position}">${r.position}</span></td>
       <td>${r.team ?? ""}</td>
       <td>${r.home_away === "away" ? "@" : ""}${r.opponent ?? ""}</td>
       <td class="num">${pt.toFixed(1)}</td>
+      <td class="num">${fmt1(lo)}</td>
+      <td class="num">${fmt1(up)}</td>
       <td class="rangecell">${bar}</td>
+      <td class="mixcell">${mix}</td>
+      ${missCell}
     </tr>`;
   }).join("");
 }
 
-let SEASON = null;
+function weekResultBanner(week) {
+  const res = META.week_results && META.week_results[String(week)];
+  const el = $("resultbanner");
+  if (!res) { el.innerHTML = ""; return; }
+  const cov = res.coverage80 != null ? `, ${Math.round(res.coverage80 * 100)}% of outcomes inside the 80% range` : "";
+  el.innerHTML = `<div class="banner result"><strong>Week ${week} has been played.</strong>
+    Against real results for the ${res.n} projected players who recorded a stat line:
+    average miss ${res.mae.toFixed(1)} points, mean error ${res.bias > 0 ? "+" : ""}${res.bias.toFixed(1)}
+    (positive = projected above actual)${cov}. The Actual and Miss columns show each player.</div>`;
+}
+
+function setHash() {
+  const parts = [`wk=${WEEK}`];
+  const f = $("filter").value; if (f !== "ALL") parts.push(`pos=${f}`);
+  const q = $("q").value.trim(); if (q) parts.push(`q=${encodeURIComponent(q)}`);
+  history.replaceState(null, "", "#" + parts.join("&"));
+}
+
+function applyHash() {
+  const h = readHash();
+  $("filter").value = (h.pos && POS.includes(h.pos)) ? h.pos : "ALL";
+  $("q").value = h.q || "";
+  const wk = (h.wk && META.weeks.includes(+h.wk)) ? +h.wk : META.weeks[0];
+  return wk === WEEK ? Promise.resolve(render()) : loadWeek(wk);
+}
+
+function readHash() {
+  const out = {};
+  for (const kv of location.hash.replace(/^#/, "").split("&")) {
+    const [k, v] = kv.split("="); if (k) out[k] = decodeURIComponent(v ?? "");
+  }
+  return out;
+}
 
 function loadWeek(week) {
-  return fetch(`data/weekly_${SEASON}_wk${week}.json`)
+  WEEK = +week;
+  $("week").value = String(WEEK);
+  const weeks = META.weeks;
+  $("prev").disabled = weeks.indexOf(WEEK) <= 0;
+  $("next").disabled = weeks.indexOf(WEEK) >= weeks.length - 1;
+  return fetch(`data/weekly_${SEASON}_wk${WEEK}.json`)
     .then(r => r.ok ? r.json() : [])
     .then(rows => {
       RAW = (rows || []).filter(r => r && r.predicted_points != null);
-      const n = META.counts && META.counts[String(week)];
-      document.getElementById("meta").textContent =
-        `${SEASON} Week ${week} · ${RAW.length} players` +
-        (n ? "" : "") +
+      const nBlend = RAW.filter(r => r.pace_weight > 0).length;
+      $("meta").textContent =
+        `${SEASON} Week ${WEEK} · ${RAW.length} players` +
+        (played() ? " · played" : "") +
         ` · generated ${META.generated_at.slice(0,10)}`;
+      weekResultBanner(WEEK);
+      // Sorting by actual/miss makes no sense for an unplayed week.
+      if (!played() && (SORT.key === "actual_points" || SORT.key === "_miss"))
+        SORT = { key: "predicted_points", asc: false };
       render();
+      setHash();
     });
 }
 
@@ -212,69 +362,52 @@ fetch("data/weekly_meta.json")
     if (!meta || !meta.weeks || !meta.weeks.length) throw new Error("no weekly_meta.json");
     META = meta; SEASON = meta.season;
 
-    const sel = document.getElementById("week");
-    sel.innerHTML = meta.weeks.map(w => `<option value="${w}">Week ${w}</option>`).join("");
+    const sel = $("week");
+    sel.innerHTML = meta.weeks.map(w => {
+      const done = meta.week_results && meta.week_results[String(w)];
+      return `<option value="${w}">Week ${w}${done ? " ✓" : ""}</option>`;
+    }).join("");
     sel.addEventListener("change", () => loadWeek(+sel.value));
+    $("prev").addEventListener("click", () => {
+      const i = meta.weeks.indexOf(WEEK); if (i > 0) loadWeek(meta.weeks[i - 1]);
+    });
+    $("next").addEventListener("click", () => {
+      const i = meta.weeks.indexOf(WEEK); if (i < meta.weeks.length - 1) loadWeek(meta.weeks[i + 1]);
+    });
+    document.querySelectorAll("th.sortable").forEach(th => th.addEventListener("click", () => {
+      const k = th.dataset.key;
+      // Floor/upside/actual read best high-to-low; miss and pace share low-to-high first.
+      const defaultAsc = (k === "_miss" || k === "pace_weight");
+      SORT = (SORT.key === k) ? { key: k, asc: !SORT.asc } : { key: k, asc: defaultAsc };
+      render();
+    }));
 
-    const prorated = meta.mode === "season_prorated";
-    document.getElementById("banner").innerHTML = prorated
-      ? `<div class="banner"><strong>Season pace, not a weekly forecast.</strong>
-         No ${SEASON} games have been played, so the weekly model cannot tell
-         one week from another yet — the opponent-strength and betting-line
-         features it relies on do not exist until games are played and lines are
-         posted. Rather than present one number as eighteen forecasts, these are
-         the <em>season</em> model's projected total divided by
-         ${meta.games_per_season}. The figure is identical every week by
-         construction; what changes is the opponent and who is on bye. Once week
-         1 is played this page switches automatically to real week-by-week
-         projections.</div>`
-      : `<div class="banner"><strong>Week-by-week projections.</strong> Built
-         from games played so far this season, with each week's real opponent.</div>`;
+    const kappa = meta.pace_blend_kappa ?? 3;
+    $("banner").innerHTML =
+      `<div class="banner"><strong>Week-by-week projections.</strong> The weekly
+       model — each player's form from games played so far, this week's real
+       opponent, betting line and injury report — shrunk toward the season pace
+       by games played (weight <code>g / (g + ${kappa})</code>). Before kickoff
+       every number is the season pace; by mid-season the weekly model leads.
+       The Pace · Form column shows the split for each player.</div>`;
 
-    const rn = document.getElementById("rangenote");
-    if (prorated && rn) {
-      rn.innerHTML = `<strong>No range is shown, deliberately.</strong> A season
-        floor and ceiling divided by ${meta.games_per_season} is a pace band, not
-        the spread of a single week's outcome — a player averaging 15 a game can
-        score 2 or 35 in any given week. Publishing the former as the latter
-        would overstate what is known. Weekly intervals return with the weekly
-        model.`;
-    }
-    const a1 = document.getElementById("accnote2"), a2 = document.getElementById("accnote");
-    if (prorated) {
-      if (a1) a1.style.display = "none";
-      if (a2) a2.innerHTML = `<strong>Accuracy.</strong> The error figures
-        measured for the weekly model do not describe these numbers, so they are
-        withheld until that model is driving the page. Season-total accuracy is
-        on the <a href="draft.html" style="color:#60a5fa">draft board</a>.`;
-    }
-    // Only fill these when the weekly model is actually driving the page. In
-    // prorated mode the paragraphs above are rewritten and the spans they
-    // contained no longer exist -- writing to them threw a TypeError that was
-    // swallowed by the catch below, so the table never loaded at all.
-    // Null-guarded regardless: a note rewrite must not be able to break data
-    // rendering again.
-    if (meta.measured && !prorated) {
-      const bl = document.getElementById("biasline");
-      const ml = document.getElementById("maeline");
-      // Signed, per position: the bias is small and no longer runs the same
-      // way for every position, so a single "runs low" claim would be wrong.
+    if (meta.measured) {
       const fmt = (k, signed) => POS.filter(p => meta.measured[p])
         .map(p => {
           const v = meta.measured[p][k];
           return `${p} ${signed && v > 0 ? "+" : ""}${v.toFixed(1)}`;
         }).join(", ") + " points";
+      const bl = $("biasline"), ml = $("maeline");
       if (bl) bl.textContent = fmt("bias", true) + " (positive = projected above actual)";
       if (ml) ml.textContent = fmt("mae", false);
     }
 
     // What the model is worth against naive baselines, stated plainly.
-    const bsl = document.getElementById("baselineline");
+    const bsl = $("baselineline");
     const bs = meta.baseline_standing;
     if (bsl) {
-      if (prorated || !bs || !bs.rmse_improvement_pct) {
-        const note = document.getElementById("baselinenote");
-        if (note) note.style.display = "none";
+      if (!bs || !bs.rmse_improvement_pct) {
+        $("baselinenote").style.display = "none";
       } else {
         const pct = bs.rmse_improvement_pct;
         const named = { trailing_3g_avg: "a 3-game average", season_avg: "this season's average",
@@ -290,18 +423,20 @@ fetch("data/weekly_meta.json")
                 + "heuristics, not a decisive one.");
       }
     }
-    return loadWeek(meta.weeks[0]);
+
+    // Restore a shared view (#wk=3&pos=RB&q=hill), else the first week; and
+    // follow the hash when it changes (back/forward, a pasted link).
+    window.addEventListener("hashchange", applyHash);
+    return applyHash();
   })
   .catch(e => {
-    // Surface the real error. This handler previously hid a TypeError thrown by
-    // the page's own note-rewriting code behind a message blaming missing data,
-    // so the page looked like it had no payload when the payload was fine.
+    // Surface the real error rather than blaming missing data.
     console.error("weekly.html failed to render:", e);
-    document.getElementById("meta").textContent =
+    $("meta").textContent =
       "Failed to render: " + (e && e.message ? e.message : e)
       + " — data may be fine; check the console.";
   });
 
 for (const id of ["filter","q","limit"])
-  document.getElementById(id).addEventListener("input", render);
+  $(id).addEventListener("input", () => { render(); setHash(); });
 </script>

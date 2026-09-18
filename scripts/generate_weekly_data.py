@@ -140,10 +140,11 @@ def baseline_standing() -> dict | None:
         }
     return None
 
-KEEP = ["name", "position", "team", "opponent", "home_away",
+KEEP = ["player_id", "name", "position", "team", "opponent", "home_away",
         "predicted_points", "prediction_ci80_lower", "prediction_ci80_upper",
         "injury_adjustment",
-        "predicted_points_model", "pace_prior", "pace_weight", "games_played_season"]
+        "predicted_points_model", "pace_prior", "pace_weight", "games_played_season",
+        "actual_points"]
 
 
 def completed_games(season: int) -> int:
@@ -154,6 +155,41 @@ def completed_games(season: int) -> int:
             (season,)).fetchone()[0]
     finally:
         con.close()
+
+
+def actual_points(season: int, week: int) -> pd.Series:
+    """Real PPR points for a played week, indexed by player_id; empty if the
+    week has no rows yet. Attached to that week's file so the page can show
+    projected vs. actual once the games are in."""
+    con = sqlite3.connect(DB_PATH)
+    try:
+        df = pd.read_sql(
+            "SELECT player_id, fantasy_points FROM player_weekly_stats "
+            "WHERE season = ? AND week = ? AND fantasy_points IS NOT NULL",
+            con, params=(int(season), int(week)))
+    finally:
+        con.close()
+    return df.set_index("player_id")["fantasy_points"]
+
+
+def week_result(df: pd.DataFrame) -> dict | None:
+    """Accuracy of THIS week's served numbers against what happened: mean
+    absolute miss, signed bias, and how often the 80% range held. Only rows
+    with an actual -- a projected player who did not record a stat line is
+    not scored, matching the backtester."""
+    if "actual_points" not in df.columns:
+        return None
+    d = df[df["actual_points"].notna() & df["predicted_points"].notna()]
+    if len(d) < 20:
+        return None
+    err = d["predicted_points"] - d["actual_points"]
+    out = {"n": int(len(d)), "mae": round(float(err.abs().mean()), 2),
+           "bias": round(float(err.mean()), 2)}
+    if {"prediction_ci80_lower", "prediction_ci80_upper"} <= set(d.columns):
+        inside = ((d["actual_points"] >= d["prediction_ci80_lower"])
+                  & (d["actual_points"] <= d["prediction_ci80_upper"]))
+        out["coverage80"] = round(float(inside.mean()), 3)
+    return out
 
 
 def schedule_by_week(season: int) -> dict:
@@ -191,7 +227,7 @@ def build_weekly_model(season, weeks, top_n):
     if not p.initialize():
         print("no trained models; run `python -m src.models.train` first")
         return [], {}
-    written, counts = [], {}
+    written, counts, results = [], {}, {}
     for wk in weeks:
         df = p.predict(n_weeks=1, position=None, top_n=top_n, as_of=(season, wk))
         if df.empty:
@@ -200,12 +236,19 @@ def build_weekly_model(season, weeks, top_n):
             df = df[df["opponent"].astype(str).str.strip().ne("")]
         if df.empty:
             continue
+        actual = actual_points(season, wk)
+        if len(actual):
+            df["actual_points"] = df["player_id"].map(actual)
+            res = week_result(df)
+            if res:
+                results[str(wk)] = res
         df = df.sort_values("predicted_points", ascending=False)
         (OUT_DIR / f"weekly_{season}_wk{wk}.json").write_text(json.dumps(_clean(df)))
         written.append(wk); counts[str(wk)] = len(df)
+        played = f", played: MAE {results[str(wk)]['mae']}" if str(wk) in results else ""
         print(f"  wk{wk}: {len(df):4d} players, median "
-              f"{df['predicted_points'].median():.1f}", flush=True)
-    return written, counts
+              f"{df['predicted_points'].median():.1f}{played}", flush=True)
+    return written, counts, results
 
 
 def main() -> int:
@@ -233,7 +276,7 @@ def main() -> int:
     for stale in OUT_DIR.glob(f"weekly_{season}_wk*.json"):
         stale.unlink()
 
-    written, counts = build_weekly_model(season, weeks, args.top_n)
+    written, counts, results = build_weekly_model(season, weeks, args.top_n)
 
     if not written:
         print("nothing written")
@@ -244,6 +287,8 @@ def main() -> int:
         "mode": mode,
         "weeks": written,
         "counts": counts,
+        # Per played week: served-number accuracy against real results.
+        "week_results": results,
         "completed_game_rows": int(played),
         "has_intervals": True,
         "pace_blend_kappa": PACE_BLEND_KAPPA,

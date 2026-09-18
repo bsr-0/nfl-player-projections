@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-09-17T13:00:14",
+  "model": "step8",
+  "train_from": 2019,
+  "seasons": [
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "target_coverage": 0.5,
+  "q_floor": 0.25,
+  "q_ceiling": 0.75,
+  "n_player_seasons": 2253,
+  "holdout": {
+    "fit_seasons": [
+      2021,
+      2023
+    ],
+    "test_seasons": [
+      2024,
+      2025
+    ],
+    "floor_breached": 0.22950819672131148,
+    "ceiling_breached": 0.2721311475409836,
+    "n": 915
+  },
+  "in_sample": {
+    "floor_breached": 0.2507767421216156,
+    "ceiling_breached": 0.25122059476253883,
+    "n": 2253
+  },
+  "floor_coef": {
+    "const": -1.708546260126151,
+    "log_pred": 0.22641575105044762,
+    "confidence_score": 0.11470196760573693,
+    "pos_RB": 0.0062425489380937655,
+    "pos_WR": 0.03423034263739073,
+    "pos_TE": 0.1191453946396241
+  },
+  "ceiling_coef": {
+    "const": 1.0176529801959153,
+    "log_pred": -0.12305663027253798,
+    "confidence_score": -0.07828491290727606,
+    "pos_RB": -0.03462241853192823,
+    "pos_WR": -0.0884917505352595,
+    "pos_TE": -0.06397187251490218
+  }
+}
