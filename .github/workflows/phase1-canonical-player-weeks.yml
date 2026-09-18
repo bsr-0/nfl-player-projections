@@ -1,0 +1,26 @@
+name: Phase 1 canonical player-weeks
+
+on:
+  pull_request:
+    paths:
+      - "scripts/build_canonical_player_weeks.py"
+      - "tests/test_canonical_player_weeks.py"
+      - "docs/CANONICAL_PLAYER_WEEKS.md"
+      - ".github/workflows/phase1-canonical-player-weeks.yml"
+  workflow_dispatch:
+
+jobs:
+  phase1-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==2.1.4 numpy==1.26.3 pytest==7.4.4 certifi requests sqlalchemy==2.0.25 python-dateutil==2.8.2
+      - name: Run Phase 1 tests
+        run: python -m pytest -q tests/test_canonical_player_weeks.py
