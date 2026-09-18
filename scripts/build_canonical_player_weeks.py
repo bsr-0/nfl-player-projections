@@ -84,7 +84,7 @@ def load_schedule_team_weeks(conn: sqlite3.Connection, lo: int, hi: int) -> pd.D
 
 def load_stats(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     cols = pd.read_sql("PRAGMA table_info(player_weekly_stats)", conn)["name"].tolist()
-    keep = ["player_id","season","week","team","fantasy_points","snap_count","snap_share"]
+    keep = ["player_id","season","week","team","position","fantasy_points","snap_count","snap_share"]
     keep = [c for c in keep if c in cols]
     q = f"SELECT {','.join(keep)} FROM player_weekly_stats WHERE season BETWEEN ? AND ?"
     df = pd.read_sql(q, conn, params=(lo, hi))
@@ -169,11 +169,24 @@ def load_rosters(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     return out.drop(columns="_priority")
 
 
+def load_player_positions(conn: sqlite3.Connection) -> pd.DataFrame:
+    """Stable player-level position fallback for evidence rows lacking weekly position."""
+    if not _table_exists(conn, "players"):
+        return pd.DataFrame(columns=["player_id", "player_position"])
+    cols = pd.read_sql("PRAGMA table_info(players)", conn)["name"].tolist()
+    if not {"player_id", "position"}.issubset(cols):
+        return pd.DataFrame(columns=["player_id", "player_position"])
+    out = pd.read_sql("SELECT player_id, position AS player_position FROM players", conn)
+    out = out[out["player_position"].isin(POSITIONS)].drop_duplicates("player_id")
+    return out
+
+
 def build_panel(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     sched = load_schedule_team_weeks(conn, lo, hi)
     stats = load_stats(conn, lo, hi)
     snaps = load_snaps(conn, lo, hi)
     rosters = load_rosters(conn, lo, hi)
+    players = load_player_positions(conn)
 
     keys = ["player_id","season","week"]
     evidence = []
@@ -195,7 +208,7 @@ def build_panel(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
 
     roster_cols = keys + ["team","position","player_name","status","roster_source"]
     snap_cols = keys + ["team","position","offense_snaps","offense_pct","has_snap_row"]
-    stat_cols = keys + [c for c in stats.columns if c not in keys and c not in ("team",)]
+    stat_cols = keys + [c for c in stats.columns if c not in keys and c not in ("team","position")]
     roster = rosters[roster_cols] if not rosters.empty else pd.DataFrame(columns=roster_cols)
     snap = snaps[snap_cols] if not snaps.empty else pd.DataFrame(columns=snap_cols)
     stat = stats[stat_cols] if not stats.empty else pd.DataFrame(columns=stat_cols)
@@ -213,6 +226,19 @@ def build_panel(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     stats_team = stats[keys + ["team"]].rename(columns={"team":"stats_team"}) if not stats.empty else pd.DataFrame(columns=keys+["stats_team"])
     panel = panel.merge(stats_team, on=keys, how="left")
     panel["team"] = panel["team"].combine_first(panel["stats_team"])
+
+    if "position" in stats.columns:
+        stats_pos = stats[keys + ["position"]].rename(columns={"position":"stats_position"})
+        panel = panel.merge(stats_pos, on=keys, how="left")
+        panel["position"] = panel["position"].combine_first(panel["stats_position"])
+    else:
+        panel["stats_position"] = None
+
+    if not players.empty:
+        panel = panel.merge(players, on="player_id", how="left")
+        panel["position"] = panel["position"].combine_first(panel["player_position"])
+    else:
+        panel["player_position"] = None
 
     # Only include player-weeks where that team actually had a REG game.
     panel = panel.merge(sched, on=["season","week","team"], how="inner")
@@ -260,6 +286,13 @@ def validate_panel(panel: pd.DataFrame) -> None:
         raise ValueError("canonical player-week panel is empty")
     if panel.duplicated(["player_id","season","week"]).any():
         raise ValueError("duplicate player_id/season/week rows")
+    if panel["team"].isna().any() or panel["opponent"].isna().any():
+        raise ValueError("canonical row missing team/opponent schedule identity")
+    if panel["position"].isna().any():
+        raise ValueError("canonical row missing fantasy position")
+    invalid_positions = sorted(set(panel["position"].dropna()) - set(POSITIONS))
+    if invalid_positions:
+        raise ValueError(f"canonical row has invalid positions: {invalid_positions}")
     bad = panel["participation_state"].eq("confirmed_played") & panel["offense_snaps"].le(0)
     if bad.any():
         raise ValueError("confirmed_played row has non-positive offense_snaps")
@@ -272,24 +305,80 @@ def validate_panel(panel: pd.DataFrame) -> None:
             raise ValueError("fabricated fantasy_points found on missing-stat rows")
 
 
+def audit_panel(conn: sqlite3.Connection, panel: pd.DataFrame, lo: int, hi: int) -> pd.DataFrame:
+    """Run Phase 1 acceptance checks and return season/position population summary."""
+    validate_panel(panel)
+
+    # Every canonical stats row must correspond to a real source row and preserve
+    # its fantasy-points target exactly. This is the central non-mutation gate.
+    raw = load_stats(conn, lo, hi)
+    source = raw[["player_id","season","week","fantasy_points"]].drop_duplicates(
+        ["player_id","season","week"], keep="last"
+    )
+    observed = panel.loc[
+        panel["has_stats_row"].eq(1),
+        ["player_id","season","week","fantasy_points"],
+    ]
+    chk = observed.merge(
+        source, on=["player_id","season","week"], how="left",
+        suffixes=("_panel","_source"), indicator=True,
+    )
+    if not chk["_merge"].eq("both").all():
+        raise ValueError("canonical has_stats_row=1 without matching player_weekly_stats source")
+
+    a = pd.to_numeric(chk["fantasy_points_panel"], errors="coerce")
+    b = pd.to_numeric(chk["fantasy_points_source"], errors="coerce")
+    same = (a.isna() & b.isna()) | (a.eq(b))
+    if not same.all():
+        raise ValueError("canonical panel altered an existing fantasy_points target")
+
+    # A measured snap row must never be classified unknown.
+    bad = panel["has_snap_row"].eq(1) & panel["participation_state"].eq("unknown")
+    if bad.any():
+        raise ValueError("mapped snap measurement classified as unknown")
+
+    summary = (
+        panel.groupby(["season","position"], dropna=False)
+        .agg(
+            player_weeks=("player_id","size"),
+            players=("player_id","nunique"),
+            confirmed_played=("participation_state", lambda s: int((s == "confirmed_played").sum())),
+            confirmed_zero_snaps=("participation_state", lambda s: int((s == "confirmed_zero_snaps").sum())),
+            unknown=("participation_state", lambda s: int((s == "unknown").sum())),
+            missing_stats_rows=("missing_stats_row","sum"),
+            played_without_stats_rows=("played_without_stats_row","sum"),
+            zero_snaps_without_stats_rows=("zero_snaps_without_stats_row","sum"),
+        )
+        .reset_index()
+    )
+    return summary
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seasons", nargs=2, type=int, metavar=("LO","HI"), default=[2013, 2026])
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--csv", type=Path, default=None)
+    ap.add_argument("--audit-csv", type=Path, default=PROJECT_ROOT / "data" / "experiments" / "canonical_player_weeks_audit.csv")
     args = ap.parse_args()
     lo, hi = sorted(args.seasons)
 
     conn = sqlite3.connect(str(DB_PATH))
     panel = build_panel(conn, lo, hi)
-    validate_panel(panel)
+    summary = audit_panel(conn, panel, lo, hi)
 
     print(f"canonical player-weeks: {len(panel):,}")
     print(panel["participation_state"].value_counts(dropna=False).to_string())
     print(f"missing stats rows: {int(panel['missing_stats_row'].sum()):,}")
     print(f"played but no stats row: {int(panel['played_without_stats_row'].sum()):,}")
     print(f"zero snaps but no stats row: {int(panel['zero_snaps_without_stats_row'].sum()):,}")
+    print("\nseason/position audit:")
+    print(summary.to_string(index=False))
+    if args.audit_csv:
+        args.audit_csv.parent.mkdir(parents=True, exist_ok=True)
+        summary.to_csv(args.audit_csv, index=False)
+        print(f"wrote audit CSV: {args.audit_csv}")
 
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)
