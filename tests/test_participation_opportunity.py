@@ -5,6 +5,7 @@ import pytest
 from src.models.participation_opportunity import (
     FEATURES, add_targets, build_causal_features, expanding_season_folds,
     normalize_snap_share, target_name, validate_causal_contract,
+    predict_preseason,
 )
 from scripts.run_phase2_participation import evaluate, summarize
 
@@ -116,3 +117,18 @@ def test_evaluation_harness_produces_strict_oof_metrics():
         row["threshold"] == .10 and row["model"] == "logistic" and row["segment"] == "all"
         for row in summary["classification"]
     )
+
+
+def test_preseason_prediction_excludes_target_season_from_training():
+    panel = _panel()
+    # Keep unique player-week keys while making this a viable opportunity fit.
+    panel = pd.concat([
+        panel.assign(player_id=panel.player_id + f"_{copy}")
+        for copy in range(10)
+    ], ignore_index=True)
+    frame = build_causal_features(panel)
+    prediction = predict_preseason(frame, 2025)
+    assert prediction.season.eq(2025).all()
+    assert {"participation_probability", "conditional_snap_share", "expected_snap_share"} <= set(prediction)
+    assert prediction.participation_probability.between(0, 1).all()
+    assert prediction.expected_snap_share.between(0, 1).all()

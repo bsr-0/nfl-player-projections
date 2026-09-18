@@ -180,6 +180,42 @@ def make_opportunity_regressor(random_state: int = 42) -> Pipeline:
     ])
 
 
+def fit_preseason_models(frame: pd.DataFrame, predict_season: int, random_state: int = 42) -> tuple[Pipeline, Pipeline]:
+    """Fit primary participation/opportunity models using seasons before ``S``.
+
+    This is the safe deployment boundary for an upcoming season.  It refuses
+    to train on any row from ``predict_season``; callers wanting in-season
+    updating need a separately audited as-of-week protocol.
+    """
+    validate_causal_contract(frame)
+    train = frame[(frame["season"] < predict_season) & frame["label_observed"].eq(1)]
+    primary = target_name(PRIMARY_THRESHOLD)
+    if train.empty or train[primary].nunique() < 2:
+        raise ValueError(f"insufficient observed primary labels before season {predict_season}")
+    classifier = make_classifier("hist_gbm", random_state).fit(train[FEATURES], train[primary].astype(int))
+    positive = train[train[primary].eq(1)]
+    if len(positive) < 100:
+        raise ValueError(f"insufficient meaningful-participation rows before season {predict_season}")
+    regressor = make_opportunity_regressor(random_state).fit(positive[FEATURES], positive["snap_share"])
+    return classifier, regressor
+
+
+def predict_preseason(frame: pd.DataFrame, predict_season: int, random_state: int = 42) -> pd.DataFrame:
+    """Produce pre-season Phase 2 predictions without modifying PPR outputs."""
+    classifier, regressor = fit_preseason_models(frame, predict_season, random_state)
+    target = frame[frame["season"].eq(predict_season)].copy()
+    if target.empty:
+        return pd.DataFrame(columns=KEY + ["team", "position", "participation_probability",
+                                            "conditional_snap_share", "expected_snap_share"])
+    probability = classifier.predict_proba(target[FEATURES])[:, 1]
+    conditional = np.clip(regressor.predict(target[FEATURES]), 0, 1)
+    return target[KEY + ["team", "position"]].assign(
+        participation_probability=probability,
+        conditional_snap_share=conditional,
+        expected_snap_share=probability * conditional,
+    )
+
+
 @dataclass(frozen=True)
 class SeasonFold:
     test_season: int

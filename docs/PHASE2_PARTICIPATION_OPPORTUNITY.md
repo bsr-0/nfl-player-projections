@@ -78,16 +78,22 @@ season/position, and causal feature ablations.
 ```bash
 python scripts/build_canonical_player_weeks.py --write --seasons 2013 2026
 python scripts/run_phase2_participation.py
+python scripts/run_phase2_participation.py --predict-season 2026
 ```
 
 Outputs (gitignored experiment data):
 
 - `data/experiments/phase2/oof_predictions.csv`
 - `data/experiments/phase2/evaluation.json`
+- `data/experiments/phase2/predictions_2026.csv` (when requested)
 
 OOF predictions are the only acceptable Phase 2 inputs to a later Phase 3
 training experiment. In-sample fitted probabilities must never be supplied to
 the historical PPR model.
+
+The optional pre-season output trains only on seasons before its requested
+season. It is appropriate for an upcoming-season opportunity view, not for an
+in-season refit; an as-of-week update protocol needs its own causality audit.
 
 ## Acceptance criteria
 
