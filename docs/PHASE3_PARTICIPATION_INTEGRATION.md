@@ -36,7 +36,8 @@ recomputed in-sample.
 
 ```bash
 python scripts/run_phase3_participation_integration.py \
-  --phase2-oof data/experiments/phase2/oof_predictions.csv
+  --phase2-oof data/experiments/phase2/oof_predictions.csv \
+  --phase2-model hist_gbm
 ```
 
 Outputs are `row_predictions.csv`, `fold_metrics.csv`, and `report.json` under
@@ -44,7 +45,9 @@ Outputs are `row_predictions.csv`, `fold_metrics.csv`, and `report.json` under
 
 ## Decision gate
 
-No production change is made by this script. A candidate requires all requested
-folds to complete, a negative paired-bootstrap 95% CI for aggregate MAE delta,
-and position-level review. Phase 2's canonical-panel acceptance must also be
+No production change is made by this script. The Phase 2 model label is
+explicit rather than hardcoded, and should be chosen only after the canonical
+Phase 2 comparison. A candidate requires all requested folds to complete, a
+negative player-clustered paired-bootstrap 95% CI for aggregate MAE delta, and
+position-level review. Phase 2's canonical-panel acceptance must also be
 complete; a result from the raw-snap smoke file is not eligible for adoption.

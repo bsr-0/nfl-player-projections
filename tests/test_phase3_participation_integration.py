@@ -47,6 +47,7 @@ def test_attach_uses_only_identical_matched_population():
 
 def test_paired_bootstrap_detects_better_augmented_prediction():
     rows = pd.DataFrame({
+        "player_id": ["a", "a", "b", "b"],
         "actual": [0., 10., 20., 5.],
         "baseline_prediction": [4., 5., 15., 0.],
         "augmented_prediction": [1., 9., 19., 5.],

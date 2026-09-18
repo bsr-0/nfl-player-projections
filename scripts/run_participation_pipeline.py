@@ -42,6 +42,7 @@ def stage_commands(args: argparse.Namespace) -> list[tuple[str, list[str]]]:
             str(root / "phase2" / "oof_predictions.csv"), "--seasons",
             *[str(s) for s in args.phase3_seasons], "--output-dir", str(root / "phase3"),
             "--n-bootstrap", str(args.n_bootstrap),
+            "--phase2-model", args.phase2_model,
         ]))
     return commands
 
@@ -66,6 +67,8 @@ def main() -> int:
     ap.add_argument("--include-pregame-injury", action="store_true")
     ap.add_argument("--phase3-seasons", nargs="+", type=int, default=[2023, 2024, 2025])
     ap.add_argument("--n-bootstrap", type=int, default=2000)
+    ap.add_argument("--phase2-model", default="hist_gbm",
+                    help="Phase 2 model label promoted to the Phase 3 experiment")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     args.seasons = sorted(args.seasons)
@@ -95,6 +98,7 @@ def main() -> int:
         "system": "participation_opportunity", "completed_stages": completed,
         "database": str(args.db), "seasons": args.seasons,
         "include_pregame_injury": bool(args.include_pregame_injury),
+        "phase2_model": args.phase2_model,
         "phase2_dir": str(args.output_root / "phase2"),
         "phase3_dir": str(args.output_root / "phase3"),
     }

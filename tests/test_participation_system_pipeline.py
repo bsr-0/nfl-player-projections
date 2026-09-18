@@ -8,7 +8,7 @@ def _args(tmp_path, stages):
     return Namespace(
         output_root=tmp_path / "participation", db=tmp_path / "nfl.db", stages=stages,
         seasons=[2013, 2026], min_train_seasons=3, include_pregame_injury=True,
-        phase3_seasons=[2023, 2024, 2025], n_bootstrap=2000,
+        phase3_seasons=[2023, 2024, 2025], n_bootstrap=2000, phase2_model="logistic",
     )
 
 
@@ -20,6 +20,7 @@ def test_main_pipeline_orders_all_stages_and_handoffs(tmp_path):
     phase1 = commands[0][1]
     assert phase1[phase1.index("--db") + 1] == str(tmp_path / "nfl.db")
     assert "--include-pregame-injury" in phase2
+    assert phase3[phase3.index("--phase2-model") + 1] == "logistic"
     assert str(tmp_path / "participation" / "phase2" / "oof_predictions.csv") in phase3
 
 

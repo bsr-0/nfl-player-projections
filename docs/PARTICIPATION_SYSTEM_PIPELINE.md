@@ -31,3 +31,9 @@ commands without modifying the database or artifacts.
 
 The pipeline is experimental and has no import into the Phase 7 serving path.
 That boundary remains until the Phase 3 decision gate is met.
+
+After canonical Phase 2 evaluation, pass its selected model label explicitly:
+
+```bash
+python scripts/run_participation_pipeline.py --phase2-model logistic
+```

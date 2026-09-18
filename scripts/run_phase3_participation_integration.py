@@ -15,10 +15,12 @@ def main() -> int:
     ap.add_argument("--positions", nargs="+", default=None)
     ap.add_argument("--output-dir", type=Path, default=Path("data/experiments/phase3_participation"))
     ap.add_argument("--n-bootstrap", type=int, default=2000)
+    ap.add_argument("--phase2-model", default="hist_gbm",
+                    help="model label selected from Phase 2's OOF file")
     args = ap.parse_args()
     _, summary, report = run_participation_integration(
         args.phase2_oof, positions=args.positions, seasons=args.seasons,
-        output_dir=args.output_dir, n_bootstrap=args.n_bootstrap,
+        output_dir=args.output_dir, n_bootstrap=args.n_bootstrap, phase2_model=args.phase2_model,
     )
     print(summary.to_string(index=False))
     print(f"all requested folds completed: {report['all_requested_folds_completed']}")

@@ -98,17 +98,33 @@ def attach_phase2_oof(ppr: pd.DataFrame, oof: pd.DataFrame) -> pd.DataFrame:
 
 
 def paired_bootstrap_mae_delta(rows: pd.DataFrame, n_bootstrap: int = 2000, seed: int = 42) -> dict:
-    """Bootstrap CI for augmented minus baseline absolute error (negative wins)."""
+    """Player-clustered CI for augmented minus baseline absolute error.
+
+    Weekly rows for one player are correlated; resampling individual rows would
+    overstate precision.  A player is therefore the bootstrap unit.
+    """
     required = {"actual", "baseline_prediction", "augmented_prediction"}
     if not required.issubset(rows):
         raise ValueError(f"row-level comparison missing: {sorted(required - set(rows))}")
-    clean = rows[list(required)].dropna()
+    # Preserve player identity so player-level, rather than row-level,
+    # resampling is actually used when the caller provides it.
+    columns = list(required)
+    if "player_id" in rows.columns:
+        columns.append("player_id")
+    clean = rows[columns].dropna()
     if len(clean) < 2:
         return {"n": len(clean), "mae_delta": np.nan, "ci95_low": np.nan, "ci95_high": np.nan}
     delta = np.abs(clean.augmented_prediction - clean.actual).to_numpy() - np.abs(clean.baseline_prediction - clean.actual).to_numpy()
+    clusters = clean["player_id"].to_numpy() if "player_id" in clean else np.arange(len(clean))
+    unique, inverse = np.unique(clusters, return_inverse=True)
     rng = np.random.default_rng(seed)
-    draws = rng.integers(0, len(delta), size=(n_bootstrap, len(delta)))
-    means = delta[draws].mean(axis=1)
+    sampled_clusters = rng.integers(0, len(unique), size=(n_bootstrap, len(unique)))
+    means = np.empty(n_bootstrap)
+    for i, draw in enumerate(sampled_clusters):
+        row_mask = np.isin(inverse, draw)
+        # Repeated sampled players must retain their multiplicity.
+        counts = np.bincount(draw, minlength=len(unique))[inverse]
+        means[i] = np.average(delta[row_mask], weights=counts[row_mask])
     return {"n": int(len(delta)), "mae_delta": float(delta.mean()),
             "ci95_low": float(np.quantile(means, .025)), "ci95_high": float(np.quantile(means, .975))}
 
@@ -124,6 +140,7 @@ def run_participation_integration(
     seasons: Sequence[int] = (2023, 2024, 2025),
     output_dir: Path = Path("data/experiments/phase3_participation"),
     n_bootstrap: int = 2000,
+    phase2_model: str = P2_MODEL,
     fold_loader: Callable | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Run matched-population Phase 7 vs Phase 7+Phase-2 OOF comparison.
@@ -141,7 +158,7 @@ def run_participation_integration(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     phase2_manifest = validate_phase2_manifest(oof_path)
-    oof = validate_phase2_oof(pd.read_csv(oof_path))
+    oof = validate_phase2_oof(pd.read_csv(oof_path), model=phase2_model)
     positions = list(positions) if positions is not None else list(POSITIONS)
     fold_loader = fold_loader or run_fold
     row_frames, summary_rows, failures = [], [], []
@@ -196,14 +213,17 @@ def run_participation_integration(
         baseline = rows[rows.arm.eq("baseline")].rename(columns={"prediction": "baseline_prediction"})
         for arm in ("p_only", "p_plus_expected"):
             augmented = rows[rows.arm.eq(arm)].rename(columns={"prediction": "augmented_prediction"})
-            joined = baseline.merge(augmented[KEY + ["augmented_prediction"]], on=KEY, how="inner", validate="one_to_one")
+            joined = baseline.merge(
+                augmented[KEY + ["position", "augmented_prediction"]],
+                on=KEY + ["position"], how="inner", validate="one_to_one",
+            )
             for (position, season), group in joined.groupby(["position", "season"]):
                 result = paired_bootstrap_mae_delta(group, n_bootstrap=n_bootstrap)
                 paired.append({"position": position, "season": season, "arm": arm, **result})
             aggregate = paired_bootstrap_mae_delta(joined, n_bootstrap=n_bootstrap)
             paired.append({"position": "ALL", "season": "ALL", "arm": arm, **aggregate})
     report = {"system": "participation_opportunity", "phase": 3,
-              "phase2_manifest": phase2_manifest, "selected_phase2_model": P2_MODEL,
+              "phase2_manifest": phase2_manifest, "selected_phase2_model": phase2_model,
               "arms": ARMS, "failures": failures, "all_requested_folds_completed": not failures,
               "selection_rule": "No production change. A future adoption decision requires complete folds, a negative aggregate paired-bootstrap CI, and review by position.",
               "paired_bootstrap": paired}
