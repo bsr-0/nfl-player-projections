@@ -299,6 +299,19 @@ FEATURE_AVAILABILITY: Tuple[Tuple[str, str], ...] = (
     ("injury_risk_score_", "pre-kickoff (runtime-filtered in external_data.py)"),
     ("expected_missed_games_", "assumed week - 1 report (UNVERIFIED — see GAPS.md)"),
     ("availability_3yr", "prior seasons (fully known pre-kickoff)"),
+    # Game-outcome model (src/models/game_outcome/): home-minus-away team-form
+    # differences, joined at week - 1 and earlier with a runtime assertion in
+    # features.py (mirrors the week - 1 discipline above, applied to a
+    # game-level rather than player-level panel).
+    ("home_minus_away_", "week - 1 and earlier (runtime-asserted in game_outcome/features.py)"),
+    ("is_cold_start", "week - 1 and earlier (derived from prior-games-played count)"),
+    ("game_week", "prediction week (schedule is fixed in advance)"),
+    ("prior_season_win_pct", "prior season (fully known pre-kickoff)"),
+    ("spread_line", "known pre-kickoff (Vegas line)"),
+    ("total_line", "known pre-kickoff (Vegas line)"),
+    ("wind_mph", "pre-kickoff forecast"),
+    ("temp_f", "pre-kickoff forecast"),
+    ("precip_mm", "pre-kickoff forecast"),
 )
 
 

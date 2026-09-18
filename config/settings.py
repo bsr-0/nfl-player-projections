@@ -356,6 +356,44 @@ LOYO_CONFIG = {
     "purge_gap": 1,                      # Seasons to exclude before test fold
 }
 
+# Game-outcome (win/loss) model, phase 1 (2026-09). Standalone from the
+# fantasy models -- see src/models/game_outcome/. Not wired into train.py.
+GAME_OUTCOME_MODEL_CONFIG = {
+    # team_stats coverage is effectively 100% back to 2006 (verified against
+    # the live DB 2026-09-18: total_plays/third_down_conv fully populated
+    # every season; drive_success_rate/avg_drive_epa/points_per_drive at
+    # 94-100% every season 2006-2025, dipping to 89.2% only in 2025). No PBP
+    # coverage reason to start later than the earliest season with spread_line.
+    "earliest_training_season": 2006,
+    # gap_seasons=0 (unlike the player models' cv_gap_seasons=1): every
+    # game-outcome feature is lagged to week-1 *within* the target season, so
+    # there is no rolling-window feature that can bridge across a season
+    # boundary the way player rolling/S2D features can. Revisit only if a
+    # feature is ever added that reads across a season boundary.
+    "cv_gap_seasons": 0,
+    "n_walk_forward_test_seasons": 5,   # most recent 5 complete seasons as holdout folds
+    "rolling_window_games": 3,           # last-3-game form window (season-to-date is the other)
+    "min_prior_games_for_form": 3,       # below this, is_cold_start=1 and form falls back to prior season
+    "logistic_C": 1.0,                   # fixed baseline; no inner-CV tuning in phase 1
+    "xgb_params": {
+        # Shallow/conservative on purpose: a season is ~285 games, so even
+        # 20 seasons is only a few thousand rows -- well below where XGBoost
+        # needs more capacity. Bias toward under- rather than over-fitting.
+        "n_estimators": 300,
+        "max_depth": 3,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "eval_metric": "logloss",
+        "random_state": 42,
+    },
+}
+
+# Requirement-derived minimum training seasons for the game-outcome model
+# (mirrors MIN_TRAINING_SEASONS_1W below).
+MIN_TRAINING_SEASONS_GAME_OUTCOME = 3
+
 # =============================================================================
 # FEATURE MODE: "full" (400+ features) or "causal" (9-11 per position)
 # =============================================================================

@@ -1540,6 +1540,54 @@ class DatabaseManager:
                     )
         return pos_map
 
+    def get_current_team_map(self) -> Dict[str, str]:
+        """Latest known team per player_id, from the same roster snapshots
+        and priority order as ``get_authoritative_player_positions``
+        (weekly_rosters_v2, then weekly_rosters, then rosters; most recent
+        (season, week) wins). Used to place a drafted rookie who has not
+        yet appeared in ``player_weekly_stats`` on his real current team
+        for a synthetic debut-week feature row, since ``draft_team`` in
+        ``draft_picks_v2`` does not reflect a trade or practice-squad
+        elevation that happened after the draft.
+        """
+        def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            ).fetchone()
+            return row is not None
+
+        def _latest_teams(conn: sqlite3.Connection, table_name: str,
+                          week_col: Optional[str]) -> List[Tuple[str, str]]:
+            if not _table_exists(conn, table_name):
+                return []
+            order_by = "season DESC" + (f", {week_col} DESC" if week_col else "")
+            query = f"""
+                SELECT player_id, team
+                FROM (
+                    SELECT player_id, team,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY player_id ORDER BY {order_by}
+                           ) AS rn
+                    FROM {table_name}
+                    WHERE team IS NOT NULL AND TRIM(team) != ''
+                      AND player_id IS NOT NULL AND TRIM(player_id) != ''
+                )
+                WHERE rn = 1
+            """
+            return conn.execute(query).fetchall()
+
+        team_map: Dict[str, str] = {}
+        with self._get_connection() as conn:
+            for table_name, week_col in [
+                ("weekly_rosters_v2", "week"),
+                ("weekly_rosters", "week"),
+                ("rosters", None),
+            ]:
+                for player_id, team in _latest_teams(conn, table_name, week_col):
+                    team_map.setdefault(player_id, team)
+        return team_map
+
     def reconcile_player_positions_from_rosters(self) -> int:
         """Update ``players.position`` from authoritative roster snapshots."""
         pos_map = self.get_authoritative_player_positions()

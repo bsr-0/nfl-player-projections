@@ -190,3 +190,19 @@ def test_authority_keeps_the_stats_era_label_for_position_switchers(db):
     db.insert_player({"player_id": "switcher", "name": "J.Thomas", "position": "TE"})
     assert db.get_authoritative_player_positions()["switcher"] == "TE"
     assert db.reconcile_player_positions_from_rosters() == 0
+
+
+def test_current_team_map_uses_the_latest_snapshot(db):
+    """A player traded mid-career must resolve to his LATEST team, same
+    (season, week)-ordered priority as get_authoritative_player_positions.
+    Used by _drafted_rookie_stub_rows to place a not-yet-debuted rookie on
+    his real current team rather than his draft-day team."""
+    _seed_rosters(db, [
+        (2023, 1, "DEN", "WR", "traded"), (2024, 5, "MIA", "WR", "traded"),
+    ])
+    assert db.get_current_team_map()["traded"] == "MIA"
+
+
+def test_current_team_map_ignores_blank_team(db):
+    _seed_rosters(db, [(2024, 1, "", "WR", "no_team_yet")])
+    assert "no_team_yet" not in db.get_current_team_map()

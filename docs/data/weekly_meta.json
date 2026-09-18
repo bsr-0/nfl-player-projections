@@ -47,12 +47,18 @@
       "mae": 4.88,
       "bias": -1.88,
       "coverage80": 0.829
+    },
+    "2": {
+      "n": 22,
+      "mae": 6.51,
+      "bias": -3.33,
+      "coverage80": 0.591
     }
   },
   "completed_game_rows": 361,
   "has_intervals": true,
   "pace_blend_kappa": 3.0,
-  "generated_at": "2026-09-18T02:44:01+00:00",
+  "generated_at": "2026-09-18T12:45:29+00:00",
   "measured": {
     "QB": {
       "mae": 6.8,

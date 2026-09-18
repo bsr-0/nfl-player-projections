@@ -1,0 +1,530 @@
+{
+  "trained_at": "2026-09-18T12:26:16.838637+00:00",
+  "seasons_requested": [
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "config": {
+    "earliest_training_season": 2006,
+    "cv_gap_seasons": 0,
+    "n_walk_forward_test_seasons": 5,
+    "rolling_window_games": 3,
+    "min_prior_games_for_form": 3,
+    "logistic_C": 1.0,
+    "xgb_params": {
+      "n_estimators": 300,
+      "max_depth": 3,
+      "learning_rate": 0.05,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "min_child_weight": 5,
+      "eval_metric": "logloss",
+      "random_state": 42
+    }
+  },
+  "backtest": {
+    "n_folds": 5,
+    "n_games_total": 4350,
+    "folds": [
+      {
+        "fold": 0,
+        "train_seasons": [
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020
+        ],
+        "test_seasons": [
+          2021
+        ],
+        "n_train": 2930,
+        "n_test": 284,
+        "arms": {
+          "logistic": {
+            "n": 284,
+            "accuracy": 0.6514084507042254,
+            "brier": 0.21426850348116314,
+            "log_loss": 0.6146198417798245,
+            "roc_auc": 0.7227270470231889
+          },
+          "xgboost": {
+            "n": 284,
+            "accuracy": 0.6725352112676056,
+            "brier": 0.21280778608551532,
+            "log_loss": 0.6221179936028118,
+            "roc_auc": 0.7261035801181788
+          },
+          "vegas_favorite": {
+            "n": 284,
+            "accuracy": 0.6232394366197183,
+            "brier": 0.21912341600098006,
+            "log_loss": 0.6264167356807682,
+            "roc_auc": 0.7215105020110235
+          },
+          "home_field": {
+            "n": 284,
+            "accuracy": 0.5176056338028169,
+            "brier": 0.2524352112676056,
+            "log_loss": 0.6980823260525391,
+            "roc_auc": 0.5
+          }
+        }
+      },
+      {
+        "fold": 1,
+        "train_seasons": [
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021
+        ],
+        "test_seasons": [
+          2022
+        ],
+        "n_train": 3214,
+        "n_test": 282,
+        "arms": {
+          "logistic": {
+            "n": 282,
+            "accuracy": 0.6595744680851063,
+            "brier": 0.2073038742385238,
+            "log_loss": 0.5995863712655601,
+            "roc_auc": 0.7318135245901639
+          },
+          "xgboost": {
+            "n": 282,
+            "accuracy": 0.6666666666666666,
+            "brier": 0.21682296236947896,
+            "log_loss": 0.6214393998103953,
+            "roc_auc": 0.7057889344262294
+          },
+          "vegas_favorite": {
+            "n": 282,
+            "accuracy": 0.6631205673758865,
+            "brier": 0.20908237936782,
+            "log_loss": 0.6041812980973813,
+            "roc_auc": 0.7265625
+          },
+          "home_field": {
+            "n": 282,
+            "accuracy": 0.5673758865248227,
+            "brier": 0.24546737588652484,
+            "log_loss": 0.6840545229804935,
+            "roc_auc": 0.5
+          }
+        }
+      },
+      {
+        "fold": 2,
+        "train_seasons": [
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "test_seasons": [
+          2023
+        ],
+        "n_train": 3496,
+        "n_test": 285,
+        "arms": {
+          "logistic": {
+            "n": 285,
+            "accuracy": 0.4421052631578947,
+            "brier": 0.35272662263273324,
+            "log_loss": 1.0993870598379187,
+            "roc_auc": 0.41399519134441987
+          },
+          "xgboost": {
+            "n": 285,
+            "accuracy": 0.5298245614035088,
+            "brier": 0.26180852273167254,
+            "log_loss": 0.7228216796196913,
+            "roc_auc": 0.5417251051893408
+          },
+          "vegas_favorite": {
+            "n": 285,
+            "accuracy": 0.6736842105263158,
+            "brier": 0.21711434742391894,
+            "log_loss": 0.6232798701995268,
+            "roc_auc": 0.6928220797435383
+          },
+          "home_field": {
+            "n": 285,
+            "accuracy": 0.5649122807017544,
+            "brier": 0.2458122807017544,
+            "log_loss": 0.6847488931201464,
+            "roc_auc": 0.5
+          }
+        }
+      },
+      {
+        "fold": 3,
+        "train_seasons": [
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "test_seasons": [
+          2024
+        ],
+        "n_train": 3781,
+        "n_test": 285,
+        "arms": {
+          "logistic": {
+            "n": 285,
+            "accuracy": 0.6771929824561403,
+            "brier": 0.21125325945470785,
+            "log_loss": 0.6106444152860435,
+            "roc_auc": 0.7214768435698669
+          },
+          "xgboost": {
+            "n": 285,
+            "accuracy": 0.6526315789473685,
+            "brier": 0.22734534393312802,
+            "log_loss": 0.6466480262402698,
+            "roc_auc": 0.6777976545418407
+          },
+          "vegas_favorite": {
+            "n": 285,
+            "accuracy": 0.7052631578947368,
+            "brier": 0.20071362639190501,
+            "log_loss": 0.5880931054684199,
+            "roc_auc": 0.7558139534883721
+          },
+          "home_field": {
+            "n": 285,
+            "accuracy": 0.5473684210526316,
+            "brier": 0.24826842105263153,
+            "log_loss": 0.6896936501752515,
+            "roc_auc": 0.5
+          }
+        }
+      },
+      {
+        "fold": 4,
+        "train_seasons": [
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "test_seasons": [
+          2025
+        ],
+        "n_train": 4066,
+        "n_test": 284,
+        "arms": {
+          "logistic": {
+            "n": 284,
+            "accuracy": 0.6654929577464789,
+            "brier": 0.21385818647686333,
+            "log_loss": 0.61305091404237,
+            "roc_auc": 0.7131678628389154
+          },
+          "xgboost": {
+            "n": 284,
+            "accuracy": 0.6408450704225352,
+            "brier": 0.21875814786295247,
+            "log_loss": 0.6241623691652357,
+            "roc_auc": 0.7032496012759171
+          },
+          "vegas_favorite": {
+            "n": 284,
+            "accuracy": 0.6584507042253521,
+            "brier": 0.2113135291657215,
+            "log_loss": 0.6073900535696583,
+            "roc_auc": 0.7203698165869219
+          },
+          "home_field": {
+            "n": 284,
+            "accuracy": 0.5352112676056338,
+            "brier": 0.2499704225352113,
+            "log_loss": 0.6931201578810428,
+            "roc_auc": 0.5
+          }
+        }
+      }
+    ],
+    "pooled": {
+      "logistic": {
+        "n": 1420,
+        "accuracy": 0.6190140845070422,
+        "brier": 0.23998728090018587,
+        "log_loss": 0.7078174801131835,
+        "roc_auc": 0.653366523660114
+      },
+      "xgboost": {
+        "n": 1420,
+        "accuracy": 0.6323943661971831,
+        "brier": 0.22754764269649727,
+        "log_loss": 0.6475270422132013,
+        "roc_auc": 0.6761181725043222
+      },
+      "vegas_favorite": {
+        "n": 1420,
+        "accuracy": 0.6647887323943662,
+        "brier": 0.21146922249759037,
+        "log_loss": 0.6098743325886954,
+        "roc_auc": 0.7210851956201576
+      },
+      "home_field": {
+        "n": 1420,
+        "accuracy": 0.5464788732394367,
+        "brier": 0.24839295774647885,
+        "log_loss": 0.6899443702512851,
+        "roc_auc": 0.5
+      }
+    },
+    "calibration": {
+      "logistic": [
+        {
+          "bin_range": [
+            0.0,
+            0.2
+          ],
+          "n": 80,
+          "mean_predicted": 0.12805274079174064,
+          "actual_win_rate": 0.45
+        },
+        {
+          "bin_range": [
+            0.2,
+            0.4
+          ],
+          "n": 320,
+          "mean_predicted": 0.31798449949218593,
+          "actual_win_rate": 0.36875
+        },
+        {
+          "bin_range": [
+            0.4,
+            0.6000000000000001
+          ],
+          "n": 405,
+          "mean_predicted": 0.5078510993754825,
+          "actual_win_rate": 0.5185185185185185
+        },
+        {
+          "bin_range": [
+            0.6000000000000001,
+            0.8
+          ],
+          "n": 457,
+          "mean_predicted": 0.6944111778196889,
+          "actual_win_rate": 0.6236323851203501
+        },
+        {
+          "bin_range": [
+            0.8,
+            1.0
+          ],
+          "n": 158,
+          "mean_predicted": 0.8655455659990603,
+          "actual_win_rate": 0.8037974683544303
+        }
+      ],
+      "xgboost": [
+        {
+          "bin_range": [
+            0.0,
+            0.2
+          ],
+          "n": 59,
+          "mean_predicted": 0.15049482882022858,
+          "actual_win_rate": 0.3728813559322034
+        },
+        {
+          "bin_range": [
+            0.2,
+            0.4
+          ],
+          "n": 328,
+          "mean_predicted": 0.3143361806869507,
+          "actual_win_rate": 0.375
+        },
+        {
+          "bin_range": [
+            0.4,
+            0.6000000000000001
+          ],
+          "n": 465,
+          "mean_predicted": 0.5005524158477783,
+          "actual_win_rate": 0.5010752688172043
+        },
+        {
+          "bin_range": [
+            0.6000000000000001,
+            0.8
+          ],
+          "n": 364,
+          "mean_predicted": 0.6912969350814819,
+          "actual_win_rate": 0.6181318681318682
+        },
+        {
+          "bin_range": [
+            0.8,
+            1.0
+          ],
+          "n": 204,
+          "mean_predicted": 0.8683425188064575,
+          "actual_win_rate": 0.8480392156862745
+        }
+      ],
+      "vegas_favorite": [
+        {
+          "bin_range": [
+            0.0,
+            0.2
+          ],
+          "n": 49,
+          "mean_predicted": 0.1490868107079575,
+          "actual_win_rate": 0.24489795918367346
+        },
+        {
+          "bin_range": [
+            0.2,
+            0.4
+          ],
+          "n": 398,
+          "mean_predicted": 0.334117355018769,
+          "actual_win_rate": 0.32914572864321606
+        },
+        {
+          "bin_range": [
+            0.4,
+            0.6000000000000001
+          ],
+          "n": 365,
+          "mean_predicted": 0.5320356121469731,
+          "actual_win_rate": 0.5260273972602739
+        },
+        {
+          "bin_range": [
+            0.6000000000000001,
+            0.8
+          ],
+          "n": 474,
+          "mean_predicted": 0.685168325403272,
+          "actual_win_rate": 0.6708860759493671
+        },
+        {
+          "bin_range": [
+            0.8,
+            1.0
+          ],
+          "n": 134,
+          "mean_predicted": 0.8545463426469366,
+          "actual_win_rate": 0.917910447761194
+        }
+      ],
+      "home_field": [
+        {
+          "bin_range": [
+            0.4,
+            0.6000000000000001
+          ],
+          "n": 1420,
+          "mean_predicted": 0.5700000000000001,
+          "actual_win_rate": 0.5464788732394367
+        }
+      ]
+    }
+  },
+  "feature_columns": [
+    "spread_line",
+    "total_line",
+    "home_minus_away_points_scored_s2d",
+    "home_minus_away_points_scored_roll3",
+    "home_minus_away_points_allowed_s2d",
+    "home_minus_away_points_allowed_roll3",
+    "home_minus_away_total_yards_s2d",
+    "home_minus_away_total_yards_roll3",
+    "home_minus_away_passing_yards_s2d",
+    "home_minus_away_passing_yards_roll3",
+    "home_minus_away_rushing_yards_s2d",
+    "home_minus_away_rushing_yards_roll3",
+    "home_minus_away_turnovers_s2d",
+    "home_minus_away_turnovers_roll3",
+    "home_minus_away_third_down_conv_s2d",
+    "home_minus_away_third_down_conv_roll3",
+    "home_minus_away_drive_success_rate_s2d",
+    "home_minus_away_drive_success_rate_roll3",
+    "home_minus_away_avg_drive_epa_s2d",
+    "home_minus_away_avg_drive_epa_roll3",
+    "home_minus_away_points_per_drive_s2d",
+    "home_minus_away_points_per_drive_roll3",
+    "home_minus_away_neutral_pass_rate_oe_s2d",
+    "home_minus_away_neutral_pass_rate_oe_roll3",
+    "home_minus_away_win_pct_s2d",
+    "home_minus_away_win_pct_roll3",
+    "home_minus_away_prior_season_win_pct",
+    "is_cold_start",
+    "game_week",
+    "is_dome",
+    "temp_f",
+    "wind_mph",
+    "precip_mm"
+  ],
+  "n_training_games": 4350
+}

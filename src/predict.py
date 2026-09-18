@@ -352,6 +352,19 @@ class NFLPredictor:
                 print("  no history before the target week")
                 return pd.DataFrame()
 
+        # Drafted rookies with zero games this season so far have no row at
+        # all in player_data (see _drafted_rookie_stub_rows) -- add one, so
+        # the ensemble gets a real prediction from draft/combine/team
+        # signal instead of the player being silently absent. Applies to
+        # both a backtest's as_of week and live serving alike, since a
+        # not-yet-played debut looks the same either way: zero rows for
+        # that player this season as of the target week.
+        rookie_stub = self._drafted_rookie_stub_rows(player_data, pred_season)
+        if not rookie_stub.empty:
+            print(f"  +{len(rookie_stub)} drafted {pred_season} rookie(s) with no game yet "
+                  f"(draft/combine/team signal only)")
+            player_data = pd.concat([player_data, rookie_stub], ignore_index=True)
+
         # Prepare features on the FULL multi-position frame, so team-relative
         # denominators are the real ones.
         player_data = self._prepare_features(player_data)
@@ -812,7 +825,18 @@ class NFLPredictor:
                 .set_index("player_id")["step8_pace"] * float(n_weeks))
         if {"season", "player_id"} <= set(history.columns):
             s = pd.to_numeric(history["season"], errors="coerce")
-            games = history.loc[s == pred_season].groupby("player_id").size()
+            real = s == pred_season
+            # A synthetic debut-week row (_drafted_rookie_stub_rows) must not
+            # count as a game played, or a rookie's first blend would use
+            # g=1 instead of the correct g=0. Its fantasy_points is NOT a
+            # usable signal for this: calculate_all_scores's blanket
+            # numeric fill turns the row's NaN into 0.0 well before this
+            # point, indistinguishable from a real scoreless game. Its
+            # data_source tag survives untouched (a plain string column no
+            # feature step has reason to overwrite).
+            if "data_source" in history.columns:
+                real = real & (history["data_source"] != "rookie_debut_stub")
+            games = history.loc[real].groupby("player_id").size()
         else:
             games = pd.Series(dtype=float)
 
@@ -841,6 +865,118 @@ class NFLPredictor:
         print(f"  pace blend: {n_blend}/{len(out)} players shrunk toward the Step 8 pace "
               f"(kappa={PACE_BLEND_KAPPA:g}, mean weight on pace {float((1 - w).mean()):.2f})")
         return out
+
+    def _drafted_rookie_stub_rows(self, player_data: pd.DataFrame,
+                                  pred_season: int) -> pd.DataFrame:
+        """One synthetic feature row per drafted rookie who has not yet
+        played a game this season.
+
+        Until 2026-09-17 such a player simply had zero rows anywhere in
+        ``player_data`` (it is built entirely from ``player_weekly_stats``,
+        which has no row for a game that has not been played), so he never
+        reached ``predict()`` at all -- not "predicted from the pace",
+        invisible. This gives the weekly ensemble its own real prediction,
+        from real signal: draft capital, combine, college, and the
+        player's TEAM's context (coaching, prior-season wins, depth chart,
+        Vegas/weather/opponent for the target week) -- exactly the
+        features CAUSAL_FEATURES already carries for this purpose (the "33
+        of 72 causal features that are genuinely populated for" a debut
+        player, per the cold-start comment on this class). Every other
+        column -- his own snap share, targets, rolling stats, anything
+        that presupposes he has played -- is left NaN, the same value a
+        real debut row gets from ``_restore_debut_history_nan`` once
+        ``first_nfl_season`` marks it as one.
+
+        Reuses ``_cold_start_rows_from_draft``'s population
+        (``draft_picks_v2`` for ``draft_season == pred_season``) rather
+        than re-deriving it, so the weekly page and the Step 8 pace it
+        blends against are never looking at two different rookie classes.
+        Requires the player to exist in ``players`` (a real identity, not
+        a bare draft-day ID with nothing else in the DB) -- guards against
+        exactly the kind of disconnected placeholder record a draft feed
+        can carry before a player is fully onboarded.
+
+        This row's OWN prediction is not what gets served at zero games.
+        Measured on every real week-1 debut across 2022-2025 (165 rows
+        with real outcomes, scripts left in /tmp this session --
+        data/experiments/rookie_debut_stub_2022_2025.csv): the raw model
+        collapses toward a low default (mean predicted 1.63 vs. actual 4.80,
+        bias -3.17) because its volume features -- targets/carries/snap-share
+        rolling means -- are all structurally missing and median-impute to
+        a low-usage league-wide typical, which a drafted rookie expected to
+        play is not. MAE 4.20 / RMSE 6.51 vs. the pace's 3.67 / 5.11 (which
+        is nearly unbiased: -0.20). So `_blend_toward_season_pace` keeps its
+        existing w=0 default at g=0 for these rows too -- this function
+        makes the rookie visible and gives it a real, inspectable
+        `predicted_points_model`, it does not make that number the served
+        one. Revisit if the weekly model ever gets features that describe
+        an incoming player's role (usage projection, snap-share forecast)
+        rather than only his draft pedigree.
+        """
+        if player_data.empty or "position" not in player_data.columns \
+                or "season" not in player_data.columns:
+            return pd.DataFrame()
+        already_here = set(
+            player_data.loc[pd.to_numeric(player_data["season"], errors="coerce")
+                            == pred_season, "player_id"]
+        )
+        with self.db._get_connection() as conn:
+            draft = pd.read_sql(
+                """
+                SELECT dp.player_id, dp.position, dp.draft_round, dp.draft_pick,
+                       dp.college AS draft_college, dp.draft_team,
+                       p.name, p.birth_date,
+                       COALESCE(dv.otc, 0) AS draft_pick_value
+                FROM (
+                    SELECT player_id, position, college, draft_team, draft_season,
+                           draft_round, MIN(draft_pick) AS draft_pick
+                    FROM draft_picks_v2
+                    WHERE draft_season = ? AND position IN ('QB','RB','WR','TE')
+                      AND player_id IS NOT NULL AND player_id != ''
+                    GROUP BY player_id
+                ) dp
+                JOIN players p ON p.player_id = dp.player_id
+                LEFT JOIN draft_values dv ON dv.pick = MIN(dp.draft_pick, 262)
+                """,
+                conn, params=(int(pred_season),),
+            )
+        if draft.empty:
+            return pd.DataFrame()
+        draft = draft[~draft["player_id"].isin(already_here)]
+        if draft.empty:
+            return pd.DataFrame()
+
+        team_map = self.db.get_current_team_map()
+        draft["team"] = draft["player_id"].map(team_map).fillna(draft["draft_team"])
+        draft = draft[draft["team"].notna() & (draft["team"] != "")]
+        if draft.empty:
+            return pd.DataFrame()
+
+        template = player_data.iloc[[0]].copy()
+        for col in template.columns:
+            template[col] = np.nan
+        stub = pd.concat([template] * len(draft), ignore_index=True)
+        stub["player_id"] = draft["player_id"].to_numpy()
+        stub["name"] = draft["name"].to_numpy()
+        stub["position"] = draft["position"].to_numpy()
+        stub["birth_date"] = draft["birth_date"].to_numpy()
+        stub["team"] = draft["team"].to_numpy()
+        stub["season"] = pred_season
+        stub["week"] = 1
+        stub["is_undrafted"] = 0
+        stub["draft_round"] = draft["draft_round"].to_numpy()
+        stub["draft_pick"] = draft["draft_pick"].to_numpy()
+        stub["draft_pick_value"] = draft["draft_pick_value"].to_numpy()
+        stub["draft_season"] = pred_season
+        stub["draft_college"] = draft["draft_college"].to_numpy()
+        stub["first_nfl_season"] = pred_season
+        # Presumed healthy: the same neutral value
+        # single_week_ppr.season_projection.COLD_START_NEUTRAL_INJURY_SCORE
+        # uses for the same situation (a true cold start has no practice
+        # report to read a real number from).
+        stub["injury_score"] = 1.0
+        stub["data_source"] = "rookie_debut_stub"
+        return stub
 
     def _prepare_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """Prepare features for prediction."""
