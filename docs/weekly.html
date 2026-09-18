@@ -90,6 +90,24 @@
   #tbl-wrap { max-height:68vh; overflow:auto; }
   .legend { display:inline-block; width:10px; height:10px; border-radius:2px;
             vertical-align:middle; margin-right:4px; }
+  .cmpcell { width:26px; text-align:center; }
+  .cmpcell input { cursor:pointer; }
+  #compare { margin:14px 24px 0; padding:14px 16px; border-radius:8px;
+             background:var(--panel); border:1px solid var(--line); display:none; }
+  #compare.open { display:block; }
+  .cmp-head { display:flex; justify-content:space-between; align-items:center;
+              margin-bottom:10px; }
+  .cmp-head strong { font-size:13px; }
+  .cmp-head button { font-size:12px; }
+  .cmp-hint { color:var(--dim); font-size:12px; }
+  #compare table { width:auto; min-width:100%; }
+  #compare th, #compare td { padding:6px 14px 6px 0; border-bottom:1px solid var(--line); }
+  #compare th.rowlabel, #compare td.rowlabel { color:var(--dim); font-size:11px;
+    text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; padding-right:18px; }
+  #compare .cmpcol { min-width:150px; }
+  .cmp-remove { background:none; border:none; color:var(--dim); font-size:14px;
+                cursor:pointer; padding:0 0 0 8px; }
+  .cmp-remove:hover { color:var(--warn); }
 </style>
 
 <header>
@@ -113,15 +131,26 @@
   <div class="ctl"><label>Position</label>
     <select id="filter"><option value="ALL">All</option><option>QB</option>
     <option>RB</option><option>WR</option><option>TE</option></select></div>
+  <div class="ctl"><label>Team / opponent</label>
+    <select id="teamfilter"><option value="ALL">All</option></select></div>
   <div class="ctl"><label>Search</label><input id="q" placeholder="player or team"></div>
   <div class="ctl"><label>Show</label>
     <select id="limit"><option value="50">Top 50</option>
     <option value="100">Top 100</option><option value="9999">All</option></select></div>
 </div>
 
+<div id="compare">
+  <div class="cmp-head">
+    <strong>Comparing <span id="cmp-count">0</span> player(s)</strong>
+    <button id="cmp-clear">Clear</button>
+  </div>
+  <div id="cmp-body"></div>
+</div>
+
 <div id="tbl-wrap">
   <table>
     <thead><tr>
+      <th class="cmpcell" title="check to compare">Cmp</th>
       <th class="num">#</th><th>Player</th><th>Pos</th><th>Team</th><th>Opp</th>
       <th class="num sortable" data-key="predicted_points" title="sort by projection">Proj</th>
       <th class="num sortable" data-key="prediction_ci80_lower" title="sort by floor">Floor</th>
@@ -176,6 +205,13 @@
   real opponent from the schedule, the injury report as of that week, and only
   the games played before it. Players on bye are omitted for that week.</p>
 
+  <p><strong>Team / opponent and compare.</strong> The team dropdown shows
+  either side of one NFL game — pick a team to see it and its opponent
+  together. Check the box on up to 4 rows to compare them side by side (the
+  panel appears above the table); the selection is week-scoped and clears
+  when you change weeks, since it's a "how do these two look this week"
+  question.</p>
+
   <p>Source: weekly ensemble, 1-week horizon, blended toward the season pace, from
   <code>docs/data/weekly_{season}_wk{N}.json</code>. Season-long projections
   live on the <a href="draft.html" style="color:#60a5fa">draft board</a>, which
@@ -184,8 +220,10 @@
 
 <script>
 const POS = ["QB","RB","WR","TE"];
+const MAX_COMPARE = 4;
 let RAW = [], META = null, SEASON = null, WEEK = null;
 let SORT = { key: "predicted_points", asc: false };
+let COMPARE = new Set();
 
 const $ = id => document.getElementById(id);
 const fmt1 = v => (v == null || isNaN(v)) ? "—" : (+v).toFixed(1);
@@ -194,8 +232,22 @@ function played() {
   return RAW.some(r => r.actual_points != null);
 }
 
+function teamsInvolved(r) {
+  return [r.team, r.opponent].filter(Boolean);
+}
+
+function populateTeamFilter() {
+  const teams = [...new Set(RAW.flatMap(teamsInvolved))].sort();
+  const sel = $("teamfilter");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="ALL">All</option>'
+    + teams.map(t => `<option value="${t}">${t}</option>`).join("");
+  sel.value = teams.includes(prev) ? prev : "ALL";
+}
+
 function render() {
   const filter = $("filter").value;
+  const team = $("teamfilter").value;
   const q = $("q").value.trim().toLowerCase();
   const limit = +$("limit").value;
   const isPlayed = played();
@@ -203,6 +255,7 @@ function render() {
 
   let rows = RAW.slice();
   if (filter !== "ALL") rows = rows.filter(r => r.position === filter);
+  if (team !== "ALL") rows = rows.filter(r => teamsInvolved(r).includes(team));
   if (q) rows = rows.filter(r =>
     (r.name||"").toLowerCase().includes(q) || (r.team||"").toLowerCase().includes(q));
   for (const r of rows)
@@ -282,7 +335,11 @@ function render() {
             : `<span class="${r._miss > 0 ? "over" : "under"}">${r._miss > 0 ? "+" : ""}${r._miss.toFixed(1)}</span>`}</td>`
       : "";
 
+    const checked = COMPARE.has(r.player_id) ? "checked" : "";
+    const disabled = (!checked && COMPARE.size >= MAX_COMPARE) ? "disabled" : "";
     return `<tr>
+      <td class="cmpcell"><input type="checkbox" class="cmp-check" data-pid="${r.player_id}"
+            ${checked} ${disabled} title="compare"></td>
       <td class="num">${i+1}</td>
       <td>${r.name ?? ""}${badges}</td>
       <td><span class="pos ${r.position}">${r.position}</span></td>
@@ -296,6 +353,43 @@ function render() {
       ${missCell}
     </tr>`;
   }).join("");
+
+  renderCompare();
+}
+
+function renderCompare() {
+  const panel = $("compare");
+  const picked = RAW.filter(r => COMPARE.has(r.player_id));
+  $("cmp-count").textContent = picked.length;
+  panel.classList.toggle("open", picked.length > 0);
+  if (!picked.length) { $("cmp-body").innerHTML = ""; return; }
+
+  const isPlayed = played();
+  const rowsDef = [
+    ["Pos / Team", r => `<span class="pos ${r.position}">${r.position}</span> ${r.team ?? ""}`],
+    ["Opponent", r => (r.home_away === "away" ? "@" : "vs ") + (r.opponent ?? "")],
+    ["Projection", r => (r.predicted_points ?? 0).toFixed(1)],
+    ["Likely range (80%)", r => (r.prediction_ci80_lower != null && r.prediction_ci80_upper != null)
+        ? `${fmt1(r.prediction_ci80_lower)} – ${fmt1(r.prediction_ci80_upper)}` : "—"],
+    ["Pace · form", r => r.pace_weight != null
+        ? `pace ${Math.round(r.pace_weight * 100)}% · form ${Math.round((1 - r.pace_weight) * 100)}%` : "weekly only"],
+    ["Games played", r => r.games_played_season ?? "—"],
+  ];
+  if (isPlayed) {
+    rowsDef.push(["Actual", r => fmt1(r.actual_points)]);
+    rowsDef.push(["Miss", r => {
+      const m = (r.actual_points != null && r.predicted_points != null) ? r.predicted_points - r.actual_points : null;
+      return m == null ? "—" : `<span class="${m > 0 ? "over" : "under"}">${m > 0 ? "+" : ""}${m.toFixed(1)}</span>`;
+    }]);
+  }
+
+  const head = `<tr><th class="rowlabel"></th>${picked.map(r =>
+    `<th class="cmpcol">${r.name ?? ""}
+       <button class="cmp-remove" data-pid="${r.player_id}" title="remove">×</button></th>`).join("")}</tr>`;
+  const body = rowsDef.map(([label, fn]) =>
+    `<tr><td class="rowlabel">${label}</td>${picked.map(r => `<td>${fn(r)}</td>`).join("")}</tr>`
+  ).join("");
+  $("cmp-body").innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
 function weekResultBanner(week) {
@@ -312,7 +406,9 @@ function weekResultBanner(week) {
 function setHash() {
   const parts = [`wk=${WEEK}`];
   const f = $("filter").value; if (f !== "ALL") parts.push(`pos=${f}`);
+  const t = $("teamfilter").value; if (t !== "ALL") parts.push(`team=${t}`);
   const q = $("q").value.trim(); if (q) parts.push(`q=${encodeURIComponent(q)}`);
+  if (COMPARE.size) parts.push(`cmp=${[...COMPARE].join(",")}`);
   history.replaceState(null, "", "#" + parts.join("&"));
 }
 
@@ -320,8 +416,17 @@ function applyHash() {
   const h = readHash();
   $("filter").value = (h.pos && POS.includes(h.pos)) ? h.pos : "ALL";
   $("q").value = h.q || "";
+  const wantedTeam = h.team || "ALL";
+  const wantedCmp = h.cmp ? h.cmp.split(",").filter(Boolean) : [];
   const wk = (h.wk && META.weeks.includes(+h.wk)) ? +h.wk : META.weeks[0];
-  return wk === WEEK ? Promise.resolve(render()) : loadWeek(wk);
+  const finish = () => {
+    // teamfilter's options are only populated once RAW is loaded for the week.
+    if ([...$("teamfilter").options].some(o => o.value === wantedTeam)) $("teamfilter").value = wantedTeam;
+    COMPARE = new Set(wantedCmp.filter(pid => RAW.some(r => r.player_id === pid)).slice(0, MAX_COMPARE));
+    render();
+    setHash();
+  };
+  return (wk === WEEK ? Promise.resolve() : loadWeek(wk)).then(finish);
 }
 
 function readHash() {
@@ -338,11 +443,15 @@ function loadWeek(week) {
   const weeks = META.weeks;
   $("prev").disabled = weeks.indexOf(WEEK) <= 0;
   $("next").disabled = weeks.indexOf(WEEK) >= weeks.length - 1;
+  // Week-scoped: a new week means different rows entirely, so a compare
+  // selection and a team filter built from the OLD week's roster/options
+  // would be stale (and possibly reference a player_id absent this week).
+  COMPARE = new Set();
   return fetch(`data/weekly_${SEASON}_wk${week}.json`)
     .then(r => r.ok ? r.json() : [])
     .then(rows => {
       RAW = (rows || []).filter(r => r && r.predicted_points != null);
-      const nBlend = RAW.filter(r => r.pace_weight > 0).length;
+      populateTeamFilter();
       $("meta").textContent =
         `${SEASON} Week ${WEEK} · ${RAW.length} players` +
         (played() ? " · played" : "") +
@@ -351,9 +460,9 @@ function loadWeek(week) {
       // Sorting by actual/miss makes no sense for an unplayed week.
       if (!played() && (SORT.key === "actual_points" || SORT.key === "_miss"))
         SORT = { key: "predicted_points", asc: false };
-      render();
-      setHash();
     });
+  // Caller renders and updates the hash once any pending filter/compare
+  // state (e.g. from applyHash) has also been applied.
 }
 
 fetch("data/weekly_meta.json")
@@ -367,12 +476,16 @@ fetch("data/weekly_meta.json")
       const done = meta.week_results && meta.week_results[String(w)];
       return `<option value="${w}">Week ${w}${done ? " ✓" : ""}</option>`;
     }).join("");
-    sel.addEventListener("change", () => loadWeek(+sel.value));
+    // loadWeek() already rebuilds the team filter and clears the (week-
+    // scoped) compare selection for the new week's rows; render+setHash
+    // once that settles.
+    const goToWeek = w => loadWeek(w).then(() => { render(); setHash(); });
+    sel.addEventListener("change", () => goToWeek(+sel.value));
     $("prev").addEventListener("click", () => {
-      const i = meta.weeks.indexOf(WEEK); if (i > 0) loadWeek(meta.weeks[i - 1]);
+      const i = meta.weeks.indexOf(WEEK); if (i > 0) goToWeek(meta.weeks[i - 1]);
     });
     $("next").addEventListener("click", () => {
-      const i = meta.weeks.indexOf(WEEK); if (i < meta.weeks.length - 1) loadWeek(meta.weeks[i + 1]);
+      const i = meta.weeks.indexOf(WEEK); if (i < meta.weeks.length - 1) goToWeek(meta.weeks[i + 1]);
     });
     document.querySelectorAll("th.sortable").forEach(th => th.addEventListener("click", () => {
       const k = th.dataset.key;
@@ -437,6 +550,23 @@ fetch("data/weekly_meta.json")
       + " — data may be fine; check the console.";
   });
 
-for (const id of ["filter","q","limit"])
+for (const id of ["filter","teamfilter","q","limit"])
   $(id).addEventListener("input", () => { render(); setHash(); });
+
+// Checkboxes/remove buttons are re-created on every render(), so these are
+// delegated listeners on stable containers rather than per-row bindings.
+$("tbl-wrap").addEventListener("change", e => {
+  if (!e.target.classList.contains("cmp-check")) return;
+  const pid = e.target.dataset.pid;
+  if (e.target.checked) COMPARE.add(pid); else COMPARE.delete(pid);
+  render();
+  setHash();
+});
+$("compare").addEventListener("click", e => {
+  if (!e.target.classList.contains("cmp-remove")) return;
+  COMPARE.delete(e.target.dataset.pid);
+  render();
+  setHash();
+});
+$("cmp-clear").addEventListener("click", () => { COMPARE = new Set(); render(); setHash(); });
 </script>
