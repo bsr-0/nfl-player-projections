@@ -305,13 +305,44 @@ def _cold_start_rows(curr_totals: pd.DataFrame, season_agg: pd.DataFrame,
     return out
 
 
-def _cold_start_rows_from_draft(db, target: int, history: pd.DataFrame) -> pd.DataFrame:
-    """Incoming rookies for an UNPLAYED season, from the draft class.
+def _cold_start_rows_incoming(db, target: int, history: pd.DataFrame) -> pd.DataFrame:
+    """Incoming rookies for an UNPLAYED season: the draft class, plus
+    undrafted rookies who have made it onto a roster.
 
     `_cold_start_rows` identifies rookies as "players with target-season stats
     and no prior history" -- impossible before the season is played. For
-    inference the equivalent population is that season's draft class, minus
-    anyone who somehow already has NFL history.
+    inference the equivalent population used to be just that season's draft
+    class. That excluded every UDFA outright, drafted or not being exactly
+    the distinction `is_undrafted`/`career_static_by_player` already exist to
+    carry (2026-09-18: 152 of a real UDFA rookie class this size, ~33 of whom
+    go on to play). Undrafted here means: on a `target`-season roster row
+    with `years_exp <= 1`, no draft_picks_v2 record AT ALL (a career fact,
+    not season-scoped the way `draft_season == target` is for the drafted
+    half), and no history before `target`.
+
+    A years_exp cap is required, not just "never in player_weekly_stats":
+    checked directly against a real season, 298 undrafted skill players had
+    no prior regular-season row, but 83 of them had roster `years_exp` 1-3
+    -- practice-squad/tryout players who have been on a ROSTER for years
+    without ever dressing for a game, not incoming rookies.
+
+    `<= 1` rather than the cleaner-looking `== 0` is a deliberate
+    compromise: the roster feed's own tenure clock does not always agree
+    with "never played a real regular-season game" at the boundary. Checked
+    across 2021-2025, 1-3 real UDFA debuts each season (e.g. 2022: Q.Morris,
+    C.Johnson, C.Huntley) had genuine fantasy-relevant production in their
+    true rookie year while already reading `years_exp == 1` -- a
+    development-squad season before it counted as their real one. `== 0`
+    would silently have dropped every one of them. `<= 1` catches them, at
+    the cost of also letting back in some of the 59 real one-year camp
+    bodies this field alone cannot distinguish from them -- preferred to
+    excluding a genuine, productive rookie outright.
+
+    Nothing downstream needs to know which half of the union a row came
+    from: `career_static_by_player`, called on the whole pairs frame by the
+    caller, already resolves an unmatched player_id (no draft_picks_v2 row)
+    to is_undrafted=1 and the UNDRAFTED_ROUND/UNDRAFTED_PICK sentinel via its
+    own left-join fallback.
     """
     import sqlite3
     from config.settings import DB_PATH
@@ -322,17 +353,28 @@ def _cold_start_rows_from_draft(db, target: int, history: pd.DataFrame) -> pd.Da
             "SELECT player_id, position FROM draft_picks_v2 "
             "WHERE draft_season = ? AND position IN ('QB','RB','WR','TE') "
             "AND player_id IS NOT NULL", conn, params=[int(target)])
+        ever_drafted = set(pd.read_sql(
+            "SELECT DISTINCT player_id FROM draft_picks_v2 "
+            "WHERE player_id IS NOT NULL AND player_id != ''", conn)["player_id"])
+        roster = pd.read_sql(
+            "SELECT DISTINCT player_id, position FROM rosters "
+            "WHERE season = ? AND position IN ('QB','RB','WR','TE') "
+            "AND player_id IS NOT NULL AND player_id != '' AND years_exp <= 1",
+            conn, params=[int(target)])
     finally:
         conn.close()
-    if draft.empty:
-        return pd.DataFrame()
 
     prior_ids = set(history.loc[history["season"] < target, "player_id"])
     draft = draft[~draft["player_id"].isin(prior_ids)].drop_duplicates("player_id")
-    if draft.empty:
+
+    undrafted = roster[~roster["player_id"].isin(ever_drafted)
+                       & ~roster["player_id"].isin(prior_ids)].drop_duplicates("player_id")
+
+    combined = pd.concat([draft, undrafted], ignore_index=True).drop_duplicates("player_id")
+    if combined.empty:
         return pd.DataFrame()
 
-    out = draft.copy()
+    out = combined.copy()
     out["player_name"] = pd.NA
     out["season"] = target - 1          # matches the anchor convention
     out["target_season"] = target
@@ -475,7 +517,7 @@ def build_multiyear_season_pairs(db, seasons: List[int],
         # above already exists on `row` and concat aligns them as NaN rather
         # than silently inventing values.
         cold = (_cold_start_rows(curr_totals, season_agg, history, target) if has_label
-                else _cold_start_rows_from_draft(db, target, history))
+                else _cold_start_rows_incoming(db, target, history))
         if not cold.empty:
             cold = cold.merge(dest_team, on="player_id", how="left")
             cold["prior_team"] = pd.NA

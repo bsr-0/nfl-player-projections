@@ -868,65 +868,95 @@ class NFLPredictor:
 
     def _drafted_rookie_stub_rows(self, player_data: pd.DataFrame,
                                   pred_season: int) -> pd.DataFrame:
-        """One synthetic feature row per drafted rookie who has not yet
-        played a game this season.
+        """One synthetic feature row per rookie -- drafted or undrafted --
+        who has not yet played a game this season.
 
         Until 2026-09-17 such a player simply had zero rows anywhere in
         ``player_data`` (it is built entirely from ``player_weekly_stats``,
         which has no row for a game that has not been played), so he never
         reached ``predict()`` at all -- not "predicted from the pace",
         invisible. This gives the weekly ensemble its own real prediction,
-        from real signal: draft capital, combine, college, and the
-        player's TEAM's context (coaching, prior-season wins, depth chart,
-        Vegas/weather/opponent for the target week) -- exactly the
-        features CAUSAL_FEATURES already carries for this purpose (the "33
-        of 72 causal features that are genuinely populated for" a debut
-        player, per the cold-start comment on this class). Every other
-        column -- his own snap share, targets, rolling stats, anything
-        that presupposes he has played -- is left NaN, the same value a
-        real debut row gets from ``_restore_debut_history_nan`` once
+        from real signal: draft capital (or its UNDRAFTED_ROUND/
+        UNDRAFTED_PICK sentinel), combine, college, and the player's TEAM's
+        context (coaching, prior-season wins, depth chart, Vegas/weather/
+        opponent for the target week) -- exactly the features
+        CAUSAL_FEATURES already carries for this purpose (the "33 of 72
+        causal features that are genuinely populated for" a debut player,
+        per the cold-start comment on this class). Every other column --
+        his own snap share, targets, rolling stats, anything that
+        presupposes he has played -- is left NaN, the same value a real
+        debut row gets from ``_restore_debut_history_nan`` once
         ``first_nfl_season`` marks it as one.
 
-        Reuses ``_cold_start_rows_from_draft``'s population
-        (``draft_picks_v2`` for ``draft_season == pred_season``) rather
-        than re-deriving it, so the weekly page and the Step 8 pace it
-        blends against are never looking at two different rookie classes.
+        Two populations, unioned:
+          * Drafted: ``draft_picks_v2`` for ``draft_season == pred_season``
+            (the SAME query as before 2026-09-18).
+          * Undrafted: a ``pred_season`` roster row, no draft_picks_v2
+            record EVER (a career fact), no history before pred_season, and
+            roster ``years_exp <= 1`` -- see
+            ``preseason_features._cold_start_rows_incoming``'s docstring
+            for why ``<= 1`` and not the cleaner-looking ``== 0`` (a real
+            development-squad-then-debut pattern already reads years_exp==1
+            on the roster feed despite having no regular-season history
+            either). This function and that one share the SAME two-source
+            population by construction (same queries, same cutoffs), so the
+            weekly page and the Step 8 pace it blends against are never
+            looking at two different rookie classes -- undrafted included.
+
         Requires the player to exist in ``players`` (a real identity, not
         a bare draft-day ID with nothing else in the DB) -- guards against
         exactly the kind of disconnected placeholder record a draft feed
         can carry before a player is fully onboarded.
 
         This row's OWN prediction is not what gets served at zero games.
-        Measured on every real week-1 debut across 2022-2025 (165 rows
-        with real outcomes, scripts left in /tmp this session --
-        data/experiments/rookie_debut_stub_2022_2025.csv): the raw model
-        collapses toward a low default (mean predicted 1.63 vs. actual 4.80,
-        bias -3.17) because its volume features -- targets/carries/snap-share
-        rolling means -- are all structurally missing and median-impute to
-        a low-usage league-wide typical, which a drafted rookie expected to
-        play is not. MAE 4.20 / RMSE 6.51 vs. the pace's 3.67 / 5.11 (which
-        is nearly unbiased: -0.20). So `_blend_toward_season_pace` keeps its
-        existing w=0 default at g=0 for these rows too -- this function
-        makes the rookie visible and gives it a real, inspectable
+        Measured separately for each half, both 2022-2025 real week-1
+        debuts:
+
+          * Drafted (165 rows with a real outcome, data/experiments/
+            rookie_debut_stub_2022_2025.csv): the raw model collapses
+            toward a low default (mean predicted 1.63 vs. actual 4.80,
+            bias -3.17) because its volume features -- targets/carries/
+            snap-share rolling means -- are all structurally missing and
+            median-impute to a low-usage league-wide typical, which a
+            rookie expected to play is not. MAE 4.20 / RMSE 6.51 vs. the
+            pace's 3.67 / 5.11 (nearly unbiased: -0.20) -- pace wins
+            decisively.
+          * Undrafted (32 rows, data/experiments/
+            undrafted_rookie_debut_stub_2022_2025.csv): MAE 1.22 vs.
+            pace's 1.41, RMSE close (1.75 vs. 1.71) -- paired bootstrap
+            CI95 on the difference [-0.418, +0.056], meaning NO clear
+            winner at this sample size. The drafted result's assumption
+            that undrafted would be at least as lopsided toward pace did
+            not hold; there simply is not enough real UDFA week-1 data yet
+            to move off the default either way.
+
+        Both halves currently serve pure pace at g=0 regardless (see
+        `_blend_toward_season_pace`'s w=0 default there) -- decisively for
+        the drafted half, and for the undrafted half because the evidence
+        does not yet justify anything else, not because pace has been shown
+        to win there. This function makes the rookie visible and gives it a
+        real, inspectable
         `predicted_points_model`, it does not make that number the served
         one. Revisit if the weekly model ever gets features that describe
         an incoming player's role (usage projection, snap-share forecast)
         rather than only his draft pedigree.
         """
+        from src.models.preseason_features import UNDRAFTED_PICK, UNDRAFTED_ROUND
+
         if player_data.empty or "position" not in player_data.columns \
                 or "season" not in player_data.columns:
             return pd.DataFrame()
-        already_here = set(
-            player_data.loc[pd.to_numeric(player_data["season"], errors="coerce")
-                            == pred_season, "player_id"]
-        )
+        season_num = pd.to_numeric(player_data["season"], errors="coerce")
+        already_here = set(player_data.loc[season_num == pred_season, "player_id"])
+        prior_ids = set(player_data.loc[season_num < pred_season, "player_id"])
+
         with self.db._get_connection() as conn:
             draft = pd.read_sql(
                 """
                 SELECT dp.player_id, dp.position, dp.draft_round, dp.draft_pick,
                        dp.college AS draft_college, dp.draft_team,
                        p.name, p.birth_date,
-                       COALESCE(dv.otc, 0) AS draft_pick_value
+                       COALESCE(dv.otc, 0) AS draft_pick_value, 0 AS is_undrafted
                 FROM (
                     SELECT player_id, position, college, draft_team, draft_season,
                            draft_round, MIN(draft_pick) AS draft_pick
@@ -940,35 +970,59 @@ class NFLPredictor:
                 """,
                 conn, params=(int(pred_season),),
             )
-        if draft.empty:
+            ever_drafted = pd.read_sql(
+                "SELECT DISTINCT player_id FROM draft_picks_v2 "
+                "WHERE player_id IS NOT NULL AND player_id != ''", conn,
+            )["player_id"]
+            undrafted = pd.read_sql(
+                """
+                SELECT DISTINCT r.player_id, r.position, r.college AS draft_college,
+                       p.name, p.birth_date
+                FROM rosters r
+                JOIN players p ON p.player_id = r.player_id
+                WHERE r.season = ? AND r.position IN ('QB','RB','WR','TE')
+                  AND r.player_id IS NOT NULL AND r.player_id != '' AND r.years_exp <= 1
+                """,
+                conn, params=(int(pred_season),),
+            )
+        undrafted = undrafted[~undrafted["player_id"].isin(set(ever_drafted))
+                              & ~undrafted["player_id"].isin(prior_ids)]
+        undrafted = undrafted.drop_duplicates("player_id").copy()
+        for col, val in (("draft_round", UNDRAFTED_ROUND), ("draft_pick", UNDRAFTED_PICK),
+                        ("draft_pick_value", 0.0), ("draft_team", pd.NA), ("is_undrafted", 1)):
+            undrafted[col] = val
+
+        rookies = pd.concat([draft, undrafted], ignore_index=True)
+        if rookies.empty:
             return pd.DataFrame()
-        draft = draft[~draft["player_id"].isin(already_here)]
-        if draft.empty:
+        rookies = rookies[~rookies["player_id"].isin(already_here)
+                          & ~rookies["player_id"].isin(prior_ids)].drop_duplicates("player_id")
+        if rookies.empty:
             return pd.DataFrame()
 
         team_map = self.db.get_current_team_map()
-        draft["team"] = draft["player_id"].map(team_map).fillna(draft["draft_team"])
-        draft = draft[draft["team"].notna() & (draft["team"] != "")]
-        if draft.empty:
+        rookies["team"] = rookies["player_id"].map(team_map).fillna(rookies["draft_team"])
+        rookies = rookies[rookies["team"].notna() & (rookies["team"] != "")]
+        if rookies.empty:
             return pd.DataFrame()
 
         template = player_data.iloc[[0]].copy()
         for col in template.columns:
             template[col] = np.nan
-        stub = pd.concat([template] * len(draft), ignore_index=True)
-        stub["player_id"] = draft["player_id"].to_numpy()
-        stub["name"] = draft["name"].to_numpy()
-        stub["position"] = draft["position"].to_numpy()
-        stub["birth_date"] = draft["birth_date"].to_numpy()
-        stub["team"] = draft["team"].to_numpy()
+        stub = pd.concat([template] * len(rookies), ignore_index=True)
+        stub["player_id"] = rookies["player_id"].to_numpy()
+        stub["name"] = rookies["name"].to_numpy()
+        stub["position"] = rookies["position"].to_numpy()
+        stub["birth_date"] = rookies["birth_date"].to_numpy()
+        stub["team"] = rookies["team"].to_numpy()
         stub["season"] = pred_season
         stub["week"] = 1
-        stub["is_undrafted"] = 0
-        stub["draft_round"] = draft["draft_round"].to_numpy()
-        stub["draft_pick"] = draft["draft_pick"].to_numpy()
-        stub["draft_pick_value"] = draft["draft_pick_value"].to_numpy()
+        stub["is_undrafted"] = rookies["is_undrafted"].to_numpy()
+        stub["draft_round"] = rookies["draft_round"].to_numpy()
+        stub["draft_pick"] = rookies["draft_pick"].to_numpy()
+        stub["draft_pick_value"] = rookies["draft_pick_value"].to_numpy()
         stub["draft_season"] = pred_season
-        stub["draft_college"] = draft["draft_college"].to_numpy()
+        stub["draft_college"] = rookies["draft_college"].to_numpy()
         stub["first_nfl_season"] = pred_season
         # Presumed healthy: the same neutral value
         # single_week_ppr.season_projection.COLD_START_NEUTRAL_INJURY_SCORE

@@ -1,18 +1,22 @@
-"""A drafted rookie with zero games this season must still get a row.
+"""A rookie -- drafted or undrafted -- with zero games this season must
+still get a row.
 
-Before 2026-09-17 (the pace blend) and the days after it, such a player had
-NO row anywhere in the serving frame at all -- it is built entirely from
-player_weekly_stats, which has no room for a game that has not been
-played -- so he never reached predict(), full stop: not predicted from the
-pace, invisible.
+Before 2026-09-17 (the pace blend) such a player had NO row anywhere in
+the serving frame at all -- it is built entirely from player_weekly_stats,
+which has no room for a game that has not been played -- so he never
+reached predict(), full stop: not predicted from the pace, invisible. The
+drafted half was fixed 2026-09-17; the undrafted half (~39% of everyone who
+reaches the league) the next day, 2026-09-18.
 
-_drafted_rookie_stub_rows builds a synthetic row from draft_picks_v2 (real
-signal: draft capital, combine, college, current team) with every
+_drafted_rookie_stub_rows builds a synthetic row from real signal --
+draft_picks_v2 for a drafted rookie, a roster snapshot (years_exp <= 1,
+never drafted, no prior history) for an undrafted one -- with every
 own-history column left NaN, the same value a real debut row gets once
 first_nfl_season marks it as one. Its own model prediction is real but,
-per data/experiments/rookie_debut_stub_2022_2025_README.md, measurably
-worse than the pace for a real debut week -- _blend_toward_season_pace
-still serves pure pace at g=0. These tests pin the row CONSTRUCTION only.
+per data/experiments/rookie_debut_stub_2022_2025_README.md (drafted) and
+undrafted_rookie_debut_stub_2022_2025_README.md (undrafted), not shown to
+beat the pace either way -- _blend_toward_season_pace still serves pure
+pace at g=0 for both. These tests pin the row CONSTRUCTION only.
 """
 import numpy as np
 import pandas as pd
@@ -28,10 +32,16 @@ def db(tmp_path):
     with d._get_connection() as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS weekly_rosters_v2 "
                      "(season INTEGER, week INTEGER, team TEXT, position TEXT, player_id TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS rosters "
+                     "(player_id TEXT, position TEXT, team TEXT, season INTEGER, "
+                     "years_exp REAL, college TEXT)")
         conn.executemany(
             "INSERT INTO players (player_id, name, position, birth_date) VALUES (?,?,?,?)",
             [("rook1", "New Rookie", "WR", "2003-01-01"),
-             ("rook2", "Undebuted Vet Class", "RB", "2002-06-01")],
+             ("rook2", "Undebuted Vet Class", "RB", "2002-06-01"),
+             ("udfa_rookie", "UDFA Debut", "WR", "2003-05-01"),
+             ("udfa_year1", "Development Squad", "TE", "2002-11-01"),
+             ("camp_body", "Long Tenured", "RB", "2001-02-01")],
             # "ghost" is deliberately absent from `players` -- a draft-day ID
             # in the feed that never reached a real player record.
         )
@@ -49,6 +59,18 @@ def db(tmp_path):
             "INSERT INTO weekly_rosters_v2 (player_id, team, season, week, position) "
             "VALUES (?,?,?,?,?)",
             [("rook1", "DAL", 2026, 1, "WR")],  # on Dallas's active roster
+        )
+        conn.executemany(
+            "INSERT INTO rosters (player_id, position, team, season, years_exp, college) "
+            "VALUES (?,?,?,?,?,?)",
+            [("udfa_rookie", "WR", "KC", 2026, 0, "Small State"),
+             # Development-squad-then-real-year pattern: years_exp reads 1
+             # despite no real regular-season history either -- see the
+             # _cold_start_rows_incoming docstring for the real cases this
+             # `<= 1` cutoff (not `== 0`) exists to catch.
+             ("udfa_year1", "TE", "GB", 2026, 1, "Mid State"),
+             # 3 years on a roster without ever debuting -- not a rookie.
+             ("camp_body", "RB", "MIA", 2026, 6, "Old State")],
         )
         conn.commit()
     return d
@@ -79,9 +101,11 @@ def _empty_player_data(extra_ids=()):
 
 def test_a_drafted_rookie_with_no_players_row_is_excluded(predictor):
     stub = predictor._drafted_rookie_stub_rows(_empty_player_data(), 2026)
-    assert set(stub["player_id"]) == {"rook1", "rook2"}, \
+    ids = set(stub["player_id"])
+    assert {"rook1", "rook2"} <= ids
+    assert "ghost" not in ids, \
         "'ghost' has no players-table identity and must not get a synthetic row"
-    assert "some_veteran" not in set(stub["player_id"])
+    assert "some_veteran" not in ids
 
 
 def test_static_attributes_come_from_the_draft_record(predictor):
@@ -152,3 +176,49 @@ def test_games_played_excludes_stub_rows_from_the_blend_weight(predictor, monkey
     assert out.loc[0, "games_played_season"] == 0
     assert out.loc[0, "pace_weight"] == 1.0
     assert out.loc[0, "predicted_points"] == 5.0
+
+
+def test_undrafted_rookie_gets_a_stub_with_the_sentinel_values(predictor):
+    stub = predictor._drafted_rookie_stub_rows(_empty_player_data(), 2026)
+    row = stub.set_index("player_id").loc["udfa_rookie"]
+    assert row["name"] == "UDFA Debut"
+    assert row["team"] == "KC"
+    assert row["draft_college"] == "Small State"
+    assert row["is_undrafted"] == 1
+    assert row["draft_round"] == 8 and row["draft_pick"] == 400, \
+        "UNDRAFTED_ROUND/UNDRAFTED_PICK, matching advanced_rookie_injury's convention"
+    assert row["draft_pick_value"] == 0.0
+    assert row["first_nfl_season"] == 2026
+
+
+def test_development_squad_year_one_still_counts_as_a_rookie(predictor):
+    """years_exp <= 1, not == 0: a real development-squad-then-debut
+    pattern reads years_exp==1 on the roster feed despite no regular-season
+    history either. See _cold_start_rows_incoming's docstring."""
+    stub = predictor._drafted_rookie_stub_rows(_empty_player_data(), 2026)
+    assert "udfa_year1" in set(stub["player_id"])
+
+
+def test_long_tenured_never_drafted_player_is_not_treated_as_a_rookie(predictor):
+    """3 seasons on a roster without ever debuting is a real, if marginal,
+    veteran -- not this year's incoming class, however undrafted he is."""
+    stub = predictor._drafted_rookie_stub_rows(_empty_player_data(), 2026)
+    assert "camp_body" not in set(stub["player_id"])
+
+
+def test_undrafted_rookie_with_prior_history_gets_no_stub(predictor):
+    already_played = _empty_player_data(extra_ids=[])
+    # Give him a row from an EARLIER season -- real history, not "already
+    # has a row this season" (a different, already-tested exclusion).
+    prior = pd.DataFrame([{"player_id": "udfa_rookie", "season": 2024, "week": 10,
+                          "fantasy_points": 3.0}])
+    frame = pd.concat([already_played, prior], ignore_index=True)
+    stub = predictor._drafted_rookie_stub_rows(frame, 2026)
+    assert "udfa_rookie" not in set(stub["player_id"])
+
+
+def test_drafted_and_undrafted_do_not_duplicate_a_player(predictor):
+    """A player could in principle satisfy both queries (e.g. a data
+    inconsistency); drop_duplicates in the union must keep exactly one row."""
+    stub = predictor._drafted_rookie_stub_rows(_empty_player_data(), 2026)
+    assert stub["player_id"].is_unique

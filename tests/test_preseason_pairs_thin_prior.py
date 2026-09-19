@@ -53,7 +53,7 @@ def pairs(monkeypatch, history):
     monkeypatch.setattr(pf, "_load_full_history", lambda db: history)
     monkeypatch.setattr(pf, "_inference_season_teams",
                         lambda season: pd.DataFrame(columns=["player_id", "season", "team"]))
-    monkeypatch.setattr(pf, "_cold_start_rows_from_draft",
+    monkeypatch.setattr(pf, "_cold_start_rows_incoming",
                         lambda db, target, hist: pd.DataFrame())
     monkeypatch.setattr(pf, "career_static_by_player",
                         lambda db: pd.DataFrame(columns=["player_id"]))

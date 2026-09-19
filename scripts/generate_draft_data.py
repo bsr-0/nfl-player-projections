@@ -47,12 +47,14 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 # actual/pred - 1 = -0.14 to -0.24 by season), so floors sized for a
 # different model sat too high. Refit with the same method
 # (scripts/calibrate_floor_ceiling.py, now driven by walk-forward Step 8
-# refits), then refit again the same day after preseason_features.MIN_GAMES
-# went 6 -> 1 (thin and missed prior seasons now get a projection; 2,800
-# player-seasons in the fit): holdout fit 2021-2023 / test 2024-2025, floor
-# breached 25.4%, ceiling 25.9%, per-side miscalibration 0.013; final fit
-# on all five seasons 25.1% / 25.0% in-sample. Coefficients and the holdout
-# record are in data/models/floor_ceiling_step8_calibration.json. The
+# refits), then refit again after preseason_features.MIN_GAMES went 6 -> 1
+# (thin and missed prior seasons get a projection), then once more
+# 2026-09-18 after _cold_start_rows_incoming started covering undrafted
+# rookies too (2,985 player-seasons in the final fit, from an original
+# 2,253): holdout fit 2021-2023 / test 2024-2025, floor breached 25.2%,
+# ceiling 25.6%, per-side miscalibration 0.008; final fit on all five
+# seasons 25.0% / 25.1% in-sample. Coefficients and the holdout record are
+# in data/models/floor_ceiling_step8_calibration.json. The
 # PreseasonProjector-era coefficient sets (50% and 86.6%) were removed with
 # that model; they described a distribution nothing serves.
 #
@@ -140,12 +142,12 @@ BACKTEST_DIR = DATA_DIR / "backtest_results"
 # of how uncertain a season-total projection actually is (MAE ~43 on a mean
 # actual near 100). The previous coefficients are preserved below.
 FLOOR_ASYM_COEF = {
-    "const": -1.637250, "log_pred": 0.204366, "confidence_score": 0.114144,
-    "pos_RB": 0.019668, "pos_WR": 0.050038, "pos_TE": 0.104556,
+    "const": -1.653454, "log_pred": 0.204733, "confidence_score": 0.148037,
+    "pos_RB": 0.009093, "pos_WR": 0.038481, "pos_TE": 0.095891,
 }
 CEILING_ASYM_COEF = {
-    "const": 0.572257, "log_pred": -0.066222, "confidence_score": 0.075295,
-    "pos_RB": -0.022572, "pos_WR": -0.050111, "pos_TE": -0.008422,
+    "const": 0.300778, "log_pred": -0.025627, "confidence_score": 0.181700,
+    "pos_RB": -0.029059, "pos_WR": -0.092738, "pos_TE": -0.009817,
 }
 FLOOR_CEILING_DEFAULT_CONFIDENCE = 0.7
 # Sanity clamps on the fitted relative error -- guards against extreme
