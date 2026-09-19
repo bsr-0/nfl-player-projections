@@ -1,0 +1,47 @@
+{
+  "phase": 3,
+  "title": "Participation-stage to PPR value test",
+  "status": "preregistered_before_run",
+  "primary_hypothesis": "For QB, adding leakage-safe Phase 2 participation-stage outputs improves weekly PPR prediction accuracy beyond the existing rolling-usage feature set.",
+  "secondary_hypothesis": "For RB, the participation-stage output may be redundant with existing rolling usage features; the full-replace arm is exploratory and non-gating.",
+  "primary_metric": "paired_mae_on_weekly_fantasy_points",
+  "secondary_metrics": ["rmse", "paired_bootstrap_ci", "feature_importance_delta"],
+  "non_inferiority_or_superiority_margin_ppr_points": 0.15,
+  "margin_basis": "fixed preregistered practical threshold; season-to-season noise is also reported rather than used to change the threshold post hoc",
+  "decision_rule": {
+    "primary_gate": "promote only if QB candidate MAE improvement versus baseline is at least 0.15 PPR points and the paired 95% bootstrap CI for candidate-minus-baseline excludes zero on the improvement side",
+    "rb_gate": "variant E is exploratory; report whether full replacement is non-inferior but it cannot promote a model if QB fails",
+    "season_consistency": "report every walk-forward season; no aggregate-only promotion",
+    "phase7_serving": "untouched unless the preregistered primary QB gate passes"
+  },
+  "variants": {
+    "A_baseline": "current PPR model and causal feature set unchanged",
+    "B_p_participation": "baseline plus Phase 2 participation_probability",
+    "C_conditional_snap_share": "baseline plus Phase 2 conditional_snap_share",
+    "D_unconditional_expected_snap_share": "baseline plus Phase 2 expected_snap_share = P(participation) * E(snap share | participation)",
+    "E_rb_full_replace": "RB only: remove preregistered rolling snap/rush-share/target-share usage features and add expected_snap_share"
+  },
+  "leakage": {
+    "participation_source": "existing Phase 2 hist_gbm OOF predictions only",
+    "required_provenance": ["phase2_test_season", "phase2_train_max_season"],
+    "rule": "phase2_train_max_season must be strictly less than the PPR test season; no current-week snap or PPR label may enter any feature",
+    "matched_population": "identical player-week keys for all arms within every position-season fold"
+  },
+  "evaluation": {
+    "folds": "walk-forward by test season using Phase 7 FINAL_CONFIG windows and the existing run_fold feature pipeline",
+    "seasons": "all seasons present in Phase 2 hist_gbm OOF, subject to a complete fold report",
+    "bootstrap_replicates": 1000,
+    "bootstrap_seed": 42,
+    "bootstrap_unit": "player cluster",
+    "sparse_history_definition": "fewer than 3 prior player-week rows in the PPR training window; report separately from established players",
+    "feature_importance": "built-in fitted-model importance, with added participation features compared against incumbent usage features"
+  },
+  "artifacts": [
+    "phase3_evaluation.json",
+    "phase3_fold_metrics.csv",
+    "phase3_row_predictions.csv",
+    "phase3_bootstrap.json",
+    "phase3_feature_importance.csv",
+    "phase3_decision.json"
+  ]
+}
