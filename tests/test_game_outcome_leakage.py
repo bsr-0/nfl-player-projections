@@ -33,7 +33,11 @@ def _seed_db(db: DatabaseManager, n_weeks: int, sentinel_week: int, sentinel_val
             }
         )
         for team, base in (("AAA", 20.0), ("BBB", 17.0)):
-            points = sentinel_value if (team == "AAA" and week == sentinel_week) else base + week
+            # total_yards (not points_scored/points_allowed -- those are now
+            # derived from schedule.home_score/away_score, see features.py's
+            # module docstring on the team_stats points defect) carries the
+            # sentinel here.
+            yards = sentinel_value if (team == "AAA" and week == sentinel_week) else base + week
             db.insert_team_stats(
                 {
                     "team": team,
@@ -41,9 +45,9 @@ def _seed_db(db: DatabaseManager, n_weeks: int, sentinel_week: int, sentinel_val
                     "week": week,
                     "opponent": "BBB" if team == "AAA" else "AAA",
                     "home_away": "home" if team == "AAA" else "away",
-                    "points_scored": points,
+                    "points_scored": 20.0,
                     "points_allowed": 17.0,
-                    "total_yards": 350.0,
+                    "total_yards": yards,
                     "passing_yards": 220.0,
                     "rushing_yards": 130.0,
                     "turnovers": 1.0,
@@ -112,13 +116,13 @@ def test_sentinel_value_only_appears_in_later_weeks(synthetic_db):
 
     # week 3 is when the sentinel is recorded for AAA -- the game AT week 3
     # must not reflect it (shift(1) excludes the current row).
-    week3_s2d = rows.loc[3, "home_minus_away_points_scored_s2d"]
+    week3_s2d = rows.loc[3, "home_minus_away_total_yards_s2d"]
     assert week3_s2d != pytest.approx(999.0, rel=0.5)
 
     # week 4 has 3 prior games (weeks 1-3) for AAA, clearing min_prior_games_for_form,
     # so its season-to-date and roll3 means include week 3's sentinel.
-    week4_s2d = rows.loc[4, "home_minus_away_points_scored_s2d"]
-    week4_roll3 = rows.loc[4, "home_minus_away_points_scored_roll3"]
+    week4_s2d = rows.loc[4, "home_minus_away_total_yards_s2d"]
+    week4_roll3 = rows.loc[4, "home_minus_away_total_yards_roll3"]
     assert week4_s2d > 300  # dominated by the 999 sentinel averaged with 2 normal values
     assert week4_roll3 > 300
 
@@ -127,3 +131,23 @@ def test_no_unclassified_columns_survive_audit_for_full_default_build(synthetic_
     rows = _build(synthetic_db, include_weather=True)
     assert "home_win" in rows.columns
     assert audit_feature_availability(feature_columns(rows)) == []
+
+
+def test_numpy_int64_seasons_return_same_rows_as_plain_int(synthetic_db):
+    """Regression test for a silent bug found 2026-09-18 while tuning Elo
+    hyperparameters: passing numpy.int64 season values (e.g. from a
+    DataFrame's `.unique()`, rather than a plain Python int list) caused
+    sqlite3 to bind them as something matching NO row, silently returning
+    an empty-but-valid-looking DataFrame instead of raising or matching."""
+    import numpy as np
+
+    plain = _build(synthetic_db, include_weather=False)
+    con = sqlite3.connect(str(synthetic_db.db_path))
+    try:
+        numpy_seasons = build_game_outcome_rows(
+            seasons=[np.int64(SEASON)], con=con, include_weather=False
+        )
+    finally:
+        con.close()
+    assert len(numpy_seasons) == len(plain)
+    assert len(numpy_seasons) > 0

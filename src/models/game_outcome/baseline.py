@@ -85,3 +85,26 @@ class HomeFieldBaseline:
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         return np.ones(len(X), dtype=int)
+
+
+class MarketLineBaseline:
+    """Predicts the closing line itself -- e.g. `predicted_margin = spread_line`
+    or `predicted_total = total_line`.
+
+    Since `spread_line` already represents the market's implied home margin
+    (positive = home favored by roughly that many points, see the sign-
+    convention note above) and `total_line` already represents the market's
+    implied combined score, this is not a trivial floor like `HomeFieldBaseline`
+    -- it IS the market's own forecast, and the real bar for the margin/total
+    regressors to clear (see src/evaluation/game_margin_backtester.py).
+    Requires no fitting.
+    """
+
+    def __init__(self, line_column: str) -> None:
+        self.line_column = line_column
+
+    def fit(self, X: pd.DataFrame, y) -> "MarketLineBaseline":
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return X[self.line_column].to_numpy()

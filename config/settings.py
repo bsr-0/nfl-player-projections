@@ -359,11 +359,17 @@ LOYO_CONFIG = {
 # Game-outcome (win/loss) model, phase 1 (2026-09). Standalone from the
 # fantasy models -- see src/models/game_outcome/. Not wired into train.py.
 GAME_OUTCOME_MODEL_CONFIG = {
-    # team_stats coverage is effectively 100% back to 2006 (verified against
-    # the live DB 2026-09-18: total_plays/third_down_conv fully populated
-    # every season; drive_success_rate/avg_drive_epa/points_per_drive at
-    # 94-100% every season 2006-2025, dipping to 89.2% only in 2025). No PBP
-    # coverage reason to start later than the earliest season with spread_line.
+    # team_stats.{points_scored,points_allowed,turnovers,third_down_conv} are
+    # placeholder zeros for every 2006-2022 row (verified against the live DB
+    # 2026-09-18 -- a pre-existing upstream data defect, not introduced here;
+    # only real-valued from 2023 on). src/models/game_outcome/features.py
+    # works around this by deriving points_scored/points_allowed from
+    # `schedule` directly (reliable back to 2006) and dropping turnovers/
+    # third_down_conv from phase 1 entirely. total_yards/passing_yards/
+    # rushing_yards and the drive-based columns (drive_success_rate/
+    # avg_drive_epa/points_per_drive/neutral_pass_rate_oe) ARE genuinely
+    # populated the whole history (94-100% every season), so no reason to
+    # start later than the earliest season with spread_line.
     "earliest_training_season": 2006,
     # gap_seasons=0 (unlike the player models' cv_gap_seasons=1): every
     # game-outcome feature is lagged to week-1 *within* the target season, so
@@ -387,6 +393,60 @@ GAME_OUTCOME_MODEL_CONFIG = {
         "min_child_weight": 5,
         "eval_metric": "logloss",
         "random_state": 42,
+    },
+    # Phase 2 (2026-09): margin (spread) / total (over-under) regression.
+    # Shares the same feature pipeline, season range, and walk-forward config
+    # above -- only these two entries are target-specific.
+    "ridge_alpha": 10.0,  # fixed baseline; no inner-CV tuning in phase 2 either
+    "xgb_regressor_params": {
+        # Same shallow/conservative reasoning as xgb_params above -- a few
+        # thousand rows total, bias toward under- rather than over-fitting.
+        "n_estimators": 300,
+        "max_depth": 3,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "objective": "reg:squarederror",
+        "eval_metric": "rmse",
+        "random_state": 42,
+    },
+    # Third model arm (2026-09): RandomForest, a second tree family with a
+    # different bias/variance tradeoff than the boosted-tree arm (already
+    # used elsewhere in this repo's fantasy ensemble). Same shallow/
+    # conservative-capacity reasoning: min_samples_leaf=20 on a few-thousand-
+    # row panel is the RF analogue of XGBoost's min_child_weight=5 here.
+    "rf_params": {
+        "n_estimators": 300,
+        "max_depth": 5,
+        "min_samples_leaf": 20,
+        "random_state": 42,
+        "n_jobs": -1,
+    },
+    "rf_regressor_params": {
+        "n_estimators": 300,
+        "max_depth": 5,
+        "min_samples_leaf": 20,
+        "random_state": 42,
+        "n_jobs": -1,
+    },
+    # Elo power rating (2026-09-18): a sequential per-team rating, distinct
+    # from the rolling-mean team-form features above -- see
+    # src/models/game_outcome/elo.py. home_advantage=55 and k=20 are the
+    # commonly-cited NFL-Elo starting points (FiveThirtyEight's public NFL
+    # Elo writeup used ~65 home-field and k~20-32 with a margin-of-victory
+    # multiplier); not tuned here, just a reasonable, documented default.
+    # season_regression=0.75 means a team keeps 75% of its rating's distance
+    # from 1500 across an offseason (fully reset would be 0.0, no regression
+    # at all would be 1.0) -- offseason roster turnover means full carryover
+    # is wrong, but a full reset throws away real signal (a team that was
+    # bad for 3 years running is more likely bad again than a random team).
+    "elo_params": {
+        "initial": 1500.0,
+        "k": 20.0,
+        "home_advantage": 55.0,
+        "season_regression": 0.75,
+        "mov_multiplier": True,
     },
 }
 

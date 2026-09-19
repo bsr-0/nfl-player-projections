@@ -230,8 +230,24 @@ class NFLDataLoader:
     def __init__(self):
         self.db = DatabaseManager()
         self.lineage_run_id = f"load_{uuid.uuid4().hex[:8]}"
-    
-    def load_weekly_data(self, seasons: List[int], 
+
+    def _local_schedule_df(self, season: int) -> pd.DataFrame:
+        """Schedule rows for `season` from the local DB (no network call).
+
+        Shape matches what `_enrich_team_stats_from_schedule` expects
+        (home_team, away_team, season, week, home_score, away_score) --
+        it's the same columns `_fetch_schedules` returns, just sourced
+        locally instead of over the network.
+        """
+        with self.db._get_connection() as conn:
+            return pd.read_sql_query(
+                "SELECT season, week, home_team, away_team, home_score, away_score "
+                "FROM schedule WHERE season = ?",
+                conn,
+                params=[season],
+            )
+
+    def load_weekly_data(self, seasons: List[int],
                          store_in_db: bool = True,
                          use_pbp_fallback: bool = True) -> pd.DataFrame:
         """
@@ -472,12 +488,29 @@ class NFLDataLoader:
                         from src.data.pbp_stats_aggregator import get_team_stats_from_pbp
                         team_df = get_team_stats_from_pbp(season, use_cache=True)
                         if team_df is not None and not team_df.empty:
-                            try:
-                                sched_df = _fetch_schedules([season])
-                                if sched_df is not None and not sched_df.empty:
-                                    team_df = _enrich_team_stats_from_schedule(team_df, sched_df)
-                            except Exception as e_sched:
-                                print(f"  Schedule enrichment for team stats {season}: {e_sched}")
+                            # Prefer the LOCAL schedule table over a fresh network
+                            # fetch: `_fetch_schedules` hits nfl_data_py's remote
+                            # host (the same one scripts/backfill_vegas_lines.py
+                            # documents as unreliable), and a failed fetch here
+                            # was previously caught and silently logged, leaving
+                            # points_scored/points_allowed at their schema
+                            # default of 0 -- while turnovers/third_down_conv
+                            # etc. (which don't depend on this fetch) still wrote
+                            # fine. That silent split is what produced years of
+                            # placeholder-zero points_scored/points_allowed in
+                            # team_stats for 2006-2022 (see GAPS.md 2026-09-18
+                            # game-outcome-model investigation). Falls back to
+                            # the network fetch only if the local schedule table
+                            # doesn't have this season yet.
+                            sched_df = self._local_schedule_df(season)
+                            if sched_df.empty:
+                                try:
+                                    sched_df = _fetch_schedules([season])
+                                except Exception as e_sched:
+                                    print(f"  Schedule enrichment for team stats {season}: {e_sched}")
+                                    sched_df = pd.DataFrame()
+                            if not sched_df.empty:
+                                team_df = _enrich_team_stats_from_schedule(team_df, sched_df)
                             self._store_team_stats_dataframe(team_df)
                     except Exception as e:
                         print(f"  Team PBP stats for {season}: {e}")

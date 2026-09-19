@@ -13966,3 +13966,296 @@ season has no stats, so a historical target season is untouched -- re-running
 the harness after the roster work produced 1,636 rows identical to four
 decimal places, cold-start rows included. The 2026 board moved; the backtest
 did not.
+
+## New game-outcome model, and two team_stats defects it surfaced (2026-09-18)
+
+A new standalone package, `src/models/game_outcome/`, predicts real NFL game
+outcomes -- win/loss, spread margin, over/under -- which this repo had never
+done before (everything else predicts fantasy points). Not wired into
+`train.py`'s POSITIONS loop; its own training scripts
+(`scripts/train_game_outcome_model.py`, `scripts/train_game_margin_model.py`)
+and serving script (`scripts/predict_upcoming_games.py`).
+
+Phase 1 (win/loss, `LogisticRegression`/`XGBClassifier`/`RandomForestClassifier`)
+and phase 2 (margin/total, `Ridge`/`XGBRegressor`/`RandomForestRegressor`)
+share one leakage-safe feature pipeline (`home_minus_away_*` diffs of
+team-form, lagged via `shift(1)` before `.expanding()`/`.rolling()`, plus
+`spread_line`/`total_line`/weather/rest-days) and reuse
+`SeasonAwareTimeSeriesSplit` for walk-forward evaluation, same as the
+player models. Minimal fixed-grid tuning (tuned once on data before the
+earliest test season, applied fixed across folds -- not re-tuned per fold)
+moved win/loss logistic accuracy from 0.663 to 0.665 pooled, matching the
+Vegas-favorite baseline exactly; didn't move margin/total meaningfully.
+Results, 2010-2025, 5 walk-forward folds:
+
+    win/loss      acc    log_loss  roc_auc
+      logistic    0.665  0.614     0.714
+      xgboost     0.663  0.623     0.707
+      vegas       0.665  0.610     0.721   (the bar -- market-implied prob)
+      home_field  0.546  0.690     0.500   (floor -- always pick home)
+
+    margin/total     MAE     vs market_line MAE
+      margin ridge    9.85    9.77 (does not beat)
+      total  ridge   10.27   10.31 (beats)
+
+Neither beats Vegas on win/loss by a real margin, and margin/total mostly
+don't beat the line's own MAE either -- expected for an efficient market,
+not a bug. `home_minus_away_rest_days` (days since each team's last game,
+from `schedule.game_time`) was added as a feature, then measured via
+`scripts/ablate_rest_days.py`: neutral for the linear arms (<0.001 acc,
+<0.003 MAE either way), slightly WORSE for XGBoost on both regression
+targets (MAE +0.03 to +0.04 without it removed, i.e. worse with it in).
+Kept for now -- not harmful, not proven either, no code change pending
+stronger evidence.
+
+Building this surfaced three real, pre-existing defects unrelated to the
+new model itself:
+
+**1. `team_stats.points_scored`/`points_allowed`/`turnovers`/`third_down_conv`
+were placeholder zeros for every 2006-2022 row**, real-valued only from
+2023. Root cause: `nfl_data_loader.py`'s `_enrich_team_stats_from_schedule`
+call site fetched schedule data fresh over the network
+(`_fetch_schedules`, the same flaky `habitatring.com` host
+`backfill_vegas_lines.py` already avoids) and silently no-op'd on failure
+(`except Exception as e_sched: print(...)`) -- points columns stayed at
+their `DEFAULT 0` while yards/drive-EPA (a different, PBP-direct code
+path) kept working, which is why only some columns broke. Fixed by adding
+`NFLDataLoader._local_schedule_df()` (reads the already-populated local
+`schedule` table instead of hitting the network) and backfilled all 21
+seasons via `scripts/backfill_team_stats_points_turnovers.py` --
+`turnovers` went from a flat 0.0 to a real 1.2-1.8/game average across the
+full 2006-2025 history, matching the mean once it turns real in 2023.
+
+**2. 186 `week=0` placeholder rows in `team_stats`** (31/season,
+2020-2025, `total_plays=0`), plus 62 of them (2023-2024) had also picked
+up a stray season-total `points_scored` (e.g. Dallas's real 509-point 2023
+season total landed under `week=0` instead of being spread across real
+games) -- a second, compounding anomaly. `schedule` has never had a
+week=0 row, so these were pure junk. `src/utils/database.py` had already
+patched a symptom of this on 2026-08-29 (`ts.week >= 1` guard on the
+`week - 1` prior-week join, after finding it fabricated `team_plays=0` for
+73% of week-1 RB rows) but never found or fixed the write path, and never
+deleted the rows. Root-caused 2026-09-18 to
+`aggregate_team_stats_from_players()`: it aggregates
+`player_weekly_stats` with no week filter, while `schema_validator.py`'s
+`_is_valid_week_for_phase` explicitly allows week 0-4 for a "PRE"
+(preseason) phase -- any such row landing in `player_weekly_stats`, even
+transiently, would get aggregated into a `team_stats` (team, season,
+week=0) row and persist forever, since `ensure_team_stats_from_players`
+(called on every `auto_refresh`) only inserts keys not already present.
+Deleted the 186 existing rows directly and added `AND week >= 1` to the
+aggregation query -- confirmed against the live DB it now produces zero
+week=0 rows.
+
+**3. The serving path for predicting a not-yet-played game returned NaN
+for every team-form feature.** `team_stats`/score/win history only have
+rows for games actually played, so joining a future game to them by exact
+`(season, week)` found nothing -- and a bug in the `is_cold_start`
+combination logic read that NaN as "not cold start" (0) instead of
+correctly flagging it. This wasn't cosmetic: it's what made
+`XGBClassifier`/`XGBRegressor` predictions diverge sharply from
+`Ridge`/`LogisticRegression` on real 2026 week-2 predictions (each
+model's NaN-handling differs), before the underlying data gap was found.
+Fixed in `build_prediction_rows()` by appending one NaN-valued placeholder
+row per team per upcoming game to the team-form source tables before
+`_lagged_form` runs -- `shift(1)` already excludes a row's own value
+before aggregating, so the placeholder contributes nothing itself, it just
+gives the lag computation a position to compute FROM, correctly yielding
+the expanding/rolling mean of every real prior game. Also fixed
+`is_cold_start` to treat a missing flag as cold-start=1 (safe default)
+rather than silently 0.
+
+## Follow-ups: adjusted R^2, Elo power rating, weather-label fix (2026-09-18)
+
+Three small additions closing out the sprint above.
+
+**Weather feature mislabel.** `src/utils/leakage.py`'s
+`FEATURE_AVAILABILITY` classified `wind_mph`/`temp_f`/`precip_mm` (and the
+older player-model `wind_speed_mph`/`precipitation_flag`/
+`temperature_bucket`, same underlying source) as "pre-kickoff forecast".
+They're actually observed weather from `src/scrapers/weather_scraper.py`'s
+Open-Meteo **historical archive** API, fetched after the game, not a
+forecast. Not a leakage bug (weather doesn't depend on the score, so using
+observed values in training/backtests is still valid), but it does mean
+`build_prediction_rows()`'s weather join returns NaN/imputed for a real
+future game -- no live forecast is wired in, despite what the comment
+implied. Fixed the labels to say what's actually happening; no behavior
+change.
+
+**Adjusted R^2 added to the margin/total regression metrics.**
+`game_margin_backtester.py`'s `_regression_metrics()` now reports `r2` and
+`adj_r2` alongside MAE/RMSE/pick-accuracy (`1 - (1-R^2)*(n-1)/(n-p-1)`,
+NaN when `n - p - 1 <= 0` -- e.g. fold 4's 16-game 2026 test set has far
+fewer rows than features, so its `adj_r2` is correctly NaN, not a
+divide-by-zero or a misleading 0). `n_features=0` for `market_line` (it
+isn't fit on X at all, it just echoes the line), so its adjusted and plain
+R^2 are identical. No score computation for the win/loss classifier --
+R^2 isn't a meaningful metric for a binary target.
+
+**Elo power rating added as a feature (`home_minus_away_elo_pre`).** New
+`src/models/game_outcome/elo.py`: a sequential per-team Elo rating (initial
+1500, k=20, home_advantage=55, margin-of-victory multiplier via
+`ln(margin+1)`, 0.75 season-boundary regression toward 1500), fit once
+per feature build over the FULL played-game history (ties included --
+Elo treats a tie as `actual_home=0.5`, unlike the win/loss label
+population which drops the ~0.1% of games that tie). The "pre-game"
+rating attached to each (team, season, week) is correct by construction
+(the sequential update loop never looks ahead), so no `shift(1)` step is
+needed the way the rolling-mean team-form features require one -- verified
+with a leakage sentinel test (`test_pregame_rating_never_depends_on_that_
+games_own_score`) that mutates a game's own score and confirms its own
+pre-game ratings are unchanged. For not-yet-played games,
+`EloRatingSystem.current_elo(team, season)` returns the team's latest
+known rating with the same season-boundary regression applied, without
+mutating fitted state -- verified this returns non-NaN, sensible values
+for real 2026 week-3 games. `home_minus_away_elo_pre` needed no new
+`FEATURE_AVAILABILITY` entry (the existing `home_minus_away_` prefix
+already covers it). Correlation with `home_win` on 2015-2025 real data:
+0.317 (comparable in strength to the existing team-form diff features).
+Retrained all six phase-1/phase-2 model arms with the new feature; pooled
+walk-forward accuracy is materially unchanged (logistic 0.676, matching
+Vegas's 0.676) -- Elo doesn't currently look like a needle-mover on top of
+the existing team-form + market features, but it's a real, independently
+useful signal (power ratings are a standard input elsewhere) and didn't
+hurt. 9 new tests in `tests/test_elo_ratings.py`.
+
+## Elo hyperparameter tuning + a silent numpy.int64/sqlite3 bug (2026-09-18)
+
+**Elo tuning result: the grid is flat, defaults kept as-is.** New
+`scripts/tune_elo_params.py` grid-searches `k` (10/20/30), `home_advantage`
+(25/55/85), `season_regression` (0.5/0.75/1.0) -- 27 combos, each a full
+feature-frame rebuild, scored via 3-fold inner walk-forward CV on the
+win/loss classifier's log-loss, tuned once on 2006-2021 only (holdout
+2022-2026 never scored, same discipline as the phase-1/2 `--tune` flags).
+Every combination landed in a 0.6104-0.6108 log-loss band -- the committed
+538-style default (`k=20, home_advantage=55, season_regression=0.75`,
+log_loss=0.6106) is statistically indistinguishable from the grid's best
+(`season_regression=1.0`, log_loss=0.6104, an 0.0001 improvement, well
+below noise). Not tuning against the margin/total regressors separately --
+Elo is one shared feature and log-loss on the classifier is a fine proxy;
+splitting the grid per-target would just be more combinations of the same
+underlying rating for no expected difference given how flat this already is.
+
+**Real bug found and fixed while building the tuner:** `build_game_outcome_
+rows(seasons=...)` (and `build_margin_total_rows`, `_load_weather`,
+`load_upcoming_games`) silently returned an EMPTY DataFrame -- not an
+error -- whenever `seasons` contained `numpy.int64` values instead of plain
+Python `int`s. `pd.Series.unique()` returns numpy int64 by construction, so
+any caller building a season list that way (the tuner's first draft did
+exactly this: `sorted(df["season"].unique())`) got zero training rows
+without any exception, warning, or visible signal -- the walk-forward
+splitter's own error (`Cannot have number of folds=... greater than the
+number of samples=0`) was the only thing that surfaced it, and only
+because the fold count happened to exceed zero. Root cause: sqlite3's
+Python DB-API binds `numpy.int64` params in a way that matches no `season`
+row (schema column is a plain SQL INTEGER), rather than raising or
+coercing. Fixed at the three affected query sites (`labels.py`'s
+`_load_completed_nontie_games_with_scores`/`load_upcoming_games`,
+`features.py`'s `_load_weather`) by casting every season/week SQL param to
+`int(...)` before binding. No production caller was actually hitting this
+today (`train_game_outcome_model.py`/`train_game_margin_model.py` build
+their season lists from `range()`, which is already plain `int`), but it's
+exactly the kind of silent, no-exception data gap this repo has been bitten
+by before -- added `test_numpy_int64_seasons_return_same_rows_as_plain_int`
+to `tests/test_game_outcome_leakage.py` as a permanent regression guard.
+
+## Real Optuna tuning added (2026-09-19)
+
+Phase-1 planning explicitly deferred this ("no Optuna tuning in phase 1...
+a natural fast-follow using the existing `_tune_*`/`objective(trial)`
+pattern already used for the fantasy regressors" -- see
+`src/models/single_week_ppr/tuning.py`). New
+`src/models/game_outcome/optuna_tuning.py` mirrors that pattern: TPE
+sampler, seed=42, same inner walk-forward CV (`SeasonAwareTimeSeriesSplit`,
+`gap_seasons=0`) and same pre-holdout-only leakage boundary as `tuning.py`'s
+existing fixed-grid search (tuned once on data strictly before the earliest
+outer walk-forward test season, then the winning params are fixed across
+every outer fold). Continuous search spaces (vs. `tuning.py`'s handful of
+grid combos): `logistic.C` and `ridge.alpha` log-uniform; `xgboost`/
+`random_forest` get real ranges on n_estimators/max_depth/learning_rate/
+subsample/colsample_bytree/min_child_weight (xgb) or
+n_estimators/max_depth/min_samples_leaf (RF).
+
+Wired into both training scripts as `--tune-optuna N_TRIALS` (takes
+precedence over the existing `--tune` fixed-grid flag if both are passed).
+Ran 40 trials/arm against the real DB:
+
+- **Win/loss (phase 1):** xgboost pooled log-loss improved 0.626 -> 0.619,
+  random_forest 0.621 -> ~0.621 (roughly flat); logistic (single param C)
+  unchanged at 0.609 -- Optuna's best C landed close to the existing fixed
+  default. None of this changes the earlier finding that the classifiers
+  are, at best, matching Vegas rather than beating it (pooled acc 0.676 for
+  both logistic and vegas_favorite).
+- **Margin (phase 2):** all three arms still do NOT beat the market line's
+  own MAE (ridge 9.656 vs market 9.571, xgboost 9.673, random_forest
+  9.704) -- modestly better than the untuned baseline (9.665/9.845/9.748)
+  but the gap to market never closes.
+- **Total (phase 2):** ridge (10.184) and xgboost (10.201) now both edge
+  out the market line's own MAE (10.203) for the first time this sprint --
+  a small, real improvement, though margin-of-victory here (0.02 MAE) is
+  well within the kind of noise a single walk-forward run can produce; not
+  claiming this generalizes without more folds/seasons of evidence.
+
+Retrained and saved all 9 model artifacts under `data/models/` with the
+Optuna-tuned hyperparameters. Confirmed `scripts/predict_upcoming_games.py`
+still runs cleanly against the retrained artifacts (feature columns are
+unchanged, only per-arm hyperparameters moved).
+
+## game_odds multi-bookmaker features: implemented, ablated, NOT adopted (2026-09-19)
+
+Picked up the last explicitly-deferred phase-1 non-goal ("Not `game_odds`
+-- that table is 2020+ only and would truncate ~14 seasons of usable
+training history... Defer `game_odds` to a later phase"). New
+`src/models/game_outcome/market_odds.py`: per-game cross-bookmaker
+consensus (`market_spread_median`, `market_total_median`,
+`market_moneyline_median` -- vig-removed implied home-win probability) and
+disagreement (`_std`) features, plus `market_n_books_*` coverage counts,
+built from closing lines only (each bookmaker's LAST fetch strictly before
+that game's `commence_time` -- an in-game or postgame fetch is dropped
+entirely, never risked). Wired into `features.py` as an opt-in
+`include_market_odds=False` parameter (default off, so the committed 2006+
+models are untouched) since `game_odds` only covers 2020-2025.
+
+**Two real data-quality bugs found and fixed while building this, both
+verified against the live DB before shipping:**
+
+1. **Sign convention.** `game_odds.home_point` for the "spreads" market
+   uses the standard American-odds convention (negative = home favored) --
+   the OPPOSITE of `schedule.spread_line` (positive = home favored,
+   established earlier this project). Confirmed via correlation: -0.976
+   before negating, +0.976 after. Getting this backwards would have
+   silently taught a model the reverse of "the market favors the home team
+   by N" -- a much worse failure mode than a merely-weak feature, since it
+   would look plausible in isolation.
+2. **Duplicate placeholder events.** The same (home_team, away_team) pair
+   can appear under two different `game_odds.event_id`s within a season --
+   one the real game, one an early placeholder listing from the odds API
+   with a `commence_time` MONTHS off from the actual scheduled kickoff
+   (found: a CLE @ NYJ "event" dated 2023-08-04 sitting alongside the real
+   2023-12-29 Week 17 game). `game_odds.season`/`week` themselves are also
+   unreliable (~1% NULL season, ~2.7% NULL week) so aren't used for
+   anything -- every game is re-identified by matching `event_id` to
+   `schedule` via (home_team, away_team, commence_time closest to
+   game_time, within a 1.5-day tolerance), which rejects the
+   months-off placeholder automatically.
+
+**Ablation result: does NOT help, not adopted.** `scripts/
+ablate_market_odds.py` compares WITH/WITHOUT the market_odds columns,
+restricted to the only population where they exist (2020-2025, 3-fold
+inner CV -- a full 5-fold outer walk-forward isn't feasible on 6 seasons
+of coverage the way the 2006+ models get it, so this is intentionally a
+smaller, honest comparison rather than a like-for-like one). Result: WITH
+market_odds is flat-to-worse everywhere -- win/loss logistic accuracy
+0.652 vs 0.664 without (log-loss 0.643 vs 0.625), xgboost roughly flat;
+margin/total MAE also flat-to-slightly-worse for both arms. Root cause is
+obvious in hindsight: `market_spread_median`/`market_total_median`
+correlate 0.976/0.989 with the `spread_line`/`total_line` already in every
+model -- adding a near-duplicate of an existing feature on top of a much
+smaller sample (6 seasons vs 20) just adds noise/dimensionality without
+new signal. The disagreement (`_std`) and book-count features didn't carry
+enough independent signal to offset that. Feature code, tests
+(`tests/test_market_odds.py`, 6 tests), and the opt-in flag are kept in
+the codebase (real, reusable, bug-fixed machinery) but `include_market_odds`
+stays `False` everywhere in the committed training scripts -- this closes
+out the deferred item as "investigated, not adopted," same treatment as
+the `rest_days` ablation finding.

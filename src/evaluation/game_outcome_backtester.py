@@ -20,12 +20,19 @@ from sklearn.metrics import accuracy_score, brier_score_loss, log_loss, roc_auc_
 from config.settings import GAME_OUTCOME_MODEL_CONFIG
 from src.models.game_outcome.baseline import HomeFieldBaseline, VegasFavoriteBaseline
 from src.models.game_outcome.features import build_game_outcome_rows, feature_columns
-from src.models.game_outcome.models import GameOutcomeLogisticModel, GameOutcomeXGBModel
+from src.models.game_outcome.models import GameOutcomeLogisticModel, GameOutcomeRFModel, GameOutcomeXGBModel
 from src.models.position_models import SeasonAwareTimeSeriesSplit
 
-ARM_FACTORIES: Dict[str, Callable[[], object]] = {
+# Arms whose hyperparameters can be overridden via `tuned_params` in
+# run_walk_forward_backtest -- the two baselines are never tuned.
+TUNABLE_ARM_CLASSES: Dict[str, Callable[..., object]] = {
     "logistic": GameOutcomeLogisticModel,
     "xgboost": GameOutcomeXGBModel,
+    "random_forest": GameOutcomeRFModel,
+}
+
+ARM_FACTORIES: Dict[str, Callable[[], object]] = {
+    **TUNABLE_ARM_CLASSES,
     "vegas_favorite": VegasFavoriteBaseline,
     "home_field": HomeFieldBaseline,
 }
@@ -71,12 +78,26 @@ def _calibration_table(y_true: np.ndarray, proba: np.ndarray, n_bins: int = 5) -
 def run_walk_forward_backtest(
     seasons: Optional[List[int]] = None,
     n_test_seasons: Optional[int] = None,
+    tuned_params: Optional[Dict[str, dict]] = None,
 ) -> Dict:
     """Train each arm fresh per fold on strictly-prior seasons, score on the held-out season(s).
+
+    `tuned_params`, if given, is a dict like {"xgboost": {"max_depth": 4}} --
+    only affects TUNABLE_ARM_CLASSES; the two baselines are never tuned. The
+    caller (scripts/train_game_outcome_model.py's --tune flag) is responsible
+    for having produced these params from data strictly before every season
+    scored here.
 
     Returns per-fold metrics for every arm plus pooled (all-folds-concatenated)
     metrics and a calibration table per arm.
     """
+    tuned_params = tuned_params or {}
+    arm_factories: Dict[str, Callable[[], object]] = {
+        **{name: (lambda cls=cls, name=name: cls(**tuned_params.get(name, {}))) for name, cls in TUNABLE_ARM_CLASSES.items()},
+        "vegas_favorite": VegasFavoriteBaseline,
+        "home_field": HomeFieldBaseline,
+    }
+
     df = build_game_outcome_rows(seasons=seasons)
     feat_cols = feature_columns(df)
     X = df[feat_cols]
@@ -88,7 +109,7 @@ def run_walk_forward_backtest(
     splitter = SeasonAwareTimeSeriesSplit(n_splits=n_splits, seasons=season_arr, gap_seasons=gap)
 
     fold_reports: List[Dict] = []
-    pooled_preds: Dict[str, List[np.ndarray]] = {name: [] for name in ARM_FACTORIES}
+    pooled_preds: Dict[str, List[np.ndarray]] = {name: [] for name in arm_factories}
     pooled_true: List[np.ndarray] = []
 
     for fold_i, (train_idx, test_idx) in enumerate(splitter.split(X)):
@@ -111,7 +132,7 @@ def run_walk_forward_backtest(
             "n_test": int(len(test_idx)),
             "arms": {},
         }
-        for name, factory in ARM_FACTORIES.items():
+        for name, factory in arm_factories.items():
             model = factory().fit(X_train, y_train)
             proba = model.predict_proba(X_test)[:, 1]
             fold_report["arms"][name] = _classification_metrics(y_test, proba)
@@ -122,7 +143,7 @@ def run_walk_forward_backtest(
     y_all = np.concatenate(pooled_true) if pooled_true else np.array([])
     pooled = {}
     calibration = {}
-    for name in ARM_FACTORIES:
+    for name in arm_factories:
         proba_all = np.concatenate(pooled_preds[name]) if pooled_preds[name] else np.array([])
         if len(proba_all) == 0:
             continue

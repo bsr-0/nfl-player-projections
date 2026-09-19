@@ -17,6 +17,13 @@ Chains, in order:
        does not do this itself -- see the ADP-fix session note in git log)
     6. scripts/generate_weekly_data.py -- writes docs/data/weekly_*.json
        directly; one blended path for every week (mode "weekly_blend")
+    7. scripts/generate_game_predictions_data.py -- writes docs/data/
+       game_predictions_*.json for the Game Predictions tab (src/models/
+       game_outcome/, standalone from everything else in this chain).
+       Skipped by default if no model artifacts exist yet in data/models/
+       (run scripts/train_game_outcome_model.py / train_game_margin_model.py
+       first) -- failing this step should not block the player-projection
+       refresh, which is why it's last and independently skippable.
 
 Does NOT commit or push anything. Review `git status`/`git diff` on
 docs/data and data/players_*.json yourself before committing.
@@ -41,7 +48,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 DOCS_DATA_DIR = PROJECT_ROOT / "docs" / "data"
 POSITIONS = ["QB", "RB", "WR", "TE"]
 
-STEPS = ["auto_refresh", "injuries", "adp", "draft_data", "sync_docs", "weekly_data"]
+STEPS = ["auto_refresh", "injuries", "adp", "draft_data", "sync_docs", "weekly_data", "game_predictions"]
 
 
 def _run(label: str, cmd: list[str]) -> None:
@@ -50,6 +57,18 @@ def _run(label: str, cmd: list[str]) -> None:
     if result.returncode != 0:
         print(f"\nFAILED at step: {label} (exit {result.returncode})")
         sys.exit(result.returncode)
+
+
+def _run_soft(label: str, cmd: list[str]) -> None:
+    """Like `_run`, but a non-zero exit is reported and swallowed rather
+    than aborting the whole refresh -- used only for game_predictions,
+    since a missing data/models/*.joblib (never trained yet) is a valid,
+    unrelated state that shouldn't block the player-projection refresh
+    this script exists for."""
+    print(f"\n{'=' * 60}\n{label}\n{'=' * 60}")
+    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+    if result.returncode != 0:
+        print(f"\nSkipped/failed (non-fatal): {label} (exit {result.returncode})")
 
 
 def sync_docs_data() -> None:
@@ -85,20 +104,23 @@ def main() -> int:
     py = sys.executable
 
     if "auto_refresh" not in skip:
-        _run("1/6 auto_refresh (rosters/weekly stats/schedule/quality gates)",
+        _run("1/7 auto_refresh (rosters/weekly stats/schedule/quality gates)",
              [py, "-m", "src.data.auto_refresh"])
     if "injuries" not in skip:
-        _run(f"2/6 backfill_injuries ({season})",
+        _run(f"2/7 backfill_injuries ({season})",
              [py, "scripts/backfill_injuries.py", "--seasons", str(season), str(season)])
     if "adp" not in skip:
-        _run(f"3/6 backfill_adp ({season})",
+        _run(f"3/7 backfill_adp ({season})",
              [py, "scripts/backfill_adp.py", "--seasons", str(season), str(season)])
     if "draft_data" not in skip:
-        _run("4/6 generate_draft_data", [py, "scripts/generate_draft_data.py"])
+        _run("4/7 generate_draft_data", [py, "scripts/generate_draft_data.py"])
     if "sync_docs" not in skip:
         sync_docs_data()
     if "weekly_data" not in skip:
-        _run("6/6 generate_weekly_data", [py, "scripts/generate_weekly_data.py"])
+        _run("6/7 generate_weekly_data", [py, "scripts/generate_weekly_data.py"])
+    if "game_predictions" not in skip:
+        _run_soft("7/7 generate_game_predictions_data",
+                   [py, "scripts/generate_game_predictions_data.py", "--season", str(season)])
 
     print(f"\n{'=' * 60}\nDone. Review before committing:\n"
           f"  git status docs/data data/players_*.json\n"

@@ -1,23 +1,24 @@
 {
-  "trained_at": "2026-09-18T12:26:16.838637+00:00",
-  "seasons_requested": [
-    2010,
-    2011,
-    2012,
-    2013,
-    2014,
-    2015,
-    2016,
-    2017,
-    2018,
-    2019,
-    2020,
-    2021,
-    2022,
-    2023,
-    2024,
-    2025
-  ],
+  "trained_at": "2026-09-19T04:59:53.584478+00:00",
+  "seasons_requested": null,
+  "tuned_params": {
+    "logistic": {
+      "C": 90.12852407949295
+    },
+    "xgboost": {
+      "n_estimators": 350,
+      "max_depth": 5,
+      "learning_rate": 0.011973103005107516,
+      "subsample": 0.5941884741876359,
+      "colsample_bytree": 0.9632940033879211,
+      "min_child_weight": 17
+    },
+    "random_forest": {
+      "n_estimators": 400,
+      "max_depth": 10,
+      "min_samples_leaf": 23
+    }
+  },
   "config": {
     "earliest_training_season": 2006,
     "cv_gap_seasons": 0,
@@ -34,66 +35,52 @@
       "min_child_weight": 5,
       "eval_metric": "logloss",
       "random_state": 42
+    },
+    "ridge_alpha": 10.0,
+    "xgb_regressor_params": {
+      "n_estimators": 300,
+      "max_depth": 3,
+      "learning_rate": 0.05,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "min_child_weight": 5,
+      "objective": "reg:squarederror",
+      "eval_metric": "rmse",
+      "random_state": 42
+    },
+    "rf_params": {
+      "n_estimators": 300,
+      "max_depth": 5,
+      "min_samples_leaf": 20,
+      "random_state": 42,
+      "n_jobs": -1
+    },
+    "rf_regressor_params": {
+      "n_estimators": 300,
+      "max_depth": 5,
+      "min_samples_leaf": 20,
+      "random_state": 42,
+      "n_jobs": -1
+    },
+    "elo_params": {
+      "initial": 1500.0,
+      "k": 20.0,
+      "home_advantage": 55.0,
+      "season_regression": 0.75,
+      "mov_multiplier": true
     }
   },
   "backtest": {
     "n_folds": 5,
-    "n_games_total": 4350,
+    "n_games_total": 5433,
     "folds": [
       {
         "fold": 0,
         "train_seasons": [
-          2010,
-          2011,
-          2012,
-          2013,
-          2014,
-          2015,
-          2016,
-          2017,
-          2018,
-          2019,
-          2020
-        ],
-        "test_seasons": [
-          2021
-        ],
-        "n_train": 2930,
-        "n_test": 284,
-        "arms": {
-          "logistic": {
-            "n": 284,
-            "accuracy": 0.6514084507042254,
-            "brier": 0.21426850348116314,
-            "log_loss": 0.6146198417798245,
-            "roc_auc": 0.7227270470231889
-          },
-          "xgboost": {
-            "n": 284,
-            "accuracy": 0.6725352112676056,
-            "brier": 0.21280778608551532,
-            "log_loss": 0.6221179936028118,
-            "roc_auc": 0.7261035801181788
-          },
-          "vegas_favorite": {
-            "n": 284,
-            "accuracy": 0.6232394366197183,
-            "brier": 0.21912341600098006,
-            "log_loss": 0.6264167356807682,
-            "roc_auc": 0.7215105020110235
-          },
-          "home_field": {
-            "n": 284,
-            "accuracy": 0.5176056338028169,
-            "brier": 0.2524352112676056,
-            "log_loss": 0.6980823260525391,
-            "roc_auc": 0.5
-          }
-        }
-      },
-      {
-        "fold": 1,
-        "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
           2010,
           2011,
           2012,
@@ -110,28 +97,35 @@
         "test_seasons": [
           2022
         ],
-        "n_train": 3214,
+        "n_train": 4281,
         "n_test": 282,
         "arms": {
           "logistic": {
             "n": 282,
-            "accuracy": 0.6595744680851063,
-            "brier": 0.2073038742385238,
-            "log_loss": 0.5995863712655601,
-            "roc_auc": 0.7318135245901639
+            "accuracy": 0.6702127659574468,
+            "brier": 0.2106012094219195,
+            "log_loss": 0.6071851571893593,
+            "roc_auc": 0.7209528688524591
           },
           "xgboost": {
             "n": 282,
-            "accuracy": 0.6666666666666666,
-            "brier": 0.21682296236947896,
-            "log_loss": 0.6214393998103953,
-            "roc_auc": 0.7057889344262294
+            "accuracy": 0.6595744680851063,
+            "brier": 0.21484859286620542,
+            "log_loss": 0.6179545187094461,
+            "roc_auc": 0.7075819672131147
+          },
+          "random_forest": {
+            "n": 282,
+            "accuracy": 0.6595744680851063,
+            "brier": 0.2132890143013881,
+            "log_loss": 0.6153515237383473,
+            "roc_auc": 0.7114754098360656
           },
           "vegas_favorite": {
             "n": 282,
             "accuracy": 0.6631205673758865,
-            "brier": 0.20908237936782,
-            "log_loss": 0.6041812980973813,
+            "brier": 0.20920978466933116,
+            "log_loss": 0.6046570896496132,
             "roc_auc": 0.7265625
           },
           "home_field": {
@@ -144,8 +138,12 @@
         }
       },
       {
-        "fold": 2,
+        "fold": 1,
         "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
           2010,
           2011,
           2012,
@@ -163,28 +161,35 @@
         "test_seasons": [
           2023
         ],
-        "n_train": 3496,
+        "n_train": 4563,
         "n_test": 285,
         "arms": {
           "logistic": {
             "n": 285,
-            "accuracy": 0.4421052631578947,
-            "brier": 0.35272662263273324,
-            "log_loss": 1.0993870598379187,
-            "roc_auc": 0.41399519134441987
+            "accuracy": 0.6666666666666666,
+            "brier": 0.22079842789495077,
+            "log_loss": 0.6316302235961658,
+            "roc_auc": 0.6857844119414948
           },
           "xgboost": {
             "n": 285,
-            "accuracy": 0.5298245614035088,
-            "brier": 0.26180852273167254,
-            "log_loss": 0.7228216796196913,
-            "roc_auc": 0.5417251051893408
+            "accuracy": 0.6175438596491228,
+            "brier": 0.23020749037015184,
+            "log_loss": 0.6518948876793087,
+            "roc_auc": 0.652424363854939
+          },
+          "random_forest": {
+            "n": 285,
+            "accuracy": 0.624561403508772,
+            "brier": 0.2300758837968268,
+            "log_loss": 0.6514512710079462,
+            "roc_auc": 0.6525746343418153
           },
           "vegas_favorite": {
             "n": 285,
             "accuracy": 0.6736842105263158,
-            "brier": 0.21711434742391894,
-            "log_loss": 0.6232798701995268,
+            "brier": 0.21718102882722323,
+            "log_loss": 0.6233970238908786,
             "roc_auc": 0.6928220797435383
           },
           "home_field": {
@@ -197,8 +202,12 @@
         }
       },
       {
-        "fold": 3,
+        "fold": 2,
         "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
           2010,
           2011,
           2012,
@@ -217,28 +226,35 @@
         "test_seasons": [
           2024
         ],
-        "n_train": 3781,
+        "n_train": 4848,
         "n_test": 285,
         "arms": {
           "logistic": {
             "n": 285,
-            "accuracy": 0.6771929824561403,
-            "brier": 0.21125325945470785,
-            "log_loss": 0.6106444152860435,
-            "roc_auc": 0.7214768435698669
+            "accuracy": 0.7017543859649122,
+            "brier": 0.20065611100770825,
+            "log_loss": 0.587235468134181,
+            "roc_auc": 0.7529318226992646
           },
           "xgboost": {
             "n": 285,
-            "accuracy": 0.6526315789473685,
-            "brier": 0.22734534393312802,
-            "log_loss": 0.6466480262402698,
-            "roc_auc": 0.6777976545418407
+            "accuracy": 0.7157894736842105,
+            "brier": 0.2037227426832198,
+            "log_loss": 0.5953097146882844,
+            "roc_auc": 0.7506459948320413
+          },
+          "random_forest": {
+            "n": 285,
+            "accuracy": 0.7157894736842105,
+            "brier": 0.20496477827037846,
+            "log_loss": 0.5986114580132901,
+            "roc_auc": 0.7486086265156033
           },
           "vegas_favorite": {
             "n": 285,
             "accuracy": 0.7052631578947368,
-            "brier": 0.20071362639190501,
-            "log_loss": 0.5880931054684199,
+            "brier": 0.2010110207473812,
+            "log_loss": 0.5888237342582198,
             "roc_auc": 0.7558139534883721
           },
           "home_field": {
@@ -251,8 +267,12 @@
         }
       },
       {
-        "fold": 4,
+        "fold": 3,
         "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
           2010,
           2011,
           2012,
@@ -272,28 +292,35 @@
         "test_seasons": [
           2025
         ],
-        "n_train": 4066,
+        "n_train": 5133,
         "n_test": 284,
         "arms": {
           "logistic": {
             "n": 284,
-            "accuracy": 0.6654929577464789,
-            "brier": 0.21385818647686333,
-            "log_loss": 0.61305091404237,
-            "roc_auc": 0.7131678628389154
+            "accuracy": 0.6619718309859155,
+            "brier": 0.21374848086462261,
+            "log_loss": 0.6121402108714095,
+            "roc_auc": 0.7119218500797447
           },
           "xgboost": {
             "n": 284,
-            "accuracy": 0.6408450704225352,
-            "brier": 0.21875814786295247,
-            "log_loss": 0.6241623691652357,
-            "roc_auc": 0.7032496012759171
+            "accuracy": 0.6549295774647887,
+            "brier": 0.21271962549697288,
+            "log_loss": 0.6115249436837367,
+            "roc_auc": 0.7195474481658692
+          },
+          "random_forest": {
+            "n": 284,
+            "accuracy": 0.647887323943662,
+            "brier": 0.21582767608446488,
+            "log_loss": 0.6191055847070137,
+            "roc_auc": 0.7105263157894738
           },
           "vegas_favorite": {
             "n": 284,
             "accuracy": 0.6584507042253521,
-            "brier": 0.2113135291657215,
-            "log_loss": 0.6073900535696583,
+            "brier": 0.21124194636672775,
+            "log_loss": 0.6074215241940621,
             "roc_auc": 0.7203698165869219
           },
           "home_field": {
@@ -304,35 +331,109 @@
             "roc_auc": 0.5
           }
         }
+      },
+      {
+        "fold": 4,
+        "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "test_seasons": [
+          2026
+        ],
+        "n_train": 5417,
+        "n_test": 16,
+        "arms": {
+          "logistic": {
+            "n": 16,
+            "accuracy": 0.75,
+            "brier": 0.2050851387613331,
+            "log_loss": 0.602590351734067,
+            "roc_auc": 0.7333333333333334
+          },
+          "xgboost": {
+            "n": 16,
+            "accuracy": 0.625,
+            "brier": 0.2163664848640266,
+            "log_loss": 0.6244261778506475,
+            "roc_auc": 0.65
+          },
+          "random_forest": {
+            "n": 16,
+            "accuracy": 0.5625,
+            "brier": 0.22090815984699125,
+            "log_loss": 0.6358205486582209,
+            "roc_auc": 0.65
+          },
+          "vegas_favorite": {
+            "n": 16,
+            "accuracy": 0.75,
+            "brier": 0.20553651437573733,
+            "log_loss": 0.6033553494058894,
+            "roc_auc": 0.6916666666666668
+          },
+          "home_field": {
+            "n": 16,
+            "accuracy": 0.625,
+            "brier": 0.23740000000000003,
+            "log_loss": 0.6678131002064116,
+            "roc_auc": 0.5
+          }
+        }
       }
     ],
     "pooled": {
       "logistic": {
-        "n": 1420,
-        "accuracy": 0.6190140845070422,
-        "brier": 0.23998728090018587,
-        "log_loss": 0.7078174801131835,
-        "roc_auc": 0.653366523660114
+        "n": 1152,
+        "accuracy": 0.6762152777777778,
+        "brier": 0.21136286061629622,
+        "log_loss": 0.609455036445984,
+        "roc_auc": 0.7184257810235901
       },
       "xgboost": {
-        "n": 1420,
-        "accuracy": 0.6323943661971831,
-        "brier": 0.22754764269649727,
-        "log_loss": 0.6475270422132013,
-        "roc_auc": 0.6761181725043222
+        "n": 1152,
+        "accuracy": 0.6614583333333334,
+        "brier": 0.21539206337451872,
+        "log_loss": 0.6192538097244961,
+        "roc_auc": 0.7079104473058843
+      },
+      "random_forest": {
+        "n": 1152,
+        "accuracy": 0.6605902777777778,
+        "brier": 0.21611430667333753,
+        "log_loss": 0.6213508006081508,
+        "roc_auc": 0.7066871665339667
       },
       "vegas_favorite": {
-        "n": 1420,
-        "accuracy": 0.6647887323943662,
-        "brier": 0.21146922249759037,
-        "log_loss": 0.6098743325886954,
-        "roc_auc": 0.7210851956201576
+        "n": 1152,
+        "accuracy": 0.6762152777777778,
+        "brier": 0.20960346389207998,
+        "log_loss": 0.6060395953257741,
+        "roc_auc": 0.7243469480517502
       },
       "home_field": {
-        "n": 1420,
-        "accuracy": 0.5464788732394367,
-        "brier": 0.24839295774647885,
-        "log_loss": 0.6899443702512851,
+        "n": 1152,
+        "accuracy": 0.5546875,
+        "brier": 0.24724374999999998,
+        "log_loss": 0.6876307593413249,
         "roc_auc": 0.5
       }
     },
@@ -343,45 +444,45 @@
             0.0,
             0.2
           ],
-          "n": 80,
-          "mean_predicted": 0.12805274079174064,
-          "actual_win_rate": 0.45
+          "n": 33,
+          "mean_predicted": 0.15234692255314938,
+          "actual_win_rate": 0.18181818181818182
         },
         {
           "bin_range": [
             0.2,
             0.4
           ],
-          "n": 320,
-          "mean_predicted": 0.31798449949218593,
-          "actual_win_rate": 0.36875
+          "n": 291,
+          "mean_predicted": 0.319781438087101,
+          "actual_win_rate": 0.33676975945017185
         },
         {
           "bin_range": [
             0.4,
             0.6000000000000001
           ],
-          "n": 405,
-          "mean_predicted": 0.5078510993754825,
-          "actual_win_rate": 0.5185185185185185
+          "n": 354,
+          "mean_predicted": 0.5161777619852128,
+          "actual_win_rate": 0.519774011299435
         },
         {
           "bin_range": [
             0.6000000000000001,
             0.8
           ],
-          "n": 457,
-          "mean_predicted": 0.6944111778196889,
-          "actual_win_rate": 0.6236323851203501
+          "n": 380,
+          "mean_predicted": 0.6886049956654962,
+          "actual_win_rate": 0.6947368421052632
         },
         {
           "bin_range": [
             0.8,
             1.0
           ],
-          "n": 158,
-          "mean_predicted": 0.8655455659990603,
-          "actual_win_rate": 0.8037974683544303
+          "n": 94,
+          "mean_predicted": 0.8554623362324563,
+          "actual_win_rate": 0.925531914893617
         }
       ],
       "xgboost": [
@@ -390,45 +491,83 @@
             0.0,
             0.2
           ],
-          "n": 59,
-          "mean_predicted": 0.15049482882022858,
-          "actual_win_rate": 0.3728813559322034
+          "n": 12,
+          "mean_predicted": 0.18039874732494354,
+          "actual_win_rate": 0.08333333333333333
         },
         {
           "bin_range": [
             0.2,
             0.4
           ],
-          "n": 328,
-          "mean_predicted": 0.3143361806869507,
-          "actual_win_rate": 0.375
+          "n": 240,
+          "mean_predicted": 0.3046317398548126,
+          "actual_win_rate": 0.32916666666666666
         },
         {
           "bin_range": [
             0.4,
             0.6000000000000001
           ],
-          "n": 465,
-          "mean_predicted": 0.5005524158477783,
-          "actual_win_rate": 0.5010752688172043
+          "n": 480,
+          "mean_predicted": 0.5011799931526184,
+          "actual_win_rate": 0.5166666666666667
         },
         {
           "bin_range": [
             0.6000000000000001,
             0.8
           ],
-          "n": 364,
-          "mean_predicted": 0.6912969350814819,
-          "actual_win_rate": 0.6181318681318682
+          "n": 295,
+          "mean_predicted": 0.696221113204956,
+          "actual_win_rate": 0.7016949152542373
         },
         {
           "bin_range": [
             0.8,
             1.0
           ],
-          "n": 204,
-          "mean_predicted": 0.8683425188064575,
-          "actual_win_rate": 0.8480392156862745
+          "n": 125,
+          "mean_predicted": 0.8529694080352783,
+          "actual_win_rate": 0.832
+        }
+      ],
+      "random_forest": [
+        {
+          "bin_range": [
+            0.2,
+            0.4
+          ],
+          "n": 228,
+          "mean_predicted": 0.32041473712471796,
+          "actual_win_rate": 0.2894736842105263
+        },
+        {
+          "bin_range": [
+            0.4,
+            0.6000000000000001
+          ],
+          "n": 497,
+          "mean_predicted": 0.4990253797752549,
+          "actual_win_rate": 0.5070422535211268
+        },
+        {
+          "bin_range": [
+            0.6000000000000001,
+            0.8
+          ],
+          "n": 326,
+          "mean_predicted": 0.6972071819921457,
+          "actual_win_rate": 0.7208588957055214
+        },
+        {
+          "bin_range": [
+            0.8,
+            1.0
+          ],
+          "n": 101,
+          "mean_predicted": 0.8475423579676783,
+          "actual_win_rate": 0.8514851485148515
         }
       ],
       "vegas_favorite": [
@@ -437,45 +576,45 @@
             0.0,
             0.2
           ],
-          "n": 49,
-          "mean_predicted": 0.1490868107079575,
-          "actual_win_rate": 0.24489795918367346
+          "n": 31,
+          "mean_predicted": 0.15671151693376348,
+          "actual_win_rate": 0.1935483870967742
         },
         {
           "bin_range": [
             0.2,
             0.4
           ],
-          "n": 398,
-          "mean_predicted": 0.334117355018769,
-          "actual_win_rate": 0.32914572864321606
+          "n": 325,
+          "mean_predicted": 0.3372280706829607,
+          "actual_win_rate": 0.3292307692307692
         },
         {
           "bin_range": [
             0.4,
             0.6000000000000001
           ],
-          "n": 365,
-          "mean_predicted": 0.5320356121469731,
-          "actual_win_rate": 0.5260273972602739
+          "n": 340,
+          "mean_predicted": 0.5336891571919361,
+          "actual_win_rate": 0.5441176470588235
         },
         {
           "bin_range": [
             0.6000000000000001,
             0.8
           ],
-          "n": 474,
-          "mean_predicted": 0.685168325403272,
-          "actual_win_rate": 0.6708860759493671
+          "n": 368,
+          "mean_predicted": 0.6877040170561886,
+          "actual_win_rate": 0.7092391304347826
         },
         {
           "bin_range": [
             0.8,
             1.0
           ],
-          "n": 134,
-          "mean_predicted": 0.8545463426469366,
-          "actual_win_rate": 0.917910447761194
+          "n": 88,
+          "mean_predicted": 0.8523712114482733,
+          "actual_win_rate": 0.9090909090909091
         }
       ],
       "home_field": [
@@ -484,9 +623,9 @@
             0.4,
             0.6000000000000001
           ],
-          "n": 1420,
-          "mean_predicted": 0.5700000000000001,
-          "actual_win_rate": 0.5464788732394367
+          "n": 1152,
+          "mean_predicted": 0.57,
+          "actual_win_rate": 0.5546875
         }
       ]
     }
@@ -494,20 +633,12 @@
   "feature_columns": [
     "spread_line",
     "total_line",
-    "home_minus_away_points_scored_s2d",
-    "home_minus_away_points_scored_roll3",
-    "home_minus_away_points_allowed_s2d",
-    "home_minus_away_points_allowed_roll3",
     "home_minus_away_total_yards_s2d",
     "home_minus_away_total_yards_roll3",
     "home_minus_away_passing_yards_s2d",
     "home_minus_away_passing_yards_roll3",
     "home_minus_away_rushing_yards_s2d",
     "home_minus_away_rushing_yards_roll3",
-    "home_minus_away_turnovers_s2d",
-    "home_minus_away_turnovers_roll3",
-    "home_minus_away_third_down_conv_s2d",
-    "home_minus_away_third_down_conv_roll3",
     "home_minus_away_drive_success_rate_s2d",
     "home_minus_away_drive_success_rate_roll3",
     "home_minus_away_avg_drive_epa_s2d",
@@ -516,9 +647,14 @@
     "home_minus_away_points_per_drive_roll3",
     "home_minus_away_neutral_pass_rate_oe_s2d",
     "home_minus_away_neutral_pass_rate_oe_roll3",
+    "home_minus_away_points_scored_s2d",
+    "home_minus_away_points_scored_roll3",
+    "home_minus_away_points_allowed_s2d",
+    "home_minus_away_points_allowed_roll3",
     "home_minus_away_win_pct_s2d",
     "home_minus_away_win_pct_roll3",
-    "home_minus_away_prior_season_win_pct",
+    "home_minus_away_rest_days",
+    "home_minus_away_elo_pre",
     "is_cold_start",
     "game_week",
     "is_dome",
@@ -526,5 +662,5 @@
     "wind_mph",
     "precip_mm"
   ],
-  "n_training_games": 4350
+  "n_training_games": 5433
 }

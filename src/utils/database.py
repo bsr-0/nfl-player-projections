@@ -1667,6 +1667,22 @@ class DatabaseManager:
         Produces one row per (team, season, week) with pass/rush attempts and yards,
         total_yards, total_plays; opponent/home_away from any player on that team.
         Use when team_stats is empty so training has team tendency features.
+
+        `week >= 1` guards against `player_weekly_stats` preseason rows:
+        schema_validator.py's `_is_valid_week_for_phase` explicitly allows
+        week 0-4 for a "PRE" phase, so a preseason row landing in
+        `player_weekly_stats` (even transiently, even later cleaned up
+        there) would otherwise get aggregated here into a `team_stats`
+        (team, season, week=0) row and then persist forever -- this
+        function's caller (`ensure_team_stats_from_players`, invoked on
+        every auto_refresh) only inserts keys not already present, so a
+        stale junk row is never revisited once created. `team_stats`, like
+        `schedule`, has no legitimate week=0 (regular/postseason only) --
+        traced 2026-09-18 as the likely root cause of 186 `total_plays=0`
+        placeholder rows (31/season, 2020-2025) found and deleted directly
+        from the DB; this closes the write path rather than just the read
+        side (see the `ts.week >= 1` join guard below, added 2026-08-29 for
+        the same underlying rows before their origin was known).
         """
         query = """
             SELECT
@@ -1700,7 +1716,7 @@ class DatabaseManager:
                 NULL AS points_per_drive,
                 NULL AS pace_sec_per_play
             FROM player_weekly_stats
-            WHERE team IS NOT NULL AND team != ''
+            WHERE team IS NOT NULL AND team != '' AND week >= 1
         """
         params = []
         if season is not None:

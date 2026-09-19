@@ -281,10 +281,20 @@ FEATURE_AVAILABILITY: Tuple[Tuple[str, str], ...] = (
     ("sos_rank_next_", "prediction week (schedule is fixed in advance)"),
     ("favorable_matchups_next_", "prediction week (schedule is fixed in advance)"),
     ("expected_games_next_", "prediction week (derived from prior injury history)"),
-    ("wind_speed_mph", "pre-kickoff forecast"),
+    # NOTE (2026-09-18): "pre-kickoff forecast" below is a misnomer carried
+    # over from an earlier assumption -- game_weather is actually populated
+    # by src/scrapers/weather_scraper.py's Open-Meteo HISTORICAL ARCHIVE API
+    # (archive-api.open-meteo.com), i.e. observed weather fetched after the
+    # game, not a pre-game forecast. This is still leakage-safe for training/
+    # backtesting (weather is exogenous -- it isn't caused by the score), but
+    # it means these columns will be NaN/imputed for a not-yet-played game in
+    # any live serving path, since observed weather can't exist yet for a
+    # game that hasn't happened. See the same note on the game-outcome
+    # model's wind_mph/temp_f/precip_mm entries below.
+    ("wind_speed_mph", "pre-kickoff (observed, from historical archive -- see NOTE above)"),
     ("is_dome", "static stadium attribute"),
-    ("precipitation_flag", "pre-kickoff forecast"),
-    ("temperature_bucket", "pre-kickoff forecast"),
+    ("precipitation_flag", "pre-kickoff (observed, from historical archive -- see NOTE above)"),
+    ("temperature_bucket", "pre-kickoff (observed, from historical archive -- see NOTE above)"),
     # Draft capital / combine / identity: fixed at draft time, static per player.
     ("is_rookie", "static player attribute"),
     ("rookie_draft_value", "fixed at draft time"),
@@ -308,10 +318,21 @@ FEATURE_AVAILABILITY: Tuple[Tuple[str, str], ...] = (
     ("game_week", "prediction week (schedule is fixed in advance)"),
     ("prior_season_win_pct", "prior season (fully known pre-kickoff)"),
     ("spread_line", "known pre-kickoff (Vegas line)"),
+    ("rest_days", "prediction week (schedule is fixed in advance, no lag needed)"),
     ("total_line", "known pre-kickoff (Vegas line)"),
-    ("wind_mph", "pre-kickoff forecast"),
-    ("temp_f", "pre-kickoff forecast"),
-    ("precip_mm", "pre-kickoff forecast"),
+    # Multi-bookmaker market-odds features (2026-09-19, opt-in only -- see
+    # src/models/game_outcome/market_odds.py): closing lines are the last
+    # fetch strictly BEFORE each game's commence_time (in-game/postgame
+    # fetches are dropped entirely before aggregation), so these are
+    # pre-kickoff-known by construction, same availability class as
+    # spread_line/total_line above. 2020+ only (game_odds table coverage).
+    ("market_spread_", "pre-kickoff (game_odds closing line, strictly before commence_time, 2020+ only)"),
+    ("market_total_", "pre-kickoff (game_odds closing line, strictly before commence_time, 2020+ only)"),
+    ("market_moneyline_", "pre-kickoff (game_odds closing line, strictly before commence_time, 2020+ only)"),
+    ("market_n_books_", "pre-kickoff (game_odds closing line, strictly before commence_time, 2020+ only)"),
+    ("wind_mph", "pre-kickoff (observed, from historical archive -- see NOTE above)"),
+    ("temp_f", "pre-kickoff (observed, from historical archive -- see NOTE above)"),
+    ("precip_mm", "pre-kickoff (observed, from historical archive -- see NOTE above)"),
 )
 
 

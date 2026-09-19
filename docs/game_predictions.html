@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Game Predictions</title>
+<!--
+  Win/loss, spread margin, and over/under predictions for scheduled-but-
+  not-yet-played games. Standalone from the player-projection pages --
+  src/models/game_outcome/ (see GAPS.md's 2026-09-18/19 entries), not
+  src/predict.py.
+
+  Source: docs/data/game_predictions_{season}_wk{N}.json + _meta.json,
+  written by scripts/generate_game_predictions_data.py, which calls
+  build_prediction_rows() + the saved joblib artifacts in data/models/ --
+  the same serving path as scripts/predict_upcoming_games.py.
+
+  Deliberately shows NO predicted-vs-actual comparison for played weeks --
+  unlike weekly.html, these models have no as_of replay mode (they're
+  trained once on all history and saved), so re-scoring an already-played
+  game would be in-sample, not a real prediction. All accuracy claims here
+  come from the models' own walk-forward backtest metadata instead, which
+  IS honest held-out performance -- see the note below the table.
+
+  Honest headline, per GAPS.md: these models track the market closely but
+  do not clearly beat it. Pooled walk-forward accuracy for win/loss ties
+  the Vegas-favorite baseline; margin/total MAE is close to, and only
+  occasionally better than, the market line's own MAE. Framed that way
+  below rather than oversold.
+-->
+<style>
+  :root { --bg:#0f1216; --panel:#171b21; --line:#252b33; --fg:#e6e9ee; --dim:#98a2b0;
+          --warn:#f87171; --good:#4ade80; --bar:#2b3a4a; --bar-fill:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { padding:20px 24px 12px; border-bottom:1px solid var(--line); }
+  h1 { margin:0 0 4px; font-size:20px; font-weight:600; }
+  .sub { color:var(--dim); font-size:13px; }
+  .banner { margin:12px 24px 0; padding:10px 14px; border-radius:6px;
+            background:#1a2230; border:1px solid #2c3e55; color:#c9d6e6;
+            font-size:13px; max-width:900px; }
+  .controls { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end;
+              padding:14px 24px; border-bottom:1px solid var(--line); background:var(--panel); }
+  .ctl label { display:block; font-size:11px; text-transform:uppercase;
+               letter-spacing:.04em; color:var(--dim); margin-bottom:4px; }
+  select,button { background:#0d1014; color:var(--fg); border:1px solid var(--line);
+                 border-radius:6px; padding:6px 8px; font-size:13px; }
+  button { cursor:pointer; } button:disabled { opacity:.35; cursor:default; }
+  .weeknav { display:flex; gap:4px; align-items:center; }
+  table { border-collapse:collapse; width:100%; }
+  th,td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--line);
+          white-space:nowrap; }
+  th { position:sticky; top:0; background:var(--panel); font-size:11px;
+       text-transform:uppercase; letter-spacing:.04em; color:var(--dim); }
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { color:var(--fg); }
+  th.sorted { color:var(--fg); }
+  th.sorted::after { content:" ▾"; }
+  th.sorted.asc::after { content:" ▴"; }
+  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr:hover td { background:#1b2027; }
+  .matchup { font-weight:600; }
+  .matchup .fav { color:var(--good); }
+  .probcell { width:160px; }
+  .track { position:relative; height:14px; background:var(--bar); border-radius:3px; overflow:hidden; }
+  .fill { position:absolute; top:0; bottom:0; left:0; background:var(--bar-fill); opacity:.6; }
+  .probtext { color:var(--dim); font-size:11px; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .diff { font-size:11px; color:var(--dim); margin-top:1px; }
+  .diff.hi { color:var(--warn); }
+  .note { padding:16px 24px 40px; color:var(--dim); font-size:12px; max-width:900px; }
+  .note strong { color:var(--fg); }
+  .note code { background:#0d1014; padding:1px 4px; border-radius:3px; }
+  .sitenav { display:flex; gap:6px; padding:10px 0 0; }
+  .sitenav a { border:1px solid var(--line); background:var(--panel);
+               color:var(--dim); padding:6px 14px; border-radius:8px;
+               font-size:13px; text-decoration:none; }
+  .sitenav a.current { color:var(--fg); border-color:#3b82f6; font-weight:600; }
+  #tbl-wrap { max-height:68vh; overflow:auto; }
+  .acctable { border-collapse:collapse; margin-top:6px; }
+  .acctable th, .acctable td { padding:4px 12px 4px 0; border:none; white-space:nowrap; }
+  .acctable th { position:static; text-transform:none; letter-spacing:0; font-size:11px; }
+</style>
+
+<header>
+  <h1>Game Predictions</h1>
+  <div class="sub" id="meta">loading…</div>
+  <nav class="sitenav">
+    <a href="draft.html">Draft board</a>
+    <a href="weekly.html">Weekly</a>
+    <a href="game_predictions.html" class="current">Game Predictions</a>
+  </nav>
+</header>
+<div id="banner"></div>
+
+<div class="controls">
+  <div class="ctl"><label>Week</label>
+    <div class="weeknav">
+      <button id="prev" title="previous week">‹</button>
+      <select id="week"></select>
+      <button id="next" title="next week">›</button>
+    </div></div>
+  <div class="ctl"><label>Win/loss model</label>
+    <select id="wlmodel">
+      <option value="logistic">Logistic (baseline)</option>
+      <option value="xgb">XGBoost</option>
+      <option value="rf">Random Forest</option>
+    </select></div>
+  <div class="ctl"><label>Margin/total model</label>
+    <select id="regmodel">
+      <option value="ridge">Ridge (baseline)</option>
+      <option value="xgb">XGBoost</option>
+      <option value="rf">Random Forest</option>
+    </select></div>
+</div>
+
+<div id="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th>Matchup</th>
+      <th class="probcell sortable" data-key="_homeprob" title="sort by home win probability">Home win prob.</th>
+      <th class="num">Market spread</th>
+      <th class="num sortable" data-key="_margin" title="sort by predicted margin">Predicted margin</th>
+      <th class="num">Market total</th>
+      <th class="num sortable" data-key="_total" title="sort by predicted total">Predicted total</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<div class="note">
+  <p><strong>How to read this.</strong> "Predicted margin" is home score
+  minus away score (positive = home favored, same convention as "Market
+  spread"). "Home win prob." is this model's probability the home team
+  wins outright. Both are shown next to the market's own number so you can
+  see how closely -- or not -- the model tracks the closing line.</p>
+
+  <p id="honesty"><strong>Does this beat the market?</strong> Mostly no, and
+  this page says so rather than implying otherwise. Measured on a proper
+  walk-forward backtest (train only on seasons strictly before the ones
+  being scored -- see <code>src/evaluation/game_outcome_backtester.py</code>
+  / <code>game_margin_backtester.py</code>): <span id="accline">—</span></p>
+
+  <p><strong>Why no "actual" column for played weeks.</strong> Unlike the
+  weekly player-projection page, these models are trained once on all
+  available history and saved -- they don't have a mode that replays what
+  they would have known before a specific past week. Re-scoring an
+  already-played game with the saved model would be in-sample (that game
+  was part of its training data), which would overstate accuracy if shown
+  here as if it were a real prediction. This page only ever shows
+  scheduled-but-unplayed games; all accuracy claims come from the
+  walk-forward backtest above instead.</p>
+
+  <p>Source: <code>docs/data/game_predictions_{season}_wk{N}.json</code>,
+  written by <code>scripts/generate_game_predictions_data.py</code>.</p>
+</div>
+
+<script>
+let RAW = [], META = null, SEASON = null, WEEK = null;
+let SORT = { key: "_homeprob", asc: false };
+
+const $ = id => document.getElementById(id);
+const fmt1 = v => (v == null || isNaN(v)) ? "—" : (+v).toFixed(1);
+const fmtPct = v => (v == null || isNaN(v)) ? "—" : Math.round(v * 100) + "%";
+
+function annotate(rows) {
+  const wl = $("wlmodel").value, reg = $("regmodel").value;
+  for (const r of rows) {
+    r._homeprob = r[`home_win_prob_${wl}`];
+    r._margin = r[`predicted_margin_${reg}`];
+    r._total = r[`predicted_total_${reg}`];
+  }
+  return rows;
+}
+
+function render() {
+  let rows = annotate(RAW.slice());
+  const key = SORT.key, dir = SORT.asc ? 1 : -1;
+  rows.sort((a, b) => {
+    const av = a[key], bv = b[key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return (av - bv) * dir;
+  });
+
+  document.querySelectorAll("th.sortable").forEach(th => {
+    th.classList.toggle("sorted", th.dataset.key === key);
+    th.classList.toggle("asc", th.dataset.key === key && SORT.asc);
+  });
+
+  $("rows").innerHTML = rows.map(r => {
+    const p = r._homeprob;
+    const pct = p == null ? 50 : Math.round(p * 100);
+    const favTeam = p != null && p >= 0.5 ? r.home_team : r.away_team;
+    const bar = p == null ? "—" : `
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      <div class="probtext">${r.home_team} ${fmtPct(p)}</div>`;
+
+    const marginDiff = (r._margin != null && r.spread_line != null) ? r._margin - r.spread_line : null;
+    const totalDiff = (r._total != null && r.total_line != null) ? r._total - r.total_line : null;
+    const diffCell = (v, big) => v == null ? "" :
+      `<div class="diff${Math.abs(v) >= big ? " hi" : ""}">${v > 0 ? "+" : ""}${v.toFixed(1)} vs market</div>`;
+
+    return `<tr>
+      <td class="matchup">${r.away_team} @ ${r.home_team}
+        ${p != null ? `<div class="diff">favors <span class="fav">${favTeam}</span></div>` : ""}</td>
+      <td class="probcell">${bar}</td>
+      <td class="num">${fmt1(r.spread_line)}</td>
+      <td class="num">${fmt1(r._margin)}${diffCell(marginDiff, 3)}</td>
+      <td class="num">${fmt1(r.total_line)}</td>
+      <td class="num">${fmt1(r._total)}${diffCell(totalDiff, 4)}</td>
+    </tr>`;
+  }).join("");
+}
+
+function setHash() {
+  const parts = [`wk=${WEEK}`];
+  const wl = $("wlmodel").value; if (wl !== "logistic") parts.push(`wl=${wl}`);
+  const reg = $("regmodel").value; if (reg !== "ridge") parts.push(`reg=${reg}`);
+  history.replaceState(null, "", "#" + parts.join("&"));
+}
+
+function readHash() {
+  const out = {};
+  for (const kv of location.hash.replace(/^#/, "").split("&")) {
+    const [k, v] = kv.split("="); if (k) out[k] = decodeURIComponent(v ?? "");
+  }
+  return out;
+}
+
+function loadWeek(week) {
+  WEEK = +week;
+  $("week").value = String(WEEK);
+  const weeks = META.weeks;
+  $("prev").disabled = weeks.indexOf(WEEK) <= 0;
+  $("next").disabled = weeks.indexOf(WEEK) >= weeks.length - 1;
+  return fetch(`data/game_predictions_${SEASON}_wk${week}.json`)
+    .then(r => r.ok ? r.json() : [])
+    .then(rows => {
+      RAW = rows || [];
+      $("meta").textContent = `${SEASON} Week ${WEEK} · ${RAW.length} games`
+        + ` · generated ${META.generated_at.slice(0,10)}`;
+    });
+}
+
+function applyHash() {
+  const h = readHash();
+  if (h.wl) $("wlmodel").value = h.wl;
+  if (h.reg) $("regmodel").value = h.reg;
+  const wk = (h.wk && META.weeks.includes(+h.wk)) ? +h.wk : META.weeks[0];
+  return (wk === WEEK ? Promise.resolve() : loadWeek(wk)).then(() => { render(); setHash(); });
+}
+
+fetch("data/game_predictions_meta.json")
+  .then(r => r.ok ? r.json() : null)
+  .then(meta => {
+    if (!meta || !meta.weeks || !meta.weeks.length) throw new Error("no game_predictions_meta.json");
+    META = meta; SEASON = meta.season;
+
+    $("week").innerHTML = meta.weeks.map(w => `<option value="${w}">Week ${w}</option>`).join("");
+    const goToWeek = w => loadWeek(w).then(() => { render(); setHash(); });
+    $("week").addEventListener("change", () => goToWeek(+$("week").value));
+    $("prev").addEventListener("click", () => {
+      const i = meta.weeks.indexOf(WEEK); if (i > 0) goToWeek(meta.weeks[i - 1]);
+    });
+    $("next").addEventListener("click", () => {
+      const i = meta.weeks.indexOf(WEEK); if (i < meta.weeks.length - 1) goToWeek(meta.weeks[i + 1]);
+    });
+    document.querySelectorAll("th.sortable").forEach(th => th.addEventListener("click", () => {
+      const k = th.dataset.key;
+      SORT = (SORT.key === k) ? { key: k, asc: !SORT.asc } : { key: k, asc: false };
+      render();
+    }));
+    for (const id of ["wlmodel", "regmodel"])
+      $(id).addEventListener("change", () => { render(); setHash(); });
+
+    $("banner").innerHTML =
+      `<div class="banner"><strong>Predictions for scheduled-but-unplayed games only.</strong>
+       Three model types per target (see the dropdowns above) trained on the full
+       game history back to 2006; the market's own spread/total is shown alongside
+       every prediction for comparison.</div>`;
+
+    if (meta.measured) {
+      const wl = meta.measured.win_loss || {};
+      const mg = meta.measured.margin || {};
+      const tot = meta.measured.total || {};
+      const parts = [];
+      if (wl.logistic && wl.vegas_favorite) {
+        const l = wl.logistic, v = wl.vegas_favorite;
+        parts.push(`win/loss: logistic accuracy ${(l.accuracy*100).toFixed(1)}% vs. the market-favorite `
+          + `baseline's ${(v.accuracy*100).toFixed(1)}% (pooled across walk-forward test seasons)`);
+      }
+      if (mg.ridge && mg.market_line) {
+        parts.push(`margin: ridge MAE ${mg.ridge.mae.toFixed(2)} vs. the market line's own MAE `
+          + `${mg.market_line.mae.toFixed(2)} points`);
+      }
+      if (tot.ridge && tot.market_line) {
+        parts.push(`total: ridge MAE ${tot.ridge.mae.toFixed(2)} vs. the market line's own MAE `
+          + `${tot.market_line.mae.toFixed(2)} points`);
+      }
+      const el = $("accline");
+      if (el) el.textContent = parts.length ? parts.join("; ") + "." : "no backtest data available.";
+    }
+
+    window.addEventListener("hashchange", applyHash);
+    return applyHash();
+  })
+  .catch(e => {
+    console.error("game_predictions.html failed to render:", e);
+    $("meta").textContent =
+      "Failed to render: " + (e && e.message ? e.message : e)
+      + " — data may be fine; check the console.";
+  });
+</script>

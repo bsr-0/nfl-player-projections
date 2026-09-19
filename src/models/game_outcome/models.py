@@ -1,8 +1,15 @@
 """Phase 1 models: LogisticRegression baseline, XGBoost tree-based arm.
+Phase 2 models: Ridge baseline, XGBoost tree-based arm, for margin/total
+regression -- same pipeline shape, different sklearn estimator.
+Third arm (both phases): RandomForest -- a second tree family with a
+different bias/variance tradeoff than boosting, wrapped with the same
+median-imputation pipeline as the linear arms since (unlike XGBoost)
+sklearn's RandomForest doesn't handle NaN natively.
 
-Both expose `fit(X, y)` / `predict_proba(X)` so the backtester
-(src/evaluation/game_outcome_backtester.py) and the training script treat
-every arm -- these two models plus the two baselines in baseline.py --
+All expose `fit(X, y)` / `predict_proba(X)` (classifiers) or `fit(X, y)` /
+`predict(X)` (regressors) so the backtesters (src/evaluation/
+game_outcome_backtester.py, game_margin_backtester.py) and the training
+scripts treat every arm -- these models plus the baselines in baseline.py --
 identically.
 """
 from __future__ import annotations
@@ -13,11 +20,12 @@ from typing import Optional
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from xgboost import XGBClassifier
+from xgboost import XGBClassifier, XGBRegressor
 
 from config.settings import GAME_OUTCOME_MODEL_CONFIG
 
@@ -74,6 +82,96 @@ class GameOutcomeXGBModel:
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         return self.model.predict(X)
+
+
+class GameMarginRidgeModel:
+    """StandardScaler + Ridge, fixed alpha (no inner-CV tuning in phase 2).
+
+    Used for both the margin and total targets -- same class, different `y`
+    at fit time. Same median-imputation-inside-the-pipeline discipline as
+    `GameOutcomeLogisticModel`.
+    """
+
+    def __init__(self, alpha: Optional[float] = None) -> None:
+        a = alpha if alpha is not None else GAME_OUTCOME_MODEL_CONFIG["ridge_alpha"]
+        self.pipeline = make_pipeline(
+            SimpleImputer(strategy="median"),
+            StandardScaler(),
+            Ridge(alpha=a),
+        )
+
+    def fit(self, X: pd.DataFrame, y) -> "GameMarginRidgeModel":
+        self.pipeline.fit(X, y)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return self.pipeline.predict(X)
+
+
+class GameRegressionXGBModel:
+    """XGBRegressor with fixed, conservative hyperparameters (no Optuna in phase 2).
+
+    Same shallow-depth reasoning as `GameOutcomeXGBModel`. Used for both the
+    margin and total targets.
+    """
+
+    def __init__(self, **overrides) -> None:
+        params = dict(GAME_OUTCOME_MODEL_CONFIG["xgb_regressor_params"])
+        params.update(overrides)
+        self.model = XGBRegressor(**params)
+
+    def fit(self, X: pd.DataFrame, y) -> "GameRegressionXGBModel":
+        self.model.fit(X, y)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return self.model.predict(X)
+
+
+class GameOutcomeRFModel:
+    """RandomForestClassifier, fixed conservative hyperparameters (no Optuna).
+
+    No StandardScaler needed (trees are scale-invariant) -- just the median
+    imputer, since sklearn's RandomForest can't handle NaN natively.
+    """
+
+    def __init__(self, **overrides) -> None:
+        params = dict(GAME_OUTCOME_MODEL_CONFIG["rf_params"])
+        params.update(overrides)
+        self.pipeline = make_pipeline(
+            SimpleImputer(strategy="median"),
+            RandomForestClassifier(**params),
+        )
+
+    def fit(self, X: pd.DataFrame, y) -> "GameOutcomeRFModel":
+        self.pipeline.fit(X, y)
+        return self
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        return self.pipeline.predict_proba(X)
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return self.pipeline.predict(X)
+
+
+class GameRegressionRFModel:
+    """RandomForestRegressor, fixed conservative hyperparameters (no Optuna).
+    Used for both the margin and total targets."""
+
+    def __init__(self, **overrides) -> None:
+        params = dict(GAME_OUTCOME_MODEL_CONFIG["rf_regressor_params"])
+        params.update(overrides)
+        self.pipeline = make_pipeline(
+            SimpleImputer(strategy="median"),
+            RandomForestRegressor(**params),
+        )
+
+    def fit(self, X: pd.DataFrame, y) -> "GameRegressionRFModel":
+        self.pipeline.fit(X, y)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return self.pipeline.predict(X)
 
 
 def save_model(model, path: str | Path) -> None:

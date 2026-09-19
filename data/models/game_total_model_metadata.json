@@ -1,0 +1,482 @@
+{
+  "trained_at": "2026-09-19T05:05:08.889939+00:00",
+  "target": "total",
+  "seasons_requested": null,
+  "tuned_params": {
+    "ridge": {
+      "alpha": 298.10696320471254
+    },
+    "xgboost": {
+      "n_estimators": 500,
+      "max_depth": 2,
+      "learning_rate": 0.013701784021425259,
+      "subsample": 0.5548302525774697,
+      "colsample_bytree": 0.7767162911954619,
+      "min_child_weight": 12
+    },
+    "random_forest": {
+      "n_estimators": 150,
+      "max_depth": 3,
+      "min_samples_leaf": 47
+    }
+  },
+  "config": {
+    "earliest_training_season": 2006,
+    "cv_gap_seasons": 0,
+    "n_walk_forward_test_seasons": 5,
+    "rolling_window_games": 3,
+    "min_prior_games_for_form": 3,
+    "logistic_C": 1.0,
+    "xgb_params": {
+      "n_estimators": 300,
+      "max_depth": 3,
+      "learning_rate": 0.05,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "min_child_weight": 5,
+      "eval_metric": "logloss",
+      "random_state": 42
+    },
+    "ridge_alpha": 10.0,
+    "xgb_regressor_params": {
+      "n_estimators": 300,
+      "max_depth": 3,
+      "learning_rate": 0.05,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "min_child_weight": 5,
+      "objective": "reg:squarederror",
+      "eval_metric": "rmse",
+      "random_state": 42
+    },
+    "rf_params": {
+      "n_estimators": 300,
+      "max_depth": 5,
+      "min_samples_leaf": 20,
+      "random_state": 42,
+      "n_jobs": -1
+    },
+    "rf_regressor_params": {
+      "n_estimators": 300,
+      "max_depth": 5,
+      "min_samples_leaf": 20,
+      "random_state": 42,
+      "n_jobs": -1
+    },
+    "elo_params": {
+      "initial": 1500.0,
+      "k": 20.0,
+      "home_advantage": 55.0,
+      "season_regression": 0.75,
+      "mov_multiplier": true
+    }
+  },
+  "backtest": {
+    "target": "total",
+    "n_folds": 5,
+    "n_games_total": 5433,
+    "folds": [
+      {
+        "fold": 0,
+        "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021
+        ],
+        "test_seasons": [
+          2022
+        ],
+        "n_train": 4281,
+        "n_test": 282,
+        "arms": {
+          "ridge": {
+            "n": 282,
+            "mae": 10.427035960437017,
+            "rmse": 13.262002734998067,
+            "r2": 0.07919231913557512,
+            "adj_r2": -0.030864375788459686,
+            "ou_accuracy": 0.5464285714285714,
+            "n_picks": 280
+          },
+          "xgboost": {
+            "n": 282,
+            "mae": 10.440841363676896,
+            "rmse": 13.256482183572372,
+            "r2": 0.07995876568740146,
+            "adj_r2": -0.030006322079044523,
+            "ou_accuracy": 0.5285714285714286,
+            "n_picks": 280
+          },
+          "random_forest": {
+            "n": 282,
+            "mae": 10.476859627863064,
+            "rmse": 13.234876089597627,
+            "r2": 0.08295538237610078,
+            "adj_r2": -0.026651544033130303,
+            "ou_accuracy": 0.5285714285714286,
+            "n_picks": 280
+          },
+          "market_line": {
+            "n": 282,
+            "mae": 10.450354609929079,
+            "rmse": 13.254665978921006,
+            "r2": 0.08021084895949815,
+            "adj_r2": 0.08021084895949815,
+            "ou_accuracy": NaN,
+            "n_picks": 0
+          }
+        }
+      },
+      {
+        "fold": 1,
+        "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "test_seasons": [
+          2023
+        ],
+        "n_train": 4563,
+        "n_test": 285,
+        "arms": {
+          "ridge": {
+            "n": 285,
+            "mae": 10.1012083181435,
+            "rmse": 12.84162037240138,
+            "r2": 0.11881452669831893,
+            "adj_r2": 0.014737502292608506,
+            "ou_accuracy": 0.5480427046263345,
+            "n_picks": 281
+          },
+          "xgboost": {
+            "n": 285,
+            "mae": 10.17926010667232,
+            "rmse": 12.90417200794087,
+            "r2": 0.110209096082175,
+            "adj_r2": 0.005115682233612917,
+            "ou_accuracy": 0.505338078291815,
+            "n_picks": 281
+          },
+          "random_forest": {
+            "n": 285,
+            "mae": 10.282960195235601,
+            "rmse": 13.055093102377915,
+            "r2": 0.08927423831642856,
+            "adj_r2": -0.018291796528087767,
+            "ou_accuracy": 0.501779359430605,
+            "n_picks": 281
+          },
+          "market_line": {
+            "n": 285,
+            "mae": 10.16842105263158,
+            "rmse": 13.0569602330066,
+            "r2": 0.08901371691703097,
+            "adj_r2": 0.08901371691703086,
+            "ou_accuracy": NaN,
+            "n_picks": 0
+          }
+        }
+      },
+      {
+        "fold": 2,
+        "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "test_seasons": [
+          2024
+        ],
+        "n_train": 4848,
+        "n_test": 285,
+        "arms": {
+          "ridge": {
+            "n": 285,
+            "mae": 9.76986794204313,
+            "rmse": 12.630750596011334,
+            "r2": 0.08207052275367577,
+            "adj_r2": -0.02634634463762242,
+            "ou_accuracy": 0.5177304964539007,
+            "n_picks": 282
+          },
+          "xgboost": {
+            "n": 285,
+            "mae": 9.804225212231017,
+            "rmse": 12.64014368139009,
+            "r2": 0.08070474549295281,
+            "adj_r2": -0.027873434173233846,
+            "ou_accuracy": 0.475177304964539,
+            "n_picks": 282
+          },
+          "random_forest": {
+            "n": 285,
+            "mae": 9.783184095073215,
+            "rmse": 12.609475943171294,
+            "r2": 0.08516015456134918,
+            "adj_r2": -0.02289179568731048,
+            "ou_accuracy": 0.5,
+            "n_picks": 282
+          },
+          "market_line": {
+            "n": 285,
+            "mae": 9.76842105263158,
+            "rmse": 12.586612213679416,
+            "r2": 0.088474755045024,
+            "adj_r2": 0.08847475504502389,
+            "ou_accuracy": NaN,
+            "n_picks": 0
+          }
+        }
+      },
+      {
+        "fold": 3,
+        "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "test_seasons": [
+          2025
+        ],
+        "n_train": 5133,
+        "n_test": 284,
+        "arms": {
+          "ridge": {
+            "n": 284,
+            "mae": 10.337309253901195,
+            "rmse": 13.123629221304412,
+            "r2": 0.08234747634579798,
+            "adj_r2": -0.026465075866162646,
+            "ou_accuracy": 0.5176056338028169,
+            "n_picks": 284
+          },
+          "xgboost": {
+            "n": 284,
+            "mae": 10.288305806442045,
+            "rmse": 13.045999090061153,
+            "r2": 0.09317173681468593,
+            "adj_r2": -0.014357306250766255,
+            "ou_accuracy": 0.5598591549295775,
+            "n_picks": 284
+          },
+          "random_forest": {
+            "n": 284,
+            "mae": 10.298576519141518,
+            "rmse": 13.067055288088591,
+            "r2": 0.09024213909405221,
+            "adj_r2": -0.017634287100328994,
+            "ou_accuracy": 0.5563380281690141,
+            "n_picks": 284
+          },
+          "market_line": {
+            "n": 284,
+            "mae": 10.345070422535212,
+            "rmse": 13.119574666757293,
+            "r2": 0.08291440755020307,
+            "adj_r2": 0.08291440755020307,
+            "ou_accuracy": NaN,
+            "n_picks": 0
+          }
+        }
+      },
+      {
+        "fold": 4,
+        "train_seasons": [
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "test_seasons": [
+          2026
+        ],
+        "n_train": 5417,
+        "n_test": 16,
+        "arms": {
+          "ridge": {
+            "n": 16,
+            "mae": 11.997398159798442,
+            "rmse": 16.72342748634951,
+            "r2": 0.07506692050919506,
+            "adj_r2": NaN,
+            "ou_accuracy": 0.3125,
+            "n_picks": 16
+          },
+          "xgboost": {
+            "n": 16,
+            "mae": 11.84851622581482,
+            "rmse": 16.506849768178064,
+            "r2": 0.09886859259607983,
+            "adj_r2": NaN,
+            "ou_accuracy": 0.5625,
+            "n_picks": 16
+          },
+          "random_forest": {
+            "n": 16,
+            "mae": 11.854433131556302,
+            "rmse": 16.479449409611583,
+            "r2": 0.10185775539614528,
+            "adj_r2": NaN,
+            "ou_accuracy": 0.4375,
+            "n_picks": 16
+          },
+          "market_line": {
+            "n": 16,
+            "mae": 11.6875,
+            "rmse": 16.492422502470642,
+            "r2": 0.10044311238001735,
+            "adj_r2": 0.10044311238001735,
+            "ou_accuracy": NaN,
+            "n_picks": 0
+          }
+        }
+      }
+    ],
+    "pooled": {
+      "ridge": {
+        "n": 1152,
+        "mae": 10.183537390330851,
+        "rmse": 13.025503348533588,
+        "r2": 0.09655695255057062,
+        "adj_r2": 0.07237917251178116,
+        "ou_accuracy": 0.5293088363954506,
+        "n_picks": 1143
+      },
+      "xgboost": {
+        "n": 1152,
+        "mae": 10.200577855110168,
+        "rmse": 13.018611702911938,
+        "r2": 0.09751270252008093,
+        "adj_r2": 0.07336050008975314,
+        "ou_accuracy": 0.5179352580927384,
+        "n_picks": 1143
+      },
+      "random_forest": {
+        "n": 1152,
+        "mae": 10.232458506368479,
+        "rmse": 13.047789581839243,
+        "r2": 0.0934627815825484,
+        "adj_r2": 0.06920219589787091,
+        "ou_accuracy": 0.5205599300087489,
+        "n_picks": 1143
+      },
+      "market_line": {
+        "n": 1152,
+        "mae": 10.203125,
+        "rmse": 13.060921621811804,
+        "r2": 0.09163708172889884,
+        "adj_r2": 0.09163708172889895,
+        "ou_accuracy": NaN,
+        "n_picks": 0
+      }
+    }
+  },
+  "feature_columns": [
+    "spread_line",
+    "total_line",
+    "home_minus_away_total_yards_s2d",
+    "home_minus_away_total_yards_roll3",
+    "home_minus_away_passing_yards_s2d",
+    "home_minus_away_passing_yards_roll3",
+    "home_minus_away_rushing_yards_s2d",
+    "home_minus_away_rushing_yards_roll3",
+    "home_minus_away_drive_success_rate_s2d",
+    "home_minus_away_drive_success_rate_roll3",
+    "home_minus_away_avg_drive_epa_s2d",
+    "home_minus_away_avg_drive_epa_roll3",
+    "home_minus_away_points_per_drive_s2d",
+    "home_minus_away_points_per_drive_roll3",
+    "home_minus_away_neutral_pass_rate_oe_s2d",
+    "home_minus_away_neutral_pass_rate_oe_roll3",
+    "home_minus_away_points_scored_s2d",
+    "home_minus_away_points_scored_roll3",
+    "home_minus_away_points_allowed_s2d",
+    "home_minus_away_points_allowed_roll3",
+    "home_minus_away_win_pct_s2d",
+    "home_minus_away_win_pct_roll3",
+    "home_minus_away_rest_days",
+    "home_minus_away_elo_pre",
+    "is_cold_start",
+    "game_week",
+    "is_dome",
+    "temp_f",
+    "wind_mph",
+    "precip_mm"
+  ],
+  "n_training_games": 5433
+}

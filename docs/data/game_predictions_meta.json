@@ -1,0 +1,116 @@
+{
+  "season": 2026,
+  "weeks": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "counts": {
+    "2": 16,
+    "3": 16,
+    "4": 16,
+    "5": 15,
+    "6": 14,
+    "7": 14,
+    "8": 14,
+    "9": 15,
+    "10": 14,
+    "11": 13,
+    "12": 16,
+    "13": 14,
+    "14": 15,
+    "15": 16,
+    "16": 16,
+    "17": 16,
+    "18": 16
+  },
+  "generated_at": "2026-09-19T12:57:11+00:00",
+  "measured": {
+    "win_loss": {
+      "logistic": {
+        "accuracy": 0.6762,
+        "log_loss": 0.6095,
+        "roc_auc": 0.7184
+      },
+      "xgboost": {
+        "accuracy": 0.6615,
+        "log_loss": 0.6193,
+        "roc_auc": 0.7079
+      },
+      "random_forest": {
+        "accuracy": 0.6606,
+        "log_loss": 0.6214,
+        "roc_auc": 0.7067
+      },
+      "vegas_favorite": {
+        "accuracy": 0.6762,
+        "log_loss": 0.606,
+        "roc_auc": 0.7243
+      },
+      "home_field": {
+        "accuracy": 0.5547,
+        "log_loss": 0.6876,
+        "roc_auc": 0.5
+      }
+    },
+    "margin": {
+      "ridge": {
+        "mae": 9.6564,
+        "rmse": 12.4929,
+        "ats_accuracy": 0.4679
+      },
+      "xgboost": {
+        "mae": 9.673,
+        "rmse": 12.5594,
+        "ats_accuracy": 0.4964
+      },
+      "random_forest": {
+        "mae": 9.7037,
+        "rmse": 12.5344,
+        "ats_accuracy": 0.484
+      },
+      "market_line": {
+        "mae": 9.5707,
+        "rmse": 12.4508,
+        "ats_accuracy": null
+      }
+    },
+    "total": {
+      "ridge": {
+        "mae": 10.1835,
+        "rmse": 13.0255,
+        "ou_accuracy": 0.5293
+      },
+      "xgboost": {
+        "mae": 10.2006,
+        "rmse": 13.0186,
+        "ou_accuracy": 0.5179
+      },
+      "random_forest": {
+        "mae": 10.2325,
+        "rmse": 13.0478,
+        "ou_accuracy": 0.5206
+      },
+      "market_line": {
+        "mae": 10.2031,
+        "rmse": 13.0609,
+        "ou_accuracy": null
+      }
+    }
+  },
+  "model": "phase-1 win/loss classifiers (logistic/xgboost/random_forest) + phase-2 margin/total regressors (ridge/xgboost/random_forest), src/models/game_outcome/ -- see GAPS.md 2026-09-18/19 entries"
+}
