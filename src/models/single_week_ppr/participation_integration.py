@@ -79,6 +79,31 @@ def validate_phase2_manifest(oof_path: Path) -> dict:
     return manifest
 
 
+def deduplicate_ppr_player_weeks(ppr: pd.DataFrame) -> pd.DataFrame:
+    """Collapse feature-preparation duplicates without changing PPR truth.
+
+    Phase 2 OOF data is one row per player-week.  The Phase 7 preparation
+    chain can occasionally duplicate an otherwise valid player-week during a
+    feature merge.  Those copies are usable only when they agree on the
+    observed PPR target.  Keep the most feature-complete copy deterministically
+    and fail loudly on competing outcomes rather than letting an inner merge
+    fabricate a one-to-many comparison population.
+    """
+    if not ppr.duplicated(KEY).any():
+        return ppr
+    duplicate = ppr[ppr.duplicated(KEY, keep=False)]
+    conflicting = duplicate.groupby(KEY, dropna=False)["fantasy_points"].nunique(dropna=False)
+    if conflicting.gt(1).any():
+        examples = conflicting[conflicting.gt(1)].index.tolist()[:3]
+        raise ValueError(f"PPR duplicate player-weeks disagree on fantasy_points: {examples}")
+    out = ppr.copy()
+    out["_phase3_non_null_features"] = out.notna().sum(axis=1)
+    return (out.sort_values(KEY + ["_phase3_non_null_features"], ascending=[True, True, True, False],
+                            kind="mergesort")
+               .drop_duplicates(KEY, keep="first")
+               .drop(columns="_phase3_non_null_features"))
+
+
 def attach_phase2_oof(ppr: pd.DataFrame, oof: pd.DataFrame) -> pd.DataFrame:
     """Inner-join one PPR population to valid Phase 2 OOF predictions.
 
@@ -87,8 +112,7 @@ def attach_phase2_oof(ppr: pd.DataFrame, oof: pd.DataFrame) -> pd.DataFrame:
     arms train on different information regimes.  The caller must use this
     exact matched frame for *both* arms.
     """
-    if ppr.duplicated(KEY).any():
-        raise ValueError("PPR frame has duplicate player/season/week rows")
+    ppr = deduplicate_ppr_player_weeks(ppr)
     matched = ppr.merge(oof, on=KEY, how="inner", validate="one_to_one")
     if matched.empty:
         raise ValueError("no PPR rows match the Phase 2 OOF population")
@@ -130,7 +154,15 @@ def paired_bootstrap_mae_delta(rows: pd.DataFrame, n_bootstrap: int = 2000, seed
 
 
 def _feature_matrix(df: pd.DataFrame, features: Sequence[str]) -> tuple[pd.DataFrame, pd.Series]:
-    usable = df.dropna(subset=["fantasy_points", *features]).copy()
+    """Return the matched PPR matrix without changing production missingness.
+
+    Phase 7's fold path intentionally retains structurally missing causal
+    features (LightGBM handles them natively; its sklearn fallback applies its
+    own imputation).  Requiring every feature here removed all older matched
+    QB/WR training rows and made Phase 3 compare an empty population.  Only
+    the observed target is required at this boundary.
+    """
+    usable = df.dropna(subset=["fantasy_points"]).copy()
     return usable[list(features)], usable["fantasy_points"]
 
 
@@ -160,7 +192,9 @@ def run_participation_integration(
     phase2_manifest = validate_phase2_manifest(oof_path)
     oof = validate_phase2_oof(pd.read_csv(oof_path), model=phase2_model)
     positions = list(positions) if positions is not None else list(POSITIONS)
-    fold_loader = fold_loader or run_fold
+    if fold_loader is None:
+        from functools import partial
+        fold_loader = partial(run_fold, fit_existing_models=False)
     row_frames, summary_rows, failures = [], [], []
 
     for position in positions:
@@ -195,7 +229,13 @@ def run_participation_integration(
                     if len(X_train) < 20 or len(X_test) < 20:
                         raise ValueError(f"insufficient matched rows for {arm}: train={len(X_train)}, test={len(X_test)}")
                     model = _architectures_for_fold()[cfg["architecture"]]
-                    model.fit(X_train, y_train, sample_weight=weights.reindex(X_train.index))
+                    # The production "none" weighting deliberately returns
+                    # None; sklearn models accept omitted sample_weight, not
+                    # None.reindex(...).
+                    fit_kwargs = {}
+                    if weights is not None:
+                        fit_kwargs["sample_weight"] = pd.Series(weights, index=train.index).reindex(X_train.index)
+                    model.fit(X_train, y_train, **fit_kwargs)
                     pred = pd.Series(model.predict(X_test), index=X_test.index)
                     metrics = compute_metrics(y_test, pred)
                     summary_rows.append({"position": position, "season": season, "arm": arm,

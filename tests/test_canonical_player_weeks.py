@@ -122,3 +122,47 @@ def test_mapped_snap_row_cannot_be_unknown():
     with pytest.raises(ValueError, match="classified as unknown"):
         audit_panel(conn, df, 2025, 2025)
     conn.close()
+
+
+def test_stats_only_nonfantasy_positions_are_excluded_but_missing_positions_fail():
+    from scripts.build_canonical_player_weeks import build_panel
+    with sqlite3.connect(":memory:") as conn:
+        pd.DataFrame({"season": [2025], "week": [1], "home_team": ["KC"],
+                      "away_team": ["LV"]}).to_sql("schedule", conn, index=False)
+        pd.DataFrame({"player_id": ["qb", "kicker", "defense", "missing"],
+                      "position": ["QB", "K", "DST", None]}).to_sql("players", conn, index=False)
+        pd.DataFrame({"player_id": ["qb", "kicker", "defense", "missing"],
+                      "season": [2025]*4, "week": [1]*4, "team": ["KC"]*4,
+                      "fantasy_points": [10., 3., 5., 1.]}).to_sql("player_weekly_stats", conn, index=False)
+        panel = build_panel(conn, 2025, 2025)
+        assert set(panel.player_id) == {"qb", "missing"}
+        with pytest.raises(ValueError, match="missing fantasy position"):
+            validate_panel(panel)
+
+
+def test_missing_id_mapping_fails_before_snap_labels_are_lost(monkeypatch):
+    from scripts import build_canonical_player_weeks as builder
+    with sqlite3.connect(":memory:") as conn:
+        pd.DataFrame({"season": [2025], "week": [1], "team": ["KC"],
+                      "position": ["QB"], "game_type": ["REG"], "pfr_player_id": ["pfr"],
+                      "offense_snaps": [50], "offense_pct": [.8]}).to_sql("snap_counts", conn, index=False)
+        monkeypatch.setattr(builder, "get_pfr_to_gsis_map", lambda: {})
+        with pytest.raises(ValueError, match="mapping unavailable"):
+            builder.load_snaps(conn, 2025, 2025)
+
+
+def test_missing_player_identity_is_rejected():
+    panel = _base()
+    panel.loc[0, 'player_id'] = None
+    with pytest.raises(ValueError, match='identity'):
+        validate_panel(panel)
+
+
+def test_unidentified_roster_rows_are_excluded_with_diagnostic(capsys):
+    from scripts.build_canonical_player_weeks import load_rosters
+    with sqlite3.connect(':memory:') as conn:
+        pd.DataFrame({'player_id': ['known', None], 'season': [2025, 2025],
+                      'week': [1, 1], 'team': ['KC', 'KC'], 'position': ['WR', 'WR']
+                      }).to_sql('weekly_rosters', conn, index=False)
+        assert load_rosters(conn, 2025, 2025).player_id.tolist() == ['known']
+        assert 'excluding 1 roster rows without player IDs' in capsys.readouterr().out

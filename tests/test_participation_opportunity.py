@@ -5,10 +5,10 @@ import pytest
 from src.models.participation_opportunity import (
     FEATURES, add_targets, build_causal_features, expanding_season_folds,
     normalize_snap_share, target_name, validate_causal_contract,
-    predict_preseason,
+    TEAM_COMPETITION_FEATURES, predict_preseason,
     predict_asof_week,
 )
-from scripts.run_phase2_participation import evaluate, summarize
+from scripts.run_phase2_participation import evaluate, position_platt_gbm_probability, summarize
 
 
 def _panel():
@@ -83,6 +83,31 @@ def test_first_player_row_is_cold_start_and_has_no_usage_history():
     assert pd.isna(first.snap_share_lag1)
 
 
+def test_team_competition_features_exclude_focal_player_and_use_lagged_history():
+    frame = build_causal_features(_panel())
+    lead = frame[(frame.player_id.eq("lead")) & (frame.season.eq(2021)) & (frame.week.eq(2))].iloc[0]
+    depth = frame[(frame.player_id.eq("depth")) & (frame.season.eq(2021)) & (frame.week.eq(2))].iloc[0]
+    assert set(TEAM_COMPETITION_FEATURES) <= set(frame)
+    # At week 2, lead's only peer had a 0% Week-1 share; depth's had 80%.
+    assert lead.peer_history_count == 1
+    assert lead.peer_snap_share_lag1_sum == 0
+    assert depth.peer_history_count == 1
+    assert depth.peer_snap_share_lag1_sum == pytest.approx(.8)
+
+
+def test_teammate_current_outcome_never_enters_same_week_competition_features():
+    panel = _panel()
+    before = build_causal_features(panel)
+    current = panel.player_id.eq("depth") & panel.season.eq(2025) & panel.week.eq(3)
+    panel.loc[current, ["offense_snaps", "offense_pct"]] = [50, 90.]
+    after = build_causal_features(panel)
+    lead_week = before.player_id.eq("lead") & before.season.eq(2025) & before.week.eq(3)
+    pd.testing.assert_frame_equal(
+        before.loc[lead_week, TEAM_COMPETITION_FEATURES],
+        after.loc[lead_week, TEAM_COMPETITION_FEATURES],
+    )
+
+
 def test_future_outcome_change_cannot_change_past_features():
     panel = _panel()
     before = build_causal_features(panel)
@@ -129,6 +154,31 @@ def test_evaluation_harness_produces_strict_oof_metrics():
         row["threshold"] == .10 and row["model"] == "logistic" and row["segment"] == "all"
         for row in summary["classification"]
     )
+    assert any(
+        row["threshold"] == .10 and row["model"] == "hist_gbm_platt_position" and row["segment"] == "all"
+        for row in summary["classification"]
+    )
+    assert any(
+        row["threshold"] == .10 and row["model"] == "hist_gbm_team_competition" and row["segment"] == "all"
+        for row in summary["classification"]
+    )
+
+
+def test_position_platt_calibration_reserves_latest_training_season():
+    frame = build_causal_features(_panel())
+    observed = frame[frame.label_observed.eq(1)]
+    fold = list(expanding_season_folds(observed, min_train_seasons=3))[0]
+    train, test = observed.loc[fold.train_index], observed.loc[fold.test_index]
+    target = target_name(.10)
+    probability, modes = position_platt_gbm_probability(train, test, target)
+    assert len(probability) == len(test)
+    assert np.isfinite(probability).all()
+    assert set(modes) == {"RB"}
+    # The calibration season is the latest *training* season, never held out.
+    assert modes["RB"] in {
+        f"platt_holdout_{int(train.season.max())}",
+        "raw_fallback_insufficient_calibration_classes",
+    }
 
 
 def test_preseason_prediction_excludes_target_season_from_training():
@@ -157,3 +207,48 @@ def test_asof_week_prediction_excludes_target_week_outcome():
     after = build_causal_features(panel)
     prediction_after = predict_asof_week(after, 2025, 2)
     pd.testing.assert_frame_equal(prediction_before, prediction_after)
+
+
+def test_percent_strings_preserve_one_percent():
+    assert normalize_snap_share(pd.Series(["1%", "0.5%", "100%", 1.0])).tolist() == [.01, .005, 1., 1.]
+
+
+def test_baselines_use_history_of_the_scored_threshold():
+    from scripts.run_phase2_participation import baseline_probability
+    panel = _panel()
+    panel.loc[panel.player_id.eq("lead"), "offense_pct"] = 5.0
+    frame = build_causal_features(panel)
+    train = frame[frame.season.lt(2025) & frame.label_observed.eq(1)]
+    test = frame[frame.player_id.eq("lead") & frame.season.eq(2025)]
+    for mode in ("previous_game", "rolling3"):
+        assert (baseline_probability(train, test, target_name(.10), mode) == 0).all()
+        assert (baseline_probability(train, test, target_name(0), mode) == 1).all()
+
+
+def test_unidentified_player_is_not_silently_dropped_from_features():
+    panel = _panel()
+    panel.loc[0, 'player_id'] = None
+    with pytest.raises(ValueError, match='identity'):
+        build_causal_features(panel)
+
+
+def test_calibration_error_distinguishes_calibrated_and_overconfident_predictions():
+    from scripts.run_phase2_participation import classification_metrics
+    assert classification_metrics(pd.Series([0, 1]), np.array([.5, .5]))['ece'] == 0
+    assert classification_metrics(pd.Series([0, 0]), np.array([1., 1.]))['ece'] == 1
+
+
+def test_opportunity_reports_matched_cold_start_and_position_baselines():
+    panel = _panel()
+    panel = pd.concat([panel.assign(player_id=panel.player_id + f'_{copy}')
+                       for copy in range(10)], ignore_index=True)
+    debut = panel[panel.season.eq(2025) & panel.player_id.str.startswith('lead')].copy()
+    debut['player_id'] = 'debut_' + debut.player_id
+    frame = build_causal_features(pd.concat([panel, debut], ignore_index=True))
+    _, report = evaluate(frame, min_train_seasons=4)
+    opportunity = pd.DataFrame(report['opportunity'])
+    for segment in ['all', 'position:RB', 'cold_start', 'has_history']:
+        rows = opportunity[opportunity.segment.eq(segment)]
+        assert set(rows.model) == {'rolling3', 'hist_gbm_mae', 'hist_gbm_team_competition_mae'}
+        assert rows.n.nunique() == 1
+        assert rows.n.iloc[0] > 0

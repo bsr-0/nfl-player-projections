@@ -39,15 +39,28 @@ NUMERIC_FEATURES = [
 ]
 CATEGORICAL_FEATURES = ["position", "status_lag1"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+TEAM_COMPETITION_FEATURES = [
+    "peer_history_count",
+    "peer_snap_share_lag1_mean",
+    "peer_snap_share_lag1_max",
+    "peer_snap_share_lag1_sum",
+    "peer_snap_share_lag1_hhi",
+    "peer_snap_share_roll3_mean",
+    "peer_snap_share_roll3_max",
+    "peer_meaningful_10_lag1_count",
+]
+TEAM_COMPETITION_MODEL_FEATURES = FEATURES + TEAM_COMPETITION_FEATURES
 
 
 def normalize_snap_share(values: pd.Series) -> pd.Series:
     """Return snap share on [0, 1], accepting fractions, percentages or 'N%'."""
-    raw = values.astype("string").str.rstrip("%")
+    text = values.astype("string")
+    percent = text.str.endswith("%").fillna(False)
+    raw = text.str.rstrip("%")
     out = pd.to_numeric(raw, errors="coerce")
     # Normalize row-wise rather than guessing one dataset-wide unit.  This is
     # robust to migrations that temporarily mix 0.72, 72 and "72%".
-    out = out.where(out <= 1, out / 100.0)
+    out = out.where((out <= 1) & ~percent, out / 100.0)
     invalid = out.notna() & ~out.between(0, 1)
     if invalid.any():
         examples = sorted(out[invalid].unique())[:5]
@@ -61,6 +74,8 @@ def add_targets(panel: pd.DataFrame, thresholds: Sequence[float] = TARGET_THRESH
     missing = required - set(panel.columns)
     if missing:
         raise ValueError(f"canonical panel missing required columns: {sorted(missing)}")
+    if panel[KEY].isna().any().any():
+        raise ValueError("canonical panel missing player/week identity")
     out = panel.copy()
     out["snap_share"] = normalize_snap_share(out["offense_pct"])
     observed = out["participation_state"].isin(["confirmed_played", "confirmed_zero_snaps"])
@@ -81,6 +96,83 @@ def add_targets(panel: pd.DataFrame, thresholds: Sequence[float] = TARGET_THRESH
 
 def target_name(threshold: float) -> str:
     return "meaningful_any_snap" if threshold == 0 else f"meaningful_snap_share_{int(round(threshold * 100)):02d}"
+
+
+def team_grouping_provenance(panel: pd.DataFrame) -> dict:
+    """Summarize whether current team can safely form a non-model group key.
+
+    ``team`` is never supplied as a categorical predictor.  It only groups
+    players whose own *lagged* histories become peer aggregates.  Canonical
+    construction resolves it roster-first, so retain the roster-source
+    coverage in the experiment artifact for audit rather than assuming it.
+    """
+    if "team" not in panel:
+        raise ValueError("team grouping requires canonical team column")
+    team = panel["team"].astype("string").str.strip()
+    has_team = team.notna() & team.ne("")
+    roster_source = panel.get("roster_source", pd.Series(index=panel.index, dtype="object"))
+    return {
+        "grouping_key": ["season", "week", "team", "position"],
+        "team_is_model_feature": False,
+        "current_week_outcomes_used": False,
+        "rows": int(len(panel)),
+        "rows_with_team": int(has_team.sum()),
+        "team_coverage": float(has_team.mean()) if len(panel) else 0.0,
+        "roster_backed_team_rows": int((has_team & roster_source.notna()).sum()),
+        "roster_backed_team_coverage": float((has_team & roster_source.notna()).mean()) if len(panel) else 0.0,
+        "roster_sources": roster_source.dropna().value_counts().to_dict(),
+    }
+
+
+def _add_team_competition_features(frame: pd.DataFrame) -> pd.DataFrame:
+    """Add team-position peer signals assembled exclusively from lagged data."""
+    out = frame.copy()
+    for feature in TEAM_COMPETITION_FEATURES:
+        out[feature] = np.nan
+
+    valid = (
+        out["team"].notna() & out["team"].astype("string").str.strip().ne("")
+        & out["position"].isin(POSITIONS)
+    )
+    group_columns = ["season", "week", "team", "position"]
+    group = out.loc[valid, group_columns]
+
+    def peer_statistics(values: pd.Series) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+        """Return peer count, sum, mean and max for a lagged numeric signal."""
+        known = values.notna()
+        count = known.groupby([group[c] for c in group_columns], sort=False).transform("sum") - known.astype(int)
+        total = values.fillna(0).groupby([group[c] for c in group_columns], sort=False).transform("sum") - values.fillna(0)
+        mean = total / count.replace(0, np.nan)
+        first_max = values.groupby([group[c] for c in group_columns], sort=False).transform("max")
+        max_ties = values.eq(first_max).groupby([group[c] for c in group_columns], sort=False).transform("sum")
+        second_max = values.where(values.lt(first_max)).groupby(
+            [group[c] for c in group_columns], sort=False
+        ).transform("max")
+        peer_max = first_max.where(values.ne(first_max) | max_ties.gt(1), second_max)
+        peer_max = peer_max.where(count.gt(0))
+        return count.astype(float), total, mean, peer_max
+
+    lag1 = pd.to_numeric(out.loc[valid, "snap_share_lag1"], errors="coerce")
+    count, total, mean, peer_max = peer_statistics(lag1)
+    out.loc[valid, "peer_history_count"] = count
+    out.loc[valid, "peer_snap_share_lag1_sum"] = total.where(count.gt(0))
+    out.loc[valid, "peer_snap_share_lag1_mean"] = mean
+    out.loc[valid, "peer_snap_share_lag1_max"] = peer_max
+    peer_square_sum = (lag1.fillna(0) ** 2).groupby([group[c] for c in group_columns], sort=False).transform("sum") - lag1.fillna(0) ** 2
+    peer_total = total.where(count.gt(0))
+    out.loc[valid, "peer_snap_share_lag1_hhi"] = (peer_square_sum / peer_total.pow(2)).where(peer_total.gt(0), 0.0)
+
+    roll3 = pd.to_numeric(out.loc[valid, "snap_share_roll3"], errors="coerce")
+    roll3_count, _, roll3_mean, roll3_max = peer_statistics(roll3)
+    out.loc[valid, "peer_snap_share_roll3_mean"] = roll3_mean.where(roll3_count.gt(0))
+    out.loc[valid, "peer_snap_share_roll3_max"] = roll3_max
+
+    meaningful = pd.to_numeric(out.loc[valid, f"{target_name(PRIMARY_THRESHOLD)}_lag1"], errors="coerce")
+    meaningful_known = meaningful.notna()
+    peer_known = meaningful_known.groupby([group[c] for c in group_columns], sort=False).transform("sum") - meaningful_known.astype(int)
+    peer_positive = meaningful.ge(1).groupby([group[c] for c in group_columns], sort=False).transform("sum") - meaningful.ge(1).astype(int)
+    out.loc[valid, "peer_meaningful_10_lag1_count"] = peer_positive.where(peer_known.gt(0))
+    return out
 
 
 def build_causal_features(panel: pd.DataFrame, include_pregame_injury: bool = False) -> pd.DataFrame:
@@ -133,6 +225,11 @@ def build_causal_features(panel: pd.DataFrame, include_pregame_injury: bool = Fa
         g["snap_share_roll5"] = prior_share.rolling(5, min_periods=1).mean()
         g["snap_share_roll3_known"] = prior_share.notna().astype(int).rolling(3, min_periods=1).sum()
         g["played_roll3"] = prior_played.rolling(3, min_periods=1).mean()
+        for threshold in TARGET_THRESHOLDS:
+            target = target_name(threshold)
+            prior_target = g[target].astype(float).shift(1)
+            g[f"{target}_lag1"] = prior_target
+            g[f"{target}_roll3"] = prior_target.rolling(3, min_periods=1).mean()
         g["cold_start"] = g["prior_games_observed"].eq(0).astype("int8")
 
         # Schedule distance since the last observed label.  This is a count of
@@ -143,43 +240,50 @@ def build_causal_features(panel: pd.DataFrame, include_pregame_injury: bool = Fa
         parts.append(g)
 
     result = pd.concat(parts).sort_values(["season", "week", "player_id"]).reset_index(drop=True)
+    result = _add_team_competition_features(result)
     absent = set(FEATURES) - set(result.columns)
     if absent:
         raise AssertionError(f"feature builder failed to create: {sorted(absent)}")
     return result
 
 
-def _preprocessor(scale: bool) -> ColumnTransformer:
+def _preprocessor(scale: bool, feature_columns: Sequence[str] = FEATURES) -> ColumnTransformer:
+    numeric_features = [c for c in feature_columns if c in NUMERIC_FEATURES or c in TEAM_COMPETITION_FEATURES]
+    categorical_features = [c for c in feature_columns if c in CATEGORICAL_FEATURES]
     numeric_steps = [("impute", SimpleImputer(
         strategy="median", add_indicator=True, keep_empty_features=True
     ))]
     if scale:
         numeric_steps.append(("scale", StandardScaler()))
     return ColumnTransformer([
-        ("numeric", Pipeline(numeric_steps), NUMERIC_FEATURES),
+        ("numeric", Pipeline(numeric_steps), numeric_features),
         ("categorical", Pipeline([
             ("impute", SimpleImputer(strategy="most_frequent")),
             ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
-        ]), CATEGORICAL_FEATURES),
+        ]), categorical_features),
     ], remainder="drop")
 
 
-def make_classifier(kind: str, random_state: int = 42) -> Pipeline:
+def make_classifier(
+    kind: str, random_state: int = 42, feature_columns: Sequence[str] = FEATURES,
+) -> Pipeline:
     if kind == "logistic":
         model = LogisticRegression(max_iter=2000, C=1.0, class_weight=None, random_state=random_state)
-        return Pipeline([("features", _preprocessor(scale=True)), ("model", model)])
+        return Pipeline([("features", _preprocessor(scale=True, feature_columns=feature_columns)), ("model", model)])
     if kind == "hist_gbm":
         model = HistGradientBoostingClassifier(
             learning_rate=0.05, max_iter=200, max_leaf_nodes=15,
             min_samples_leaf=30, l2_regularization=1.0, random_state=random_state,
         )
-        return Pipeline([("features", _preprocessor(scale=False)), ("model", model)])
+        return Pipeline([("features", _preprocessor(scale=False, feature_columns=feature_columns)), ("model", model)])
     raise ValueError(f"unknown classifier: {kind}")
 
 
-def make_opportunity_regressor(random_state: int = 42) -> Pipeline:
+def make_opportunity_regressor(
+    random_state: int = 42, feature_columns: Sequence[str] = FEATURES,
+) -> Pipeline:
     return Pipeline([
-        ("features", _preprocessor(scale=False)),
+        ("features", _preprocessor(scale=False, feature_columns=feature_columns)),
         ("model", HistGradientBoostingRegressor(
             loss="absolute_error", learning_rate=0.05, max_iter=200,
             max_leaf_nodes=15, min_samples_leaf=30,
@@ -279,3 +383,6 @@ def validate_causal_contract(frame: pd.DataFrame) -> None:
         raise ValueError(f"current-game/leaky features declared: {sorted(overlap)}")
     if frame[FEATURES].shape[1] != len(FEATURES):
         raise ValueError("feature contract contains duplicate columns")
+    missing = set(TEAM_COMPETITION_FEATURES) - set(frame.columns)
+    if missing:
+        raise ValueError(f"team competition features missing: {sorted(missing)}")

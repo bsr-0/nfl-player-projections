@@ -62,6 +62,10 @@ Participation baselines:
 - previous observed participation;
 - rolling-three participation.
 
+History baselines use the same snap threshold as the scored target (including
+the primary 10% threshold), with prior-season position-rate fallback when
+history is missing. Unknown weeks remain unlabeled in that history.
+
 Candidates:
 
 - regularized logistic regression;
@@ -74,8 +78,12 @@ gradient-boosting absolute-error regressor. Predictions are clipped to `[0,1]`.
 
 Validation is expanding-season walk-forward. For held-out season `S`, all
 training seasons are `< S`. The runner reports Brier score and log loss for
-participation, MAE/RMSE for opportunity, calibration bins, label coverage by
+participation, MAE/RMSE for opportunity, calibration bins and ten-bin expected
+calibration error for candidates and baselines, label coverage by
 season/position, and causal feature ablations.
+Conditional opportunity includes both position and cold-start comparisons
+against rolling-three snap share. Summary metrics are equal-weight season
+averages; fold metrics retain their sample counts.
 
 ```bash
 python scripts/build_canonical_player_weeks.py --write --seasons 2013 2026

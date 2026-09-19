@@ -29,3 +29,17 @@ def test_partial_phase3_uses_same_durable_phase2_location(tmp_path):
     assert command[command.index("--phase2-oof") + 1] == str(
         tmp_path / "participation" / "phase2" / "oof_predictions.csv"
     )
+
+
+def test_phase3_entrypoint_runs_directly_from_clean_environment():
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    env = os.environ.copy()
+    env.pop('PYTHONPATH', None)
+    result = subprocess.run([sys.executable, 'scripts/run_phase3_participation_integration.py', '--help'],
+                            cwd=Path(__file__).resolve().parents[1], env=env,
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert '--phase2-model' in result.stdout

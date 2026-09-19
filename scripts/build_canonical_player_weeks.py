@@ -116,7 +116,10 @@ def load_snaps(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
         return snaps.assign(player_id=[], has_snap_row=[])
     snaps["team"] = _norm_team(snaps["team"])
     snaps["position"] = snaps["position"].replace(POSITION_ALIASES)
-    snaps["player_id"] = snaps["pfr_player_id"].map(get_pfr_to_gsis_map())
+    mapping = get_pfr_to_gsis_map()
+    if not mapping:
+        raise ValueError("PFR-to-GSIS mapping unavailable; cannot audit authoritative snap coverage")
+    snaps["player_id"] = snaps["pfr_player_id"].map(mapping)
     snaps = snaps.dropna(subset=["player_id"]).copy()
     snaps = snaps[snaps["position"].isin(POSITIONS)].copy()
     snaps["has_snap_row"] = 1
@@ -153,6 +156,10 @@ def load_rosters(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
             df = df[df["game_type"].fillna("REG").eq("REG")]
         df["position"] = df["position"].replace(POSITION_ALIASES)
         df = df[df["position"].isin(POSITIONS)].copy()
+        unidentified = df["player_id"].isna() | df["player_id"].astype("string").str.strip().eq("")
+        if unidentified.any():
+            print(f"  {table}: excluding {int(unidentified.sum())} roster rows without player IDs")
+            df = df.loc[~unidentified].copy()
         df["team"] = _norm_team(df["team"])
         df["player_name"] = df[name_col] if name_col in df.columns else None
         if "status" not in df.columns:
@@ -184,7 +191,7 @@ def load_player_positions(conn: sqlite3.Connection) -> pd.DataFrame:
         return pd.DataFrame(columns=["player_id", "player_position"])
     out = pd.read_sql("SELECT player_id, position AS player_position FROM players", conn)
     out["player_position"] = out["player_position"].replace(POSITION_ALIASES)
-    out = out[out["player_position"].isin(POSITIONS)].drop_duplicates("player_id")
+    out = out.drop_duplicates("player_id")
     return out
 
 
@@ -247,6 +254,11 @@ def build_panel(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     else:
         panel["player_position"] = None
 
+    # Stats also include kickers, defenses and incidental defensive/OL stats.
+    # Resolve their actual position before excluding them from this population;
+    # truly missing positions must still fail validation rather than disappear.
+    panel = panel[panel["position"].isna() | panel["position"].isin(POSITIONS)].copy()
+
     # Only include player-weeks where that team actually had a REG game.
     panel = panel.merge(sched, on=["season","week","team"], how="inner")
 
@@ -291,6 +303,8 @@ def build_panel(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
 def validate_panel(panel: pd.DataFrame) -> None:
     if panel.empty:
         raise ValueError("canonical player-week panel is empty")
+    if panel[["player_id", "season", "week"]].isna().any().any():
+        raise ValueError("canonical row missing player/week identity")
     if panel.duplicated(["player_id","season","week"]).any():
         raise ValueError("duplicate player_id/season/week rows")
     if panel["team"].isna().any() or panel["opponent"].isna().any():

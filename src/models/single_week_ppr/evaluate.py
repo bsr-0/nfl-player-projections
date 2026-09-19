@@ -313,6 +313,7 @@ def run_fold(
     tune_hyperparameters: bool = False,
     n_trials: int = 0,
     train_seasons_override: Optional[Sequence[int]] = None,
+    fit_existing_models: bool = True,
 ):
     """Loads one (train_seasons, test_season) fold, feature-engineers it via
     the existing leakage-safe pipeline, and extracts the existing-methodology
@@ -339,6 +340,8 @@ def run_fold(
     can never reach the fold's own test season.
 
     Returns (train_df, test_df, existing_methodology_pred, train_seasons).
+    With fit_existing_models=False, preparation is unchanged but the unused
+    legacy fit is omitted and existing_methodology_pred is None.
     """
     import config.settings as settings
     from src.models.feature_preparation import _prepare_training_data
@@ -382,11 +385,13 @@ def run_fold(
             if len(train_data) < 20:
                 raise ValueError(f"Not enough train rows for {position} seasons {train_seasons}: {len(train_data)}")
 
+            preparation_options = {} if fit_existing_models else {"fit_models": False}
             train_df, test_df, trainer = _prepare_training_data(
                 train_data, test_data, [position], tune_hyperparameters, n_trials, fast=True,
-                context_data=context_data,
+                context_data=context_data, **preparation_options,
             )
-            existing_pred = _existing_methodology_predictions(trainer, test_df, position)
+            existing_pred = (_existing_methodology_predictions(trainer, test_df, position)
+                             if fit_existing_models else None)
         finally:
             settings.MODELS_DIR = old_models_dir
 

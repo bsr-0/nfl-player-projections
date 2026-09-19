@@ -449,6 +449,7 @@ def _prepare_training_data(
     n_trials: int,
     fast: bool = False,
     context_data: pd.DataFrame = None,
+    fit_models: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, "ModelTrainer"]:
     """Shared preprocessing pipeline used by both train_models() and _run_one_fold().
 
@@ -467,6 +468,8 @@ def _prepare_training_data(
     exactly. See _apply_with_temporal_context.
 
     Returns (train_data, test_data, trainer).
+    Offline architecture experiments may set fit_models=False to return the
+    identical prepared frames with trainer=None, without fitting unused models.
     """
     from config.settings import MODELS_DIR
 
@@ -691,6 +694,9 @@ def _prepare_training_data(
         if col in test_data.columns:
             test_mask = test_data["position"] == pos
             test_data.loc[test_mask, col] = test_data.loc[test_mask, col].clip(lo, hi)
+
+    if not fit_models:
+        return train_data, test_data, None
 
     # Train models (fast mode: skip QB dual-target comparison by withholding test_data)
     trainer = ModelTrainer()

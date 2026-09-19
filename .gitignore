@@ -102,6 +102,7 @@ walk-forward-validation.md
 # These are large (60MB+ of row-level prediction dumps) and churn on every run,
 # so they are kept on disk but out of the repo.
 data/experiments/*.csv
+data/experiments/participation_system/
 data/experiments/*.weekskips.json
 
 # EXCEPT the two Phase 4 row-level dumps: season_simulation.py reads them as
