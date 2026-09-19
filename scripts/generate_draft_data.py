@@ -1223,8 +1223,59 @@ def _rookie_identities(draft: pd.DataFrame, ids: pd.DataFrame,
     return named[["draft_id", "player_id", "name", "full_name", "team", "position"]]
 
 
+def _load_undrafted_rookie_identities(upcoming_season: int) -> pd.DataFrame:
+    """Undrafted first-year players: a roster row, no draft_picks_v2 record
+    EVER, no player_weekly_stats before `upcoming_season`.
+
+    Same population `preseason_features._cold_start_rows_incoming` and
+    `NFLPredictor._drafted_rookie_stub_rows` use for this exact
+    population -- see the `<= 1` note on the first of those for why
+    ``years_exp <= 1``, not the cleaner-looking ``== 0``.
+
+    None of the drafted half's identity juggling applies: draft_picks_v2's
+    player_id is an nflverse stub needing GSIS resolution, but `rosters`
+    and `players` already use real GSIS ids, so `draft_id == player_id`
+    here and there is no combine/cfb-slug name fallback to chase.
+    """
+    import sqlite3
+    from config.settings import DB_PATH
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        roster = pd.read_sql(
+            """
+            SELECT r.player_id, r.position, r.team, p.name
+            FROM rosters r JOIN players p ON p.player_id = r.player_id
+            WHERE r.season = ? AND r.position IN ('QB','RB','WR','TE')
+              AND r.player_id IS NOT NULL AND r.player_id != '' AND r.years_exp <= 1
+            """,
+            conn, params=[int(upcoming_season)])
+        ever_drafted = pd.read_sql(
+            "SELECT DISTINCT player_id FROM draft_picks_v2 "
+            "WHERE player_id IS NOT NULL AND player_id != ''", conn)["player_id"]
+        prior_ids = pd.read_sql(
+            "SELECT DISTINCT player_id FROM player_weekly_stats WHERE season < ?",
+            conn, params=[int(upcoming_season)])["player_id"]
+    finally:
+        conn.close()
+    if roster.empty:
+        return pd.DataFrame()
+
+    roster = roster[~roster["player_id"].isin(set(ever_drafted))
+                    & ~roster["player_id"].isin(set(prior_ids))]
+    roster = roster.dropna(subset=["name"]).drop_duplicates("player_id")
+    if roster.empty:
+        return pd.DataFrame()
+
+    roster["full_name"] = roster["name"]
+    roster["name"] = roster["name"].map(board_name)
+    roster["draft_id"] = roster["player_id"]
+    return roster[["draft_id", "player_id", "name", "full_name", "team", "position"]]
+
+
 def _load_rookie_identities(upcoming_season: int) -> pd.DataFrame:
-    """Read the draft class and resolve who each pick is."""
+    """Read the incoming class -- drafted and undrafted -- and resolve who
+    each player is."""
     import sqlite3
     from config.settings import DB_PATH
 
@@ -1240,21 +1291,26 @@ def _load_rookie_identities(upcoming_season: int) -> pd.DataFrame:
             "WHERE pfr_id IS NOT NULL", conn)
     finally:
         conn.close()
-    if draft.empty:
-        return pd.DataFrame()
 
-    # nflverse is the only source carrying GSIS ids for a class this new. It
-    # is a network fetch, so losing it costs names for a few picks and the
-    # right id for all of them -- not the rookies themselves.
-    try:
-        import nfl_data_py as nfl
-        ids = nfl.import_ids()
-    except Exception as e:                           # noqa: BLE001
-        print(f"  nflverse id map unavailable ({e}); "
-              "falling back to combine names and draft ids")
-        ids = pd.DataFrame()
+    drafted = pd.DataFrame()
+    if not draft.empty:
+        # nflverse is the only source carrying GSIS ids for a class this new.
+        # It is a network fetch, so losing it costs names for a few picks and
+        # the right id for all of them -- not the rookies themselves.
+        try:
+            import nfl_data_py as nfl
+            ids = nfl.import_ids()
+        except Exception as e:                       # noqa: BLE001
+            print(f"  nflverse id map unavailable ({e}); "
+                  "falling back to combine names and draft ids")
+            ids = pd.DataFrame()
+        drafted = _rookie_identities(draft, ids, combine)
 
-    return _rookie_identities(draft, ids, combine)
+    undrafted = _load_undrafted_rookie_identities(upcoming_season)
+    combined = pd.concat([drafted, undrafted], ignore_index=True)
+    if combined.empty:
+        return combined
+    return combined.drop_duplicates("player_id")
 
 
 def _rookie_board_rows(upcoming_season: int, preseason_df: pd.DataFrame,
@@ -1264,10 +1320,15 @@ def _rookie_board_rows(upcoming_season: int, preseason_df: pd.DataFrame,
     The board's population comes from the previous season's weekly stats, so a
     player whose first season is `upcoming_season` never reaches it -- there is
     nothing to aggregate. The season model does not have that gap: its
-    cold-start rows are built from the draft class itself
-    (`preseason_features._cold_start_rows_from_draft`), and PR #96 conditioned
-    their availability on draft round specifically to make them better. Those
-    projections were being computed and then dropped here.
+    cold-start rows are built from the incoming class, drafted and undrafted
+    (`preseason_features._cold_start_rows_incoming`), and PR #96 conditioned
+    the drafted half's availability on draft round specifically to make it
+    better. Those projections were being computed and then dropped here --
+    2026-09-18: the undrafted half specifically, since `_load_rookie_
+    identities` was drafted-only until then, so an undrafted rookie the
+    season model already had a real projection for (confirmed: a genuine
+    2026 UDFA cold-start candidate was present in the projection table and
+    absent from the board) stayed invisible regardless.
 
     Prior-season columns stay NaN rather than zero. A rookie did not score 0
     PPG last season; he has no last season, and the board renders the
