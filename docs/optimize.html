@@ -1,0 +1,95 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lineup Builder · NFL Projections</title>
+<style>
+:root{--bg:#0f1216;--panel:#171b21;--line:#252b33;--fg:#e6e9ee;--dim:#98a2b0;--blue:#60a5fa;--green:#4ade80;--red:#f87171;--gold:#fbbf24}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 24px 14px;border-bottom:1px solid var(--line)}h1{margin:0 0 4px;font-size:21px;font-weight:600}.sub{color:var(--dim);font-size:13px}
+.sitenav{display:flex;gap:6px;padding:12px 0 0;flex-wrap:wrap}.sitenav a{border:1px solid var(--line);background:var(--panel);color:var(--dim);padding:6px 13px;border-radius:8px;font-size:13px;text-decoration:none}.sitenav a.current{color:var(--fg);border-color:var(--blue);font-weight:600}
+.controls{display:flex;gap:14px;flex-wrap:wrap;align-items:end;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--panel)}label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin-bottom:4px}select,input,button{background:#0d1014;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit}button{cursor:pointer}button.primary{background:#2563eb;border-color:#3b82f6;color:white;font-weight:600}
+main{padding:18px 24px 42px;max-width:1180px}.layout{display:grid;grid-template-columns:minmax(360px,1fr) minmax(480px,1.5fr);gap:18px}.card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:16px}.card h2{font-size:15px;margin:0 0 4px}.muted,.hint{color:var(--dim);font-size:12px}.summary{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0}.metric strong{display:block;font-size:24px;font-variant-numeric:tabular-nums}.metric span{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.slots{margin-top:12px}.slot{display:grid;grid-template-columns:58px 1fr 70px 24px;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}.slot:last-child{border-bottom:0}.slot .pos{font-weight:600;color:var(--blue)}.slot .points{text-align:right;font-variant-numeric:tabular-nums}.slot .range{font-size:11px;color:var(--dim)}
+table{border-collapse:collapse;width:100%}th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);position:sticky;top:0;background:var(--panel)}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}.pool{max-height:620px;overflow:auto;margin-top:12px}tr:hover td{background:#1b2027}.pospill{font-weight:600}.pospill.QB{color:#c084fc}.pospill.RB{color:var(--green)}.pospill.WR{color:var(--blue)}.pospill.TE{color:var(--gold)}.risk{color:var(--red);font-size:10px;margin-left:5px}.good{color:var(--green)}.warn{color:var(--gold)}.empty{padding:20px;color:var(--dim)}.note{margin-top:18px;color:var(--dim);font-size:12px;max-width:900px}.notice{background:#1a2230;border:1px solid #2c3e55;border-radius:7px;padding:10px 12px;margin-bottom:14px;color:#c9d6e6;font-size:12px}
+@media(max-width:850px){.layout{grid-template-columns:1fr}main{padding:14px}.controls,header{padding-left:14px;padding-right:14px}.pool{max-height:none}}
+</style>
+<header>
+<h1>Weekly Lineup Builder</h1>
+<div class="sub" id="meta">Loading weekly projections…</div>
+<nav class="sitenav">
+<a href="draft.html">Draft board</a><a href="weekly.html">Weekly</a><a href="optimize.html" class="current">Lineup Builder</a><a href="game_predictions.html">Game Predictions</a>
+</nav>
+</header>
+<div class="controls">
+<div><label>Week</label><select id="week"></select></div>
+<div><label>Position filter</label><select id="filter"><option value="ALL">All</option><option>QB</option><option>RB</option><option>WR</option><option>TE</option></select></div>
+<div><label>Player search</label><input id="query" placeholder="player or team"></div>
+<div><label>Player pool</label><select id="poolmode"><option value="all">All eligible players</option><option value="safe">Hide risk flags</option></select></div>
+<button class="primary" id="run">Build lineup</button>
+</div>
+<main>
+<div class="notice"><strong>How this works.</strong> The builder maximizes the weekly PPR projection subject to QB 1, RB 2, WR 2, TE 1, and FLEX 1 (RB/WR/TE). It uses the published projection and its uncertainty range; injury adjustment is already incorporated into that projection and is not applied a second time.</div>
+<div class="layout">
+<section class="card"><h2>Recommended lineup</h2><div class="muted" id="lineupnote">Choose a week to begin.</div><div class="summary"><div class="metric"><strong id="total">—</strong><span>Projected PPR</span></div><div class="metric"><strong id="floor">—</strong><span>80% floor</span></div><div class="metric"><strong id="ceiling">—</strong><span>80% ceiling</span></div></div><div id="slots" class="slots"><div class="empty">No lineup built yet.</div></div></section>
+<section class="card"><h2>Available players</h2><div class="muted">Select a player to lock them into the next build. Locked players must fit the roster constraints.</div><div class="pool"><table><thead><tr><th>Lock</th><th>Player</th><th>Pos</th><th>Team</th><th>Opp</th><th class="num">Proj</th><th class="num">Range</th></tr></thead><tbody id="players"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody></table></div></section>
+</div>
+<div class="note">This is a weekly roster builder, not a DFS optimizer: no salary-cap assumptions are made. It is intentionally separate from the participation-model work until that model passes its acceptance gate. The projection source is <code>docs/data/weekly_{season}_wk{N}.json</code>.</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let META=null,RAW=[],LOCKED=new Set(),LAST=[];
+const POS=["QB","RB","WR","TE"];
+function fmt(v){return v==null||isNaN(v)?"—":Number(v).toFixed(1)}
+function risk(r){return r.injury_adjustment!=null&&r.injury_adjustment<.85}
+function fileFor(w){return "data/weekly_"+META.season+"_wk"+w+".json"}
+async function loadWeek(w){
+  $("players").innerHTML='<tr><td colspan="7" class="empty">Loading week '+w+"…</td></tr>";
+  try{const res=await fetch(fileFor(w));RAW=await res.json();renderPool();build()}catch(e){RAW=[];$("players").innerHTML='<tr><td colspan="7" class="empty">Could not load this week.</td></tr>'}
+}
+function filtered(){
+  const pos=$("filter").value,q=$("query").value.trim().toLowerCase(),safe=$("poolmode").value==="safe";
+  return RAW.filter(r=>(pos==="ALL"||r.position===pos)&&(!q||((r.name||"")+" "+(r.team||"")).toLowerCase().includes(q))&&(!safe||!risk(r)));
+}
+function renderPool(){
+  const rows=filtered().slice().sort((a,b)=>(b.predicted_points||0)-(a.predicted_points||0)).slice(0,250);
+  $("players").innerHTML=rows.length?rows.map(r=>{
+    const id=String(r.player_id),checked=LOCKED.has(id)?" checked":"";
+    return "<tr><td><input type=\"checkbox\" class=\"lock\" data-id=\""+id+"\""+checked+" title=\"Lock player\"></td><td>"+(r.name||"—")+(risk(r)?"<span class=\"risk\">risk</span>":"")+"</td><td><span class=\"pospill "+r.position+"\">"+r.position+"</span></td><td>"+(r.team||"—")+"</td><td>"+(r.home_away==="away"?"@":"")+ (r.opponent||"—")+"</td><td class=\"num\">"+fmt(r.predicted_points)+"</td><td class=\"num\">"+fmt(r.prediction_ci80_lower)+"–"+fmt(r.prediction_ci80_upper)+"</td></tr>"
+  }).join(""):"<tr><td colspan=\"7\" class=\"empty\">No matching players.</td></tr>";
+  document.querySelectorAll(".lock").forEach(x=>x.onchange=()=>{if(x.checked)LOCKED.add(x.dataset.id);else LOCKED.delete(x.dataset.id);build()});
+}
+function top(arr,n){return arr.filter(Boolean).sort((a,b)=>(b.predicted_points||0)-(a.predicted_points||0)).slice(0,n)}
+function combos(arr,k){
+  const out=[];for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++)if(k===2)out.push([arr[i],arr[j]]);return out
+}
+function build(){
+  if(!RAW.length)return;
+  const safe=$("poolmode").value==="safe";\n  const pool=RAW.filter(r=>!safe||!risk(r));\n  const locked=pool.filter(r=>LOCKED.has(String(r.player_id)));
+  const by=p=>top(pool.filter(r=>r.position===p),35);
+  const qs=by("QB"),rs=by("RB"),ws=by("WR"),ts=by("TE");
+  let best=null;
+  for(const qb of qs)for(const rb of combos(rs,2))for(const wr of combos(ws,2))for(const te of ts){
+    const chosen=[qb,...rb,...wr,te],ids=new Set(chosen.map(r=>String(r.player_id)));
+    if(locked.some(r=>!ids.has(String(r.player_id))))continue;
+    const flex=top(pool.filter(r=>(r.position==="RB"||r.position==="WR"||r.position==="TE")&&!ids.has(String(r.player_id))),1)[0];
+    if(!flex)continue;
+    const lineup=[qb,...rb,...wr,te,flex],sum=lineup.reduce((a,r)=>a+(+r.predicted_points||0),0);
+    if(!best||sum>best.sum)best={lineup,sum};
+  }
+  if(!best){$("slots").innerHTML='<div class="empty">No valid lineup fits the current pool and locked players. Clear a lock or broaden the filters.</div>';return}
+  LAST=best.lineup;
+  $("total").textContent=fmt(best.sum);
+  $("floor").textContent=fmt(best.lineup.reduce((a,r)=>a+(+r.prediction_ci80_lower||0),0));
+  $("ceiling").textContent=fmt(best.lineup.reduce((a,r)=>a+(+r.prediction_ci80_upper||0),0));
+  $("lineupnote").textContent="Week "+$("week").value+" · "+best.lineup.length+" players · "+LOCKED.size+" locked";
+  const flexId=String(best.lineup[best.lineup.length-1].player_id);
+  $("slots").innerHTML=best.lineup.map((r,i)=>{
+    const slot=i===0?"QB":i<3?"RB":i<5?"WR":i===5?"TE":"FLEX";
+    const badge=String(r.player_id)===flexId&&slot==="FLEX"?" · FLEX":"";
+    return "<div class=\"slot\"><span class=\"pos\">"+slot+badge+"</span><span><strong>"+(r.name||"—")+"</strong><br><span class=\"range\">"+r.team+" vs "+r.opponent+(risk(r)?" · risk flag":"")+"</span></span><span class=\"points\">"+fmt(r.predicted_points)+"<br><span class=\"range\">"+fmt(r.prediction_ci80_lower)+"–"+fmt(r.prediction_ci80_upper)+"</span></span><span>🔒</span></div>"
+  }).join("");
+}
+$("week").onchange=()=>{LOCKED.clear();loadWeek($("week").value)}
+$("filter").onchange=renderPool;$("query").oninput=renderPool;$("poolmode").onchange=()=>{renderPool();build()};$("run").onclick=build;
+(async()=>{try{META=await (await fetch("data/weekly_meta.json")).json();$("meta").textContent="Season "+META.season+" · generated "+(META.generated_at||"—")+" · "+(META.mode);META.weeks.forEach(w=>{const o=document.createElement("option");o.value=w;o.textContent="Week "+w;$("week").appendChild(o)});const initial=Math.max(...META.weeks.filter(w=>META.counts&&META.counts[String(w)]));$("week").value=initial;await loadWeek(initial)}catch(e){$("meta").textContent="Weekly data unavailable."}})();
+</script>
