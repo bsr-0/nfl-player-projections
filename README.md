@@ -32,6 +32,7 @@ python -m src.models.train --fast --no-tune     # quick iteration, skips Optuna
 python scripts/generate_app_data.py             # weekly/season predictions
 python scripts/generate_draft_data.py           # draft board JSON
 python scripts/draft_advisor.py --mode spread --season 2025
+python scripts/predict_upcoming_games.py --season 2026 --week 2  # win, ATS, and O/U forecasts
 pytest
 ```
 

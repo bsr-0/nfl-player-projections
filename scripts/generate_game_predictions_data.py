@@ -141,7 +141,10 @@ def build_predictions(season: int) -> tuple[list[int], dict[str, int]]:
         return [], {}
 
     feat_cols = feature_columns(rows)
-    X = rows[feat_cols]
+    # Keep the site-generation serving path identical to the CLI path:
+    # schedule odds may arrive from SQLite as object strings, while the saved
+    # models were trained on numeric feature columns.
+    X = rows[feat_cols].apply(pd.to_numeric, errors="coerce")
     out = rows[["season", "week", "home_team", "away_team", "spread_line", "total_line"]].copy()
 
     missing = []
