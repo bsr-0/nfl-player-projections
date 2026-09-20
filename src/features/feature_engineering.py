@@ -3902,7 +3902,8 @@ class FeatureEngineer:
         if "spread" in df.columns and "game_total" in df.columns:
             early_cols: dict = {}
             if "implied_team_total" not in df.columns:
-                early_cols["implied_team_total"] = (df["game_total"] + df["spread"]) / 2
+                # spread is negative when this team is favoured
+                early_cols["implied_team_total"] = (df["game_total"] - df["spread"]) / 2
             if "win_probability" not in df.columns:
                 # Rough conversion: spread of -7 ~ 70% win probability
                 early_cols["win_probability"] = (
@@ -3984,7 +3985,9 @@ class FeatureEngineer:
             away_lookup = away_lookup.rename(columns={"away_team": "team"})
             away_lookup["spread"] = away_lookup["spread_line"]  # positive spread = away underdog
             away_lookup["game_total"] = away_lookup["vegas_total"]
-            away_lookup["implied_team_total"] = (away_lookup["game_total"] + away_lookup["spread"]) / 2
+            # Same (game_total - spread) / 2 as the home side. The old
+            # "+ spread" here handed the away team the HOME team's implied total.
+            away_lookup["implied_team_total"] = (away_lookup["game_total"] - away_lookup["spread"]) / 2
 
             vegas = pd.concat([home_lookup, away_lookup], ignore_index=True)
             vegas = vegas[["season", "week", "team", "spread", "game_total", "implied_team_total"]].drop_duplicates()

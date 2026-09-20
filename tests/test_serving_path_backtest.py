@@ -83,7 +83,7 @@ def test_evaluation_frame_has_prior_season_history_and_vegas_columns(private_db)
     assert len(frame) == len(PLAYERS) * len(WEEKS) * 2
     home = frame[frame.team == "AAA"].iloc[0]
     assert home.implied_team_total == (45.0 + 3.0) / 2     # home favoured by 3 -> 24
-    assert home.spread == 3.0 and home.game_total == 45.0
+    assert home.spread == -3.0 and home.game_total == 45.0   # negative = favoured
 
 
 def test_walk_forward_scores_each_week_against_that_weeks_raw_points(private_db, fake_serving):

@@ -1633,8 +1633,10 @@ def _evaluation_frame(test_season: int) -> pd.DataFrame:
     baseline reads, attached from the schedule table.
 
     nflverse `spread_line` is the HOME team's expected margin (positive =
-    home favoured), so the home implied total is (total + spread) / 2 and
-    the away one is (total - spread) / 2.
+    home favoured), so the home implied total is (total + spread_line) / 2
+    and the away one is (total - spread_line) / 2. The per-team `spread`
+    column follows the feature pipeline's convention (negative = this team
+    is favoured), i.e. -spread_line for the home team.
     """
     from src.utils.database import DatabaseManager
     db = DatabaseManager()
@@ -1650,11 +1652,11 @@ def _evaluation_frame(test_season: int) -> pd.DataFrame:
             "FROM schedule WHERE season IN (?, ?)",
             conn, params=[int(test_season) - 1, int(test_season)])
     home = pd.DataFrame({"season": sched.season, "week": sched.week, "team": sched.home_team,
-                         "spread": sched.spread_line,
+                         "spread": -sched.spread_line,
                          "implied_team_total": (sched.total_line + sched.spread_line) / 2,
                          "game_total": sched.total_line})
     away = pd.DataFrame({"season": sched.season, "week": sched.week, "team": sched.away_team,
-                         "spread": -sched.spread_line,
+                         "spread": sched.spread_line,
                          "implied_team_total": (sched.total_line - sched.spread_line) / 2,
                          "game_total": sched.total_line})
     lines = pd.concat([home, away], ignore_index=True).drop_duplicates(["season", "week", "team"])

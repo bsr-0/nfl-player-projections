@@ -678,8 +678,10 @@ class VegasLinesLoader:
         """
         Calculate implied team totals from spreads and over/unders.
         
-        Implied Total = (Over/Under + Spread) / 2 for favorite
-        Implied Total = (Over/Under - Spread) / 2 for underdog
+        `spread_line` (nflverse) is the home team's expected margin, positive
+        = home favoured: home = (total + spread_line) / 2. A `spread` column
+        is taken to be the American convention (negative = home favoured):
+        home = (over_under - spread) / 2.
         """
         if lines_df.empty:
             return pd.DataFrame()
@@ -689,8 +691,8 @@ class VegasLinesLoader:
         # Check what columns we have
         if 'total' in df.columns and 'spread_line' in df.columns:
             # Calculate implied totals
-            df['home_implied_total'] = (df['total'] - df['spread_line']) / 2
-            df['away_implied_total'] = (df['total'] + df['spread_line']) / 2
+            df['home_implied_total'] = (df['total'] + df['spread_line']) / 2
+            df['away_implied_total'] = (df['total'] - df['spread_line']) / 2
         elif 'over_under' in df.columns and 'spread' in df.columns:
             df['home_implied_total'] = (df['over_under'] - df['spread']) / 2
             df['away_implied_total'] = (df['over_under'] + df['spread']) / 2
@@ -758,15 +760,24 @@ class VegasLinesLoader:
                     home_rows = home_rows.rename(columns={home_col: 'team'})
                     home_rows['is_home'] = 1
                     home_rows['game_total'] = home_rows[total_col]
-                    home_rows['spread'] = home_rows[spread_col]  # negative = home favorite
-                    home_rows['implied_team_total'] = (home_rows[total_col] - home_rows[spread_col]) / 2
+                    # nflverse spread_line is the HOME team's expected margin
+                    # (positive = home favoured). The player-level `spread`
+                    # uses the American convention (negative = this team is
+                    # favoured), so it is negated for the home team, and
+                    # implied_team_total = (game_total - spread) / 2. Verified
+                    # against 2024 scores: corr(implied_team_total, points)
+                    # is +0.42 this way; the previous formulas assigned each
+                    # team its OPPONENT's implied total (corr -0.14 to -0.19)
+                    # and inverted is_favorite / win_probability.
+                    home_rows['spread'] = -home_rows[spread_col]
+                    home_rows['implied_team_total'] = (home_rows[total_col] + home_rows[spread_col]) / 2
                     
                     away_rows = game_lines[['season', 'week', away_col, total_col, spread_col]].copy()
                     away_rows = away_rows.rename(columns={away_col: 'team'})
                     away_rows['is_home'] = 0
                     away_rows['game_total'] = away_rows[total_col]
-                    away_rows['spread'] = -away_rows[spread_col]  # flip sign for away team
-                    away_rows['implied_team_total'] = (away_rows[total_col] + away_rows[spread_col]) / 2
+                    away_rows['spread'] = away_rows[spread_col]
+                    away_rows['implied_team_total'] = (away_rows[total_col] - away_rows[spread_col]) / 2
                     
                     vegas_lookup = pd.concat([home_rows, away_rows], ignore_index=True)
                     vegas_lookup = vegas_lookup[['season', 'week', 'team', 'game_total',

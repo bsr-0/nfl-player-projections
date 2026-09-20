@@ -251,7 +251,8 @@ def vegas_implied_baseline(
     if itt_col is None:
         # If Vegas lines aren't available, compute from game_total + spread
         if "game_total" in df.columns and "spread" in df.columns:
-            df["_implied_team_total"] = (df["game_total"] + df["spread"]) / 2
+            # spread is negative when this team is favoured
+            df["_implied_team_total"] = (df["game_total"] - df["spread"]) / 2
             itt_col = "_implied_team_total"
         else:
             # No Vegas data at all -- return NaN so this baseline is skipped

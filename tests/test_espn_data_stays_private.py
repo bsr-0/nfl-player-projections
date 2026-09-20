@@ -36,6 +36,10 @@ ALLOWED_FETCH = {
     "data/weekly_${SEASON}_wk${week}.json",
     # season.html, the off-nav predecessor dashboard. NFL season totals.
     "data/projections_2026.json",
+    # game_predictions.html: real NFL game win/spread/total predictions
+    # (scripts/generate_game_predictions_data.py). Team-level, no league data.
+    "data/game_predictions_meta.json",
+    "data/game_predictions_${SEASON}_wk${week}.json",
 }
 
 

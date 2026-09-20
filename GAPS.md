@@ -14259,3 +14259,89 @@ the codebase (real, reusable, bug-fixed machinery) but `include_market_odds`
 stays `False` everywhere in the committed training scripts -- this closes
 out the deferred item as "investigated, not adopted," same treatment as
 the `rest_days` ablation finding.
+
+## Vegas features were sign-inverted in production: each team got its OPPONENT's implied total (2026-09-19)
+
+Found while setting up the game-outcome-features ablation below, before
+any of it was run. `src/data/external_data.py`'s `get_vegas_features` --
+the path production actually takes, since it runs (via
+`add_external_features`) BEFORE `FeatureEngineer._create_vegas_game_script_
+features`, whose early-return branch then keeps whatever it finds --
+assumed nflverse `schedule.spread_line` was negative-when-home-favoured.
+It is the opposite (home team's expected margin, positive = home
+favoured; corr(home margin, spread_line) = +0.43 over 2006-2025, and the
+game-outcome package had already documented this). Consequences, measured
+on 2024 team-games against real points scored:
+
+    implied_team_total   corr with own points  -0.14 (away) / -0.19 (home)
+                         correct formula        +0.42 / +0.42
+    spread               positive when favoured (documented as negative)
+    is_favorite          exactly inverted: 40% of home teams flagged, 60% are
+    win_probability      corr with own points  -0.37 (inverted)
+
+i.e. every player row carried the OTHER team's implied total, and the
+`matchup_quality_indicator` composite (fixed +0.30 weight on
+`implied_team_total`) was pulling in the wrong direction. Three more
+parallel implementations of the same join disagreed with each other:
+`feature_engineering.py`'s schedule-lookup fallback (used only when the
+nfl_data_py fetch fails) got the home side right and gave the away team the
+home team's total; `backtester._evaluation_frame` had the totals right but
+a third sign for `spread`; `baselines.vegas_implied_baseline`'s
+spread-only fallback assumed the backtester's sign. Which convention a
+model saw therefore depended on whether a network call succeeded -- a
+train/serve mismatch on top of the sign bug.
+
+Fixed all five sites to ONE convention -- `spread` negative = this team is
+favoured, `implied_team_total = (game_total - spread) / 2` -- verified the
+production path and the fallback now produce identical values (+0.42 corr
+with real points both sides, is_favorite 60% for home teams), and pinned it
+in `tests/test_vegas_sign_convention.py` (all producers exercised on one
+game and required to agree). `src/models/advanced_models.py` has a fourth
+copy that generates RANDOM lines; it is imported nowhere and was left
+alone. Every committed player-model artifact and every historical weekly
+metric was trained/measured with the inverted features; the single-week
+PPR architectures are LightGBM so the damage is "weaker feature", not
+"reversed coefficient", but nothing downstream of `implied_team_total` /
+`is_favorite` / `win_probability` should be trusted until retrained.
+
+## Game-outcome predictions as weekly-player features: no effect, not adopted (2026-09-19)
+
+Question: do the game-outcome models (win prob / margin / total) improve
+the single-week PPR projections? `scripts/ablate_game_outcome_features.py`
+answers it on the Phase 6c harness (FINAL_CONFIG architecture/window/
+weighting per position, held-out 2023/2024/2025, `run_fold`'s full
+production feature prep). The committed game-outcome artifacts were NOT
+used -- they are trained on 2006-2025 and have seen every validation
+season -- instead a walk-forward out-of-fold table is built (season S
+predicted by logistic/ridge arms fit on seasons < S only, Optuna-tuned
+hyperparameters from the artifacts' metadata), cached at
+`data/experiments/game_outcome_oof_predictions.csv`. OOF sanity matches the
+committed backtest (win acc 0.678 vs Vegas 0.680 on 2023-26; margin/total
+MAE within 0.1 of the market line) and the predictions are 0.98 / 0.95
+correlated with spread_line / total_line -- they are mostly the market.
+
+Per-team-week features tested on top of CAUSAL_FEATURES (which already
+carry the now-correctly-signed spread / implied_team_total / game_total):
+`go_win_prob`, `go_pred_margin`, `go_pred_total`, `go_implied_team_total`
+(go_raw); `go_margin_vs_market`, `go_total_vs_market` (go_residual, the
+model's disagreement with the line); and both (go_all). Join coverage
+99.6-100% of test rows, ~95% of train rows (the gap is 2006, which has no
+prior season to fit on, plus ties).
+
+Mean MAE across the three seasons, delta vs baseline:
+
+    pos   baseline   go_raw    go_residual   go_all
+    QB    5.842      +0.009    +0.009        +0.008
+    RB    4.307      -0.003    -0.002        -0.002
+    WR    4.100      +0.002    +0.005        -0.006
+    TE    2.807      -0.001    +0.001        -0.002
+
+Every per-(position, season) delta is between -0.023 and +0.029 MAE with
+mixed signs inside each position, all below the +/-0.046 per-fold noise
+band established for this harness (final_config.py). Spearman/R^2 move by
+<0.005. Conclusion: the game-outcome models add nothing to weekly player
+projections beyond the Vegas lines the player models already have -- the
+game models are at best market-matching, so their output is a
+near-duplicate of an existing feature, the same reason the game_odds
+consensus features didn't help the game models themselves. Not adopted;
+script kept as the measurement.

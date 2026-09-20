@@ -57,8 +57,8 @@
   th.sorted.asc::after { content:" ▴"; }
   td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
   tr:hover td { background:#1b2027; }
-  .matchup { font-weight:600; }
-  .matchup .fav { color:var(--good); }
+  .game { font-weight:600; }
+  .game .fav { color:var(--good); }
   .probcell { width:160px; }
   .track { position:relative; height:14px; background:var(--bar); border-radius:3px; overflow:hidden; }
   .fill { position:absolute; top:0; bottom:0; left:0; background:var(--bar-fill); opacity:.6; }
@@ -115,7 +115,7 @@
 <div id="tbl-wrap">
   <table>
     <thead><tr>
-      <th>Matchup</th>
+      <th>Game</th>
       <th class="probcell sortable" data-key="_homeprob" title="sort by home win probability">Home win prob.</th>
       <th class="num">Market spread</th>
       <th class="num sortable" data-key="_margin" title="sort by predicted margin">Predicted margin</th>
@@ -201,7 +201,7 @@ function render() {
       `<div class="diff${Math.abs(v) >= big ? " hi" : ""}">${v > 0 ? "+" : ""}${v.toFixed(1)} vs market</div>`;
 
     return `<tr>
-      <td class="matchup">${r.away_team} @ ${r.home_team}
+      <td class="game">${r.away_team} @ ${r.home_team}
         ${p != null ? `<div class="diff">favors <span class="fav">${favTeam}</span></div>` : ""}</td>
       <td class="probcell">${bar}</td>
       <td class="num">${fmt1(r.spread_line)}</td>
