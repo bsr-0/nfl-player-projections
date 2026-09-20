@@ -64,7 +64,7 @@ function combos(arr,k){
 }
 function build(){
   if(!RAW.length)return;
-  const pool=filtered(),locked=pool.filter(r=>LOCKED.has(String(r.player_id)));
+  const safe=$("poolmode").value==="safe";\n  const pool=RAW.filter(r=>!safe||!risk(r));\n  const locked=pool.filter(r=>LOCKED.has(String(r.player_id)));
   const by=p=>top(pool.filter(r=>r.position===p),35);
   const qs=by("QB"),rs=by("RB"),ws=by("WR"),ts=by("TE");
   let best=null;
