@@ -80,6 +80,25 @@ what's been verified vs. what's still an open measurement).
 
 ## Walk-Forward Backtest Findings (April 2026 Council Process)
 
+---
+
+## Vegas Feature Sign Inversion (Defect Found 2026-09-19, Fixed 2026-09-19)
+
+**Critical bug affecting all committed player models.** Production path (`src/data/external_data.py`'s `get_vegas_features()`, used via `add_external_features()` before feature engineering) incorrectly assumed nflverse `schedule.spread_line` is negative-when-home-favoured; it is the opposite (positive = home favoured). Consequence: every player row carried its **opponent's** `implied_team_total`, and the `matchup_quality_indicator` composite (30% weight on this feature) was pulling in the wrong direction.
+
+**Impact measured on 2024:**
+- `implied_team_total` correlated −0.14 (away) / −0.19 (home) with team's actual points
+- Correct formula (`(game_total − spread) / 2`) correlates +0.42 both sides
+- `is_favorite` binary was exactly inverted (40% home, should be 60%)
+- `win_probability` correlated −0.37 with team points (inverted)
+
+**Multiple implementations disagreed:** `feature_engineering.py` fallback (used when nfl_data_py fetch fails) got home side right, away side wrong; `backtester._evaluation_frame` had a third sign; `baselines.vegas_implied_baseline` used yet another; `advanced_models.py` generates random lines. Which one a model saw depended on network success — a silent train/serve mismatch.
+
+**Fixed:** All five implementations now use one convention: `spread` negative = this team favoured, `implied_team_total = (game_total − spread) / 2`. Verified production path and fallback produce identical, correctly-signed values (both correlate +0.42 with real points). Added `tests/test_vegas_sign_convention.py` regression guard requiring all producers to agree on one game.
+
+**Action required:** All committed player-model artifacts (v9–v25, trained with inverted Vegas features) and all reported weekly metrics should be considered unreliable until **retrained with the corrected features**. A walk-forward retrain was initiated 2026-09-19 (`data/experiments/retrain_walk_forward.log`) to establish new baselines.
+
+
 ### Baseline results (Ridge α=1, April 10 2026)
 
 | Metric | Overall | QB | RB | WR | TE |
