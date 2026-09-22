@@ -144,6 +144,11 @@ KEEP = ["player_id", "name", "position", "team", "opponent", "home_away",
         "predicted_points", "prediction_ci80_lower", "prediction_ci80_upper",
         "injury_adjustment",
         "predicted_points_model", "pace_prior", "pace_weight", "games_played_season",
+        # Optional causal inputs consumed by the simulation adapter when a
+        # serving path supplies them. They are absent today, so no values are
+        # fabricated into the site JSON.
+        "target_share", "rush_share", "pass_share", "usage_share",
+        "participation_prob", "will_play_probability",
         "actual_points"]
 
 
