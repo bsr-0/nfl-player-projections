@@ -82,10 +82,11 @@ def _opportunity_multiplier(player, team_plays, team_pass, baseline):
 def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationInput],
                      n_draws: int = 1000, seed: int = 42) -> list[dict]:
     scripts = simulate_game_scripts(game, n_draws, seed)
+    player_list = list(players)
     rng = np.random.default_rng(seed + 1)
     rows = []
     for script in scripts:
-        for player in players:
+        for player in player_list:
             if player.team not in (game.home_team, game.away_team):
                 raise ValueError("player is not in this game")
             is_home = player.team == game.home_team
