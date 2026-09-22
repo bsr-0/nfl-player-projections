@@ -105,6 +105,36 @@ def _safe_share(numer: pd.Series, denom: pd.Series) -> pd.Series:
     return (numer / denom.replace(0, pd.NA)).fillna(0.0)
 
 
+def _lagged_team_totals(panel: pd.DataFrame) -> pd.DataFrame:
+    """Team-level lagged season-to-date / rolling-3 mean of each volume
+    column's TEAM TOTAL (not any single player's share) -- the cheapest
+    legitimate "predicted team total" input for Plan A's reconstruction
+    step (renormalized share x predicted team total, see
+    src/models/team_allocation/reconstruct.py). Same shift(1)-before-
+    aggregating discipline as the player-level share lags above: the value
+    attached to a given (team, season, week) uses only that team's own
+    games strictly before it. One row per (team, season, week); callers
+    merge this back onto the per-player panel by that key.
+
+    No prior-season cold-start fallback here (unlike the player share lags)
+    -- kept out to keep this first cut simple; a team's first few tracked
+    weeks legitimately have no team-total history yet, and NaN is the
+    correct signal for "can't reconstruct yet," not something to
+    zero-fill or approximate.
+    """
+    team_cols = [f"team_{c}" for c in VOLUME_COLS]
+    team_week = panel[["team", "season", "week", *team_cols]].drop_duplicates(["team", "season", "week"])
+    team_week = team_week.sort_values(["team", "season", "week"]).reset_index(drop=True)
+    grp = team_week.groupby(["team", "season"], group_keys=False)
+    out = team_week[["team", "season", "week"]].copy()
+    for col in team_cols:
+        out[f"{col}_s2d"] = grp[col].transform(lambda s: s.shift(1).expanding().mean())
+        out[f"{col}_roll{ROLL_WINDOW}"] = grp[col].transform(
+            lambda s: s.shift(1).rolling(ROLL_WINDOW, min_periods=1).mean()
+        )
+    return out
+
+
 def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     pop = load_population(conn, lo, hi)
     if pop.empty:
@@ -156,6 +186,10 @@ def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
 
     drop_cols = [f"{c}_prior_season" for c in share_cols] + ["n_prior_games"]
     panel = panel.drop(columns=drop_cols)
+
+    team_totals_lagged = _lagged_team_totals(panel)
+    panel = panel.merge(team_totals_lagged, on=["team", "season", "week"], how="left")
+
     return panel.reset_index(drop=True)
 
 

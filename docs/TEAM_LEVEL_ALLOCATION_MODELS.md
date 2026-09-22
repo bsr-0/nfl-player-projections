@@ -111,11 +111,34 @@ predicted_volume(player) = predicted_team_total(stat) × renormalized_share(play
 predicted_fantasy_points = scoring_formula(predicted_volume components)
 ```
 
-`predicted_team_total` can start as a simple season-to-date team average
-(cheapest, no new model) and later be swapped for an actual team-total
-forecasting model (a sibling to `game_outcome`'s margin/total regressors) once
-the share model itself is validated — decoupling these two sources of error
-makes it possible to tell which one is responsible for any accuracy change.
+`predicted_team_total` starts as the simple lagged season-to-date/rolling-3
+team average (cheapest, no new model) — `scripts/build_team_week_player_shares.py`'s
+`_lagged_team_totals()` now builds this alongside the player-level share lags
+(`team_{stat}_s2d`/`team_{stat}_roll3`, same shift(1)-before-aggregating
+discipline, no cold-start fallback in this first cut — NaN for a team's first
+tracked weeks is correct, not something to zero-fill). Swapping in an actual
+team-total forecasting model (a sibling to `game_outcome`'s margin/total
+regressors) is a later step once the share model itself is validated —
+decoupling these two sources of error makes it possible to tell which one is
+responsible for any accuracy change.
+
+`renormalize_shares()`/`reconstruct_volume()`/`reconstruct_partial_fantasy_points()`
+in `src/models/team_allocation/reconstruct.py` implement the formula above.
+
+**Scope limitation found while implementing this** (see that module's
+docstring): the four share targets cover targets/rush-attempts/receiving-
+yards/rushing-yards only — no touchdowns, receptions, or passing production.
+`calculate_fantasy_points_df` (`src/utils/helpers.py`, this repo's single
+scoring-formula source of truth) contributes 0 for any stat not supplied, so
+reconstructing points from only `rushing_yards`/`receiving_yards` yields a
+**yardage-only partial fantasy-points number**, not the real target.
+`targets`/`rushing_attempts` have no direct entry in `config.settings.SCORING`
+at all and are excluded from the points reconstruction (they remain useful
+model inputs — volume is a leading indicator of yardage/reception
+opportunity — just not something to convert into points directly). This
+changes acceptance criterion 2 below; it does not block continuing Plan A,
+but the comparison it was originally meant to buy (this vs. the production
+model's full-PPR accuracy) isn't available yet.
 
 ### Evaluation
 
@@ -135,8 +158,19 @@ baseline, the same baseline class Phase 2 already uses).
 1. Share models must beat a rolling-3-share baseline on share MAE — if they
    don't, the reconstruction has no chance of beating the current models
    either, and there's no point looking at reconstructed accuracy at all.
-2. Reconstructed fantasy-point MAE must beat the existing per-position
-   production model on the same held-out seasons, by position.
+2. ~~Reconstructed fantasy-point MAE must beat the existing per-position
+   production model on the same held-out seasons, by position.~~ **Revised**
+   (see the Reconstruction scope-limitation note above): this reconstruction
+   only ever produces a yardage-only PARTIAL fantasy-points number, so
+   comparing it against the production model's full-PPR MAE is not
+   apples-to-apples. Revised criterion: reconstructed partial-points MAE
+   must beat a naive partial-points baseline computed the same way from the
+   production model's own predicted `rushing_yards`/`receiving_yards`
+   components (if exposed) or from a rolling-3 yardage baseline if not —
+   i.e. compare like-for-like slices, not this model's partial output
+   against the production model's full total. Full parity with criterion 2
+   as originally stated requires adding touchdown and reception share
+   targets first (not yet scoped).
 3. No unexplained population/coverage discontinuity by season or position
    (same discipline as Phase 2's acceptance criteria).
 4. All causal-contract and walk-forward tests pass (new
@@ -256,12 +290,28 @@ building anything from the Plan B section.
       reliably beats rolling3 for a target -- a repeatable gate instead of
       an eyeball read of stdout. All verified end-to-end (including a case
       where ridge passes and xgboost doesn't) against a synthetic DB.
-- [ ] Plan A reconstruction + scoring-formula wiring (share x team-total ->
-      fantasy points) -- not started; depends on the real-data backtest
-      above clearing acceptance criterion 1 first (no point reconstructing
-      points from a share model that doesn't already beat the naive
-      baseline on share accuracy).
-- [ ] Plan A walk-forward evaluation vs. production per-position baseline
-      (needs the reconstruction step above)
+- [x] Plan A reconstruction building blocks: `src/models/team_allocation/reconstruct.py`
+      (`renormalize_shares` -- sums each team-week's predicted shares to 1,
+      with a documented equal-split fallback for the degenerate all-zero
+      case; `reconstruct_volume` -- share x team-total, NaN-propagating;
+      `reconstruct_partial_fantasy_points` -- reuses
+      `src/utils/helpers.py:calculate_fantasy_points_df`, this repo's single
+      scoring-formula source of truth) and the lagged team-total columns
+      (`_lagged_team_totals` in `build_team_week_player_shares.py`,
+      `team_{stat}_s2d`/`team_{stat}_roll3`, same shift(1) discipline as
+      everything else in this pipeline). 10 new tests, all passing.
+      **Scope discovery**: this can only ever reconstruct a yardage-only
+      PARTIAL fantasy-points number (no TDs/receptions/passing) -- see the
+      Reconstruction section's scope-limitation note and the revised
+      acceptance criterion 2 above. Not yet wired into the backtester/CLI
+      (still module-level building blocks); not yet run against real data
+      for the same sandbox reason as the rest of Plan A.
+- [ ] Wire reconstruction into the walk-forward backtester/CLI (produce a
+      per-fold/pooled partial-points MAE the way share MAE already is),
+      then compare against the revised criterion 2 baseline once real data
+      is available.
+- [ ] Touchdown/reception share targets (needed for criterion 2 as
+      originally stated -- not yet scoped, deferred until the yardage-only
+      slice above shows the underlying approach has legs).
 - [ ] Decision-gate review
 - [ ] Plan B (not started; revisit only after the gate above)
