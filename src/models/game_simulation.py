@@ -73,10 +73,10 @@ def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
     return output
 
 def _opportunity_multiplier(player, team_plays, team_pass, baseline):
-    """Use volume deviation from baseline; a neutral draw preserves the model mean."""
-    actual = team_pass if player.position in ("QB", "WR", "TE") else team_plays - team_pass
-    expected = baseline.plays * (baseline.pass_rate if player.position in ("QB", "WR", "TE")
-                                 else 1.0 - baseline.pass_rate)
+    """Use volume deviation from baseline; a neutral draw preserves the mean."""
+    passing = player.position in ("QB", "WR", "TE")
+    actual = team_pass if passing else team_plays - team_pass
+    expected = baseline.plays * (baseline.pass_rate if passing else 1.0 - baseline.pass_rate)
     return actual / max(1.0, expected)
 
 def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationInput],
@@ -98,7 +98,8 @@ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationIn
                 player.mean_fantasy_points * multiplier,
                 max(0.01, player.sd_fantasy_points)))
             rows.append({"game_id": game.game_id, "draw": script.draw, "player_id": player.player_id,
-                         "team": player.team, "home_score": script.home_score,
-                         "away_score": script.away_score, "plays": team_plays,
-                         "pass_attempts": team_pass, "fantasy_points": value, "active": active})
+                         "team": player.team, "position": player.position,
+                         "home_score": script.home_score, "away_score": script.away_score,
+                         "plays": team_plays, "pass_attempts": team_pass,
+                         "fantasy_points": value, "active": active})
     return rows
