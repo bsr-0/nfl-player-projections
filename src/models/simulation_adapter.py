@@ -109,7 +109,9 @@ def player_inputs_from_predictions(
         )
         usage_share = _optional_unit_interval(row, share_fields)
         participation_prob = _optional_unit_interval(
-            row, ("participation_prob", "will_play_probability")) or 1.0
+            row, ("participation_prob", "will_play_probability"))
+        if participation_prob is None:
+            participation_prob = 1.0
         out[game_id].append(PlayerSimulationInput(
             player_id=str(row.player_id), team=team, position=position,
             mean_fantasy_points=max(0.0, mean), sd_fantasy_points=sd,
