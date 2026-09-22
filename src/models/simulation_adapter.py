@@ -58,6 +58,19 @@ def game_inputs_from_predictions(
         )
     return out
 
+def _optional_unit_interval(row, candidates: tuple[str, ...]) -> float | None:
+    for field in candidates:
+        if not hasattr(row, field):
+            continue
+        value = getattr(row, field)
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value) and 0.0 <= value <= 1.0:
+            return value
+    return None
+
 def player_inputs_from_predictions(
     player_predictions: pd.DataFrame,
     games: Mapping[str, GameScriptInput],
@@ -89,9 +102,18 @@ def player_inputs_from_predictions(
             lower, upper = float(row.prediction_ci80_lower), float(row.prediction_ci80_upper)
             if math.isfinite(lower) and math.isfinite(upper) and upper >= lower:
                 sd = max(0.01, (upper - lower) / (2 * _Z_80))
+        share_fields = (
+            ("rush_share", "usage_share") if position == "RB"
+            else ("pass_share", "usage_share") if position == "QB"
+            else ("target_share", "usage_share")
+        )
+        usage_share = _optional_unit_interval(row, share_fields)
+        participation_prob = _optional_unit_interval(
+            row, ("participation_prob", "will_play_probability")) or 1.0
         out[game_id].append(PlayerSimulationInput(
             player_id=str(row.player_id), team=team, position=position,
             mean_fantasy_points=max(0.0, mean), sd_fantasy_points=sd,
+            usage_share=usage_share, participation_prob=participation_prob,
         ))
     return {game_id: players for game_id, players in out.items() if players}
 
