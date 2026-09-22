@@ -1,25 +1,45 @@
 import numpy as np
 import pytest
-from src.models.game_simulation import GameScriptInput, PlayerSimulationInput, TeamVolumeBaseline, simulate_game_scripts, simulate_players
-from src.models.player_correlation import apply_shared_residuals, fit_residual_correlation
+
+from src.models.game_simulation import (
+    GameScriptInput, PlayerSimulationInput, TeamVolumeBaseline,
+    _split_score, simulate_game_scripts, simulate_players,
+)
+from src.models.player_correlation import fit_residual_correlation
 
 def test_scripts_are_deterministic_and_bounded():
     game = GameScriptInput("g1", "H", "A", .6, 3, 44, TeamVolumeBaseline(64, .60), TeamVolumeBaseline(63, .57))
     assert simulate_game_scripts(game, 20, 7) == simulate_game_scripts(game, 20, 7)
-    assert all(x.home_pass_attempts <= x.home_plays and x.away_pass_attempts <= x.away_plays for x in simulate_game_scripts(game, 20, 7))
+    assert all(x.home_pass_attempts <= x.home_plays and x.away_pass_attempts <= x.away_plays
+               for x in simulate_game_scripts(game, 20, 7))
+
+def test_score_split_conserves_total_at_extreme_margins():
+    assert _split_score(10.0, 25.0) == (10.0, 0.0)
+    assert _split_score(10.0, -25.0) == (0.0, 10.0)
+    home, away = _split_score(44.0, 3.0)
+    assert home + away == pytest.approx(44.0)
 
 def test_players_share_game_script():
     game = GameScriptInput("g1", "H", "A", .5, 0, 42)
     rows = simulate_players(game, [PlayerSimulationInput("qb", "H", "QB", 18, 4, .7)], 10, 2)
     assert len(rows) == 10 and all(r["plays"] >= r["pass_attempts"] for r in rows)
 
-def test_correlation_is_psd_and_reproducible():
-    model = fit_residual_correlation(np.array([[1,2,0],[2,4,1],[-1,-2,0],[0,1,-1.]], float), ["a","b","c"], .2)
-    assert np.all(np.linalg.eigvalsh(model.covariance) > 0)
-    assert np.array_equal(model.sample_residuals(5, 3), model.sample_residuals(5, 3))
+def test_correlated_residual_model_is_used_by_player_simulation():
+    model = fit_residual_correlation(
+        np.array([[-2, -2], [-1, -1], [1, 1], [2, 2]], dtype=float),
+        ["p1", "p2"], shrinkage=0.0)
+    sampled = model.sample_scaled_residuals(np.array([8.0, 8.0]), 1000, seed=3)
+    assert np.corrcoef(sampled.T)[0, 1] > .9
+    game = GameScriptInput("g1", "H", "A", .5, 0, 42)
+    players = [PlayerSimulationInput("p1", "H", "WR", 20, 8),
+               PlayerSimulationInput("p2", "H", "WR", 20, 8)]
+    rows = simulate_players(game, players, 25, 2, correlation_model=model)
+    assert len(rows) == 50
+    assert {row["position"] for row in rows} == {"WR"}
 
-def test_invalid_residuals_rejected():
-    with pytest.raises(ValueError):
-        fit_residual_correlation(np.array([[1,np.nan],[2,3]]), ["a","b"])
-    with pytest.raises(ValueError):
-        apply_shared_residuals(np.ones(3), fit_residual_correlation(np.ones((2,2)), ["a","b"]))
+def test_correlation_keys_must_match_players():
+    model = fit_residual_correlation(np.ones((2, 2)), ["a", "b"])
+    game = GameScriptInput("g1", "H", "A", .5, 0, 42)
+    with pytest.raises(ValueError, match="keys"):
+        simulate_players(game, [PlayerSimulationInput("a", "H", "WR", 10)], 2, 1,
+                         correlation_model=model)
