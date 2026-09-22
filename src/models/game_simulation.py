@@ -1,5 +1,12 @@
-"""Database-independent game-script simulation primitives."""
+"""Game-script simulation primitives.
+
+This module is intentionally database-independent.  It consumes predictions
+already produced by the game and player serving paths; learned usage shares,
+availability, and role-correlation artifacts are separate inputs.
+"""
 from dataclasses import dataclass
+from hashlib import blake2b
+from math import sqrt
 from typing import Iterable
 import numpy as np
 
@@ -30,7 +37,7 @@ class PlayerSimulationInput:
     position: str
     mean_fantasy_points: float
     sd_fantasy_points: float = 8.0
-    usage_share: float = 0.0
+    usage_share: float | None = None
     participation_prob: float = 1.0
 
 @dataclass(frozen=True)
@@ -42,9 +49,16 @@ class GameDraw:
     away_plays: int
     home_pass_attempts: int
     away_pass_attempts: int
+    home_won: bool
+    simulated_margin: float
+    simulated_total: float
 
 def _clip_probability(value: float) -> float:
     return float(np.clip(value, 0.0, 1.0))
+
+def _seed_for_game(seed: int, game_id: str) -> int:
+    digest = blake2b(game_id.encode("utf-8"), digest_size=8).digest()
+    return (int(seed) + int.from_bytes(digest, "little")) % (2**63 - 1)
 
 def _score_state_pass_adjustment(score_diff: float) -> float:
     return float(np.clip(-0.0025 * score_diff, -0.10, 0.10))
@@ -63,6 +77,29 @@ def _split_score(total: float, margin: float) -> tuple[float, float]:
         return 0.0, total
     return (total + margin) / 2.0, (total - margin) / 2.0
 
+def _draw_margin(rng, home_win_prob: float, predicted_margin: float,
+                 margin_sd: float) -> tuple[float, bool]:
+    """Draw a signed margin matching supplied win probability and mean margin.
+
+    The sign is sampled from home_win_prob. Conditional margin magnitudes use
+    exponential distributions whose means are solved so the unconditional
+    expected margin is predicted_margin. This is a coherent fallback until a
+    joint score model is fitted from historical data.
+    """
+    probability = float(np.clip(home_win_prob, 0.001, 0.999))
+    base_loss_margin = max(1.0, margin_sd * sqrt(2.0 / np.pi))
+    if predicted_margin >= 0:
+        away_margin_mean = base_loss_margin
+        home_margin_mean = max(
+            0.01, (predicted_margin + (1.0 - probability) * away_margin_mean) / probability)
+    else:
+        home_margin_mean = base_loss_margin
+        away_margin_mean = max(
+            0.01, (probability * home_margin_mean - predicted_margin) / (1.0 - probability))
+    home_won = bool(rng.random() < probability)
+    magnitude = rng.exponential(home_margin_mean if home_won else away_margin_mean)
+    return (float(magnitude) if home_won else -float(magnitude)), home_won
+
 def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
                           seed: int = 42) -> list[GameDraw]:
     if n_draws < 1:
@@ -71,19 +108,23 @@ def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
         raise ValueError("home_win_prob must be in [0, 1]")
     if game.predicted_total < 0 or game.margin_sd < 0 or game.total_sd < 0:
         raise ValueError("totals and standard deviations must be nonnegative")
-    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(_seed_for_game(seed, game.game_id))
     output = []
     for draw in range(n_draws):
-        total = max(0.0, rng.normal(game.predicted_total, game.total_sd))
-        margin = rng.normal(game.predicted_margin, game.margin_sd)
+        total = max(0.0, float(rng.normal(game.predicted_total, game.total_sd)))
+        margin, home_won = _draw_margin(
+            rng, game.home_win_prob, game.predicted_margin, game.margin_sd)
         home_score, away_score = _split_score(total, margin)
-        hp, hpa = _draw_volume(rng, game.home, home_score - away_score)
-        ap, apa = _draw_volume(rng, game.away, away_score - home_score)
-        output.append(GameDraw(draw, home_score, away_score, hp, ap, hpa, apa))
+        realized_margin = home_score - away_score
+        hp, hpa = _draw_volume(rng, game.home, realized_margin)
+        ap, apa = _draw_volume(rng, game.away, -realized_margin)
+        output.append(GameDraw(
+            draw, home_score, away_score, hp, ap, hpa, apa,
+            home_won, realized_margin, home_score + away_score))
     return output
 
 def _opportunity_multiplier(player, team_plays, team_pass, baseline):
-    """Use volume deviation from baseline; a neutral draw preserves the mean."""
+    """Volume-only fallback; usage allocation must be supplied separately."""
     passing = player.position in ("QB", "WR", "TE")
     actual = team_pass if passing else team_plays - team_pass
     expected = baseline.plays * (baseline.pass_rate if passing else 1.0 - baseline.pass_rate)
@@ -100,10 +141,11 @@ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationIn
     marginal_sds = np.asarray(
         [max(0.01, player.sd_fantasy_points) for player in player_list], dtype=float)
     correlated_noise = (
-        correlation_model.sample_scaled_residuals(marginal_sds, n_draws, seed + 2)
+        correlation_model.sample_scaled_residuals(
+            marginal_sds, n_draws, _seed_for_game(seed + 2, game.game_id))
         if correlation_model is not None else None
     )
-    rng = np.random.default_rng(seed + 1)
+    rng = np.random.default_rng(_seed_for_game(seed + 1, game.game_id))
     rows = []
     for script in scripts:
         for index, player in enumerate(player_list):
