@@ -17,6 +17,7 @@ from src.evaluation.team_share_backtester import (
     _segment_metrics,
     bootstrap_mae_delta,
     run_walk_forward_backtest,
+    walk_forward_oof_predictions,
 )
 from src.models.team_allocation.features import ROLL_WINDOW, VOLUME_COLS
 
@@ -38,6 +39,7 @@ def _synthetic_rows() -> pd.DataFrame:
                     share = base + rng.normal(scale=0.02)
                     row[c] = 5.0
                     row[f"team_{c}"] = 10.0
+                    row[f"team_{c}_roll{ROLL_WINDOW}"] = 10.0
                     row[f"share_of_team_{c}"] = share
                     row[f"share_of_team_{c}_s2d"] = base
                     row[f"share_of_team_{c}_roll{ROLL_WINDOW}"] = base
@@ -105,6 +107,7 @@ def _mixed_segment_rows() -> pd.DataFrame:
                     share = base + rng.normal(scale=0.02)
                     row[c] = 5.0
                     row[f"team_{c}"] = 10.0
+                    row[f"team_{c}_roll{ROLL_WINDOW}"] = 10.0
                     row[f"share_of_team_{c}"] = share
                     row[f"share_of_team_{c}_s2d"] = base
                     row[f"share_of_team_{c}_roll{ROLL_WINDOW}"] = base
@@ -185,3 +188,45 @@ def test_segment_metrics_splits_by_label_and_counts_add_up():
     assert out["A"]["n"] == 2
     assert out["B"]["n"] == 2
     assert out["A"]["mae"] == pytest.approx(0.0)
+
+
+def test_oof_predictions_has_one_row_per_test_row_per_arm(shares_db):
+    oof = walk_forward_oof_predictions("targets", seasons=SEASONS, n_test_seasons=2)
+    report = run_walk_forward_backtest("targets", seasons=SEASONS, n_test_seasons=2)
+    n_arms = len(report["pooled"])
+    # every held-out row appears once per arm (ridge/xgboost/rolling3)
+    assert len(oof) == report["pooled"]["ridge"]["n"] * n_arms
+
+
+def test_oof_predictions_has_expected_columns(shares_db):
+    oof = walk_forward_oof_predictions("targets", seasons=SEASONS, n_test_seasons=2)
+    expected = {
+        "player_id", "season", "week", "team", "position", "fold", "arm",
+        "predicted_share", "actual_share", "actual_volume", "team_total_roll3",
+    }
+    assert expected.issubset(oof.columns)
+
+
+def test_oof_predictions_actual_share_matches_backtest_label(shares_db):
+    """actual_share in the OOF frame must be the same share_of_team_targets
+    value the aggregated backtest scored against -- a sentinel that the OOF
+    path and the aggregated path are reading the same label column."""
+    oof = walk_forward_oof_predictions("targets", seasons=SEASONS, n_test_seasons=2)
+    df = bt.load_share_rows(seasons=SEASONS)
+    merged = oof.merge(
+        df[["player_id", "season", "week", "share_of_team_targets"]],
+        on=["player_id", "season", "week"], how="left",
+    )
+    np.testing.assert_allclose(merged["actual_share"], merged["share_of_team_targets"])
+
+
+def test_oof_predictions_folds_respect_walk_forward_order(shares_db):
+    oof = walk_forward_oof_predictions("targets", seasons=SEASONS, n_test_seasons=2)
+    for fold_i in sorted(oof["fold"].unique()):
+        fold_seasons = set(oof.loc[oof["fold"] == fold_i, "season"])
+        assert len(fold_seasons) == 1  # each fold's test rows are a single held-out season
+
+
+def test_oof_predictions_raises_for_invalid_target():
+    with pytest.raises(ValueError, match="target must be one of"):
+        walk_forward_oof_predictions("not_a_real_target")

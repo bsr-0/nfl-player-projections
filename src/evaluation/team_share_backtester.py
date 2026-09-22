@@ -229,3 +229,75 @@ def run_walk_forward_backtest(
         "folds": fold_reports,
         "pooled": pooled,
     }
+
+
+def walk_forward_oof_predictions(
+    target: str,
+    seasons: Optional[List[int]] = None,
+    n_test_seasons: Optional[int] = None,
+    tuned_params: Optional[Dict[str, dict]] = None,
+) -> pd.DataFrame:
+    """Same walk-forward fold discipline as `run_walk_forward_backtest`, but
+    returns one row per (id columns, fold, arm) for every held-out row
+    across every fold -- out-of-fold predictions, not just aggregated
+    metrics. `run_walk_forward_backtest` doesn't expose these (by design --
+    it only ever needed aggregated metrics), so this is a parallel function
+    rather than a refactor of it, same rationale game_outcome_backtester.py
+    and game_margin_backtester.py already use for staying separate siblings
+    instead of sharing one implementation.
+
+    Used by src/evaluation/team_reconstruction_backtester.py to combine two
+    targets' (rushing_yards, receiving_yards) predictions per player-week
+    before turning them into partial fantasy points -- reconstruction needs
+    per-row predicted shares, which the aggregated backtest never keeps.
+
+    Returned columns: player_id, season, week, team, position, fold, arm,
+    predicted_share, actual_share, actual_volume (the real current-week
+    `target` column, i.e. ground truth volume), team_total_roll{ROLL_WINDOW}
+    (the lagged team-total baseline reconstruction multiplies by).
+    """
+    if target not in VOLUME_COLS:
+        raise ValueError(f"target must be one of {VOLUME_COLS}, got {target!r}")
+    tuned_params = tuned_params or {}
+    label_col = f"share_of_team_{target}"
+    roll3_col = f"{label_col}_roll{ROLL_WINDOW}"
+    team_total_col = f"team_{target}_roll{ROLL_WINDOW}"
+
+    df = load_share_rows(seasons=seasons)
+    df = filter_population(df, target)
+    feat_cols = feature_columns(df)
+    X = df[feat_cols]
+    y = df[label_col].to_numpy()
+    season_arr = df["season"].to_numpy()
+
+    n_splits = n_test_seasons or TEAM_ALLOCATION_MODEL_CONFIG["n_walk_forward_test_seasons"]
+    gap = TEAM_ALLOCATION_MODEL_CONFIG["cv_gap_seasons"]
+    splitter = SeasonAwareTimeSeriesSplit(n_splits=n_splits, seasons=season_arr, gap_seasons=gap, strict=True)
+    arms = _arm_factories(roll3_col, tuned_params)
+
+    id_cols = df[["player_id", "season", "week", "team", "position"]].reset_index(drop=True)
+    actual_volume = df[target].to_numpy()
+    team_total = df[team_total_col].to_numpy()
+
+    rows: List[pd.DataFrame] = []
+    for fold_i, (train_idx, test_idx) in enumerate(splitter.split(X)):
+        X_train, y_train = X.iloc[train_idx], y[train_idx]
+        X_test, y_test = X.iloc[test_idx], y[test_idx]
+        for name, factory in arms.items():
+            model = factory().fit(X_train, y_train)
+            pred = np.asarray(model.predict(X_test), dtype=float)
+            fold_df = id_cols.iloc[test_idx].copy()
+            fold_df["fold"] = fold_i
+            fold_df["arm"] = name
+            fold_df["predicted_share"] = pred
+            fold_df["actual_share"] = y_test
+            fold_df["actual_volume"] = actual_volume[test_idx]
+            fold_df["team_total_roll3"] = team_total[test_idx]
+            rows.append(fold_df)
+
+    if not rows:
+        return pd.DataFrame(columns=[
+            "player_id", "season", "week", "team", "position", "fold", "arm",
+            "predicted_share", "actual_share", "actual_volume", "team_total_roll3",
+        ])
+    return pd.concat(rows, ignore_index=True)

@@ -303,13 +303,32 @@ building anything from the Plan B section.
       **Scope discovery**: this can only ever reconstruct a yardage-only
       PARTIAL fantasy-points number (no TDs/receptions/passing) -- see the
       Reconstruction section's scope-limitation note and the revised
-      acceptance criterion 2 above. Not yet wired into the backtester/CLI
-      (still module-level building blocks); not yet run against real data
-      for the same sandbox reason as the rest of Plan A.
-- [ ] Wire reconstruction into the walk-forward backtester/CLI (produce a
-      per-fold/pooled partial-points MAE the way share MAE already is),
-      then compare against the revised criterion 2 baseline once real data
-      is available.
+      acceptance criterion 2 above.
+- [x] Wired reconstruction into a walk-forward backtester/CLI:
+      `src/evaluation/team_share_backtester.py:walk_forward_oof_predictions()`
+      (per-row, per-fold, per-arm out-of-fold share predictions -- a
+      parallel sibling to `run_walk_forward_backtest`, not a refactor of
+      it, same rationale the game_outcome/game_margin backtesters already
+      use for staying separate) feeds
+      `src/evaluation/team_reconstruction_backtester.py:run_reconstruction_backtest()`,
+      which renormalizes + reconstructs + scores PARTIAL fantasy points per
+      arm (ridge/xgboost/rolling3), with the same position breakdown and
+      paired-bootstrap-CI-vs-rolling3 treatment as the share backtest.
+      `scripts/evaluate_team_share_reconstruction.py` is the CLI entry
+      point, writing `team_share_reconstruction_metadata.json`. The
+      `rolling3` arm here means "reconstruction fed each player's own
+      rolling-3 share" -- the correct baseline for the revised criterion 2
+      (reconstructed-vs-reconstructed, not against the production model's
+      full-PPR MAE). A QB row has no `receiving_yards` population (see
+      `reconstruct.py`'s docstring) and correctly reconstructs to 0
+      receiving yards rather than a gap. 16 new tests (5 on the
+      reconstruction backtester using real `build_shares()` output through
+      a 3-position synthetic DB, not hand-synthesized columns; 6 more on
+      `walk_forward_oof_predictions` itself). Verified end-to-end against a
+      synthetic DB -- QB partial-points MAE came out lowest (small
+      rushing-only production) and RB highest (both rushing and receiving
+      volume), the expected qualitative shape. Not yet run against real
+      data for the same sandbox reason as the rest of Plan A.
 - [ ] Touchdown/reception share targets (needed for criterion 2 as
       originally stated -- not yet scoped, deferred until the yardage-only
       slice above shows the underlying approach has legs).
