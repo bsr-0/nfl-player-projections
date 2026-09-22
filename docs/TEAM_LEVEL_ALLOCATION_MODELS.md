@@ -263,30 +263,91 @@ built-and-tested one.
 
 ### Architecture options
 
-- **Mixed-effects regression**: team-week random effect + player random
-  effect + position fixed effects (`statsmodels` `MixedLM` or a Bayesian
-  hierarchical model). Cheapest joint option; the team-week random effect
-  captures shared game-environment variance without any new architecture.
+- **Mixed-effects regression — built (2026-09), see below.**
 - **Permutation-invariant set model**: Deep Sets or a small transformer over
   the roster, so the model can learn intra-team trade-offs directly. Highest
-  potential ceiling, highest engineering cost, no precedent in this codebase
-  (everything here is `sklearn`/`xgboost` pipelines).
+  potential ceiling, highest engineering cost. `torch` is in
+  `requirements.txt` but genuinely unused anywhere in this codebase (checked
+  while starting this section) -- so "no precedent in this codebase" still
+  holds even though the raw dependency happens to already be available; a
+  training loop, data loader, and serialization convention would all be new.
+  Not started.
+
+### Mixed-effects regression — built
+
+`src/models/team_hierarchical/` (`features.py`, `models.py`) implements a
+random-intercept-per-player mixed model via `statsmodels` `MixedLM`, reusing
+Plan A's `team_week_player_shares` labels/features (joined with
+`team_week_roster_slots` for the `slot` fixed effect) and, unmodified, Plan
+A's reconstruction utilities.
+
+**Design correction from this doc's original sketch above** ("team-week
+random effect + player random effect"), found while actually building this,
+not assumed away: a random effect's value is a deviation estimated FROM
+THAT GROUP'S OWN DATA. A walk-forward test row is always a genuinely NEW
+(team, season, week) by construction, so a random effect grouped by
+team-week has zero observations to estimate from at prediction time and
+contributes nothing to a forecast -- confirmed empirically (see
+`src/models/team_hierarchical/models.py`'s module docstring): even
+statsmodels' own `MixedLMResults.predict()` ignores every group's random
+effect by default, known or not. Grouping by `player_id` instead avoids
+this: a player with prior training history keeps the same group across
+future weeks, so their persistent deviation (talent/role tendency beyond
+what slot+features predict) genuinely carries forward; a true cold-start
+player correctly falls back to the fixed-effects-only prediction, the same
+"don't fabricate, default sensibly" behavior used throughout this repo.
+Team-environment effects (what the team-week grouping was meant to capture)
+are instead carried by Plan A's existing lagged team-total features already
+in the fixed-effects design (`team_{stat}_s2d/roll3`) -- an observed,
+pre-game-known proxy, unlike an unobservable-until-the-fact team-week
+intercept. `predict()` manually adds the known-player random effect back on
+top of statsmodels' fixed-effects-only output, since the library itself
+won't.
+
+Other things handled, found while implementing rather than assumed safe:
+an unseen `slot` category at prediction time (no estimated coefficient)
+falls back to that position's rank-1 slot, and to the fold's constant mean
+if even that is unseen; a numeric fixed-effect column with zero variance in
+a fold is dropped before fitting (would otherwise make the design matrix
+singular); non-convergence does NOT raise an exception in statsmodels --
+verified empirically -- so a non-converged fit is explicitly discarded and
+the model falls back to the same trivial-constant treatment
+`VegasFavoriteBaseline` already gives a degenerate fold elsewhere in this
+repo, rather than silently keeping untrustworthy parameters.
+
+13 tests (5 features, 8 models) covering all of the above, including a
+synthetic scenario specifically designed so `slot` does NOT fully determine
+player identity (several players per team share each slot label) -- the
+actual condition the random effect is meant to explain, which a naive
+1-player-per-slot test would trivially and misleadingly pass regardless of
+whether the random-effect logic works. Verified end-to-end against a real
+synthetic DB through the full `build_team_week_player_shares.py` ->
+`build_team_week_roster_slots.py` -> `load_slot_share_rows` ->
+`MixedEffectsShareModel` pipeline.
+
+Not yet built: a walk-forward backtester for this model (mirroring
+`src/evaluation/team_share_backtester.py`'s `SeasonAwareTimeSeriesSplit`
+harness), and the slot-to-player_id evaluation re-mapping the "why this is
+deferred" section below still correctly flags as outstanding.
 
 ### Why this is deferred, not abandoned
 
-**Updated**: the slot-assignment scheme is no longer in the "new, audited
-from scratch" category — see the Data shape section above, it's built and
-tested, and it reuses this repo's existing depth-chart infra rather than
-inventing new leakage surface. Relative to Plan A, what's still genuinely
-missing: a new modeling stack (mixed effects or a set/graph net — neither
-exists anywhere else in this repo, unlike Plan A's XGBoost/Ridge pipelines
-which are the same pattern used throughout), and a new evaluation step
-(predictions must be re-mapped from slot back to `player_id` before scoring
-— once a roster changes week to week, a slot's occupant isn't fixed, which
-is itself a place to introduce a silent bug). That's still real, separate
-cost to justify before knowing whether the underlying idea (team-level
-structure improves on independent per-player prediction) pays off at all —
-just a smaller gap than this doc originally stated.
+**Updated twice now**: the slot-assignment scheme (Data shape, above) and a
+first working mixed-effects model (Mixed-effects regression, above) are both
+built and tested, reusing this repo's existing depth-chart infra and Plan
+A's reconstruction utilities rather than inventing new leakage surface or a
+parallel scoring formula. What's still genuinely missing, relative to Plan
+A: (1) a walk-forward backtester for this model, so its accuracy can
+actually be measured the same honest way every other model in this repo is
+-- right now it's built and unit-tested, not evaluated; (2) the
+set/graph-net architecture, which is still real new ground (no precedent in
+this codebase, see above); (3) the evaluation re-mapping (predictions must
+be re-mapped from slot back to `player_id` before scoring -- once a roster
+changes week to week, a slot's occupant isn't fixed, which is itself a
+place to introduce a silent bug). That's real, separate cost still to
+justify before knowing whether the underlying idea (team-level structure
+improves on independent per-player prediction) pays off at all -- the gap
+keeps shrinking, but it isn't closed.
 
 ## Decision gate
 
@@ -410,5 +471,22 @@ building anything from the Plan B section.
       lookup. Found and fixed two real bugs in the process (see Data shape
       section): a DB_PATH/cache gotcha in that reused lookup, and a
       placeholder-row gap in the tie-break's own lag computation.
-- [ ] Plan B architecture + evaluation re-mapping (not started; still
-      correctly gated on Plan A's real-data result per the decision gate)
+- [x] Plan B mixed-effects model, first cut: `src/models/team_hierarchical/`
+      (`features.py`, `models.py`). Random intercept per `player_id` (not
+      team-week -- see the Architecture section's design correction, found
+      empirically while building this: statsmodels' own `.predict()`
+      ignores every group's random effect by default, and a team-week
+      grouping has no observations to estimate from at walk-forward
+      prediction time regardless). Reuses Plan A's labels/features and
+      reconstruction utilities unmodified. 13 tests, including a
+      synthetic scenario specifically designed so `slot` doesn't fully
+      determine player identity (the actual condition the random effect is
+      meant to explain). Verified end-to-end against a real synthetic DB.
+      Built ahead of the decision gate, deliberately, as groundwork prep --
+      not a decision to proceed with Plan B as the chosen path.
+- [ ] Walk-forward backtester for the mixed-effects model (not started --
+      it's fit/predict-tested, not yet accuracy-evaluated the honest way
+      every other model in this repo is)
+- [ ] Slot-to-player_id evaluation re-mapping, and the set/graph-net
+      architecture (not started; still correctly gated on Plan A's
+      real-data result per the decision gate)

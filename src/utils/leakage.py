@@ -313,6 +313,12 @@ FEATURE_AVAILABILITY: Tuple[Tuple[str, str], ...] = (
     ("rookie_draft_value", "fixed at draft time"),
     ("combine_score", "fixed at combine, static per player"),
     ("depth_chart_rank", "most recent depth chart snapshot, prior to prediction week"),
+    # Plan B (src/models/team_hierarchical/, team_week_roster_slots): slot
+    # and slot_rank are both derived entirely from depth_chart_rank (above)
+    # plus a lagged snap_share tie-break (scripts/build_team_week_roster_slots.py)
+    # -- pregame-known by construction. Bare "slot" also matches "slot_rank"
+    # as a substring, covering both with one entry.
+    ("slot", "derived from depth_chart_rank + lagged snap_share, pregame-known (see build_team_week_roster_slots.py)"),
     # Injury/status: enforced pre-kickoff via nfl_data_py's date_modified
     # timestamp vs. schedule kickoff time (InjuryDataLoader._load_kickoff_times
     # in src/data/external_data.py); post-kickoff reports are dropped before
