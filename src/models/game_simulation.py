@@ -56,6 +56,8 @@ def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
                           seed: int = 42) -> list[GameDraw]:
     if n_draws < 1:
         raise ValueError("n_draws must be positive")
+    if not 0 <= game.home_win_prob <= 1:
+        raise ValueError("home_win_prob must be in [0, 1]")
     if game.predicted_total < 0 or game.margin_sd < 0 or game.total_sd < 0:
         raise ValueError("totals and standard deviations must be nonnegative")
     rng = np.random.default_rng(seed)
@@ -70,6 +72,13 @@ def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
         output.append(GameDraw(draw, home_score, away_score, hp, ap, hpa, apa))
     return output
 
+def _opportunity_multiplier(player, team_plays, team_pass, baseline):
+    """Use volume deviation from baseline; a neutral draw preserves the model mean."""
+    actual = team_pass if player.position in ("QB", "WR", "TE") else team_plays - team_pass
+    expected = baseline.plays * (baseline.pass_rate if player.position in ("QB", "WR", "TE")
+                                 else 1.0 - baseline.pass_rate)
+    return actual / max(1.0, expected)
+
 def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationInput],
                      n_draws: int = 1000, seed: int = 42) -> list[dict]:
     scripts = simulate_game_scripts(game, n_draws, seed)
@@ -79,14 +88,14 @@ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationIn
         for player in players:
             if player.team not in (game.home_team, game.away_team):
                 raise ValueError("player is not in this game")
+            is_home = player.team == game.home_team
+            baseline = game.home if is_home else game.away
+            team_plays = script.home_plays if is_home else script.away_plays
+            team_pass = script.home_pass_attempts if is_home else script.away_pass_attempts
             active = rng.random() < _clip_probability(player.participation_prob)
-            team_plays = script.home_plays if player.team == game.home_team else script.away_plays
-            team_pass = script.home_pass_attempts if player.team == game.home_team else script.away_pass_attempts
-            role_volume = max(0.0, player.usage_share) * (
-                team_pass if player.position in ("QB", "WR", "TE") else team_plays - team_pass)
-            scale = role_volume / max(1.0, team_plays)
+            multiplier = _opportunity_multiplier(player, team_plays, team_pass, baseline)
             value = 0.0 if not active else max(0.0, rng.normal(
-                player.mean_fantasy_points * (0.75 + 0.25 * scale),
+                player.mean_fantasy_points * multiplier,
                 max(0.01, player.sd_fantasy_points)))
             rows.append({"game_id": game.game_id, "draw": script.draw, "player_id": player.player_id,
                          "team": player.team, "home_score": script.home_score,
