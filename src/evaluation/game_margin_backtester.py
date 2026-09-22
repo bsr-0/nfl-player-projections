@@ -123,7 +123,10 @@ def run_walk_forward_backtest(
 
     n_splits = n_test_seasons or GAME_OUTCOME_MODEL_CONFIG["n_walk_forward_test_seasons"]
     gap = GAME_OUTCOME_MODEL_CONFIG["cv_gap_seasons"]
-    splitter = SeasonAwareTimeSeriesSplit(n_splits=n_splits, seasons=season_arr, gap_seasons=gap)
+    # strict=True: same rationale as game_outcome_backtester.py -- this
+    # backtest's numbers are shown to users as honest, held-out accuracy, so
+    # a silent season-unaware fallback here would misrepresent that.
+    splitter = SeasonAwareTimeSeriesSplit(n_splits=n_splits, seasons=season_arr, gap_seasons=gap, strict=True)
     arms = _arm_factories(cfg["line_col"], tuned_params)
 
     fold_reports: List[Dict] = []

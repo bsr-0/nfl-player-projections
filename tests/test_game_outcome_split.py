@@ -101,3 +101,20 @@ def test_backtest_script_trains_only_on_strictly_prior_seasons(multi_season_db, 
 
     for arm_metrics in report["pooled"].values():
         assert 0.0 <= arm_metrics["accuracy"] <= 1.0
+
+
+def test_backtest_raises_rather_than_silently_using_season_unaware_split(multi_season_db, monkeypatch):
+    """Only 5 seasons are seeded; n_test_seasons=5 with gap_seasons=0 needs
+    6 seasons of season-aware headroom. The backtester must fail loudly
+    here (strict=True) rather than silently falling back to a row-order
+    TimeSeriesSplit and reporting the result as an honest held-out
+    walk-forward -- see src/models/position_models.py's SeasonAwareTimeSeriesSplit."""
+    import src.evaluation.game_outcome_backtester as go_bt
+
+    monkeypatch.setattr(
+        go_bt,
+        "build_game_outcome_rows",
+        lambda seasons=None: _rows(multi_season_db),
+    )
+    with pytest.raises(ValueError, match="strict=True"):
+        run_walk_forward_backtest(seasons=SEASONS, n_test_seasons=5)

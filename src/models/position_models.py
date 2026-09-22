@@ -209,15 +209,40 @@ class SeasonAwareTimeSeriesSplit:
         seasons: Array of season labels per row (aligned with X).
         gap_seasons: Number of seasons to skip between train and test
             to prevent feature leakage from rolling/lag features.
+        strict: If True, never fall back to the season-unaware plain
+            TimeSeriesSplit below -- raise instead. The fallback only
+            respects ROW order, not season boundaries, so a caller that
+            reports its results as "N held-out seasons" (e.g. a
+            walk-forward backtest whose numbers get shown to users) would
+            silently mislabel a fold that actually splits mid-season if it
+            hit the fallback. Tuning-only callers that just want a fixed
+            fold count for an inner CV score can leave this False, which
+            preserves the historical fallback behavior.
     """
     def __init__(self, n_splits: int = 5, seasons: np.ndarray = None,
-                 gap_seasons: int = 0):
+                 gap_seasons: int = 0, strict: bool = False):
         self.n_splits = n_splits
         self.seasons = seasons
         self.gap_seasons = gap_seasons
+        self.strict = strict
+
+    def _refuse_fallback(self, reason: str) -> None:
+        raise ValueError(
+            f"SeasonAwareTimeSeriesSplit(strict=True): {reason} -- refusing to "
+            "silently fall back to a season-unaware TimeSeriesSplit, which "
+            "would not guarantee whole-season folds. Pass more seasons, "
+            "reduce n_splits/gap_seasons, or construct with strict=False if "
+            "season purity isn't required here."
+        )
 
     def split(self, X, y=None, groups=None):
         if self.seasons is None or len(self.seasons) != len(X):
+            if self.strict:
+                self._refuse_fallback(
+                    "no per-row season labels aligned with X"
+                    if self.seasons is None
+                    else f"{len(self.seasons)} season labels do not match {len(X)} rows"
+                )
             # Fallback: standard TimeSeriesSplit
             yield from TimeSeriesSplit(n_splits=self.n_splits).split(X, y, groups)
             return
@@ -229,9 +254,16 @@ class SeasonAwareTimeSeriesSplit:
         # the first fold had no training seasons left and was skipped, so
         # split() yielded 2 folds while get_n_splits() promised 3 -- sklearn
         # raises on that, and it killed the 2026-09-09 retrain in WR Ridge
-        # tuning. Fall back to a plain TimeSeriesSplit instead, which always
-        # yields exactly n_splits.
+        # tuning. Non-strict callers fall back to a plain TimeSeriesSplit
+        # instead, which always yields exactly n_splits; strict callers
+        # raise instead of accepting that season-unaware substitute.
         if n_seasons < self.n_splits + 1 + self.gap_seasons:
+            if self.strict:
+                self._refuse_fallback(
+                    f"only {n_seasons} season(s) available, need at least "
+                    f"{self.n_splits + 1 + self.gap_seasons} for {self.n_splits} "
+                    f"fold(s) with gap_seasons={self.gap_seasons}"
+                )
             yield from TimeSeriesSplit(n_splits=self.n_splits).split(X, y, groups)
             return
         # Allocate test seasons: last n_splits seasons each serve as a test season

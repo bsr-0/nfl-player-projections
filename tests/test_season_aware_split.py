@@ -66,3 +66,34 @@ def test_tuning_subsample_passthrough_below_cap():
     X, y, seasons = _data(3, per_season=10)
     X_sub, y_sub, seasons_sub = PositionModel._subsample_for_tuning(X, y, seasons)
     assert X_sub is X and y_sub is y and seasons_sub is seasons
+
+
+def test_strict_raises_instead_of_falling_back_to_season_unaware_split():
+    """strict=True must never silently degrade to the season-unaware plain
+    TimeSeriesSplit fallback: too few seasons for the requested fold count
+    should raise, not produce folds that don't actually respect season
+    boundaries (see game_outcome_backtester.py / game_margin_backtester.py,
+    whose walk-forward numbers are shown to users as honest, held-out
+    accuracy -- a silent fallback there would misrepresent that)."""
+    X, y, seasons = _data(4)  # only 4 seasons; n_splits=3 + gap=1 needs >= 5
+    cv = SeasonAwareTimeSeriesSplit(n_splits=3, seasons=seasons, gap_seasons=1, strict=True)
+    with pytest.raises(ValueError, match="strict=True"):
+        list(cv.split(X, y))
+
+
+def test_strict_still_works_when_enough_seasons_are_available():
+    X, y, seasons = _data(6)
+    cv = SeasonAwareTimeSeriesSplit(n_splits=3, seasons=seasons, gap_seasons=1, strict=True)
+    folds = list(cv.split(X, y))
+    assert len(folds) == 3
+    for train_idx, test_idx in folds:
+        assert seasons[train_idx].max() < seasons[test_idx].min()
+
+
+def test_non_strict_default_still_falls_back_as_before():
+    """Default behavior (strict=False) is unchanged -- tuning callers that
+    rely on the season-unaware fallback for a fixed fold count keep it."""
+    X, y, seasons = _data(4)
+    cv = SeasonAwareTimeSeriesSplit(n_splits=3, seasons=seasons, gap_seasons=1)
+    folds = list(cv.split(X, y))
+    assert len(folds) == cv.get_n_splits(X) == 3
