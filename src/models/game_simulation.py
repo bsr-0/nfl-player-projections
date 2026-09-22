@@ -10,7 +10,10 @@ from math import sqrt
 from typing import Iterable
 import numpy as np
 
-from src.models.player_correlation import ResidualCorrelationModel
+from src.models.player_correlation import (
+    ResidualCorrelationModel,
+    RoleResidualCorrelationModel,
+)
 
 @dataclass(frozen=True)
 class TeamVolumeBaseline:
@@ -130,21 +133,48 @@ def _opportunity_multiplier(player, team_plays, team_pass, baseline):
     expected = baseline.plays * (baseline.pass_rate if passing else 1.0 - baseline.pass_rate)
     return actual / max(1.0, expected)
 
+def role_keys_for_players(game: GameScriptInput,
+                          players: list[PlayerSimulationInput]) -> tuple[str, ...]:
+    """Assign stable within-game roles such as home_WR1 and away_RB2."""
+    grouped = {}
+    for index, player in enumerate(players):
+        side = "home" if player.team == game.home_team else "away"
+        grouped.setdefault((side, player.position), []).append((index, player))
+    assigned = {}
+    for (side, position), entries in grouped.items():
+        entries.sort(
+            key=lambda item: (
+                item[1].usage_share is not None,
+                item[1].usage_share if item[1].usage_share is not None else -1.0,
+                item[1].mean_fantasy_points,
+                item[1].player_id,
+            ),
+            reverse=True,
+        )
+        for rank, (index, _) in enumerate(entries, start=1):
+            assigned[index] = f"{side}_{position}{rank}"
+    return tuple(assigned[index] for index in range(len(players)))
+
 def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationInput],
                      n_draws: int = 1000, seed: int = 42,
-                     correlation_model: ResidualCorrelationModel | None = None) -> list[dict]:
+                     correlation_model: (ResidualCorrelationModel
+                                         | RoleResidualCorrelationModel
+                                         | None) = None) -> list[dict]:
     scripts = simulate_game_scripts(game, n_draws, seed)
     player_list = list(players)
     player_keys = tuple(player.player_id for player in player_list)
-    if correlation_model is not None and correlation_model.player_keys != player_keys:
-        raise ValueError("correlation model keys must exactly match simulation players")
     marginal_sds = np.asarray(
         [max(0.01, player.sd_fantasy_points) for player in player_list], dtype=float)
-    correlated_noise = (
-        correlation_model.sample_scaled_residuals(
+    correlated_noise = None
+    if isinstance(correlation_model, ResidualCorrelationModel):
+        if correlation_model.player_keys != player_keys:
+            raise ValueError("correlation model keys must exactly match simulation players")
+        correlated_noise = correlation_model.sample_scaled_residuals(
             marginal_sds, n_draws, _seed_for_game(seed + 2, game.game_id))
-        if correlation_model is not None else None
-    )
+    elif isinstance(correlation_model, RoleResidualCorrelationModel):
+        correlated_noise = correlation_model.sample_scaled_residuals(
+            role_keys_for_players(game, player_list), marginal_sds, n_draws,
+            _seed_for_game(seed + 2, game.game_id))
     rng = np.random.default_rng(_seed_for_game(seed + 1, game.game_id))
     rows = []
     for script in scripts:
