@@ -230,6 +230,23 @@ building anything from the Plan B section.
       checking whether ridge/xgboost actually beat `rolling3` on real
       held-out seasons, is the next step -- that result is Plan A's
       acceptance criterion 1 and 2 (see above).
+- [x] Coverage report + always-written metadata (robustness follow-ups):
+      `build_team_week_player_shares.py` now prints/writes a season/position
+      coverage summary (`audit_coverage`, `--audit-csv`, mirroring
+      `build_canonical_player_weeks.py`'s `audit_panel()`) and a team-week
+      share-sum diagnostic table (`audit_team_week_sums` -- a report to
+      read, not a gate; `validate_shares` still hard-fails any sum > 1).
+      `train_team_share_model.py` now writes the metadata JSON sidecar on
+      every run, including bare `--no-save` evaluation runs (only the
+      joblib model artifacts are skipped) -- so a pure backtest run is
+      diffable across commits instead of living only in stdout. **Read the
+      coverage report before trusting any MAE number** on the first real
+      run -- a season/position discontinuity there invalidates the
+      accuracy comparison regardless of what it says.
+      Still not done: statistical-significance (bootstrap CI) on the
+      MAE delta, and a scripted acceptance gate that reads the metadata
+      JSON and exits non-zero on criterion-1 failure -- both listed as
+      follow-ups, deferred until a real-data run gives something to gate.
 - [ ] Plan A reconstruction + scoring-formula wiring (share x team-total ->
       fantasy points) -- not started; depends on the real-data backtest
       above clearing acceptance criterion 1 first (no point reconstructing

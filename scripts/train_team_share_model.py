@@ -72,32 +72,43 @@ def main() -> None:
             "trained_at": datetime.now(timezone.utc).isoformat(),
             "target": target,
             "seasons_requested": seasons,
+            "no_save": args.no_save,
             "backtest": report,
         }
 
-        if args.no_save:
-            continue
-
-        print(f"\nFitting final {target} models on the full available history...")
+        # Population/feature-schema info is cheap (a read + column-name
+        # audit, no model fitting) and belongs in the metadata sidecar even
+        # on a bare --no-save evaluation run -- otherwise a pure backtest
+        # run leaves nothing diffable across runs, and "did criterion 1
+        # pass" becomes something only readable from stdout at the moment
+        # the command was run. Model fitting/saving is the only part that
+        # actually gets skipped for --no-save.
         df = load_share_rows(seasons=seasons)
         df = filter_population(df, target)
         feat_cols = feature_columns(df)
         label_col = f"share_of_team_{target}"
-        X, y = df[feat_cols], df[label_col].to_numpy()
-
-        ridge = ShareRidgeModel().fit(X, y)
-        xgb_model = ShareXGBModel().fit(X, y)
-
-        save_model(ridge, MODELS_DIR / f"team_share_{target}_ridge.joblib")
-        save_model(xgb_model, MODELS_DIR / f"team_share_{target}_xgb.joblib")
         metadata["feature_columns"] = feat_cols
         metadata["n_training_rows"] = int(len(df))
 
+        if not args.no_save:
+            print(f"\nFitting final {target} models on the full available history...")
+            X, y = df[feat_cols], df[label_col].to_numpy()
+
+            ridge = ShareRidgeModel().fit(X, y)
+            xgb_model = ShareXGBModel().fit(X, y)
+
+            save_model(ridge, MODELS_DIR / f"team_share_{target}_ridge.joblib")
+            save_model(xgb_model, MODELS_DIR / f"team_share_{target}_xgb.joblib")
+
         metadata_path = MODELS_DIR / f"team_share_{target}_model_metadata.json"
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2, default=str)
 
-        print(f"Saved {target} models + metadata to {MODELS_DIR}")
+        if args.no_save:
+            print(f"Wrote backtest-only metadata (no models saved) to {metadata_path}")
+        else:
+            print(f"Saved {target} models + metadata to {MODELS_DIR}")
 
 
 if __name__ == "__main__":

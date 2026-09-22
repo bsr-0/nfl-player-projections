@@ -178,6 +178,54 @@ def validate_shares(panel: pd.DataFrame) -> None:
             raise ValueError(f"{share_col} sums to > 1 for {len(bad)} team-week(s)")
 
 
+def audit_coverage(panel: pd.DataFrame) -> pd.DataFrame:
+    """Season/position coverage summary -- printed before any downstream
+    metric is trusted, so a silent population discontinuity (a season
+    half-missing, a position's cold-start rate spiking) is visible rather
+    than baked silently into a walk-forward MAE. Mirrors
+    build_canonical_player_weeks.py's audit_panel() summary, same rationale
+    (Phase 2's acceptance criterion 3: "no unexplained season/position
+    discontinuity").
+    """
+    summary = (
+        panel.groupby(["season", "position"], dropna=False)
+        .agg(
+            player_weeks=("player_id", "size"),
+            players=("player_id", "nunique"),
+            cold_start=("is_cold_start", "sum"),
+        )
+        .reset_index()
+    )
+    summary["cold_start_rate"] = (summary["cold_start"] / summary["player_weeks"]).round(3)
+    return summary
+
+
+def audit_team_week_sums(panel: pd.DataFrame) -> pd.DataFrame:
+    """Per-volume-column team-week share-sum diagnostics.
+
+    `validate_shares` already hard-fails any team-week summing to > 1, but a
+    sum well UNDER 1 is not an error -- it can be legitimate (a bye-week
+    artifact should not appear at all since canonical_player_weeks only has
+    rows for games actually played, but a real data issue -- e.g. a trade
+    landing a player on two teams' rosters the same week, or a team-code
+    normalization gap) would show up as a suspiciously low sum rather than a
+    crash. This is a report to read, not a gate to pass.
+    """
+    rows = []
+    for c in VOLUME_COLS:
+        share_col = f"share_of_team_{c}"
+        totals = panel.groupby(["team", "season", "week"])[share_col].sum()
+        rows.append({
+            "share_col": share_col,
+            "n_team_weeks": int(len(totals)),
+            "min_sum": float(totals.min()),
+            "mean_sum": float(totals.mean()),
+            "max_sum": float(totals.max()),
+            "n_team_weeks_sum_lt_0.5": int((totals < 0.5).sum()),
+        })
+    return pd.DataFrame(rows)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seasons", nargs=2, type=int, metavar=("LO", "HI"), default=[2013, 2026])
@@ -185,6 +233,10 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--db", type=Path, default=DB_PATH)
     ap.add_argument("--csv", type=Path, default=None)
+    ap.add_argument(
+        "--audit-csv", type=Path,
+        default=Path("data") / "experiments" / "team_week_player_shares_audit.csv",
+    )
     args = ap.parse_args()
     lo, hi = sorted(args.seasons)
 
@@ -194,6 +246,20 @@ def main() -> int:
 
     print(f"team_week_player_shares: {len(panel):,} player-weeks, seasons {lo}-{hi}")
     print(f"cold-start rows: {int(panel['is_cold_start'].sum()):,}")
+
+    coverage = audit_coverage(panel)
+    print("\nseason/position coverage:")
+    print(coverage.to_string(index=False))
+    if args.audit_csv:
+        args.audit_csv.parent.mkdir(parents=True, exist_ok=True)
+        coverage.to_csv(args.audit_csv, index=False)
+        print(f"wrote coverage audit CSV: {args.audit_csv}")
+
+    sums = audit_team_week_sums(panel)
+    print("\nteam-week share-sum diagnostics (validate_shares already hard-fails > 1;\n"
+          "a low min_sum or nonzero n_team_weeks_sum_lt_0.5 here is worth reading,\n"
+          "not necessarily a bug):")
+    print(sums.to_string(index=False))
 
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)
