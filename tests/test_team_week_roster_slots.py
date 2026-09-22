@@ -216,3 +216,89 @@ def test_db_path_override_is_actually_respected_not_a_stale_cache(tmp_path):
     rank_b = load_depth_chart_rank_asof(db_b, pop).iloc[0]
     assert rank_a == 1
     assert rank_b == 2
+
+
+def _seed_weekly(db_path, weekly_players, weekly_depth_chart=None):
+    """`weekly_players`: {week: [(player_id, position), ...]} -- lets a
+    week have a DIFFERENT (possibly smaller) roster than another week, the
+    same shape a real bye week or an injury-driven absence from the
+    canonical population produces upstream (see
+    build_canonical_player_weeks.py's schedule inner-join -- a team with no
+    scheduled game that week has no row there at all, which is inherited
+    here, not re-implemented). `weekly_depth_chart`: {week: {player_id:
+    rank}} -- lets depth-chart rank change week to week, e.g. a real
+    in-season promotion."""
+    db = DatabaseManager(db_path=db_path)
+    con = sqlite3.connect(str(db_path))
+    rows = [
+        {"player_id": pid, "season": SEASON, "week": wk, "team": "AAA", "position": pos}
+        for wk, players in weekly_players.items() for pid, pos in players
+    ]
+    pd.DataFrame(rows).to_sql("canonical_player_weeks", con, index=False, if_exists="replace")
+
+    dc_rows = []
+    if weekly_depth_chart:
+        for wk, ranks in weekly_depth_chart.items():
+            for pid, rank in ranks.items():
+                dc_rows.append({"season": SEASON, "week": wk, "gsis_id": pid, "depth_team": rank})
+    pd.DataFrame(dc_rows, columns=["season", "week", "gsis_id", "depth_team"]).to_sql(
+        "depth_charts", con, index=False, if_exists="replace"
+    )
+    con.close()
+    return db
+
+
+def test_bye_week_produces_no_slot_rows_at_all(tmp_path):
+    """A bye week isn't a row with empty/zero slots -- it's the ABSENCE of
+    any row, inherited structurally from canonical_player_weeks (which
+    itself only has rows for games actually scheduled). Confirms this
+    builder doesn't accidentally fabricate a phantom team-week for a week
+    the team had no game, e.g. via some later merge silently reintroducing
+    every week in a range regardless of population."""
+    db_path = tmp_path / "test.db"
+    # Week 3 is the "bye" -- simply absent from every player's population.
+    weekly_players = {
+        1: [("a", "RB"), ("b", "RB")],
+        2: [("a", "RB"), ("b", "RB")],
+        4: [("a", "RB"), ("b", "RB")],
+    }
+    db = _seed_weekly(db_path, weekly_players, {wk: {"a": 1, "b": 2} for wk in (1, 2, 4)})
+    _add_snap_shares(db, {"a": {}, "b": {}})
+    con = sqlite3.connect(str(db_path))
+    try:
+        panel = build_roster_slots(con, SEASON, SEASON, db_path)
+    finally:
+        con.close()
+    validate_roster_slots(panel)
+
+    assert set(panel["week"].unique()) == {1, 2, 4}
+    assert 3 not in panel["week"].values
+
+
+def test_depth_chart_promotion_mid_season_flips_slots_at_the_right_week(tmp_path):
+    """Player "b" is promoted from RB2 to RB1 starting week 3. The slot
+    flip must land EXACTLY at week 3 -- not bleed backward into weeks 1-2
+    (the as-of lookup must not look ahead) and not lag behind into week 4
+    only (the as-of lookup must not be stale once the new snapshot exists)."""
+    db_path = tmp_path / "test.db"
+    weekly_players = {wk: [("a", "RB"), ("b", "RB")] for wk in WEEKS}
+    weekly_depth_chart = {
+        1: {"a": 1, "b": 2},
+        2: {"a": 1, "b": 2},
+        3: {"a": 2, "b": 1},  # promotion takes effect
+        4: {"a": 2, "b": 1},
+    }
+    db = _seed_weekly(db_path, weekly_players, weekly_depth_chart)
+    _add_snap_shares(db, {"a": {}, "b": {}})
+    con = sqlite3.connect(str(db_path))
+    try:
+        panel = build_roster_slots(con, SEASON, SEASON, db_path)
+    finally:
+        con.close()
+    validate_roster_slots(panel)
+
+    by_week = panel.set_index(["week", "player_id"])["slot"]
+    assert by_week[(1, "a")] == "RB1" and by_week[(1, "b")] == "RB2"
+    assert by_week[(2, "a")] == "RB1" and by_week[(2, "b")] == "RB2"
+    assert by_week[(3, "a")] == "RB2" and by_week[(3, "b")] == "RB1"
+    assert by_week[(4, "a")] == "RB2" and by_week[(4, "b")] == "RB1"

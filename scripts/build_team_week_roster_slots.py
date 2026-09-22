@@ -216,10 +216,6 @@ def audit_slot_coverage(panel: pd.DataFrame) -> pd.DataFrame:
     or the default dominates means the slot assignment itself is mostly
     noise for that population, same discipline as Plan A's coverage report.
     """
-    total_team_weeks = panel.drop_duplicates(["team", "season", "week"]).groupby(
-        ["season"]
-    ).size().rename("team_weeks")
-
     rows = []
     for pos, cap in MAX_SLOTS_PER_POSITION.items():
         pos_df = panel[panel["position"] == pos]
@@ -235,6 +231,36 @@ def audit_slot_coverage(panel: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def audit_slot_coverage_by_season(panel: pd.DataFrame) -> pd.DataFrame:
+    """Per-season, per-position breakdown of how often the depth-chart
+    default drove slot assignment.
+
+    `depth_charts` coverage is NOT uniform across seasons -- GAPS.md
+    2026-08-19 ("Historical coverage backfill: depth charts, injuries,
+    NGS"): 2013-2019 were 100% neutral-default before a since-applied
+    backfill (now 83-86% real-ranked, matching 2020-2024's distribution);
+    2020-2023 are skill-position-only while 2024-2025 cover every position;
+    granularity itself differs by season (58 distinct depth_position values
+    in 2024 vs ~15 in 2020-2023). None of this is a leakage risk -- the
+    lookup this table reuses (`_load_depth_chart_asof_table`) is pregame-
+    safe regardless of how complete a given season's coverage is -- but a
+    season where the default dominates means that season's slot ordering
+    is driven mostly by the snap-share tiebreak, not real depth-chart
+    listings, which is a real accuracy-relevant regime shift worth seeing
+    directly rather than discovering only after a confusing accuracy
+    result. Pooled `audit_slot_coverage` above cannot show this by itself.
+    """
+    rows = []
+    for (season, pos), group in panel.groupby(["season", "position"]):
+        n = len(group)
+        n_default = int((group["depth_chart_rank"] >= 3).sum())
+        rows.append({
+            "season": int(season), "position": pos, "n_player_weeks": n,
+            "pct_default_depth_chart_rank": round(n_default / n, 3) if n else float("nan"),
+        })
+    return pd.DataFrame(rows).sort_values(["season", "position"]).reset_index(drop=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seasons", nargs=2, type=int, metavar=("LO", "HI"), default=[2013, 2026])
@@ -245,6 +271,10 @@ def main() -> int:
     ap.add_argument(
         "--audit-csv", type=Path,
         default=Path("data") / "experiments" / "team_week_roster_slots_audit.csv",
+    )
+    ap.add_argument(
+        "--audit-by-season-csv", type=Path,
+        default=Path("data") / "experiments" / "team_week_roster_slots_audit_by_season.csv",
     )
     args = ap.parse_args()
     lo, hi = sorted(args.seasons)
@@ -264,6 +294,18 @@ def main() -> int:
         args.audit_csv.parent.mkdir(parents=True, exist_ok=True)
         coverage.to_csv(args.audit_csv, index=False)
         print(f"wrote coverage audit CSV: {args.audit_csv}")
+
+    by_season = audit_slot_coverage_by_season(panel)
+    print("\ndepth-chart default rate by season/position (coverage is NOT uniform "
+          "across seasons -- see audit_slot_coverage_by_season's docstring / GAPS.md "
+          "2026-08-19 \"Historical coverage backfill\"; a season where this is high "
+          "means that season's slot order leans on the snap-share tiebreak, not real "
+          "depth-chart listings):")
+    print(by_season.to_string(index=False))
+    if args.audit_by_season_csv:
+        args.audit_by_season_csv.parent.mkdir(parents=True, exist_ok=True)
+        by_season.to_csv(args.audit_by_season_csv, index=False)
+        print(f"wrote by-season coverage audit CSV: {args.audit_by_season_csv}")
 
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)

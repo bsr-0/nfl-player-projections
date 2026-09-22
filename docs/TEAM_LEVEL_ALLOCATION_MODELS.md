@@ -249,11 +249,70 @@ rostered players at a position than its cap has the excess simply dropped
 (flagged in the coverage report, not silently lost). Revisit once the
 coverage report is run against real data.
 
-13 tests (`tests/test_team_week_roster_slots.py`), including a sentinel-lag
+15 tests (`tests/test_team_week_roster_slots.py`), including a sentinel-lag
 test (a snap-share spike in week W must affect week W+1's tie-break, never
 week W's own) and the DB-path/cache regression test above. Not yet run
 against real data — this script is a Plan A-style building block, same
 sandbox blocker as the rest of this doc.
+
+#### The three specific risk vectors named for this step, addressed individually
+
+("depth chart changes, byes, injuries reshuffling mid-week" — the original
+risk list's own wording. Each is a different kind of risk; lumping them
+together as "leakage-prone" would have hidden that only one of them is
+actually about leakage.)
+
+- **Depth chart changes (mid-season, real role changes)**: not a leakage
+  risk given the reused lookup's `week <= target week` as-of convention —
+  a promotion becomes visible starting the week it's actually listed, never
+  earlier. Verified, not just assumed: `test_depth_chart_promotion_mid_season_flips_slots_at_the_right_week`
+  builds a player promoted from RB2 to RB1 starting week 3 and checks the
+  slot flip lands exactly there, not bleeding backward into weeks 1-2 or
+  lagging past week 3.
+- **Byes**: not a new risk at all — inherited for free.
+  `canonical_player_weeks` only has rows for games a team actually had
+  scheduled (`build_canonical_player_weeks.py`'s inner join to `schedule`),
+  so a bye week is simply ABSENT from the population this script reads, not
+  a row needing special handling. Verified, not just assumed:
+  `test_bye_week_produces_no_slot_rows_at_all` seeds a 3-week gap and checks
+  no row exists for it, rather than trusting the inheritance blindly.
+- **Injuries reshuffling mid-week**: real, but an ACCURACY limitation, not
+  a leakage one — worth being precise about the difference. `slot`
+  reflects the LISTED depth-chart role, not confirmed game-day
+  availability; a starter ruled out after that week's depth-chart snapshot
+  still occupies their listed slot in this table even though they didn't
+  play. This cannot leak anything forward (the snapshot is still
+  exclusively pregame-known), but it can occasionally mis-rank who the
+  "actual" starter was for that specific week. This has no separate
+  fix needed: the downstream LABEL (`share_of_team_X`, from
+  `team_week_player_shares`) is built from real recorded production, so a
+  listed-but-inactive player's row correctly shows 0 (or near-0) actual
+  share regardless of their assigned slot — "RB1 sometimes gets 0" is a
+  real pattern for a model to learn from a genuinely pregame-unpredictable
+  event, not a bug to engineer around. Cross-referencing real injury data
+  (`InjuryDataLoader`'s kickoff-filtered pregame status, already used
+  elsewhere in this repo) to adjust the tie-break itself would be a
+  legitimate future refinement, not a correctness requirement of this
+  first cut.
+
+**Verified against this repo's own incident history, not re-derived from
+scratch** (GAPS.md 2026-08-19, "Historical coverage backfill: depth charts,
+injuries, NGS" and "Unbounded depth-chart staleness + dirty `depth_charts`
+table"): the reused lookup already has a 1-season staleness bound
+(`DEPTH_CHART_MAX_STALENESS_SEASONS`) and deterministic same-week-conflict
+resolution (`MIN` across duplicate listings) built in; `depth_charts`
+coverage runs 2013-2025 with 83-86% of skill-position rows carrying a real
+rank across that whole range (2013-2019 were 100% default before a since-
+applied backfill fixed this — an EARLIER GAPS.md entry describing that
+still-open gap would have been stale, and is superseded by the later
+entry; checked the dates before citing either). Coverage still isn't
+perfectly uniform even post-backfill (2020-2023 are skill-position-only,
+2024-2025 cover every position; granularity itself differs by season) —
+which is exactly why `audit_slot_coverage_by_season` (new, this pass)
+exists: a per-season, per-position breakdown of how often the missing/stale
+default drove the assignment, so a real coverage regime shift shows up in
+the report directly rather than only being discoverable after a confusing
+accuracy result.
 
 Still genuinely true from the original text below: the architecture and
 evaluation-remapping work haven't started, and are real, separate cost —
@@ -462,7 +521,7 @@ building anything from the Plan B section.
       slice above shows the underlying approach has legs).
 - [ ] Decision-gate review
 - [x] Plan B data shape: `scripts/build_team_week_roster_slots.py` +
-      `tests/test_team_week_roster_slots.py` (13 tests). Built ahead of the
+      `tests/test_team_week_roster_slots.py` (15 tests). Built ahead of the
       decision gate above, deliberately, as groundwork prep while waiting
       on real data for Plan A -- not a decision to proceed with Plan B's
       actual model. Corrected this doc's original claim that slot
@@ -471,6 +530,17 @@ building anything from the Plan B section.
       lookup. Found and fixed two real bugs in the process (see Data shape
       section): a DB_PATH/cache gotcha in that reused lookup, and a
       placeholder-row gap in the tie-break's own lag computation.
+- [x] The three named risk vectors (depth chart changes, byes, injuries
+      reshuffling mid-week) addressed individually, not just declared
+      closed by the data-shape work above -- see "The three specific risk
+      vectors named for this step, addressed individually" under Data
+      shape. Two verified with new regression tests (mid-season promotion
+      timing, bye-week absence); the injury vector correctly identified as
+      an accuracy limitation, not a leakage one, with no separate fix
+      needed. Also added `audit_slot_coverage_by_season` -- coverage isn't
+      uniform across seasons even after GAPS.md's 2026-08-19 depth-chart
+      backfill, so a real regime shift is now visible in the report
+      directly rather than discoverable only after a confusing result.
 - [x] Plan B mixed-effects model, first cut: `src/models/team_hierarchical/`
       (`features.py`, `models.py`). Random intercept per `player_id` (not
       team-week -- see the Architecture section's design correction, found
