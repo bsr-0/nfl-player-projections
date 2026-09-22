@@ -25,6 +25,15 @@ def test_adapters_match_current_serving_columns():
     assert [p.player_id for p in players["2026_2_H_A"]] == ["h_qb", "a_wr"]
     assert players["2026_2_H_A"][0].sd_fantasy_points == pytest.approx(12 / (2 * 1.281551565545))
 
+def test_adapter_consumes_optional_usage_and_zero_participation():
+    players = PLAYERS.iloc[:1].copy()
+    players["target_share"] = .30
+    players["participation_prob"] = 0.0
+    game_players = player_inputs_from_predictions(players, game_inputs_from_predictions(GAMES))
+    player = game_players["2026_2_H_A"][0]
+    assert player.usage_share == .30
+    assert player.participation_prob == 0.0
+
 def test_complete_adapter_returns_simulation_ready_game():
     inputs = simulation_inputs_from_predictions(GAMES, PLAYERS)
     game, players = inputs["2026_2_H_A"]
