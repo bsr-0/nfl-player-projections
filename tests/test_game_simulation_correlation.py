@@ -51,6 +51,20 @@ def test_correlated_residual_model_is_used_by_player_simulation():
     assert len(rows) == 50
     assert {row["position"] for row in rows} == {"WR"}
 
+def test_supplied_usage_shares_are_allocated_by_team_pool():
+    game = GameScriptInput("usage", "H", "A", .5, 0, 42)
+    players = [PlayerSimulationInput("rb1", "H", "RB", 15, 3, .60),
+               PlayerSimulationInput("rb2", "H", "RB", 10, 3, .30)]
+    rows = simulate_players(game, players, 20, 7)
+    assert len(rows) == 40
+
+def test_mixed_usage_share_pool_is_rejected():
+    game = GameScriptInput("usage_mixed", "H", "A", .5, 0, 42)
+    players = [PlayerSimulationInput("rb1", "H", "RB", 15, 3, .60),
+               PlayerSimulationInput("rb2", "H", "RB", 10, 3, None)]
+    with pytest.raises(ValueError, match="usage shares"):
+        simulate_players(game, players, 2, 7)
+
 def test_role_correlation_applies_to_changed_player_lineup():
     model = fit_role_residual_correlation(
         np.array([[-2, -2], [-1, -1], [1, 1], [2, 2]], dtype=float),
