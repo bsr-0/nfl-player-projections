@@ -189,14 +189,77 @@ Plan A predicts each player's share independently and only enforces
 roster jointly per team-week, so the model itself — not a renormalization
 step — represents "more targets to X implies fewer to teammate Y."
 
-### Data shape
+### Data shape — built (2026-09)
 
-One row per `(team, season, week)` holding a variable-length roster. This
-needs a slot-assignment scheme (e.g. rank each position group by depth-chart
-rank within the team-week) since most joint architectures want fixed
-structure. This scheme is itself a new leakage surface — depth charts change
-week to week (injury, bye, benching) — with no existing infra in this repo to
-audit it; it doesn't inherit safety from anything already built here.
+`scripts/build_team_week_roster_slots.py` produces `team_week_roster_slots`:
+one row per `(team, season, week, slot)` — long, not wide, so a set-model or
+mixed-effects regression can key off `slot` as an ordinary categorical
+rather than needing a fixed number of columns — where `slot` is
+`f"{position}{rank}"` (e.g. `RB1`, `WR3`) and `rank` comes from a
+deterministic sort: `(depth_chart_rank asc, lagged season-to-date
+snap_share desc, player_id asc)`.
+
+**Correction to this doc's original claim** ("no existing infra in this repo
+to audit [depth-chart leakage]; it doesn't inherit safety from anything
+already built here") — that was wrong, found while actually building this:
+`src/features/feature_engineering.py` already has a well-audited, pregame-safe
+as-of depth-chart lookup (`_load_depth_chart_asof_table` /
+`_add_depth_chart_rank`, with a 1-season staleness bound and a documented
+`week <= target week` convention — that week's OWN snapshot is legitimate
+pre-game info, same category as Vegas lines), already used by the production
+per-position models via `depth_chart_rank`. This script reuses that lookup
+rather than re-deriving one.
+
+What's genuinely new (not solved by the reused lookup): `depth_chart_rank`
+is not unique — multiple players routinely share a rank, or all fall back to
+the same "3" (missing/stale) default — which is fine for using it as a
+*feature* but breaks a fixed-slot assignment, which needs uniqueness. This
+script's actual contribution is the deterministic tie-break above
+(`snap_share` lag, then `player_id`) plus a hard-enforced invariant
+(`validate_roster_slots`: at most one player per slot, at most one slot per
+player, per team-week) and a per-slot coverage report
+(`audit_slot_coverage`: how often each slot is filled, how often the
+missing/stale default drove the assignment) — read that report before
+trusting anything built on this table, same discipline as Plan A's coverage
+report.
+
+**Two real bugs found and fixed while building this** (worth recording,
+per this repo's standing rule against assuming reused code is safe without
+verifying): (1) the reused `_load_depth_chart_asof_table` always reads
+`config.settings.DB_PATH` directly and caches its result at process scope,
+ignoring whatever connection/`--db` path a caller passes — this script's own
+`--db` argument would have been silently ignored for the depth-chart lookup
+only (while still respected for `canonical_player_weeks`/
+`player_weekly_stats`), a real cross-database inconsistency risk if not
+handled; fixed by pointing `config.settings.DB_PATH` at the same file and
+clearing the cache before calling it (see `load_depth_chart_rank_asof`'s
+docstring), with a regression test proving two different DB files produce
+different results in the same process rather than a stale cached one. (2)
+The snap-share tie-break was originally computed only over weeks that had a
+`player_weekly_stats` row, silently skipping a player-week with none (Phase
+1's "unknown" participation state can produce exactly this) — the same
+failure mode `_append_placeholder_rows` in `src/models/game_outcome/features.py`
+already exists to prevent; fixed by lagging against the full
+`canonical_player_weeks` population instead of the raw stats table, caught by
+a failing test rather than assumed correct.
+
+Caps (`MAX_SLOTS_PER_POSITION = {"QB": 2, "RB": 4, "WR": 6, "TE": 3}`) are a
+starting assumption, not a measured constant — a team-week with more
+rostered players at a position than its cap has the excess simply dropped
+(flagged in the coverage report, not silently lost). Revisit once the
+coverage report is run against real data.
+
+13 tests (`tests/test_team_week_roster_slots.py`), including a sentinel-lag
+test (a snap-share spike in week W must affect week W+1's tie-break, never
+week W's own) and the DB-path/cache regression test above. Not yet run
+against real data — this script is a Plan A-style building block, same
+sandbox blocker as the rest of this doc.
+
+Still genuinely true from the original text below: the architecture and
+evaluation-remapping work haven't started, and are real, separate cost —
+this data-shape work does not by itself reduce Plan B's overall cost/benefit
+case relative to Plan A, it only replaces one assumed-risky item with a
+built-and-tested one.
 
 ### Architecture options
 
@@ -211,15 +274,19 @@ audit it; it doesn't inherit safety from anything already built here.
 
 ### Why this is deferred, not abandoned
 
-Relative to Plan A this needs: a new slot-assignment scheme (new leakage
-surface, no existing audit pattern to lean on), a new modeling stack (mixed
-effects or a set/graph net — neither exists anywhere else in this repo), and
-a new evaluation step (predictions must be re-mapped from slot back to
-`player_id` before scoring, which is itself a place to introduce a silent
-bug). None of this is reusable from what already exists; every part would be
-new, audited from scratch. That's a lot of new surface area to justify before
-knowing whether the underlying idea (team-level structure improves on
-independent per-player prediction) pays off at all.
+**Updated**: the slot-assignment scheme is no longer in the "new, audited
+from scratch" category — see the Data shape section above, it's built and
+tested, and it reuses this repo's existing depth-chart infra rather than
+inventing new leakage surface. Relative to Plan A, what's still genuinely
+missing: a new modeling stack (mixed effects or a set/graph net — neither
+exists anywhere else in this repo, unlike Plan A's XGBoost/Ridge pipelines
+which are the same pattern used throughout), and a new evaluation step
+(predictions must be re-mapped from slot back to `player_id` before scoring
+— once a roster changes week to week, a slot's occupant isn't fixed, which
+is itself a place to introduce a silent bug). That's still real, separate
+cost to justify before knowing whether the underlying idea (team-level
+structure improves on independent per-player prediction) pays off at all —
+just a smaller gap than this doc originally stated.
 
 ## Decision gate
 
@@ -333,4 +400,15 @@ building anything from the Plan B section.
       originally stated -- not yet scoped, deferred until the yardage-only
       slice above shows the underlying approach has legs).
 - [ ] Decision-gate review
-- [ ] Plan B (not started; revisit only after the gate above)
+- [x] Plan B data shape: `scripts/build_team_week_roster_slots.py` +
+      `tests/test_team_week_roster_slots.py` (13 tests). Built ahead of the
+      decision gate above, deliberately, as groundwork prep while waiting
+      on real data for Plan A -- not a decision to proceed with Plan B's
+      actual model. Corrected this doc's original claim that slot
+      assignment would need new, unaudited leakage infra: it reuses
+      `feature_engineering.py`'s existing pregame-safe depth-chart as-of
+      lookup. Found and fixed two real bugs in the process (see Data shape
+      section): a DB_PATH/cache gotcha in that reused lookup, and a
+      placeholder-row gap in the tie-break's own lag computation.
+- [ ] Plan B architecture + evaluation re-mapping (not started; still
+      correctly gated on Plan A's real-data result per the decision gate)
