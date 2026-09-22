@@ -27,10 +27,19 @@ def test_joint_and_marginal_evaluation():
     result = evaluate_joint_player_draws(draws, actuals)
     assert result["games_scored"] == 1
     summary = pd.DataFrame([
-        {"game_id": "g", "player_id": "a", "mean": 10., "p10": 9., "p90": 11.},
-        {"game_id": "g", "player_id": "b", "mean": 20., "p10": 19., "p90": 21.},
+        {"game_id": "g", "player_id": "a", "mean": 10., "p10": 9., "p25": 9.5, "p75": 10.5, "p90": 11.},
+        {"game_id": "g", "player_id": "b", "mean": 20., "p10": 19., "p25": 19.5, "p75": 20.5, "p90": 21.},
     ])
     assert marginal_calibration(summary, actuals)["coverage_80"] == 1.
+
+def test_evaluator_rejects_missing_simulated_player_actual():
+    draws = pd.DataFrame([
+        {"game_id": "g", "draw": d, "player_id": p, "fantasy_points": float(d)}
+        for d in range(2) for p in ("a", "b")
+    ])
+    actuals = pd.DataFrame([{"game_id": "g", "player_id": "a", "fantasy_points": 1.}])
+    with pytest.raises(ValueError, match="lacks actual outcomes"):
+        evaluate_joint_player_draws(draws, actuals)
 
 def test_game_draw_calibration():
     draws = pd.DataFrame([
