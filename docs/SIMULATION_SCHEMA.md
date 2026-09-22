@@ -1,73 +1,84 @@
-# Game Simulation Output Schema
+# Game Simulation Output Schema and Production Gates
 
-Schema version: game-sim-v1
+## Artifact split
 
-The simulation output is a JSON object or an equivalent set of Parquet tables:
+The system writes two intentionally different artifacts.
 
-- game_draws: one row per simulated game and draw;
-- player_draws: one row per simulated player and draw;
-- player_summary: one row per player/game with UI-ready distribution statistics.
+| Artifact | Schema | Location | Purpose |
+|---|---|---|---|
+| Site summary | game-sim-site-v1 | docs/data/simulation_{season}_wk{week}.json | Compact UI/decision summary |
+| Research payload | game-sim-v1 | Local only | Full raw Monte Carlo draws |
+| Research tables | game-sim-v1 | data/simulations/{season}/*.parquet | Efficient analysis and calibration |
 
-## Top-level metadata
+Raw draw rows are never written to docs/data. A 1,000-draw slate can contain
+hundreds of thousands of player rows and is not appropriate for GitHub Pages.
 
-| Field | Type | Meaning |
-|---|---|---|
-| schema_version | string | Must equal game-sim-v1 |
-| seed | integer | Random seed used for reproducibility |
-| game_count | integer | Number of simulated games |
-| game_ids | string[] | Stable game identifiers |
-| model_config | object | Selected game-model families and simulation settings |
+## Raw schema: game-sim-v1
 
-## game_draws
+The full payload contains metadata, game_draws, player_draws, and
+player_summary. It is validated before publication: game/player references,
+draw IDs, summary values, and schema identity must agree exactly.
 
-| Field | Type | Meaning |
-|---|---|---|
-| game_id | string | Stable game identifier |
-| draw | integer | Zero-based Monte Carlo draw number |
-| home_score | float | Simulated home score |
-| away_score | float | Simulated away score |
-| home_plays / away_plays | float | Simulated offensive plays |
-| home_pass_attempts / away_pass_attempts | float | Simulated pass attempts |
+### game_draws
 
-Invariants: scores and volumes are nonnegative; pass attempts cannot exceed
-plays; a player draw cannot reference a missing game draw.
+Required fields: game_id, draw, home_score, away_score, home_plays,
+away_plays, home_pass_attempts, away_pass_attempts.
 
-## player_draws
+Current simulator also emits:
 
-| Field | Type | Meaning |
-|---|---|---|
-| game_id | string | Parent game identifier |
-| draw | integer | Parent game draw |
-| player_id | string | NFL player identifier |
-| team | string | Team in the simulated game |
-| position | string | QB, RB, WR, or TE |
-| active | boolean | Whether the player participated in this draw |
-| fantasy_points | float | Simulated PPR points |
+- home_won
+- simulated_margin
+- simulated_total
 
-The draw-level table is the canonical correlated output. The player point
-estimate is not replaced; it is the center supplied by the existing model and
-then conditioned on the shared game script.
+Each draw conserves score: home_score + away_score = simulated_total.
+The winner is sampled from home_win_prob; signed margin magnitude is calibrated
+to preserve the supplied expected margin before score clipping.
 
-## player_summary
+### player_draws
 
-| Field | Type | Meaning |
-|---|---|---|
-| game_id / player_id / team / position | string | Player identity |
-| draw_count | integer | Number of draws summarized |
-| mean / median | float | Distribution center |
-| p10 / p25 / p75 / p90 | float | Simulation quantiles |
-| std | float | Sample standard deviation |
-| prob_zero | float | Probability of zero fantasy points |
-| prob_active | float | Participation frequency |
-| max | float | Maximum simulated point result |
+Required fields: game_id, draw, player_id, team, position, active,
+fantasy_points.
 
-Summary rows are intended for the weekly site, lineup optimizer, and DFS
-decision tools. They must not be used as a replacement for validation on
-future held-out seasons.
+### player_summary
 
-## Current implementation boundary
+One row per player/game:
 
-The schema and validators are database-independent. The pipeline still needs
-a later adapter that writes these payloads after the existing game and player
-serving paths run. Participation probabilities, learned teammate residuals,
-and historical calibration remain explicit follow-up inputs.
+- mean, median, p10, p25, p75, p90, standard deviation
+- probability of zero points and participation probability
+- maximum simulated point total
+
+## Site schema: game-sim-site-v1
+
+The site payload contains metadata, game_summary, and player_summary only.
+
+game_summary includes simulated home-win probability plus total and home-margin
+mean/p10/p50/p90. player_summary is copied from the validated raw payload.
+
+## Current quality status
+
+The generated command is explicitly labeled:
+
+- simulation_status: exploratory_volume_only
+- correlation_mode: independent_residuals
+- usage_mode: team_volume_only
+
+It is not a production DFS or lineup-optimization simulation yet.
+
+## Required production gates
+
+1. Availability: connect the participation model so draw-level active status
+   is a calibrated probability, not the current 1.0 fallback.
+2. Usage allocation: provide causal target, carry, and red-zone share priors
+   for each player, then conserve team pass attempts/targets/rushes per draw.
+   Point-projection means alone cannot identify a player usage distribution.
+3. Correlation fitting: train role-based out-of-fold residual correlation
+   artifacts at a stable game-role granularity. Do not fit covariance on a
+   fixed list of player IDs and apply it to another slate.
+4. Calibration: use held-out seasons to calibrate total/margin dispersion,
+   team pace/pass-rate response, player quantiles, and teammate correlation.
+5. Evaluation: require improvements in joint forecast score/correlation
+   calibration without unacceptable per-player MAE degradation before exposing
+   the output as a decision tool.
+
+Until all five gates pass, the site artifact is informational engineering
+output only, not a recommendation.
