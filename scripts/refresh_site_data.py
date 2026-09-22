@@ -23,7 +23,11 @@ Chains, in order:
        Skipped by default if no model artifacts exist yet in data/models/
        (run scripts/train_game_outcome_model.py / train_game_margin_model.py
        first) -- failing this step should not block the player-projection
-       refresh, which is why it's last and independently skippable.
+       refresh.
+    8. scripts/generate_simulation_data.py -- joins the two serving JSON
+       outputs and writes versioned game/player simulation summaries to
+       docs/data/simulation_*.json. It is also independently skippable and
+       can write analysis Parquet with --write-parquet.
 
 Does NOT commit or push anything. Review `git status`/`git diff` on
 docs/data and data/players_*.json yourself before committing.
@@ -48,7 +52,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 DOCS_DATA_DIR = PROJECT_ROOT / "docs" / "data"
 POSITIONS = ["QB", "RB", "WR", "TE"]
 
-STEPS = ["auto_refresh", "injuries", "adp", "draft_data", "sync_docs", "weekly_data", "game_predictions"]
+STEPS = ["auto_refresh", "injuries", "adp", "draft_data", "sync_docs", "weekly_data", "game_predictions", "simulation"]
 
 
 def _run(label: str, cmd: list[str]) -> None:
@@ -121,6 +125,9 @@ def main() -> int:
     if "game_predictions" not in skip:
         _run_soft("7/7 generate_game_predictions_data",
                    [py, "scripts/generate_game_predictions_data.py", "--season", str(season)])
+    if "simulation" not in skip:
+        _run_soft("8/8 generate_simulation_data",
+                   [py, "scripts/generate_simulation_data.py", "--season", str(season)])
 
     print(f"\n{'=' * 60}\nDone. Review before committing:\n"
           f"  git status docs/data data/players_*.json\n"
