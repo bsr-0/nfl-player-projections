@@ -14,6 +14,7 @@ from src.models.player_correlation import (
     ResidualCorrelationModel,
     RoleResidualCorrelationModel,
 )
+from src.models.usage_allocation import draw_usage_shares
 
 @dataclass(frozen=True)
 class TeamVolumeBaseline:
@@ -133,6 +134,42 @@ def _opportunity_multiplier(player, team_plays, team_pass, baseline):
     expected = baseline.plays * (baseline.pass_rate if passing else 1.0 - baseline.pass_rate)
     return actual / max(1.0, expected)
 
+def _opportunity_type(player: PlayerSimulationInput) -> str:
+    if player.position == "RB":
+        return "rush"
+    return "pass"
+
+def _draw_usage_multipliers(game: GameScriptInput,
+                            players: list[PlayerSimulationInput],
+                            script: GameDraw,
+                            rng: np.random.Generator) -> dict[int, float]:
+    """Allocate optional player shares inside each team's pass/rush pool."""
+    grouped = {}
+    for index, player in enumerate(players):
+        grouped.setdefault((player.team, _opportunity_type(player)), []).append((index, player))
+    multipliers = {}
+    for (team, opportunity), entries in grouped.items():
+        supplied = [player.usage_share is not None for _, player in entries]
+        if not any(supplied):
+            continue
+        if not all(supplied):
+            raise ValueError("usage shares must be supplied for every player in an allocated pool")
+        shares = np.asarray([player.usage_share for _, player in entries], dtype=float)
+        sampled = draw_usage_shares(shares, concentration=80.0, rng=rng)
+        is_home = team == game.home_team
+        baseline = game.home if is_home else game.away
+        actual = ((script.home_pass_attempts if is_home else script.away_pass_attempts)
+                  if opportunity == "pass"
+                  else (script.home_plays - script.home_pass_attempts
+                        if is_home else script.away_plays - script.away_pass_attempts))
+        expected_pool = baseline.plays * (
+            baseline.pass_rate if opportunity == "pass" else 1.0 - baseline.pass_rate)
+        for (index, _), base_share, draw_share in zip(entries, shares, sampled):
+            multipliers[index] = (
+                0.0 if base_share == 0
+                else actual * draw_share / max(1e-6, expected_pool * base_share))
+    return multipliers
+
 def role_keys_for_players(game: GameScriptInput,
                           players: list[PlayerSimulationInput]) -> tuple[str, ...]:
     """Assign stable within-game roles such as home_WR1 and away_RB2."""
@@ -176,8 +213,10 @@ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationIn
             role_keys_for_players(game, player_list), marginal_sds, n_draws,
             _seed_for_game(seed + 2, game.game_id))
     rng = np.random.default_rng(_seed_for_game(seed + 1, game.game_id))
+    usage_rng = np.random.default_rng(_seed_for_game(seed + 3, game.game_id))
     rows = []
     for script in scripts:
+        usage_multipliers = _draw_usage_multipliers(game, player_list, script, usage_rng)
         for index, player in enumerate(player_list):
             if player.team not in (game.home_team, game.away_team):
                 raise ValueError("player is not in this game")
@@ -186,7 +225,8 @@ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationIn
             team_plays = script.home_plays if is_home else script.away_plays
             team_pass = script.home_pass_attempts if is_home else script.away_pass_attempts
             active = rng.random() < _clip_probability(player.participation_prob)
-            multiplier = _opportunity_multiplier(player, team_plays, team_pass, baseline)
+            multiplier = usage_multipliers.get(
+                index, _opportunity_multiplier(player, team_plays, team_pass, baseline))
             noise = (correlated_noise[script.draw, index]
                      if correlated_noise is not None
                      else rng.normal(0.0, marginal_sds[index]))
