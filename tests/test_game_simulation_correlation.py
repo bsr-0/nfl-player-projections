@@ -19,6 +19,17 @@ def test_score_split_conserves_total_at_extreme_margins():
     home, away = _split_score(44.0, 3.0)
     assert home + away == pytest.approx(44.0)
 
+def test_game_draws_honor_win_probability_and_expected_margin():
+    game = GameScriptInput("calibration", "H", "A", .75, 3.0, 100.0,
+                           margin_sd=10.0, total_sd=0.0)
+    draws = simulate_game_scripts(game, 5000, 19)
+    wins = np.mean([draw.home_won for draw in draws])
+    margins = np.mean([draw.simulated_margin for draw in draws])
+    assert wins == pytest.approx(.75, abs=.02)
+    assert margins == pytest.approx(3.0, abs=.35)
+    assert all(draw.home_score + draw.away_score == pytest.approx(draw.simulated_total)
+               for draw in draws)
+
 def test_players_share_game_script():
     game = GameScriptInput("g1", "H", "A", .5, 0, 42)
     rows = simulate_players(game, [PlayerSimulationInput("qb", "H", "QB", 18, 4, .7)], 10, 2)
