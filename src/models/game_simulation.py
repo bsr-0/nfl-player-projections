@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Iterable
 import numpy as np
 
+from src.models.player_correlation import ResidualCorrelationModel
+
 @dataclass(frozen=True)
 class TeamVolumeBaseline:
     plays: float = 64.0
@@ -52,6 +54,15 @@ def _draw_volume(rng, baseline, score_diff):
     rate = _clip_probability(baseline.pass_rate + _score_state_pass_adjustment(score_diff))
     return plays, int(rng.binomial(plays, rate))
 
+def _split_score(total: float, margin: float) -> tuple[float, float]:
+    """Convert total/margin to nonnegative scores while conserving total."""
+    total = max(0.0, total)
+    if margin >= total:
+        return total, 0.0
+    if margin <= -total:
+        return 0.0, total
+    return (total + margin) / 2.0, (total - margin) / 2.0
+
 def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
                           seed: int = 42) -> list[GameDraw]:
     if n_draws < 1:
@@ -65,8 +76,7 @@ def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
     for draw in range(n_draws):
         total = max(0.0, rng.normal(game.predicted_total, game.total_sd))
         margin = rng.normal(game.predicted_margin, game.margin_sd)
-        home_score = max(0.0, (total + margin) / 2.0)
-        away_score = max(0.0, total - home_score)
+        home_score, away_score = _split_score(total, margin)
         hp, hpa = _draw_volume(rng, game.home, home_score - away_score)
         ap, apa = _draw_volume(rng, game.away, away_score - home_score)
         output.append(GameDraw(draw, home_score, away_score, hp, ap, hpa, apa))
@@ -80,13 +90,23 @@ def _opportunity_multiplier(player, team_plays, team_pass, baseline):
     return actual / max(1.0, expected)
 
 def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationInput],
-                     n_draws: int = 1000, seed: int = 42) -> list[dict]:
+                     n_draws: int = 1000, seed: int = 42,
+                     correlation_model: ResidualCorrelationModel | None = None) -> list[dict]:
     scripts = simulate_game_scripts(game, n_draws, seed)
     player_list = list(players)
+    player_keys = tuple(player.player_id for player in player_list)
+    if correlation_model is not None and correlation_model.player_keys != player_keys:
+        raise ValueError("correlation model keys must exactly match simulation players")
+    marginal_sds = np.asarray(
+        [max(0.01, player.sd_fantasy_points) for player in player_list], dtype=float)
+    correlated_noise = (
+        correlation_model.sample_scaled_residuals(marginal_sds, n_draws, seed + 2)
+        if correlation_model is not None else None
+    )
     rng = np.random.default_rng(seed + 1)
     rows = []
     for script in scripts:
-        for player in player_list:
+        for index, player in enumerate(player_list):
             if player.team not in (game.home_team, game.away_team):
                 raise ValueError("player is not in this game")
             is_home = player.team == game.home_team
@@ -95,9 +115,11 @@ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationIn
             team_pass = script.home_pass_attempts if is_home else script.away_pass_attempts
             active = rng.random() < _clip_probability(player.participation_prob)
             multiplier = _opportunity_multiplier(player, team_plays, team_pass, baseline)
-            value = 0.0 if not active else max(0.0, rng.normal(
-                player.mean_fantasy_points * multiplier,
-                max(0.01, player.sd_fantasy_points)))
+            noise = (correlated_noise[script.draw, index]
+                     if correlated_noise is not None
+                     else rng.normal(0.0, marginal_sds[index]))
+            value = 0.0 if not active else max(
+                0.0, player.mean_fantasy_points * multiplier + noise)
             rows.append({"game_id": game.game_id, "draw": script.draw, "player_id": player.player_id,
                          "team": player.team, "position": player.position,
                          "home_score": script.home_score, "away_score": script.away_score,
