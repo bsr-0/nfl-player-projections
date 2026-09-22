@@ -25,7 +25,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.models.game_simulation import simulate_game_scripts, simulate_players
 from src.models.simulation_adapter import simulation_inputs_from_predictions
-from src.models.simulation_io import build_and_write_simulation_payload
+from src.models.simulation_io import build_and_write_site_simulation_payload
 
 DOCS_DATA = PROJECT_ROOT / "docs" / "data"
 PARQUET_DATA = PROJECT_ROOT / "data" / "simulations"
@@ -69,11 +69,16 @@ def generate_week(season: int, week: int, draws: int, seed: int,
             game, game_players, n_draws=draws, seed=seed))
     output = DOCS_DATA / f"simulation_{season}_wk{week}.json"
     parquet_dir = PARQUET_DATA / str(season) if write_parquet else None
-    build_and_write_simulation_payload(
-        game_draws, player_draws, seed=seed, json_path=output,
-        model_config={"outcome_model": "logistic", "margin_total_model": "ridge",
-                      "draws": draws, "season": season, "week": week},
-        parquet_dir=parquet_dir)
+    build_and_write_site_simulation_payload(
+        game_draws, player_draws, seed=seed, site_json_path=output,
+        model_config={
+            "outcome_model": "logistic", "margin_total_model": "ridge",
+            "draws": draws, "season": season, "week": week,
+            "simulation_status": "exploratory_volume_only",
+            "correlation_mode": "independent_residuals",
+            "usage_mode": "team_volume_only",
+        },
+        parquet_dir=parquet_dir, parquet_stem=output.stem)
     print(f"  wk{week}: {len(inputs)} games, {len(player_draws)} player draws -> {output.name}")
     return output
 
