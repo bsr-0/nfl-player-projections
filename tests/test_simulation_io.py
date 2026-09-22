@@ -1,7 +1,4 @@
 import json
-from pathlib import Path
-
-import pandas as pd
 import pytest
 
 from src.models.simulation_io import write_simulation_payload
@@ -16,8 +13,12 @@ def _payload():
         "player_draws": [{"game_id": "g", "draw": 0, "player_id": "p",
                           "team": "H", "position": "QB", "active": True,
                           "fantasy_points": 10.0}],
-        "player_summary": [{"game_id": "g", "player_id": "p", "team": "H",
-                            "position": "QB", "draw_count": 1, "mean": 10.0}],
+        "player_summary": [{
+            "game_id": "g", "player_id": "p", "team": "H", "position": "QB",
+            "draw_count": 1, "mean": 10.0, "median": 10.0, "p10": 10.0,
+            "p25": 10.0, "p75": 10.0, "p90": 10.0, "std": 0.0,
+            "prob_zero": 0.0, "prob_active": 1.0, "max": 10.0,
+        }],
     }
 
 def test_json_writer_is_valid_and_does_not_emit_nan(tmp_path):
@@ -25,6 +26,13 @@ def test_json_writer_is_valid_and_does_not_emit_nan(tmp_path):
     written = write_simulation_payload(_payload(), json_path=path)
     assert written == [path]
     assert json.loads(path.read_text())["schema_version"] == "game-sim-v1"
+
+def test_writer_rejects_stale_summary_before_writing(tmp_path):
+    payload = _payload()
+    payload["player_summary"][0]["mean"] = 999.0
+    with pytest.raises(ValueError, match="player_summary"):
+        write_simulation_payload(payload, json_path=tmp_path / "bad.json")
+    assert not (tmp_path / "bad.json").exists()
 
 def test_parquet_writer_requires_engine_or_writes_tables(tmp_path):
     try:
