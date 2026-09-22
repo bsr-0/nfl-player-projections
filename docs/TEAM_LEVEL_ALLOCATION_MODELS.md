@@ -243,10 +243,19 @@ building anything from the Plan B section.
       coverage report before trusting any MAE number** on the first real
       run -- a season/position discontinuity there invalidates the
       accuracy comparison regardless of what it says.
-      Still not done: statistical-significance (bootstrap CI) on the
-      MAE delta, and a scripted acceptance gate that reads the metadata
-      JSON and exits non-zero on criterion-1 failure -- both listed as
-      follow-ups, deferred until a real-data run gives something to gate.
+- [x] Statistical significance + segment breakdown + acceptance gate:
+      `src/evaluation/team_share_backtester.py`'s `bootstrap_mae_delta()`
+      adds a paired bootstrap CI (2000 resamples, config-driven) on
+      (candidate MAE - rolling3 MAE) to every tunable arm's pooled result --
+      "beats the baseline" now means the 95% CI excludes 0
+      (`significant_improvement`), not just a lower point estimate. Pooled
+      and per-fold results also break down by position and by
+      `is_cold_start` (`_segment_metrics`) so a lift can't hide behind a
+      pooled-only average. `scripts/check_team_share_acceptance.py` reads
+      the metadata JSON and exits non-zero unless at least one tunable arm
+      reliably beats rolling3 for a target -- a repeatable gate instead of
+      an eyeball read of stdout. All verified end-to-end (including a case
+      where ridge passes and xgboost doesn't) against a synthetic DB.
 - [ ] Plan A reconstruction + scoring-formula wiring (share x team-total ->
       fantasy points) -- not started; depends on the real-data backtest
       above clearing acceptance criterion 1 first (no point reconstructing

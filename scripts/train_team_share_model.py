@@ -44,12 +44,33 @@ def _print_report(report: dict) -> None:
     print("Pooled across all folds:")
     for arm, m in report["pooled"].items():
         print(f"    {arm:10s} n={m['n']:5d}  mae={m['mae']:.4f}  rmse={m['rmse']:.4f}  r2={m['r2']:.3f}")
+
+    print("\nBy position (pooled):")
+    for arm, m in report["pooled"].items():
+        for pos, seg in m.get("by_position", {}).items():
+            print(f"    {arm:10s} {pos:4s} n={seg['n']:5d}  mae={seg['mae']:.4f}")
+
+    print("\nBy cold-start (pooled; 0=established, 1=cold start):")
+    for arm, m in report["pooled"].items():
+        for flag, seg in m.get("by_cold_start", {}).items():
+            print(f"    {arm:10s} cold_start={flag}  n={seg['n']:5d}  mae={seg['mae']:.4f}")
+
     baseline_mae = report["pooled"].get("rolling3", {}).get("mae")
+    print("\nvs. rolling-3 baseline (paired bootstrap CI on the MAE delta; "
+          "negative = candidate has lower error):")
     for arm in ("ridge", "xgboost"):
-        mae = report["pooled"].get(arm, {}).get("mae")
-        if mae is not None and baseline_mae is not None:
-            status = "beats" if mae < baseline_mae else "does NOT beat"
-            print(f"    {arm} {status} the rolling-3 baseline's MAE ({mae:.4f} vs {baseline_mae:.4f})")
+        m = report["pooled"].get(arm, {})
+        mae = m.get("mae")
+        boot = m.get("vs_rolling3_bootstrap", {})
+        if mae is None or baseline_mae is None or not boot:
+            continue
+        sig = "PASSES criterion 1 (95% CI excludes 0)" if boot.get("significant_improvement") else \
+              "does NOT reliably beat baseline (CI includes 0 or is positive)"
+        print(
+            f"    {arm}: mae={mae:.4f} vs rolling3={baseline_mae:.4f}  "
+            f"delta CI [{boot['ci_low']:.4f}, {boot['ci_high']:.4f}]  n_bootstrap={boot['n_bootstrap']}  "
+            f"-> {sig}"
+        )
 
 
 def main() -> None:

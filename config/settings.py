@@ -480,6 +480,12 @@ TEAM_ALLOCATION_MODEL_CONFIG = {
         "eval_metric": "rmse",
         "random_state": 42,
     },
+    # Paired bootstrap CI on (candidate MAE - rolling3 MAE), pooled across
+    # walk-forward folds -- see src/evaluation/team_share_backtester.py's
+    # bootstrap_mae_delta(). 2000 resamples matches the n_bootstrap already
+    # used elsewhere in this repo's paired-bootstrap comparisons.
+    "n_bootstrap": 2000,
+    "bootstrap_seed": 42,
 }
 
 # =============================================================================
