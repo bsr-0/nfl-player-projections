@@ -3,15 +3,11 @@ import pandas as pd
 import pytest
 
 from src.models.game_simulation import simulate_game_scripts
-from src.models.simulation_adapter import (
-    game_inputs_from_predictions,
-    player_inputs_from_predictions,
-    simulation_inputs_from_predictions,
-)
+from src.models.simulation_adapter import game_inputs_from_predictions, player_inputs_from_predictions, simulation_inputs_from_predictions
 
 GAMES = pd.DataFrame([{
     "season": 2026, "week": 2, "home_team": "H", "away_team": "A",
-    "home_win_prob_ridge": .62, "predicted_margin_ridge": 3.5,
+    "home_win_prob_logistic": .62, "predicted_margin_ridge": 3.5,
     "predicted_total_ridge": 45.0,
 }])
 PLAYERS = pd.DataFrame([
