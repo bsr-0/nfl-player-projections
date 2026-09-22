@@ -3,9 +3,12 @@ import pytest
 
 from src.models.game_simulation import (
     GameScriptInput, PlayerSimulationInput, TeamVolumeBaseline,
-    _split_score, simulate_game_scripts, simulate_players,
+    _split_score, role_keys_for_players, simulate_game_scripts, simulate_players,
 )
-from src.models.player_correlation import fit_residual_correlation
+from src.models.player_correlation import (
+    fit_residual_correlation,
+    fit_role_residual_correlation,
+)
 
 def test_scripts_are_deterministic_and_bounded():
     game = GameScriptInput("g1", "H", "A", .6, 3, 44, TeamVolumeBaseline(64, .60), TeamVolumeBaseline(63, .57))
@@ -47,6 +50,17 @@ def test_correlated_residual_model_is_used_by_player_simulation():
     rows = simulate_players(game, players, 25, 2, correlation_model=model)
     assert len(rows) == 50
     assert {row["position"] for row in rows} == {"WR"}
+
+def test_role_correlation_applies_to_changed_player_lineup():
+    model = fit_role_residual_correlation(
+        np.array([[-2, -2], [-1, -1], [1, 1], [2, 2]], dtype=float),
+        ["home_WR1", "home_WR2"], shrinkage=0.0)
+    game = GameScriptInput("g2", "H", "A", .5, 0, 42)
+    players = [PlayerSimulationInput("new_p1", "H", "WR", 20, 8, .30),
+               PlayerSimulationInput("new_p2", "H", "WR", 15, 8, .20)]
+    assert role_keys_for_players(game, players) == ("home_WR1", "home_WR2")
+    rows = simulate_players(game, players, 10, 2, correlation_model=model)
+    assert len(rows) == 20
 
 def test_correlation_keys_must_match_players():
     model = fit_residual_correlation(np.ones((2, 2)), ["a", "b"])
