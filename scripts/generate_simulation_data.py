@@ -26,6 +26,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.models.game_simulation import simulate_game_scripts, simulate_players
 from src.models.simulation_adapter import simulation_inputs_from_predictions
 from src.models.simulation_io import build_and_write_site_simulation_payload
+from src.models.simulation_readiness import require_production_ready
 
 DOCS_DATA = PROJECT_ROOT / "docs" / "data"
 PARQUET_DATA = PROJECT_ROOT / "data" / "simulations"
@@ -47,7 +48,9 @@ def _weeks(season: int, requested: int | None) -> list[int]:
     return sorted(set(values))
 
 def generate_week(season: int, week: int, draws: int, seed: int,
-                  write_parquet: bool) -> Path | None:
+                  write_parquet: bool, production: bool,
+                  role_correlation_artifact: str | None,
+                  calibration_artifact: str | None) -> Path | None:
     game_path = DOCS_DATA / f"game_predictions_{season}_wk{week}.json"
     player_path = DOCS_DATA / f"weekly_{season}_wk{week}.json"
     if not game_path.exists() or not player_path.exists():
@@ -55,6 +58,10 @@ def generate_week(season: int, week: int, draws: int, seed: int,
         return None
     games = _read(game_path)
     players = _read(player_path)
+    if production:
+        require_production_ready(
+            players, role_correlation_artifact=role_correlation_artifact,
+            calibration_artifact=calibration_artifact)
     games["season"], games["week"] = season, week
     inputs = simulation_inputs_from_predictions(games, players)
     if not inputs:
@@ -74,9 +81,11 @@ def generate_week(season: int, week: int, draws: int, seed: int,
         model_config={
             "outcome_model": "logistic", "margin_total_model": "ridge",
             "draws": draws, "season": season, "week": week,
-            "simulation_status": "exploratory_volume_only",
-            "correlation_mode": "independent_residuals",
-            "usage_mode": "team_volume_only",
+            "simulation_status": (
+                "production_ready_inputs" if production else "exploratory_volume_only"),
+            "correlation_mode": (
+                "role_artifact_required" if production else "independent_residuals"),
+            "usage_mode": ("causal_share_required" if production else "team_volume_only"),
         },
         parquet_dir=parquet_dir, parquet_stem=output.stem)
     print(f"  wk{week}: {len(inputs)} games, {len(player_draws)} player draws -> {output.name}")
@@ -90,6 +99,10 @@ def main() -> int:
     parser.add_argument("--draws", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--write-parquet", action="store_true")
+    parser.add_argument("--production", action="store_true",
+                        help="Require calibrated usage, availability, correlation, and calibration artifacts.")
+    parser.add_argument("--role-correlation-artifact", default=None)
+    parser.add_argument("--calibration-artifact", default=None)
     args = parser.parse_args()
     if args.draws < 1:
         parser.error("--draws must be positive")
@@ -97,7 +110,9 @@ def main() -> int:
     if not weeks:
         print(f"no game prediction files found for {args.season}")
         return 1
-    written = [generate_week(args.season, week, args.draws, args.seed, args.write_parquet)
+    written = [generate_week(
+        args.season, week, args.draws, args.seed, args.write_parquet,
+        args.production, args.role_correlation_artifact, args.calibration_artifact)
                for week in weeks]
     return 0 if any(written) else 1
 
