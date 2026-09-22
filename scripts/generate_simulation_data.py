@@ -62,6 +62,9 @@ def generate_week(season: int, week: int, draws: int, seed: int,
         require_production_ready(
             players, role_correlation_artifact=role_correlation_artifact,
             calibration_artifact=calibration_artifact)
+        raise RuntimeError(
+            "production simulation is disabled: artifact loading and calibration "
+            "application must be implemented and evaluated before use")
     games["season"], games["week"] = season, week
     inputs = simulation_inputs_from_predictions(games, players)
     if not inputs:
@@ -81,11 +84,9 @@ def generate_week(season: int, week: int, draws: int, seed: int,
         model_config={
             "outcome_model": "logistic", "margin_total_model": "ridge",
             "draws": draws, "season": season, "week": week,
-            "simulation_status": (
-                "production_ready_inputs" if production else "exploratory_volume_only"),
-            "correlation_mode": (
-                "role_artifact_required" if production else "independent_residuals"),
-            "usage_mode": ("causal_share_required" if production else "team_volume_only"),
+            "simulation_status": "exploratory_volume_only",
+            "correlation_mode": "independent_residuals",
+            "usage_mode": "team_volume_only",
         },
         parquet_dir=parquet_dir, parquet_stem=output.stem)
     print(f"  wk{week}: {len(inputs)} games, {len(player_draws)} player draws -> {output.name}")
@@ -100,7 +101,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--write-parquet", action="store_true")
     parser.add_argument("--production", action="store_true",
-                        help="Require calibrated usage, availability, correlation, and calibration artifacts.")
+                        help="Fail closed after checking production prerequisites; production artifact application is not enabled yet.")
     parser.add_argument("--role-correlation-artifact", default=None)
     parser.add_argument("--calibration-artifact", default=None)
     args = parser.parse_args()
