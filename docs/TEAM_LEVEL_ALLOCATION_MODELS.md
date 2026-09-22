@@ -210,8 +210,32 @@ building anything from the Plan B section.
       running `--write` against `data/nfl_data.db` and inspecting the
       `is_cold_start`/coverage counts is the next step before building the
       regressors below.
-- [ ] Plan A share regressors (one per volume target)
-- [ ] Plan A reconstruction + scoring-formula wiring
-- [ ] Plan A walk-forward evaluation vs. production baseline
+- [x] Plan A share regressors (one per volume target) --
+      `src/models/team_allocation/` (`features.py`, `models.py`,
+      `baseline.py`), `src/evaluation/team_share_backtester.py`,
+      `scripts/train_team_share_model.py`. Ridge + XGBoost arms vs. a
+      `RollingShareBaseline` (the "market line" equivalent for this
+      problem -- predicts the player's own trailing-3-game share
+      verbatim), same `SeasonAwareTimeSeriesSplit(strict=True)` walk-forward
+      harness as `game_margin_backtester.py`. `TEAM_ALLOCATION_MODEL_CONFIG`
+      added to `config/settings.py`. No inner-CV hyperparameter tuning yet
+      (fixed conservative defaults, same phase-1 philosophy as
+      `game_outcome`) -- a fast-follow, not blocking.
+      Verified end-to-end (build shares -> train -> backtest -> print
+      report) against a synthetic populated DB; **not yet run against real
+      data** -- this sandbox's `data/nfl_data.db` has empty tables (no
+      network access to refresh it here). Running
+      `scripts/build_team_week_player_shares.py --write` then
+      `scripts/train_team_share_model.py` against the real database, and
+      checking whether ridge/xgboost actually beat `rolling3` on real
+      held-out seasons, is the next step -- that result is Plan A's
+      acceptance criterion 1 and 2 (see above).
+- [ ] Plan A reconstruction + scoring-formula wiring (share x team-total ->
+      fantasy points) -- not started; depends on the real-data backtest
+      above clearing acceptance criterion 1 first (no point reconstructing
+      points from a share model that doesn't already beat the naive
+      baseline on share accuracy).
+- [ ] Plan A walk-forward evaluation vs. production per-position baseline
+      (needs the reconstruction step above)
 - [ ] Decision-gate review
 - [ ] Plan B (not started; revisit only after the gate above)

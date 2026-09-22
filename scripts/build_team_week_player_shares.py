@@ -45,16 +45,18 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import DB_PATH, POSITIONS
+from src.models.team_allocation.features import ROLL_WINDOW, TABLE_NAME, VOLUME_COLS
 
-TABLE_NAME = "team_week_player_shares"
-ROLL_WINDOW = 3
 MIN_PRIOR_GAMES_FOR_FORM = 3
 
-# (player_weekly_stats column, share column name). Each share is
-# player_X / team_X where team_X is this table's own group-sum of the same
-# column -- see module docstring for why 0-fill on a missing stats row is
-# correct here specifically (unlike fantasy_points elsewhere in this repo).
-VOLUME_COLS = ["targets", "rushing_attempts", "receiving_yards", "rushing_yards"]
+# VOLUME_COLS/ROLL_WINDOW/TABLE_NAME are imported from
+# src/models/team_allocation/features.py (single source of truth -- that
+# module's feature_columns() must exclude exactly these same names, so it
+# owns the definitions rather than each module keeping its own copy). Each
+# share is player_X / team_X where team_X is this table's own group-sum of
+# the same column -- see module docstring for why 0-fill on a missing stats
+# row is correct here specifically (unlike fantasy_points elsewhere in this
+# repo).
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:

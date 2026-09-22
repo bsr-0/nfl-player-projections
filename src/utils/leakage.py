@@ -268,6 +268,19 @@ FEATURE_AVAILABILITY: Tuple[Tuple[str, str], ...] = (
     ("_roll5", "week - 1 and earlier (shift(1) before .rolling())"),
     ("_rolling_", "week - 1 and earlier (shift(1) before .rolling())"),
     ("_s2d_lag1", "week - 1 and earlier (shift(1) before .expanding())"),
+    # Team-allocation model (src/models/team_allocation/, Plan A -- see
+    # docs/TEAM_LEVEL_ALLOCATION_MODELS.md): share_of_team_*_s2d columns from
+    # scripts/build_team_week_player_shares.py, same shift(1)-before-
+    # .expanding() discipline as _s2d_lag1 above, just without that suffix.
+    # Deliberately bare "_s2d" rather than a "share_of_team_" prefix: the
+    # RAW (unsuffixed) share_of_team_* columns are LABELS -- current-week
+    # values -- and must never match a FEATURE_AVAILABILITY pattern here;
+    # they are excluded explicitly by name in
+    # src/models/team_allocation/features.py's feature_columns(), the same
+    # way home_win/home_margin/game_total are excluded in
+    # src/models/game_outcome/features.py rather than relying on this
+    # registry to keep them out.
+    ("_s2d", "week - 1 and earlier (shift(1) before .expanding())"),
     ("prev_season_", "prior season (fully known pre-kickoff)"),
     ("_season_prior", "prior season (fully known pre-kickoff)"),
     ("career_year_flag", "prior season and earlier (fully known pre-kickoff)"),

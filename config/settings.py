@@ -454,6 +454,34 @@ GAME_OUTCOME_MODEL_CONFIG = {
 # (mirrors MIN_TRAINING_SEASONS_1W below).
 MIN_TRAINING_SEASONS_GAME_OUTCOME = 3
 
+# Team-level player-allocation model, Plan A (2026-09) -- see
+# docs/TEAM_LEVEL_ALLOCATION_MODELS.md and src/models/team_allocation/.
+# Predicts each player's SHARE of team volume (targets/rush attempts/
+# receiving yards/rushing yards), not the raw stat itself. Same
+# shallow/conservative-capacity philosophy and walk-forward config as
+# GAME_OUTCOME_MODEL_CONFIG above -- reused verbatim rather than re-derived,
+# since the row counts (one row per fantasy-relevant player-week) are the
+# same order of magnitude and the leakage/season-boundary story is identical.
+TEAM_ALLOCATION_MODEL_CONFIG = {
+    "cv_gap_seasons": 0,                 # same rationale as GAME_OUTCOME_MODEL_CONFIG: every
+                                          # feature is lagged to week-1 within the target season.
+    "n_walk_forward_test_seasons": 5,
+    "rolling_window_games": 3,
+    "min_prior_games_for_form": 3,
+    "ridge_alpha": 10.0,                  # fixed baseline; no inner-CV tuning in this first cut
+    "xgb_params": {
+        "n_estimators": 300,
+        "max_depth": 3,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "objective": "reg:squarederror",
+        "eval_metric": "rmse",
+        "random_state": 42,
+    },
+}
+
 # =============================================================================
 # FEATURE MODE: "full" (400+ features) or "causal" (9-11 per position)
 # =============================================================================
