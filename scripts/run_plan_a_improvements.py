@@ -23,6 +23,15 @@ def _fit(kind, X, y):
     m = ShareRidgeModel() if kind == "ridge" else ShareXGBModel()
     return m.fit(X, y)
 
+def _fit_bounded(kind, X, y):
+    """Fit on logit shares and return a bounded predictor wrapper."""
+    model = _fit(kind, X, np.log(np.clip(y, 1e-5, 1 - 1e-5) / np.clip(1 - y, 1e-5, 1)))
+    model._bounded_logit = True
+    return model
+
+def _bounded_predict(model, X):
+    return 1 / (1 + np.exp(-np.clip(np.asarray(model.predict(X), float), -30, 30)))
+
 def _renorm(pred, ids):
     out = np.asarray(pred, dtype=float).copy()
     frame = pd.DataFrame({"p": out, "team": ids["team"].to_numpy(), "week": ids["week"].to_numpy(), "season": ids["season"].to_numpy()})
@@ -47,6 +56,8 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
         for kind in ("ridge", "xgb"):
             model = _fit(kind, train, yt)
             raw = np.asarray(model.predict(test), float)
+            bounded_model = _fit_bounded(kind, train, yt)
+            bounded = _bounded_predict(bounded_model, test)
             # Residual learning: fit the model to deviations from rolling-3.
             residual_model = _fit(kind, train, yt - X.iloc[tr][roll].fillna(0).to_numpy())
             residual = np.clip(X.iloc[te][roll].fillna(0).to_numpy() + residual_model.predict(test), 0, 1)
@@ -73,7 +84,7 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
                 alpha_vec = np.full(len(raw), alpha)
             blend = np.clip(alpha_vec * raw + (1-alpha_vec) * base, 0, 1)
             renorm = _renorm(blend, df.iloc[te][["season", "week", "team"]])
-            for name, pred in ((f"{kind}", raw), (f"{kind}_residual", residual), (f"{kind}_blend", blend), (f"{kind}_blend_renorm", renorm)):
+            for name, pred in ((f"{kind}", raw), (f"{kind}_bounded", bounded), (f"{kind}_residual", residual), (f"{kind}_blend", blend), (f"{kind}_blend_renorm", renorm)):
                 part = df.iloc[te][["player_id", "season", "week", "team", "position", "is_cold_start"]].copy()
                 part["fold"], part["arm"], part["actual_share"], part["predicted_share"] = fold, name, yv, pred
                 part["blend_alpha"] = alpha_vec
@@ -87,6 +98,7 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
         group_cols = ["season", "week", "team"]
         sums = g.groupby(group_cols).agg(pred_sum=("predicted_share", "sum"), actual_sum=("actual_share", "sum"), n_players=("player_id", "size"))
         sparse = g.merge(sums["n_players"].reset_index(), on=group_cols)
+        baseline = g.predicted_share if arm == "rolling3" else None
         row = {"target": target, "arm": arm, "n": len(g), "mae": mean_absolute_error(g.actual_share, g.predicted_share),
                         "mae_established": mean_absolute_error(g[g.is_cold_start == 0].actual_share, g[g.is_cold_start == 0].predicted_share),
                         "mae_cold_start": mean_absolute_error(g[g.is_cold_start == 1].actual_share, g[g.is_cold_start == 1].predicted_share) if (g.is_cold_start == 1).any() else None,
@@ -95,6 +107,8 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
                         "actual_team_sum_error": float(np.abs(sums.actual_sum - 1).mean()),
                         "sparse_group_mean_abs_sum_error": float(np.abs(sums.loc[sums.n_players <= 2, "pred_sum"] - 1).mean()) if (sums.n_players <= 2).any() else None,
                         "cold_start_mae": mean_absolute_error(g[g.is_cold_start == 1].actual_share, g[g.is_cold_start == 1].predicted_share) if (g.is_cold_start == 1).any() else None}
+        row["by_position"] = {str(k): float(mean_absolute_error(v.actual_share, v.predicted_share)) for k, v in g.groupby("position")}
+        row["by_volume_tier"] = {str(k): float(mean_absolute_error(v.actual_share, v.predicted_share)) for k, v in g.assign(volume_tier=pd.qcut(g.predicted_share.rank(method="first"), 3, labels=["low", "mid", "high"])).groupby("volume_tier")}
         metrics.append(row)
     base = out[out.arm == "rolling3"].sort_values(["fold", "player_id"])
     for m in metrics:
