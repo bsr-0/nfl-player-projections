@@ -919,6 +919,13 @@ Before promotion, repeat the best arm on the final untouched test season,
 compare against rolling-3 on the exact same row set, and verify team-share
 sum/error constraints.
 
+The first 2025-only confirmation for `targets` reduced MAE from 0.029617 to
+0.029531 with renormalization, but its paired CI was
+`[-0.000186, +0.000016]` and therefore included zero. The broad multi-fold
+lift is promising but is not yet sufficient evidence for production
+promotion; repeat the final-season check for all four targets and preferably
+on a second untouched season.
+
 #### Next test-set accuracy work
 
 The next low-risk experiments are: (a) final-season confirmation of the
