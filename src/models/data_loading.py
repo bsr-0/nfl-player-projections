@@ -41,7 +41,11 @@ def load_training_data(positions: list = None, min_games: int = 4,
     """
     # Auto-refresh and check data availability
     print("Checking data availability...")
-    data_status = auto_refresh_data()
+    # An explicit historical holdout (for example ``--test-season 2025``)
+    # must not be blocked by an incomplete live season.  Refresh still runs
+    # and records its quality report, but existing DB data is sufficient for
+    # a historical split.  Default/current-season runs remain strict.
+    data_status = auto_refresh_data(allow_gate_failure=test_season is not None)
     print(f"  Latest available season: {data_status['latest_season']}")
     print(f"  Available seasons: {data_status['available_seasons']}")
 

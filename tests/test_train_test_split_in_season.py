@@ -60,3 +60,24 @@ def test_auto_refresh_status_does_not_block_on_default_split(monkeypatch):
 
     assert status["train_test_split"] is None
     assert status["prediction_season"] == 2026
+
+
+def test_historical_load_allows_incomplete_live_refresh(monkeypatch):
+    """Historical training may use the DB while the current season is partial."""
+    import src.models.data_loading as loading
+
+    calls = []
+
+    def fake_refresh(**kwargs):
+        calls.append(kwargs)
+        return {"latest_season": 2025, "available_seasons": AVAILABLE}
+
+    monkeypatch.setattr(loading, "auto_refresh_data", fake_refresh)
+    monkeypatch.setattr(loading.DataManager, "get_train_test_seasons",
+                        lambda self, **kwargs: (list(range(2018, 2025)), 2025))
+
+    train, test, train_seasons, actual_test = loading.load_training_data(test_season=2025)
+    assert not train.empty and not test.empty
+    assert train_seasons == list(range(2018, 2025))
+    assert actual_test == 2025
+    assert calls == [{"allow_gate_failure": True}]

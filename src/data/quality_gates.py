@@ -66,8 +66,31 @@ class DataQualityGates:
             }
             return DataQualityGateResult(passed=False, report=report)
 
-        latest_season = int(df["season"].max())
-        latest_week = int(df.loc[df["season"] == latest_season, "week"].max())
+        report["latest_observed"] = {
+            "season": int(df["season"].max()),
+            "week": int(df.loc[df["season"] == df["season"].max(), "week"].max()),
+            "rows": int(len(df)),
+        }
+
+        # player_weekly_stats can carry rows for an in-progress week before
+        # most of that week's games have been played -- a Thursday game's
+        # box score lands in the DB days before the rest of the week's
+        # Sunday/Monday games, so the literal latest (season, week) can be a
+        # single-game trickle. Comparing that against a full-week baseline
+        # is exactly the false "coverage collapsed" signal this gate exists
+        # to catch, and the same class of bug nfl_calendar.
+        # season_has_completed_games() was already written to fix for
+        # season-level rollover (GAPS.md 2026-09-03: "a season is in
+        # progress when a game has been PLAYED, not when a date passes a
+        # nominal boundary") -- that fix never reached this function's own,
+        # separate latest-window computation. Completeness/anomaly checks
+        # run on a frame truncated to the latest schedule-complete week;
+        # freshness deliberately keeps the raw frame (it needs to see
+        # today's in-progress week to answer "are we caught up").
+        checked_df = self._truncate_to_complete_window(df, db_path=db_path)
+
+        latest_season = int(checked_df["season"].max())
+        latest_week = int(checked_df.loc[checked_df["season"] == latest_season, "week"].max())
         is_postseason = latest_week > regular_season_max_week(latest_season)
         scheduled_teams = None
         if not is_postseason:
@@ -75,9 +98,9 @@ class DataQualityGates:
 
         checks = {
             "completeness": self._check_completeness(
-                df, scheduled_teams=scheduled_teams, is_postseason=is_postseason
+                checked_df, scheduled_teams=scheduled_teams, is_postseason=is_postseason
             ),
-            "anomalies": self._check_anomalies(df, is_postseason=is_postseason),
+            "anomalies": self._check_anomalies(checked_df, is_postseason=is_postseason),
         }
         if check_freshness:
             # Freshness asks "are we caught up to the live calendar" -- a
@@ -86,18 +109,51 @@ class DataQualityGates:
             # today's in-progress week, so callers like train.py opt out
             # (check_freshness=False) rather than being blocked by a
             # perpetually-stale in-season freshness check that has nothing
-            # to do with training-data integrity.
+            # to do with training-data integrity. Uses the RAW frame. not
+            # checked_df -- freshness must see an in-progress week's partial
+            # data to correctly report "yes, we're caught up," which the
+            # truncated frame would hide.
             checks["freshness"] = self._check_freshness(df, expected_season, expected_week)
         report["checks"] = checks
 
         passed = all(check.get("passed", False) for check in checks.values())
         report["status"] = "pass" if passed else "fail"
-        report["latest_observed"] = {
-            "season": int(df["season"].max()),
-            "week": int(df.loc[df["season"] == df["season"].max(), "week"].max()),
-            "rows": int(len(df)),
-        }
         return DataQualityGateResult(passed=passed, report=report)
+
+    def _truncate_to_complete_window(
+        self, df: pd.DataFrame, db_path: Optional[Path] = None, max_lookback: int = 4
+    ) -> pd.DataFrame:
+        """Drop trailing (season, week) rows whose games haven't finished.
+
+        Walks the distinct (season, week) pairs present in `df`, most recent
+        first, and keeps the frame truncated through the first one where
+        EVERY game `schedule` has for that window already has a final
+        score. Falls back to the untouched frame (fail open, matching
+        `_load_scheduled_teams`'s convention elsewhere in this module) if a
+        candidate window has no schedule rows to check at all, the schedule
+        table is unreadable, or no complete window is found within
+        `max_lookback` steps -- a missing/unreadable schedule must not block
+        the gate outright, only forfeit this specific refinement.
+        """
+        windows = (
+            df[["season", "week"]].drop_duplicates()
+            .sort_values(["season", "week"], ascending=False)
+            .head(max_lookback)
+        )
+        db_file = db_path or (DATA_DIR / "nfl_data.db")
+        for _, row in windows.iterrows():
+            season, week = int(row["season"]), int(row["week"])
+            try:
+                with sqlite3.connect(str(db_file)) as conn:
+                    total, done = conn.execute(
+                        "SELECT COUNT(*), COUNT(home_score) FROM schedule "
+                        "WHERE season = ? AND week = ?", (season, week),
+                    ).fetchone()
+            except sqlite3.Error:
+                return df
+            if total == 0 or done == total:
+                return df[(df["season"] < season) | ((df["season"] == season) & (df["week"] <= week))]
+        return df
 
     def _check_freshness(
         self,
