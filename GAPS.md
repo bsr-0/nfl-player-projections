@@ -926,6 +926,14 @@ lift is promising but is not yet sufficient evidence for production
 promotion; repeat the final-season check for all four targets and preferably
 on a second untouched season.
 
+The role-aware extension calibrates blend weights separately by position and
+cold-start flag. On the pooled 2023-2025 folds it selected the XGBoost blend
+plus renormalization for all four targets: MAE was 0.030093 (targets),
+0.024521 (rushing attempts), 0.037399 (receiving yards), and 0.029088
+(rushing yards). Every paired bootstrap CI was below zero versus rolling-3.
+This is still a research result; the untouched-season confirmations remain
+the promotion gate.
+
 #### Next test-set accuracy work
 
 The next low-risk experiments are: (a) final-season confirmation of the
