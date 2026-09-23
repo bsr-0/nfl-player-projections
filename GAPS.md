@@ -890,6 +890,44 @@ evaluator, and restores the feature list in a `finally` block. The harness
 does not write production model artifacts; its outputs belong under
 `data/experiments/backlog_ablations/`.
 
+#### Plan A improvement experiment (2026-09-22)
+
+The follow-up Plan A experiment is implemented in
+`scripts/run_plan_a_improvements.py`. It evaluates, on identical held-out
+rows and strict expanding-window folds:
+
+1. residual-over-rolling-3,
+2. fold-local blending with rolling-3,
+3. team/week renormalization of predicted shares, and
+4. established-player versus cold-start segments.
+
+Residual learning alone lost to rolling-3 for every target. The blend plus
+team renormalization improved all four targets, with paired bootstrap 95% CIs
+strictly below zero:
+
+| Target | Rolling-3 MAE | Best arm | Best MAE | Delta CI |
+|---|---:|---|---:|---:|
+| targets | 0.030155 | ridge blend + renorm | 0.030101 | [-0.000105, -0.000011] |
+| rushing attempts | 0.024668 | ridge blend + renorm | 0.024475 | [-0.000283, -0.000106] |
+| receiving yards | 0.037735 | xgboost blend + renorm | 0.037492 | [-0.000339, -0.000152] |
+| rushing yards | 0.029300 | ridge blend + renorm | 0.029048 | [-0.000346, -0.000166] |
+
+This is a small but consistent out-of-fold lift, not a production promotion.
+The prediction CSVs and JSON metrics are retained under
+`data/experiments/plan_a_improvements/`; served artifacts remain unchanged.
+Before promotion, repeat the best arm on the final untouched test season,
+compare against rolling-3 on the exact same row set, and verify team-share
+sum/error constraints.
+
+#### Next test-set accuracy work
+
+The next low-risk experiments are: (a) final-season confirmation of the
+blend/renormalization arm, (b) position and cold-start stratification with
+minimum-sample confidence intervals, (c) calibration/shrinkage of the blend
+weight by target and role, and (d) a leakage audit of all feature families
+used by the winning arm. These are validation-only until the corrected-Vegas
+retrain and final holdout comparison are complete.
+
 | # | Technique/Variable | Category | What It Replaces/Adds | Expected Impact | Effort |
 |---|-------------------|----------|----------------------|-----------------|--------|
 | 1 | DVOA-adjusted opponent FPA | Feature | Raw `opp_fpts_allowed` | High — removes schedule contamination from matchup signal | Medium |

@@ -17,6 +17,13 @@ weekly and season-long — built on play-by-play and weekly player data from
   rolling windows, no same-week outcome data as input) — see
   `src/utils/leakage.py`.
 
+Plan A team-share experiments found a small, consistent out-of-fold lift from
+fold-local blending with the rolling-3 baseline followed by team/week share
+renormalization. Residual learning alone was worse than rolling-3. See
+`GAPS.md` §11.4 and the retained metrics under
+`data/experiments/plan_a_improvements/`. These are validation artifacts only;
+they have not replaced served models.
+
 ## Setup
 
 ```bash

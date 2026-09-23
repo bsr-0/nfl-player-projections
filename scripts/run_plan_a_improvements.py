@@ -29,12 +29,12 @@ def _renorm(pred, ids):
     sums = frame.groupby(["season", "week", "team"])["p"].transform("sum").to_numpy()
     return np.divide(out, sums, out=np.zeros_like(out), where=sums > 0)
 
-def run(target, seasons=None):
+def run(target, seasons=None, n_test_seasons=None):
     label = f"share_of_team_{target}"; roll = f"{label}_roll{ROLL_WINDOW}"
     df = filter_population(load_share_rows(seasons=seasons), target).reset_index(drop=True)
     cols = feature_columns(df); X, y = df[cols], df[label].to_numpy(float)
     seasons_arr = df.season.to_numpy(); splitter = SeasonAwareTimeSeriesSplit(
-        n_splits=TEAM_ALLOCATION_MODEL_CONFIG["n_walk_forward_test_seasons"],
+    n_splits=n_test_seasons or TEAM_ALLOCATION_MODEL_CONFIG["n_walk_forward_test_seasons"],
         seasons=seasons_arr, gap_seasons=TEAM_ALLOCATION_MODEL_CONFIG["cv_gap_seasons"], strict=True)
     rows = []
     for fold, (tr, te) in enumerate(splitter.split(X)):
@@ -80,9 +80,9 @@ def run(target, seasons=None):
     return out, metrics
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--target", choices=VOLUME_COLS, default="targets"); ap.add_argument("--seasons", nargs=2, type=int); ap.add_argument("--output-dir", type=Path, default=Path("data/experiments/plan_a_improvements")); args = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--target", choices=VOLUME_COLS, default="targets"); ap.add_argument("--seasons", nargs=2, type=int); ap.add_argument("--n-test-seasons", type=int, help="Use 1 for a final-season-only confirmation"); ap.add_argument("--output-dir", type=Path, default=Path("data/experiments/plan_a_improvements")); args = ap.parse_args()
     seasons = list(range(args.seasons[0], args.seasons[1]+1)) if args.seasons else None
-    out, metrics = run(args.target, seasons); args.output_dir.mkdir(parents=True, exist_ok=True)
+    out, metrics = run(args.target, seasons, args.n_test_seasons); args.output_dir.mkdir(parents=True, exist_ok=True)
     out.to_csv(args.output_dir / f"{args.target}_predictions.csv", index=False)
     (args.output_dir / f"{args.target}_metrics.json").write_text(json.dumps(metrics, indent=2, default=float) + "\n")
     print(json.dumps(metrics, indent=2, default=float))
