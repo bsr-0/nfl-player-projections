@@ -87,3 +87,12 @@ data/                   # SQLite DB, trained models, generated JSON/parquet (git
   each session. Read this first when picking up work on the project; it
   has a standing instruction for documenting bugs found along the way.
 - `CLAUDE.md` — agent working directives for this repo.
+- **Vegas lineage and validation status:** Vegas player features use the
+  corrected team-side formulas in `src/data/external_data.py` (home implied
+  total `(total + home_spread_line) / 2`, away `(total - home_spread_line) / 2`,
+  with the player-team spread convention preserved). The served weekly
+  artifacts are not considered corrected until a post-fix retrain completes.
+  `scripts/audit_production_artifacts.py` is read-only and reports artifact
+  timestamps, feature schema/version, and pre/post-fix lineage. Walk-forward
+  CSVs are validation artifacts, not served models; compare them with
+  `scripts/compare_vegas_validation.py` before promotion.

@@ -873,6 +873,23 @@ this section describes is still fully unbuilt. See `MODELS.md`.
 
 ### 11.4 Summary: Highest-Impact Adoptions (Ranked)
 
+#### Current execution status (2026-09-22)
+
+The Vegas sign-convention correction is in the feature-generation code, but
+the served `model_*_1w.joblib` artifacts must be treated as pre-fix until the
+active `--walk-forward --test-season 2025` run completes and a controlled
+promotion is made. Validation outputs are deliberately separate from served
+artifacts. Use `scripts/audit_production_artifacts.py` for the read-only
+lineage audit and `scripts/compare_vegas_validation.py` to compare a completed
+corrected validation CSV with the stale served-model metadata.
+
+The six ranked feature families have an isolated harness in
+`scripts/run_backlog_ablations.py`. It removes one family at a time from the
+existing causal feature list, runs the normal leakage-safe walk-forward
+evaluator, and restores the feature list in a `finally` block. The harness
+does not write production model artifacts; its outputs belong under
+`data/experiments/backlog_ablations/`.
+
 | # | Technique/Variable | Category | What It Replaces/Adds | Expected Impact | Effort |
 |---|-------------------|----------|----------------------|-----------------|--------|
 | 1 | DVOA-adjusted opponent FPA | Feature | Raw `opp_fpts_allowed` | High — removes schedule contamination from matchup signal | Medium |
