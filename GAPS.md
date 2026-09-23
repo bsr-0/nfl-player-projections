@@ -934,6 +934,21 @@ plus renormalization for all four targets: MAE was 0.030093 (targets),
 This is still a research result; the untouched-season confirmations remain
 the promotion gate.
 
+The experiment now records team-share constraint diagnostics: predicted
+team/week share sums, p95 sum error, actual-label sum error, sparse-group sum
+error, and absolute renormalization distortion. On the 2025 targets holdout,
+renormalized predictions had effectively zero predicted sum error (floating
+point noise), mean absolute distortion 0.00137 share points, and p95
+distortion 0.00820. The target population had no groups with two or fewer
+players, so sparse-group behavior still needs a rushing/receiving slice with
+that population present.
+
+An exact-row comparison against a served Plan A model is currently blocked:
+the repository contains Plan A metadata sidecars but no
+`team_share_*_*.joblib` artifacts or row-level serving export. The new
+`scripts/compare_plan_a_served.py` refuses aggregate-only comparisons and
+will run once such an export exists.
+
 #### Next test-set accuracy work
 
 The next low-risk experiments are: (a) final-season confirmation of the

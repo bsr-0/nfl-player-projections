@@ -84,14 +84,32 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
     out = pd.concat(rows, ignore_index=True)
     metrics = []
     for arm, g in out.groupby("arm"):
-        metrics.append({"target": target, "arm": arm, "n": len(g), "mae": mean_absolute_error(g.actual_share, g.predicted_share),
+        group_cols = ["season", "week", "team"]
+        sums = g.groupby(group_cols).agg(pred_sum=("predicted_share", "sum"), actual_sum=("actual_share", "sum"), n_players=("player_id", "size"))
+        sparse = g.merge(sums["n_players"].reset_index(), on=group_cols)
+        row = {"target": target, "arm": arm, "n": len(g), "mae": mean_absolute_error(g.actual_share, g.predicted_share),
                         "mae_established": mean_absolute_error(g[g.is_cold_start == 0].actual_share, g[g.is_cold_start == 0].predicted_share),
-                        "mae_cold_start": mean_absolute_error(g[g.is_cold_start == 1].actual_share, g[g.is_cold_start == 1].predicted_share) if (g.is_cold_start == 1).any() else None})
+                        "mae_cold_start": mean_absolute_error(g[g.is_cold_start == 1].actual_share, g[g.is_cold_start == 1].predicted_share) if (g.is_cold_start == 1).any() else None,
+                        "mean_abs_team_sum_error": float(np.abs(sums.pred_sum - 1).mean()),
+                        "p95_abs_team_sum_error": float(np.abs(sums.pred_sum - 1).quantile(.95)),
+                        "actual_team_sum_error": float(np.abs(sums.actual_sum - 1).mean()),
+                        "sparse_group_mean_abs_sum_error": float(np.abs(sums.loc[sums.n_players <= 2, "pred_sum"] - 1).mean()) if (sums.n_players <= 2).any() else None,
+                        "cold_start_mae": mean_absolute_error(g[g.is_cold_start == 1].actual_share, g[g.is_cold_start == 1].predicted_share) if (g.is_cold_start == 1).any() else None}
+        metrics.append(row)
     base = out[out.arm == "rolling3"].sort_values(["fold", "player_id"])
     for m in metrics:
         if m["arm"] != "rolling3":
             cand = out[out.arm == m["arm"]].sort_values(["fold", "player_id"])
             m["vs_rolling3_bootstrap"] = bootstrap_mae_delta(base.actual_share.to_numpy(), cand.predicted_share.to_numpy(), base.predicted_share.to_numpy())
+    for kind in ("ridge", "xgb"):
+        raw = out[out.arm == f"{kind}_blend"].set_index(["player_id", "season", "week"])
+        renorm = out[out.arm == f"{kind}_blend_renorm"].set_index(["player_id", "season", "week"])
+        if not raw.empty and not renorm.empty:
+            delta = (renorm.predicted_share - raw.predicted_share).abs()
+            for m in metrics:
+                if m["arm"] == f"{kind}_blend_renorm":
+                    m["mean_abs_renorm_distortion"] = float(delta.mean())
+                    m["p95_abs_renorm_distortion"] = float(delta.quantile(.95))
     return out, metrics
 
 def main():
