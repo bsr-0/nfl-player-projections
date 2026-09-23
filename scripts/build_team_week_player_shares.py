@@ -145,18 +145,39 @@ def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     for c in VOLUME_COLS:
         panel[c] = panel[c].fillna(0.0)
 
+    # "Share of team volume" is only a coherent concept for nonnegative
+    # volume, but a player's own recorded receiving_yards/rushing_yards can
+    # be genuinely negative for a single game (e.g. a screen pass stuffed
+    # for a loss) -- found running this against the real database: 670
+    # negative receiving_yards rows and 1,927 negative rushing_yards rows,
+    # producing 671 team-weeks where a share fell outside [0, 1] (a
+    # teammate's share pulled above 1 by a negative contributor shrinking
+    # the team total, or that player's own share going negative). Floor at
+    # 0 for this share/team-total computation only -- the raw, unfloored
+    # `panel[c]` column (kept for audit/reporting, never used as a model
+    # feature -- see feature_columns()'s exclusion of VOLUME_COLS) and
+    # fantasy-point scoring elsewhere in the repo are untouched. A
+    # net-negative week genuinely captured none of the team's positive
+    # offensive output, so 0 is the correct share, not a fabricated value.
+    for c in VOLUME_COLS:
+        panel[f"_share_basis_{c}"] = panel[c].clip(lower=0.0)
+    n_floored = {c: int((panel[c] < 0).sum()) for c in VOLUME_COLS}
+    if any(n_floored.values()):
+        print(f"floored negative volume for share computation only: {n_floored}")
+
     team_totals = (
-        panel.groupby(["team", "season", "week"])[VOLUME_COLS]
+        panel.groupby(["team", "season", "week"])[[f"_share_basis_{c}" for c in VOLUME_COLS]]
         .transform("sum")
-        .rename(columns={c: f"team_{c}" for c in VOLUME_COLS})
+        .rename(columns={f"_share_basis_{c}": f"team_{c}" for c in VOLUME_COLS})
     )
     panel = pd.concat([panel, team_totals], axis=1)
 
     share_cols = []
     for c in VOLUME_COLS:
         share_col = f"share_of_team_{c}"
-        panel[share_col] = _safe_share(panel[c], panel[f"team_{c}"])
+        panel[share_col] = _safe_share(panel[f"_share_basis_{c}"], panel[f"team_{c}"])
         share_cols.append(share_col)
+    panel = panel.drop(columns=[f"_share_basis_{c}" for c in VOLUME_COLS])
 
     panel = panel.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
     grp = panel.groupby(["player_id", "season"], group_keys=False)

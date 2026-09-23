@@ -102,6 +102,40 @@ def test_share_sum_over_one_is_rejected(db):
         validate_shares(panel)
 
 
+def test_negative_volume_is_floored_for_share_computation_only(db):
+    """A player's recorded receiving_yards can be genuinely negative for a
+    single game (e.g. a stuffed screen pass) -- found running this against
+    the real database. Without flooring, that negative contribution shrinks
+    the team total, pulling a teammate's share above 1 or this player's own
+    share below 0, both of which validate_shares correctly rejects. The
+    floor must apply only to the share computation, not to the raw stored
+    volume column (still usable for audit/fantasy-scoring elsewhere)."""
+    con = sqlite3.connect(str(db.db_path))
+    rows = [
+        {"player_id": "p1", "season": SEASON, "week": 1, "team": "AAA", "position": "WR"},
+        {"player_id": "p2", "season": SEASON, "week": 1, "team": "AAA", "position": "WR"},
+    ]
+    pd.DataFrame(rows).to_sql("canonical_player_weeks", con, index=False, if_exists="replace")
+    con.close()
+    db.insert_player_weekly_stats({
+        "player_id": "p1", "season": SEASON, "week": 1, "team": "AAA",
+        "targets": 2, "rushing_attempts": 0, "receiving_yards": -5, "rushing_yards": 0,
+    })
+    db.insert_player_weekly_stats({
+        "player_id": "p2", "season": SEASON, "week": 1, "team": "AAA",
+        "targets": 6, "rushing_attempts": 0, "receiving_yards": 80, "rushing_yards": 0,
+    })
+    panel = _build(db)
+    validate_shares(panel)  # must not raise
+
+    p1 = panel[panel.player_id == "p1"].iloc[0]
+    p2 = panel[panel.player_id == "p2"].iloc[0]
+    assert p1["receiving_yards"] == -5  # raw stored value is untouched
+    assert p1["share_of_team_receiving_yards"] == 0.0  # floored to 0, not negative
+    assert p2["share_of_team_receiving_yards"] == pytest.approx(1.0)  # team total excludes p1's negative
+    assert p1["team_receiving_yards"] == 80.0  # denominator built from floored contributions
+
+
 def test_missing_canonical_table_raises(tmp_path):
     from scripts.build_team_week_player_shares import load_population
     con = sqlite3.connect(str(tmp_path / "empty.db"))

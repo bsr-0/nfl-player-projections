@@ -426,11 +426,24 @@ building anything from the Plan B section.
       `tests/test_team_week_player_shares.py`). Same-week shares are
       correct-by-construction (built from the same source rows as their own
       team-week denominator); `_s2d`/`_roll3` lag columns verified with a
-      sentinel-value test mirroring `test_game_outcome_leakage.py`. Not yet
-      run against the real database (only synthetic-DB tests so far) --
-      running `--write` against `data/nfl_data.db` and inspecting the
-      `is_cold_start`/coverage counts is the next step before building the
-      regressors below.
+      sentinel-value test mirroring `test_game_outcome_leakage.py`. **Run
+      against the real database (2026-09-22)** -- `--write` against
+      `data/nfl_data.db` initially failed `validate_shares`: 671 team-weeks
+      had a share outside `[0, 1]`, because a player's own
+      receiving_yards/rushing_yards can be genuinely negative for a single
+      game (670 negative `receiving_yards` rows, 1,927 negative
+      `rushing_yards` rows in the real data -- e.g. a screen pass stuffed
+      for a loss), which pulls a teammate's share above 1 or that player's
+      own share below 0 when summed naively. Fixed by flooring volume at 0
+      for the share/team-total computation only (raw `panel[c]` and
+      fantasy-point scoring elsewhere are untouched) -- a net-negative week
+      genuinely captured none of the team's positive offensive output, so 0
+      is the correct share, not a fabricated value. New regression test:
+      `test_negative_volume_is_floored_for_share_computation_only`. After
+      the fix: 164,298 player-weeks, seasons 2013-2026, cold-start rate a
+      consistent ~19-25% every season (2026 shows 100% only because it's 1
+      week into that season), share sums correct. Coverage report read and
+      clean before proceeding to the regressors below.
 - [x] Plan A share regressors (one per volume target) --
       `src/models/team_allocation/` (`features.py`, `models.py`,
       `baseline.py`), `src/evaluation/team_share_backtester.py`,
@@ -443,14 +456,32 @@ building anything from the Plan B section.
       (fixed conservative defaults, same phase-1 philosophy as
       `game_outcome`) -- a fast-follow, not blocking.
       Verified end-to-end (build shares -> train -> backtest -> print
-      report) against a synthetic populated DB; **not yet run against real
-      data** -- this sandbox's `data/nfl_data.db` has empty tables (no
-      network access to refresh it here). Running
-      `scripts/build_team_week_player_shares.py --write` then
-      `scripts/train_team_share_model.py` against the real database, and
-      checking whether ridge/xgboost actually beat `rolling3` on real
-      held-out seasons, is the next step -- that result is Plan A's
-      acceptance criterion 1 and 2 (see above).
+      report) against a synthetic populated DB. **Run against real data
+      (2026-09-22) -- ACCEPTANCE CRITERION 1 FAILED, all four targets.**
+      `scripts/check_team_share_acceptance.py`'s paired-bootstrap gate:
+
+      | Target | ridge vs rolling3 | xgboost vs rolling3 |
+      |---|---|---|
+      | targets | 0.0325 vs 0.0300 -- FAIL | 0.0315 vs 0.0300 -- FAIL |
+      | rushing_attempts | 0.0273 vs 0.0240 -- FAIL | 0.0265 vs 0.0240 -- FAIL |
+      | receiving_yards | 0.0392 vs 0.0377 -- FAIL | 0.0387 vs 0.0377 -- FAIL |
+      | rushing_yards | 0.0317 vs 0.0287 -- FAIL | 0.0310 vs 0.0287 -- FAIL |
+
+      `rolling3` has the lowest MAE on every target, and the 95% bootstrap CI
+      on the MAE delta is entirely positive in all 8 (arm x target) cases --
+      ridge/xgboost are reliably WORSE than the naive trailing-3-game share,
+      not just statistically tied to it. Holds up in the position and
+      cold-start breakdowns too (`rolling3` wins on every position slice on
+      every target checked). R^2 is 0.4-0.7 for all three arms (real signal
+      is being learned), so this is not a broken pipeline -- the tunable
+      models just don't add anything beyond a player's own trailing-3-game
+      share. Most likely explanation on record: no inner-CV hyperparameter
+      tuning yet (see above) -- untested whether tuning would close the gap;
+      decision was made to stop here rather than chase that (see Decision
+      gate below). Per this doc's own criterion 1, reconstruction-level
+      accuracy (criterion 2) was NOT evaluated -- there is no point scoring
+      a reconstruction built on a share model that already lost to the
+      baseline it needed to beat first.
 - [x] Coverage report + always-written metadata (robustness follow-ups):
       `build_team_week_player_shares.py` now prints/writes a season/position
       coverage summary (`audit_coverage`, `--audit-csv`, mirroring
@@ -514,12 +545,26 @@ building anything from the Plan B section.
       `walk_forward_oof_predictions` itself). Verified end-to-end against a
       synthetic DB -- QB partial-points MAE came out lowest (small
       rushing-only production) and RB highest (both rushing and receiving
-      volume), the expected qualitative shape. Not yet run against real
-      data for the same sandbox reason as the rest of Plan A.
+      volume), the expected qualitative shape. **Deliberately not run
+      against real data**: criterion 1 failed first (see above), and this
+      doc's own decision gate says not to proceed to reconstruction accuracy
+      once that happens.
 - [ ] Touchdown/reception share targets (needed for criterion 2 as
-      originally stated -- not yet scoped, deferred until the yardage-only
-      slice above shows the underlying approach has legs).
-- [ ] Decision-gate review
+      originally stated -- moot for now; criterion 1 failed first, see
+      Decision-gate review below).
+- [x] Decision-gate review (2026-09-22): **Plan A failed acceptance
+      criterion 1** on real data, across all four volume targets (see
+      above) -- the rolling-3-game share baseline reliably beats both ridge
+      and XGBoost, not just on a point estimate. Per this doc's own gate,
+      this is treated as evidence against investing in Plan B's larger
+      cost too, not just against Plan A's specific architecture. Decision:
+      stop here rather than chase hyperparameter tuning immediately: don't
+      build Plan B's walk-forward backtester, don't scope touchdown/
+      reception share targets, don't reopen this doc, unless/until someone
+      revisits whether tuning (the one acknowledged gap in Plan A's model
+      config) changes this result. Plan B's data-shape and mixed-effects
+      groundwork below remains as documented, tested prep -- explicitly not
+      a decision to proceed with Plan B.
 - [x] Plan B data shape: `scripts/build_team_week_roster_slots.py` +
       `tests/test_team_week_roster_slots.py` (15 tests). Built ahead of the
       decision gate above, deliberately, as groundwork prep while waiting
