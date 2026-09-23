@@ -7,12 +7,31 @@ from src.models.simulation_evaluation import (
     marginal_calibration, variogram_score,
 )
 
-def test_proper_scores_prefer_accurate_draws():
+def test_energy_score_prefers_accurate_draws():
     truth = np.array([10., 20.])
     close = np.array([[10., 20.], [11., 19.], [9., 21.]])
     far = np.array([[30., 40.], [31., 39.], [29., 41.]])
     assert energy_score(close, truth) < energy_score(far, truth)
-    assert variogram_score(close, truth) < variogram_score(far, truth)
+
+def test_variogram_score_prefers_matching_dependence_not_location():
+    """Variogram score (Scheuerer & Hamill 2015) only compares within-draw
+    pairwise |x_i - x_j|^p against the observation's own |y_i - y_j|^p --
+    it never looks at each dimension's absolute level, so it is
+    translation-invariant by construction. `far` below is `close` shifted
+    +20 in both dimensions with identical internal spread, so it scores
+    identically to `close`; that is the metric doing its documented job of
+    isolating dependence-structure fidelity (energy_score and marginal
+    CRPS separately cover location/marginal accuracy). What the variogram
+    score IS sensitive to is a mismatched pairwise spread, e.g. an ensemble
+    whose two dimensions move in lockstep when the truth's dimensions are
+    10 apart.
+    """
+    truth = np.array([10., 20.])
+    close = np.array([[10., 20.], [11., 19.], [9., 21.]])
+    mismatched_dependence = np.array([[10., 10.], [11., 11.], [9., 9.]])
+    assert variogram_score(close, truth) < variogram_score(mismatched_dependence, truth)
+    far_same_dependence = np.array([[30., 40.], [31., 39.], [29., 41.]])
+    assert variogram_score(close, truth) == pytest.approx(variogram_score(far_same_dependence, truth))
 
 def test_joint_and_marginal_evaluation():
     draws = pd.DataFrame([

@@ -135,36 +135,63 @@ def _opportunity_multiplier(player, team_plays, team_pass, baseline):
     return actual / max(1.0, expected)
 
 def _opportunity_type(player: PlayerSimulationInput) -> str:
+    """Which team opportunity pool this player's `usage_share` is a fraction of.
+
+    QB and WR/TE both draw on the team's pass-attempt volume, but they are
+    NOT the same pool: a starting QB's `pass_share` (the adapter's
+    pass_share/usage_share field) is his share of the team's own dropbacks
+    -- normally ~1.0 -- while a receiver's `target_share` is that
+    receiver's share of the targets thrown on those same dropbacks. Pooling
+    them together would sum a ~1.0 QB share with several ~0.1-0.3 receiver
+    shares in one pool, which `draw_usage_shares` correctly rejects as
+    exceeding one team's opportunity pool. Both pools still size themselves
+    off the same pass-attempt volume (see `_is_pass_opportunity`); only
+    their player-level share semantics differ.
+    """
     if player.position == "RB":
         return "rush"
-    return "pass"
+    if player.position == "QB":
+        return "pass_dropbacks"
+    return "pass_targets"
+
+def _is_pass_opportunity(opportunity: str) -> bool:
+    return opportunity in ("pass_dropbacks", "pass_targets")
 
 def _draw_usage_multipliers(game: GameScriptInput,
                             players: list[PlayerSimulationInput],
                             script: GameDraw,
                             rng: np.random.Generator) -> dict[int, float]:
-    """Allocate optional player shares inside each team's pass/rush pool."""
+    """Allocate optional player shares inside each team's pass/rush pool.
+
+    A player without a supplied `usage_share` is simply left out of the
+    returned mapping -- `simulate_players` falls back to
+    `_opportunity_multiplier` for them individually -- rather than the pool
+    rejecting a partially-supplied group. Real serving data routinely has
+    partial coverage (e.g. a rookie with no `target_share` yet alongside
+    veterans that have one), so requiring every player in a pool to have a
+    share made the common case an error.
+    """
     grouped = {}
     for index, player in enumerate(players):
         grouped.setdefault((player.team, _opportunity_type(player)), []).append((index, player))
     multipliers = {}
     for (team, opportunity), entries in grouped.items():
-        supplied = [player.usage_share is not None for _, player in entries]
-        if not any(supplied):
+        supplied_entries = [(index, player) for index, player in entries
+                             if player.usage_share is not None]
+        if not supplied_entries:
             continue
-        if not all(supplied):
-            raise ValueError("usage shares must be supplied for every player in an allocated pool")
-        shares = np.asarray([player.usage_share for _, player in entries], dtype=float)
+        shares = np.asarray([player.usage_share for _, player in supplied_entries], dtype=float)
         sampled = draw_usage_shares(shares, concentration=80.0, rng=rng)
         is_home = team == game.home_team
         baseline = game.home if is_home else game.away
+        is_pass = _is_pass_opportunity(opportunity)
         actual = ((script.home_pass_attempts if is_home else script.away_pass_attempts)
-                  if opportunity == "pass"
+                  if is_pass
                   else (script.home_plays - script.home_pass_attempts
                         if is_home else script.away_plays - script.away_pass_attempts))
         expected_pool = baseline.plays * (
-            baseline.pass_rate if opportunity == "pass" else 1.0 - baseline.pass_rate)
-        for (index, _), base_share, draw_share in zip(entries, shares, sampled):
+            baseline.pass_rate if is_pass else 1.0 - baseline.pass_rate)
+        for (index, _), base_share, draw_share in zip(supplied_entries, shares, sampled):
             multipliers[index] = (
                 0.0 if base_share == 0
                 else actual * draw_share / max(1e-6, expected_pool * base_share))

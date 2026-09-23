@@ -104,4 +104,12 @@ def reconstruct_partial_fantasy_points(volumes: Dict[str, np.ndarray]) -> pd.Ser
             f"reconstruct_partial_fantasy_points needs at least one of "
             f"{POINTS_ELIGIBLE_VOLUME_COLS}, got keys {list(volumes)}"
         )
-    return calculate_fantasy_points_df(pd.DataFrame(eligible))
+    df = pd.DataFrame(eligible)
+    points = calculate_fantasy_points_df(df)
+    # calculate_fantasy_points_df fillna(0)s each column independently (its
+    # contract for a column absent entirely, e.g. passing_yards for a
+    # receiving-only reconstruction). Applied here, that would also
+    # silently turn a NaN reconstructed volume -- reconstruct_volume's
+    # documented signal for "no lagged team total yet, can't reconstruct"
+    # -- into a fake 0 rather than propagating the missing-evidence signal.
+    return points.where(~df.isna().any(axis=1), np.nan)

@@ -26,8 +26,12 @@ def test_adapters_match_current_serving_columns():
     assert players["2026_2_H_A"][0].sd_fantasy_points == pytest.approx(12 / (2 * 1.281551565545))
 
 def test_adapter_consumes_optional_usage_and_zero_participation():
+    # PLAYERS[0] is the QB row -- QBs aren't targeted, so their share field
+    # is pass_share (share of the team's own dropbacks), not target_share
+    # (see share_fields in simulation_adapter.py and the KEEP comment in
+    # scripts/generate_weekly_data.py).
     players = PLAYERS.iloc[:1].copy()
-    players["target_share"] = .30
+    players["pass_share"] = .30
     players["participation_prob"] = 0.0
     game_players = player_inputs_from_predictions(players, game_inputs_from_predictions(GAMES))
     player = game_players["2026_2_H_A"][0]

@@ -58,12 +58,23 @@ def test_supplied_usage_shares_are_allocated_by_team_pool():
     rows = simulate_players(game, players, 20, 7)
     assert len(rows) == 40
 
-def test_mixed_usage_share_pool_is_rejected():
+def test_mixed_usage_share_pool_falls_back_for_unsupplied_players():
     game = GameScriptInput("usage_mixed", "H", "A", .5, 0, 42)
     players = [PlayerSimulationInput("rb1", "H", "RB", 15, 3, .60),
                PlayerSimulationInput("rb2", "H", "RB", 10, 3, None)]
-    with pytest.raises(ValueError, match="usage shares"):
-        simulate_players(game, players, 2, 7)
+    rows = simulate_players(game, players, 20, 7)
+    assert len(rows) == 40
+
+def test_qb_and_receiver_shares_are_not_pooled_together():
+    # A starting QB's own dropback share (~1.0) plus receivers' target
+    # shares would exceed one team's opportunity pool if wrongly pooled
+    # together -- this must not raise.
+    game = GameScriptInput("usage_qb", "H", "A", .5, 0, 42)
+    players = [PlayerSimulationInput("qb1", "H", "QB", 20, 4, .98),
+               PlayerSimulationInput("wr1", "H", "WR", 15, 3, .28),
+               PlayerSimulationInput("wr2", "H", "WR", 10, 3, .22)]
+    rows = simulate_players(game, players, 20, 7)
+    assert len(rows) == 60
 
 def test_role_correlation_applies_to_changed_player_lineup():
     model = fit_role_residual_correlation(
