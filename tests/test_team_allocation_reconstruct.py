@@ -10,6 +10,7 @@ from src.models.team_allocation.reconstruct import (
     reconstruct_partial_fantasy_points,
     reconstruct_volume,
     renormalize_shares,
+    share_constraint_report,
 )
 
 
@@ -54,6 +55,16 @@ def test_renormalize_shares_rejects_mismatched_lengths():
     keys = _keys([("AAA", 2021, 1)])
     with pytest.raises(ValueError, match="matching length"):
         renormalize_shares(np.array([0.1, 0.2]), keys)
+
+
+def test_share_constraint_report_covers_sparse_and_cold_start_groups():
+    keys = _keys([("AAA", 2021, 1), ("AAA", 2021, 1), ("BBB", 2021, 1)])
+    raw = np.array([0.8, 0.1, 0.4])
+    normalized = renormalize_shares(raw, keys)
+    report = share_constraint_report(raw, normalized, keys, cold_start=[0, 1, 1])
+    assert report["mean_abs_normalized_sum_error"] == pytest.approx(0.0)
+    assert report["sparse_group_count"] == 2
+    assert report["cold_start_mean_abs_distortion"] is not None
 
 
 def test_reconstruct_volume_multiplies_elementwise():

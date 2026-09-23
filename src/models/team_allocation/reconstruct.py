@@ -75,6 +75,34 @@ def renormalize_shares(predicted_share: np.ndarray, group_keys: pd.DataFrame) ->
     return np.where(degenerate, 1.0 / group_size, normal_case).astype(float)
 
 
+def share_constraint_report(raw_share: np.ndarray, normalized_share: np.ndarray,
+                           group_keys: pd.DataFrame, *, cold_start=None) -> Dict[str, float | None]:
+    """Report compositional errors and renormalization distortion."""
+    raw = np.asarray(raw_share, dtype=float)
+    normalized = np.asarray(normalized_share, dtype=float)
+    if len(raw) != len(normalized) or len(raw) != len(group_keys):
+        raise ValueError("share arrays and group_keys must have matching length")
+    frame = group_keys[["team", "season", "week"]].reset_index(drop=True).copy()
+    frame["raw"], frame["normalized"] = raw, normalized
+    grouped = frame.groupby(["team", "season", "week"])
+    sums = grouped[["raw", "normalized"]].sum()
+    sizes = grouped.size()
+    sparse = sizes <= 2
+    report = {
+        "mean_abs_raw_sum_error": float(np.abs(sums.raw - 1).mean()),
+        "mean_abs_normalized_sum_error": float(np.abs(sums.normalized - 1).mean()),
+        "p95_abs_normalized_sum_error": float(np.abs(sums.normalized - 1).quantile(.95)),
+        "mean_abs_renormalization_distortion": float(np.abs(normalized - raw).mean()),
+        "p95_abs_renormalization_distortion": float(np.quantile(np.abs(normalized - raw), .95)),
+        "sparse_group_count": int(sparse.sum()),
+        "sparse_group_mean_abs_sum_error": float(np.abs(sums.loc[sparse, "normalized"] - 1).mean()) if sparse.any() else None,
+    }
+    if cold_start is not None:
+        mask = np.asarray(cold_start, dtype=bool)
+        report["cold_start_mean_abs_distortion"] = float(np.abs(normalized[mask] - raw[mask]).mean()) if mask.any() else None
+    return report
+
+
 def reconstruct_volume(renormalized_share: np.ndarray, predicted_team_total: np.ndarray) -> np.ndarray:
     """predicted_volume = renormalized_share x predicted_team_total.
 
