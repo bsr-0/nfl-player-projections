@@ -29,21 +29,33 @@ def main() -> int:
     ap.add_argument("--positions", nargs="+", default=["QB", "RB", "WR", "TE"])
     ap.add_argument("--arms", nargs="*", choices=["all", *ARMS], default=["all"])
     ap.add_argument("--output-dir", type=Path, default=Path("data/experiments/backlog_ablations"))
+    ap.add_argument("--no-resume", action="store_true", help="Re-run jobs whose output already exists")
     args = ap.parse_args()
     arms = list(ARMS) if "all" in args.arms else args.arms
     args.output_dir.mkdir(parents=True, exist_ok=True)
     baseline = {p: list(v) for p, v in settings.CAUSAL_FEATURES.items()}
-    manifest = {"arms": arms, "seasons": args.seasons, "positions": args.positions, "feature_groups": ARMS}
+    manifest = {"arms": arms, "seasons": args.seasons, "positions": args.positions, "feature_groups": ARMS, "jobs": {}}
     (args.output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     try:
         for arm in arms:
             settings.CAUSAL_FEATURES = {
                 p: [f for f in fs if f not in ARMS[arm]] for p, fs in baseline.items()
             }
-            out = args.output_dir / f"{arm}.csv"
-            run_final_validation(positions=args.positions, seasons=args.seasons, output_path=out)
+            for position in args.positions:
+                job = f"{arm}/{position}"
+                out = args.output_dir / f"{arm}_{position.lower()}.csv"
+                if out.exists() and not args.no_resume:
+                    manifest["jobs"][job] = {"status": "skipped_existing", "output": str(out)}
+                    continue
+                try:
+                    run_final_validation(positions=[position], seasons=args.seasons, output_path=out)
+                    manifest["jobs"][job] = {"status": "complete", "output": str(out)}
+                except Exception as exc:  # keep independent jobs resumable
+                    manifest["jobs"][job] = {"status": "failed", "error_type": type(exc).__name__, "error": str(exc)}
+                (args.output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str) + "\n")
     finally:
         settings.CAUSAL_FEATURES = baseline
+        (args.output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str) + "\n")
     return 0
 
 if __name__ == "__main__":
