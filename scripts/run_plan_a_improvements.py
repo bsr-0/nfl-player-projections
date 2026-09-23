@@ -42,7 +42,7 @@ def _best_alpha(y_true, model_pred, baseline):
     return min(np.arange(0, 1.01, .05), key=lambda a: mean_absolute_error(
         y_true, a * model_pred + (1-a) * baseline))
 
-def run(target, seasons=None, n_test_seasons=None, by_role=False):
+def run(target, seasons=None, n_test_seasons=None, by_role=False, by_volume=False):
     label = f"share_of_team_{target}"; roll = f"{label}_roll{ROLL_WINDOW}"
     df = filter_population(load_share_rows(seasons=seasons), target).reset_index(drop=True)
     cols = feature_columns(df); X, y = df[cols], df[label].to_numpy(float)
@@ -63,6 +63,11 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
             residual = np.clip(X.iloc[te][roll].fillna(0).to_numpy() + residual_model.predict(test), 0, 1)
             # Fold-local blend weight selected on the latest training season.
             last = max(seasons_arr[tr]); cal = seasons_arr[tr] == last
+            train_base_all = X.iloc[tr][roll].fillna(0).to_numpy()
+            q1, q2 = np.quantile(train_base_all, [1/3, 2/3])
+            train_tier = np.where(train_base_all <= q1, "low", np.where(train_base_all <= q2, "mid", "high"))
+            test_base = X.iloc[te][roll].fillna(0).to_numpy()
+            test_tier = np.where(test_base <= q1, "low", np.where(test_base <= q2, "mid", "high"))
             alpha = .5
             alpha_map = {}
             if cal.any() and (~cal).sum() >= 20:
@@ -71,15 +76,25 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
                 cal_base = X.iloc[tr][roll].fillna(0).to_numpy()[cal]
                 cal_pos = df.iloc[tr].position.to_numpy()[cal]
                 cal_cold = df.iloc[tr].is_cold_start.to_numpy()[cal]
-                groups = [("all", "all")] if not by_role else sorted(set(zip(cal_pos, cal_cold)), key=str)
+                if by_volume:
+                    groups = sorted(set(train_tier[cal]), key=str)
+                elif by_role:
+                    groups = sorted(set(zip(cal_pos, cal_cold)), key=str)
+                else:
+                    groups = [("all", "all")]
                 for group in groups:
-                    mask = np.ones(len(cal_pred), dtype=bool) if group == ("all", "all") else ((cal_pos == group[0]) & (cal_cold == group[1]))
+                    if by_volume:
+                        mask = train_tier[cal] == group
+                    else:
+                        mask = np.ones(len(cal_pred), dtype=bool) if group == ("all", "all") else ((cal_pos == group[0]) & (cal_cold == group[1]))
                     if mask.sum() >= 20:
                         alpha_map[group] = _best_alpha(y[tr][cal][mask], cal_pred[mask], cal_base[mask])
                 alpha = alpha_map.get(("all", "all"), .5)
             if by_role:
                 test_pos = df.iloc[te].position.to_numpy(); test_cold = df.iloc[te].is_cold_start.to_numpy()
                 alpha_vec = np.array([alpha_map.get((p, c), alpha) for p, c in zip(test_pos, test_cold)])
+            elif by_volume:
+                alpha_vec = np.array([alpha_map.get(t, alpha) for t in test_tier])
             else:
                 alpha_vec = np.full(len(raw), alpha)
             blend = np.clip(alpha_vec * raw + (1-alpha_vec) * base, 0, 1)
@@ -127,9 +142,9 @@ def run(target, seasons=None, n_test_seasons=None, by_role=False):
     return out, metrics
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--target", choices=VOLUME_COLS, default="targets"); ap.add_argument("--seasons", nargs=2, type=int); ap.add_argument("--n-test-seasons", type=int, help="Use 1 for a final-season-only confirmation"); ap.add_argument("--by-role", action="store_true", help="Calibrate alpha separately by position and cold-start flag"); ap.add_argument("--output-dir", type=Path, default=Path("data/experiments/plan_a_improvements")); args = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--target", choices=VOLUME_COLS, default="targets"); ap.add_argument("--seasons", nargs=2, type=int); ap.add_argument("--n-test-seasons", type=int, help="Use 1 for a final-season-only confirmation"); ap.add_argument("--by-role", action="store_true", help="Calibrate alpha separately by position and cold-start flag"); ap.add_argument("--by-volume", action="store_true", help="Calibrate alpha separately by low/mid/high baseline share tier"); ap.add_argument("--output-dir", type=Path, default=Path("data/experiments/plan_a_improvements")); args = ap.parse_args()
     seasons = list(range(args.seasons[0], args.seasons[1]+1)) if args.seasons else None
-    out, metrics = run(args.target, seasons, args.n_test_seasons, args.by_role); args.output_dir.mkdir(parents=True, exist_ok=True)
+    out, metrics = run(args.target, seasons, args.n_test_seasons, args.by_role, args.by_volume); args.output_dir.mkdir(parents=True, exist_ok=True)
     out.to_csv(args.output_dir / f"{args.target}_predictions.csv", index=False)
     (args.output_dir / f"{args.target}_metrics.json").write_text(json.dumps(metrics, indent=2, default=float) + "\n")
     print(json.dumps(metrics, indent=2, default=float))

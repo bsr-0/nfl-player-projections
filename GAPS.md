@@ -934,6 +934,13 @@ plus renormalization for all four targets: MAE was 0.030093 (targets),
 This is still a research result; the untouched-season confirmations remain
 the promotion gate.
 
+Volume-tier shrinkage was tested on the 2025 targets holdout. Calibrating the
+blend weight separately on low/mid/high baseline-share tiers reduced the
+high-tier MAE from 0.066635 (rolling-3) to 0.064739 (XGBoost blend plus
+renormalization), with paired CI [-0.000766, -0.000373]. Overall MAE was
+0.029049. This targeted improvement still needs confirmation on another
+untouched season before promotion.
+
 The experiment now records team-share constraint diagnostics: predicted
 team/week share sums, p95 sum error, actual-label sum error, sparse-group sum
 error, and absolute renormalization distortion. On the 2025 targets holdout,
