@@ -1,7 +1,6 @@
 """Serialization helpers for versioned simulation payloads."""
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 import shutil
@@ -12,25 +11,15 @@ import numpy as np
 import pandas as pd
 
 from src.models.simulation_schema import build_simulation_payload, validate_simulation_payload
+from src.utils.atomic_io import atomic_write_json
 
 SITE_SCHEMA_VERSION = "game-sim-site-v1"
 
+# Kept as a module-local name because callers below (and their tests) refer
+# to it; the implementation now lives in src/utils/atomic_io.py, shared with
+# the three other copies of this pattern that had grown up elsewhere.
 def _atomic_json_write(payload: Mapping, path: Path) -> None:
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent,
-            prefix=f".{path.name}.", suffix=".tmp", delete=False
-        ) as handle:
-            temporary = Path(handle.name)
-            handle.write(json.dumps(payload, indent=2, allow_nan=False))
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if temporary is not None and temporary.exists():
-            temporary.unlink()
+    atomic_write_json(payload, path)
 
 def _game_summary(game_draws: list[Mapping]) -> list[dict]:
     grouped = {}

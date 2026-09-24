@@ -436,21 +436,8 @@ def generate_app_data(save_daily: bool = False) -> bool:
     # this file expecting a real 18-week number.
     full_df = full_df.drop(columns=["projection_18w"], errors="ignore")
 
-    # Save (atomic write: temp file then rename to prevent corruption on crash)
-    import tempfile, os
-    def _atomic_save(df, path):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(suffix=".parquet.tmp", dir=path.parent)
-        try:
-            os.close(fd)
-            df.to_parquet(tmp, index=False)
-            os.replace(tmp, path)
-        except BaseException:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+    # Save (atomic write: temp file, fsync, then rename -- see src/utils/atomic_io.py)
+    from src.utils.atomic_io import atomic_write_parquet as _atomic_save
 
     _atomic_save(full_df, cached_path)
     _write_cache_fingerprint(cached_path, db_fingerprint)

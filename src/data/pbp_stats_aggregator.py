@@ -1192,21 +1192,9 @@ def _ensure_store_weekly_schema(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _atomic_parquet_write(df: pd.DataFrame, path: Path) -> None:
-    """Write a parquet file atomically (write to temp, then rename)."""
-    import tempfile
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(suffix=".parquet.tmp", dir=path.parent)
-    try:
-        os.close(fd)
-        df.to_parquet(tmp_path, index=False)
-        os.replace(tmp_path, path)
-    except BaseException:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    """Write a parquet file atomically (write to temp, fsync, then rename)."""
+    from src.utils.atomic_io import atomic_write_parquet
+    atomic_write_parquet(df, path)
 
 
 def _pbp_cache_paths(season: int) -> tuple:

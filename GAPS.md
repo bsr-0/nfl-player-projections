@@ -14437,3 +14437,100 @@ game models are at best market-matching, so their output is a
 near-duplicate of an existing feature, the same reason the game_odds
 consensus features didn't help the game models themselves. Not adopted;
 script kept as the measurement.
+
+## The `single_week_ppr` "baseline" numbers are not the production model (2026-09-24)
+
+Surfaced while investigating whether the 2026-09-19 Vegas sign fix (see that
+entry above) actually improved weekly accuracy. A post-fix walk-forward run
+through `src/models/train.py --walk-forward` produced QB MAE 6.37 / RB 4.90 /
+WR 4.47 / TE 3.06, which looks like a large regression against the "baseline"
+column in the immediately preceding entry (QB 5.842 / RB 4.307 / WR 4.100 /
+TE 2.807). It is not a regression. **The two numbers come from two different
+model architectures that share no code and were never connected.**
+
+### The two architectures
+
+* **`src/models/single_week_ppr/` (FINAL_CONFIG).** The research harness that
+  produced Phases 2-12 and almost every "baseline" MAE quoted in the second
+  half of this document, including the game-outcome-feature ablation directly
+  above. **It has never persisted a trained model**: zero `joblib.dump`,
+  `.save()`, or `pickle.dump` calls exist anywhere under that package
+  (confirmed by grep, 2026-09-24). It fits, scores, writes a CSV of metrics,
+  and throws the estimator away.
+* **`src/models/position_models.py` (`fp` mode), trained by
+  `src/models/train.py`.** This is what actually serves. The source of truth
+  is `EnsemblePredictor.load_models()` (`src/models/ensemble.py:175-233`): it
+  loads `data/models/multiweek_{position}.joblib`, falling back to
+  `model_{position}_1w.joblib`, and raises pointing at `python -m
+  src.models.train` if neither exists. Those are the only weekly player
+  artifacts `NFLPredictor` ever reads. `config/settings.py`'s
+  `position_target_type` was switched `component` -> `fp` for all four
+  positions on 2026-08-29, retiring the older `component_predictor.py` path.
+
+### Why the MAEs legitimately differ
+
+Different feature sets, different fold definitions, different estimators
+(FINAL_CONFIG is a single per-position architecture chosen by Phase 2-3
+search; production is an OOF-stacked RF + XGBoost + LightGBM + Ridge
+ensemble), and different row populations (Phase 8's participation filtering,
+among others). Neither number is "wrong" — they answer different questions
+on different data. They simply must never be differenced.
+
+### The concrete failure this nearly caused
+
+The Vegas-fix retrain was one step away from being reported as "the fix made
+the model 0.5 MAE worse at QB," which would have been an entirely fabricated
+conclusion drawn from subtracting two unrelated harnesses. The only valid
+test is pre-fix vs post-fix **within the same harness**, which is why a
+matched A/B walk-forward (pre-fix `external_data.py` /
+`feature_engineering.py` from `36d00cd~1`, everything else identical) was run
+instead. This is the same class of mistake as the 2026-08-29 log1p-space
+metric-mixing entry: comparing two numbers that were never denominated in the
+same units.
+
+### Rule going forward
+
+When quoting a weekly-player MAE anywhere in this document or in a plan, state
+which harness produced it. A number without that label is not comparable to
+anything. `docs/GAME_SIMULATION_CORRELATION_PLAN.md`'s Phase 2 scoping already
+carries this as an explicit open risk for the OOF residual panel: residuals
+must be captured from `position_models.py`, the served model, not from
+`single_week_ppr`.
+
+## Four copies of "atomic write", three of which weren't durable (2026-09-24)
+
+Found while consolidating duplicated logic, not while chasing a bug. The
+temp-file-then-rename pattern existed in four independent copies:
+
+    src/models/simulation_io.py::_atomic_json_write      fsync  ✓
+    src/utils/data_manager.py::_save_cache               fsync  ✗
+    src/data/pbp_stats_aggregator.py::_atomic_parquet_write   fsync  ✗
+    scripts/generate_app_data.py::_atomic_save           fsync  ✗
+
+Three of them carried a comment promising the write would "prevent
+corruption on crash". `os.replace` does not deliver that on its own. The
+rename is atomic *with respect to concurrent readers* — nobody ever observes
+a half-written file — but until the data blocks are flushed, a power loss or
+hard kill can leave a correctly-named, correctly-sized-in-metadata,
+zero-length artifact. The affected files are `data/data_availability_cache.json`,
+the PBP parquet caches, and `data/cached_features.parquet` — the last of
+which is the training cache, i.e. silently truncating it is precisely the
+failure `validate_training_cache_integrity` exists to catch after the fact.
+
+Not observed in the wild, and the window is small. Recorded because the
+comment asserted a guarantee the code did not provide, which is the kind of
+thing that stops anyone from looking again.
+
+**Fixed.** All four now route through `src/utils/atomic_io.py`
+(`atomic_write` / `atomic_write_json` / `atomic_write_parquet`), which
+fsyncs the temp file before renaming and removes it on any failure path.
+Tests in `tests/test_atomic_io.py`. Two incidental improvements came with
+it: the temp name is now dotted everywhere (it was `*.parquet.tmp` in two
+places, which a `*.parquet` glob of those directories would pick up
+mid-write), and the JSON writer now uses `allow_nan=False` everywhere, so a
+NaN raises at write time instead of persisting the bare `NaN` token that is
+not valid JSON and that the browser-side readers reject.
+
+The directory fsync that would additionally make the *rename* durable is
+deliberately not done — it is not portable, and its absence weakens
+durability rather than producing a wrong file.
