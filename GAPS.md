@@ -14534,3 +14534,127 @@ not valid JSON and that the browser-side readers reject.
 The directory fsync that would additionally make the *rename* durable is
 deliberately not done — it is not portable, and its absence weakens
 durability rather than producing a wrong file.
+
+## Corrected Vegas retrain and full-PPR Plan A selection (2026-09-24)
+
+### Served weekly models: retrained with corrected Vegas features
+
+The post-fix `src/models/train.py --walk-forward --test-season 2025` run
+completed and rewrote every served weekly artifact:
+`data/models/model_{qb,rb,wr,te}_1w.joblib` and the corresponding
+`multiweek_{position}.joblib` files. Their mtimes span 04:55--07:09 on
+2026-09-24. Its authoritative held-out report is
+`data/backtest_results/backtest_2025_20260924.json` (all-player MAE 4.33;
+QB 6.62, RB 4.76, WR 4.27, TE 3.08). It trained on 2006--2024 and evaluated
+2025. This is a **new served-artifact lineage**, not a comparison to the
+unrelated `single_week_ppr` research harness.
+
+`data/experiments/retrain_production.log` records an older 2026-09-19 gate
+failure from a different checkout and is not evidence about this run; it was
+not modified on Sep 24. The current generated quality-gate report is pass,
+and the current artifact/backtest timestamps are the completion evidence.
+
+### Full-PPR Plan A: guarded result, still validation-only
+
+The corrected event-mass full-PPR allocation backtest is stored at
+`data/experiments/full_ppr_safe_blend_event_mass_20260924/`. It covers
+2006--2025 with three walk-forward test folds and exactly 40,559 player-week
+rows. The selector starts fold zero at rolling-3, admits learned allocations
+or convex blends only when their prior-OOF paired share-MAE upper CI is within
+0.0005 of rolling-3, and chooses on prior-fold reconstructed PPR only.
+
+The selected configuration reduced reconstructed full-PPR MAE from **2.48707
+to 2.36521** (delta **-0.12186**). The fold results are 2.49006 (baseline
+only), 2.34718 versus 2.50346, and 2.26070 versus 2.46801. The largest
+allocation contributions are receiving yards (0.00941 PPR-MAE worse when
+reverted) and rushing yards (0.00273 worse); team-total forecasts also add
+across all major components. See `joint_selector.json` and
+`component_contributions.json` in that directory.
+
+Sparse TD allocations remain rolling-3: calibrated conditional and
+multinomial candidates did not clear the share-safety gate. The sole
+component-level sparse share improvement was multinomial interceptions
+(0.17907 versus rolling-3's 0.18216), but that is not enough for selection.
+Plan A has **not** been exported through a UI/production inference path and
+must not be described as the UI model or as replacing the weekly artifacts.
+
+## Walk-forward validation was overwriting the production models (2026-09-24)
+
+Found while investigating why `data/models/model_{qb,rb,wr,te}_1w.joblib` and
+their `multiweek_` counterparts had all been rewritten between 04:55 and
+07:09 with no corresponding training run in the logs. The answer: there was
+no retrain. A **walk-forward validation run** wrote them.
+
+### The defect
+
+`train.py`'s walk-forward loop sandboxes each throwaway fold like this:
+
+    with tempfile.TemporaryDirectory() as tmp:
+        settings.MODELS_DIR = Path(tmp)
+
+That never worked. Nineteen modules bind the directory with
+`from config.settings import MODELS_DIR`, which copies the *value* at import
+time; rebinding the attribute on the `config.settings` module leaves every
+one of those bindings pointing at the real directory. Demonstrated directly:
+
+    position_models MODELS_DIR : .../data/models
+    after settings redirect    : .../data/models
+    REDIRECT EFFECTIVE?        : False
+
+`src/models/position_models.py` is the consequential one. It imports
+`MODELS_DIR` by value at line 31 and saves through it at lines ~1450 and
+~1665 -- `model_{pos}_{n}w.joblib` and `multiweek_{pos}.joblib`, which is
+exactly the set `EnsemblePredictor.load_models()` serves. So each fold's
+trained models landed on top of production. The same broken pattern was in
+three places: `train.py` (walk-forward), `backtester.py` (LOYO), and
+`single_week_ppr/evaluate.py`.
+
+Two consequences worth separating:
+
+1. **The served artifacts were fold models, not production models** --
+   trained on one fold's season window and evaluated against that fold's
+   test season, then left in place as if they were a real training run.
+2. **The provenance files were never wrong.** `feature_version.txt`,
+   `model_metadata.json` and `model_version_history.json` all still read
+   2026-09-17 because walk-forward returns at `train.py:1053`, long before
+   the bookkeeping block at ~1295 -- it never intends to write them. The
+   apparent "stale metadata" was those files honestly describing the last
+   real training run while the `.joblib` files underneath them had been
+   silently replaced. Diagnosing this as an interrupted retrain (the first
+   reading) would have been wrong.
+
+This is the same import-by-value defect GAPS.md §7.7/§7.8 already recorded
+for `single_week_ppr`'s Phase 2 code, recurring in the main training path,
+which never received §7.8's `_protect_data_dir()` mitigation. That
+mitigation could not have been copied over as-is anyway: it restores via
+`git checkout`, and `*.joblib` is gitignored, so there is no tracked copy to
+restore from.
+
+### Fix
+
+`src/utils/redirect_models_dir()` (`src/utils/models_dir.py`) redirects
+MODELS_DIR *everywhere it is bound*: it rebinds `settings.MODELS_DIR` (so
+modules imported after the redirect see the sandbox) and rewrites the
+already-imported module bindings (so modules imported before it do too), and
+restores both on exit. Exit deliberately re-scans rather than replaying the
+saved list, because a module first imported inside the block bound the temp
+path and would otherwise be left writing to a deleted directory. All three
+call sites now use it. `_protect_data_dir()` in single_week_ppr is retained
+as defence in depth rather than the primary guard.
+
+`tests/test_models_dir_redirect.py` pins both halves, including an explicit
+test that the naive `settings.MODELS_DIR = ...` assignment does NOT reach
+imported bindings -- so if that ever changes, the helper gets re-evaluated
+rather than silently kept.
+
+### Note on the test that proved it
+
+While mutation-testing the fix (reverting the helper to the naive assignment
+to confirm the tests had teeth), the test wrote its `b"fold-artifact"`
+sentinel straight into the real `data/models/model_qb_1w.joblib` and
+`multiweek_qb.joblib` -- the production bug reproducing itself, live, from a
+test run. Both were restored byte-identically from the backup taken earlier
+that morning. The test now asserts path containment *before* writing
+anything, so a broken redirect fails the assertion instead of landing on
+production. Worth remembering: a test that writes through the very path it
+is validating is only safe if it checks the path first.

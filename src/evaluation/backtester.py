@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config.settings import (
     POSITIONS, DATA_DIR, MODELS_DIR, MODEL_CONFIG, LOYO_CONFIG, FEATURE_VERSION)
+from src.utils.models_dir import redirect_models_dir
 
 
 class ModelBacktester:
@@ -2024,8 +2025,10 @@ def run_loyo_backtest(
             print(f"  Skipping fold {ts}: only {len(td_test)} test rows (<20)")
             continue
 
-        with tempfile.TemporaryDirectory() as tmp:
-            settings.MODELS_DIR = Path(tmp)
+        # See src/utils/models_dir.py: rebinding settings.MODELS_DIR alone
+        # does not reach modules that imported the name by value, so folds
+        # wrote over the real artifacts.
+        with tempfile.TemporaryDirectory() as tmp, redirect_models_dir(tmp):
             try:
                 _, res = _fold_runner(
                     td, td_test, tr_ss, ts, positions,
@@ -2045,8 +2048,6 @@ def run_loyo_backtest(
                     print(f"  Fold {ts} returned no results")
             except Exception as e:
                 print(f"  Fold {ts} failed: {e}")
-            finally:
-                settings.MODELS_DIR = old_models_dir
 
     if not per_fold:
         print("No folds completed successfully.")

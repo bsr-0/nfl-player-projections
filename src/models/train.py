@@ -53,6 +53,7 @@ from src.features.dimensionality_reduction import PositionDimensionalityReducer
 from src.models.ensemble import ModelTrainer
 from src.models.robust_validation import RobustTimeSeriesCV
 from src.evaluation.backtester import ModelBacktester
+from src.utils.models_dir import redirect_models_dir
 from src.data.lineage import (
     find_artifact_ids,
     get_artifact_id,
@@ -1034,15 +1035,17 @@ def train_models(positions: list = None,
             )
             if len(td_test) < 20:
                 continue
-            with tempfile.TemporaryDirectory() as tmp:
-                settings.MODELS_DIR = Path(tmp)
+            # redirect_models_dir, not `settings.MODELS_DIR = ...`: the latter
+            # leaves every `from config.settings import MODELS_DIR` binding
+            # pointing at the real directory, so folds overwrote the served
+            # artifacts (see src/utils/models_dir.py).
+            with tempfile.TemporaryDirectory() as tmp, redirect_models_dir(tmp):
                 try:
                     _, res = _run_one_fold(td, td_test, tr_ss, ts, positions, tune_hyperparameters, n_trials)
                     if res:
                         wf_metrics.append(res.get("by_position", {}))
                 except Exception as e:
                     print(f"  Walk-forward fold {ts} failed: {e}")
-                settings.MODELS_DIR = old_models_dir
         if wf_metrics:
             print("\n" + "=" * 60)
             print("Walk-Forward Validation Summary (mean +/- std)")

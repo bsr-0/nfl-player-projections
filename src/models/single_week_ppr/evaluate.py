@@ -12,18 +12,23 @@ calibration breakdowns in analysis.py (run_final_validation).
 Reuses the existing leakage-safe feature pipeline (`_prepare_training_data`
 in src/models/feature_preparation.py) rather than re-implementing feature
 engineering. Must not modify any production file or overwrite production
-model artifacts. `settings.MODELS_DIR` is redirected to a temp directory per
-fold (mirroring src/models/train.py's own walk-forward loop at
-train.py:1053-1061), but that redirection alone is NOT sufficient: some
-modules (e.g. src/models/utilization_to_fp.py:16) do
-`from config.settings import MODELS_DIR` at import time, so reassigning
-`settings.MODELS_DIR` later doesn't affect their already-bound writes.
-`_protect_data_dir()` below is the real safety net — it snapshots an
-allowlist of known-leaky model-artifact paths before the fold and restores
-any touched files afterward via git (tracked) or deletion (newly-created
-untracked). See GAPS.md §7.7/§7.8 for the incidents that made this
-necessary — including why it's an allowlist, not a denylist over all of
-data/ (a denylist version deleted the production database once already).
+model artifacts. Each fold runs inside `redirect_models_dir()`
+(src/utils/models_dir.py), which points MODELS_DIR at a temp directory
+*everywhere it is bound* — including the modules (e.g.
+src/models/utilization_to_fp.py:16) that do
+`from config.settings import MODELS_DIR` at import time and therefore hold
+their own copy of the value. Plain `settings.MODELS_DIR = ...` never
+reached those, which is how folds wrote over the real artifacts; on
+2026-09-24 a walk-forward run replaced all four served weekly models that
+way before the shared helper existed.
+
+`_protect_data_dir()` below is retained as defence in depth, not as the
+primary guard: it snapshots an allowlist of known-leaky model-artifact
+paths before the fold and restores any touched files afterward via git
+(tracked) or content backup/deletion (untracked). See GAPS.md §7.7/§7.8 for
+the incidents that made it necessary — including why it's an allowlist, not
+a denylist over all of data/ (a denylist version deleted the production
+database once already).
 """
 from __future__ import annotations
 
@@ -48,6 +53,7 @@ from src.models.single_week_ppr.architectures import (
     YeoJohnsonHuber, YeoJohnsonMSE,
     naive_baselines,
 )
+from src.utils.models_dir import redirect_models_dir
 
 logger = logging.getLogger(__name__)
 
@@ -346,54 +352,52 @@ def run_fold(
     import config.settings as settings
     from src.models.feature_preparation import _prepare_training_data
 
-    old_models_dir = settings.MODELS_DIR
-    with _protect_data_dir(), tempfile.TemporaryDirectory() as tmp:
-        settings.MODELS_DIR = Path(tmp)
-        try:
-            # context_data: seasons older than the training window, used to warm
-            # up lookback features and then dropped. Production passes it (see
-            # train_models -> load_training_data(return_context=True)); this
-            # harness did not, so every fold measured a pipeline that differed
-            # from the one that ships -- lookback features started cold at the
-            # window's first season here and did not there. An evaluation
-            # harness that silently diverges from production is the same class
-            # of defect as the fabricated values this audit was chasing.
-            if train_seasons_override is not None:
-                from src.utils.database import DatabaseManager
-                train_seasons = list(train_seasons_override)
-                combined = DatabaseManager().get_all_players_for_training(position=position)
-                train_data = combined[combined["season"].isin(train_seasons)]
-                test_data = combined[combined["season"] == test_season]
-                # Explicit-override path: everything before the earliest
-                # training season, excluding the held-out season itself so a
-                # fold testing an EARLY season cannot warm up on it.
-                context_data = combined[
-                    (combined["season"] < min(train_seasons))
-                    & (combined["season"] != test_season)
-                ] if train_seasons else combined.iloc[0:0]
-            else:
-                from src.models.data_loading import load_training_data
-                train_data, test_data, train_seasons, _, context_data = load_training_data(
-                    [position], test_season=test_season, optimize_training_years=False,
-                    return_context=True,
-                )
-                if context_data is not None and not context_data.empty:
-                    context_data = context_data[context_data["season"] != test_season]
-
-            if len(test_data) < 20:
-                raise ValueError(f"Not enough test rows for {position} season {test_season}: {len(test_data)}")
-            if len(train_data) < 20:
-                raise ValueError(f"Not enough train rows for {position} seasons {train_seasons}: {len(train_data)}")
-
-            preparation_options = {} if fit_existing_models else {"fit_models": False}
-            train_df, test_df, trainer = _prepare_training_data(
-                train_data, test_data, [position], tune_hyperparameters, n_trials, fast=True,
-                context_data=context_data, **preparation_options,
+    # redirect_models_dir rather than `settings.MODELS_DIR = ...`: the latter
+    # misses every module that imported MODELS_DIR by value, which is how
+    # folds reached the real artifacts (see src/utils/models_dir.py).
+    with _protect_data_dir(), tempfile.TemporaryDirectory() as tmp, redirect_models_dir(tmp):
+        # context_data: seasons older than the training window, used to warm
+        # up lookback features and then dropped. Production passes it (see
+        # train_models -> load_training_data(return_context=True)); this
+        # harness did not, so every fold measured a pipeline that differed
+        # from the one that ships -- lookback features started cold at the
+        # window's first season here and did not there. An evaluation
+        # harness that silently diverges from production is the same class
+        # of defect as the fabricated values this audit was chasing.
+        if train_seasons_override is not None:
+            from src.utils.database import DatabaseManager
+            train_seasons = list(train_seasons_override)
+            combined = DatabaseManager().get_all_players_for_training(position=position)
+            train_data = combined[combined["season"].isin(train_seasons)]
+            test_data = combined[combined["season"] == test_season]
+            # Explicit-override path: everything before the earliest
+            # training season, excluding the held-out season itself so a
+            # fold testing an EARLY season cannot warm up on it.
+            context_data = combined[
+                (combined["season"] < min(train_seasons))
+                & (combined["season"] != test_season)
+            ] if train_seasons else combined.iloc[0:0]
+        else:
+            from src.models.data_loading import load_training_data
+            train_data, test_data, train_seasons, _, context_data = load_training_data(
+                [position], test_season=test_season, optimize_training_years=False,
+                return_context=True,
             )
-            existing_pred = (_existing_methodology_predictions(trainer, test_df, position)
-                             if fit_existing_models else None)
-        finally:
-            settings.MODELS_DIR = old_models_dir
+            if context_data is not None and not context_data.empty:
+                context_data = context_data[context_data["season"] != test_season]
+
+        if len(test_data) < 20:
+            raise ValueError(f"Not enough test rows for {position} season {test_season}: {len(test_data)}")
+        if len(train_data) < 20:
+            raise ValueError(f"Not enough train rows for {position} seasons {train_seasons}: {len(train_data)}")
+
+        preparation_options = {} if fit_existing_models else {"fit_models": False}
+        train_df, test_df, trainer = _prepare_training_data(
+            train_data, test_data, [position], tune_hyperparameters, n_trials, fast=True,
+            context_data=context_data, **preparation_options,
+        )
+        existing_pred = (_existing_methodology_predictions(trainer, test_df, position)
+                         if fit_existing_models else None)
 
     return train_df, test_df, existing_pred, train_seasons
 
