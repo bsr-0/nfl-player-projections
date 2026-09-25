@@ -24,7 +24,7 @@ from typing import Optional
 import pandas as pd
 
 from config.settings import DB_PATH
-from src.models.team_allocation.features import SHARE_COLS, VOLUME_COLS, filter_population, load_share_rows
+from src.models.team_allocation.features import ALL_SHARE_COLS, ALL_VOLUME_COLS, SHARE_COLS, VOLUME_COLS, filter_population, load_share_rows
 from src.utils.leakage import audit_feature_availability
 
 SLOTS_TABLE_NAME = "team_week_roster_slots"
@@ -110,8 +110,11 @@ def feature_columns(df: pd.DataFrame) -> list:
     new could ever reach it to be caught), which is exactly the kind of
     safety-shaped-but-inert code CLAUDE.md warns against.
     """
-    always_excluded = set(ID_COLS) | set(VOLUME_COLS) | set(SHARE_COLS) | {f"team_{c}" for c in VOLUME_COLS}
+    always_excluded = set(ID_COLS) | set(ALL_VOLUME_COLS) | set(ALL_SHARE_COLS) | {f"team_{c}" for c in ALL_VOLUME_COLS}
     feature_cols = [c for c in df.columns if c not in always_excluded]
+    full_history = set(c for c in feature_cols if c.startswith("share_of_team_") and any(name in c for name in ("receptions", "receiving_tds", "rushing_tds", "passing_yards", "passing_tds", "interceptions")))
+    full_history |= {c for c in feature_cols if c.startswith("team_") and any(name in c for name in ("receptions", "receiving_tds", "rushing_tds", "passing_yards", "passing_tds", "interceptions"))}
+    feature_cols = [c for c in feature_cols if c not in full_history]
 
     unclassified = audit_feature_availability(feature_cols)
     if unclassified:

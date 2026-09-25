@@ -1,6 +1,8 @@
 # Game Simulation and Player Correlation Plan
 
-Status: Phase 1 implementation (interfaces and deterministic core)
+Status: Phase 1 (interfaces, deterministic core) built and bug-fixed; Phase 2
+(OOF residual panel + real correlation fitting) scoped 2026-09-23, not
+started. See "Phase 2 scoping" below for what that actually requires.
 Branch: feature/game-simulation-correlation
 
 ## Objective
@@ -26,12 +28,86 @@ SimulationResult contains draw ID, scores, team volume, player activity, and fan
 - Enable only if joint calibration improves without unacceptable individual-player degradation.
 
 ## Ordered implementation
-1. Land database-independent contracts, simulation primitives, and tests (this branch).
-2. Add DB/model-artifact adapters after database access is available.
-3. Build OOF residual panels with season cutoffs and audit coverage.
-4. Add production simulation command and JSON/Parquet output.
-5. Wire weekly generation and UI behind an explicit flag.
-6. Run ablations against independent and shared-residual baselines.
+1. Land database-independent contracts, simulation primitives, and tests (this branch). **Done** -- `game_simulation.py`, `player_correlation.py`, `simulation_adapter.py`, `simulation_schema.py`, `simulation_io.py`, `simulation_evaluation.py`, `simulation_readiness.py`. Five real correctness bugs found and fixed 2026-09-22 against real data shapes (NaN cold-start crash, QB/WR share-pool conflation, all-or-nothing usage-share coverage, plus two pre-existing test bugs) -- see git history same date.
+2. Add DB/model-artifact adapters. **Half done.** `simulation_adapter.py` itself is built and unit-tested against hand-built fixtures. What's still missing is real data flowing INTO it -- see "Phase 2 scoping" below.
+3. Build OOF residual panels with season cutoffs and audit coverage. **Not started -- scoped 2026-09-23, see below.** This is the actual blocker for everything after it.
+4. Add production simulation command and JSON/Parquet output. Schema/IO layer built (`simulation_schema.py`, `simulation_io.py`); the CLI (`scripts/generate_simulation_data.py`) exists but `--production` mode is hard-disabled (raises `RuntimeError`) because the artifacts step 3 would produce don't exist yet.
+5. Wire weekly generation and UI behind an explicit flag. Not started; correctly gated on 3-4.
+6. Run ablations against independent and shared-residual baselines. Not started; correctly gated on 3-5.
 
-## Deferred until DB access
-Queries, schema mapping, historical OOF fitting, injury/depth-chart resolution, learned allocation, copula comparison, artifact regeneration, and UI output.
+## Phase 2 scoping (2026-09-23): the OOF residual panel gap
+
+Investigated what step 3 above actually requires, before writing any code for
+it. Headline finding: **no persisted out-of-fold player-level prediction
+artifact exists anywhere in this repo**, for either weekly-model
+architecture. `position_models.py` (the model `EnsemblePredictor`/`NFLPredictor`
+actually serves -- see GAPS.md's 2026-08-29 `fp`-mode entry) computes OOF
+predictions internally for meta-learner stacking and isotonic calibration,
+but only ever keeps aggregate metrics; the row-level (predicted, actual)
+pairs are discarded once training finishes. `single_week_ppr`'s Phase 4 did
+save row-level predictions once (`data/experiments/phase4_row_level_predictions.csv`),
+but that's a one-off artifact from a research architecture that was never
+wired into serving (it has zero `joblib.dump`/`.save()` calls anywhere --
+confirmed while scoping this -- so it can't be the source of "real"
+residuals for a simulator meant to sit on top of production). The
+correlation layer's stated design ("fit same-game residual covariance from
+out-of-fold player predictions") therefore has nothing to fit on yet, for
+the model that would actually be simulated.
+
+One adjacent piece already exists and is reusable as-is: game-level OOF
+predictions (`data/experiments/game_outcome_oof_predictions.csv`, built by
+`scripts/ablate_game_outcome_features.py`, walk-forward with season cutoffs
+respected) cover the `game_predictions` half of
+`simulation_adapter.game_inputs_from_predictions`'s input. Only the
+player-level half is missing.
+
+### Concrete work items, in order
+
+1. **Row-level OOF capture for the served weekly model.** `train.py
+   --walk-forward`'s `_run_one_fold` currently returns only aggregate
+   `by_position` metrics and discards every row's individual prediction.
+   Needs a parallel capture path (mirroring `ablate_game_outcome_features.py`'s
+   `OOF_CACHE` pattern) that persists `(player_id, season, week, team,
+   opponent, position, predicted_points, actual_points)` per row across the
+   walk-forward folds. This re-runs the same multi-hour-per-fold training
+   already exercised for the Vegas-fix retrain (see GAPS.md/PROJECT_NOTES
+   for that timing) -- expensive, but a one-time cache, not a per-use cost.
+2. **Correlation fitting from that panel.** Group by `(season, week, team)`
+   for same-game player residual vectors, fit via `fit_role_residual_correlation`
+   keyed by role (`role_keys_for_players`-style: `home_WR1`, `away_RB2`,
+   etc.), NOT raw `player_id` -- `INDEPENDENT_SIMULATION_AUDIT.md` already
+   flags "Player-ID covariance is not portable across lineups" as a named
+   risk, and role-keying is the existing, already-built interface for
+   avoiding it (`RoleResidualCorrelationModel`). Serialize the result as the
+   `role_correlation_artifact` `simulation_readiness.production_readiness()`
+   already expects but has never been given.
+3. **A real backtest driver.** A script analogous to `evaluate_simulation.py`
+   but that builds its own inputs end-to-end for a held-out season: pull
+   that season's game + player OOF predictions, adapt via
+   `simulation_adapter.py`, run `simulate_players`, score against real
+   actuals via `simulation_evaluation.py`'s CRPS/energy/variogram gates.
+   This is what would finally answer "does shared-residual simulation beat
+   independent per-player prediction" (the plan's own §Leakage-and-validation
+   promotion criterion) instead of only proving the code runs.
+
+### Deliberately out of scope for this next step
+
+`INDEPENDENT_SIMULATION_AUDIT.md`'s full component list (possession/drive
+modeling, a true stat-line conversion layer, TD-scarcity allocation,
+availability/role modeling) is real and each item is individually valid,
+but building any of it before knowing whether the cheap "shared Gaussian
+residual on top of existing point predictions" version clears its own
+promotion bar would be the same mistake Plan A's decision gate exists to
+prevent -- prove the cheap version first.
+
+### Open risk carried over from the Vegas-retrain investigation (2026-09-23)
+
+Item 1 above must fit residuals from whichever model is ACTUALLY served,
+not a research harness -- this plan deliberately targets `position_models.py`
+(`fp` mode), not `single_week_ppr`, for exactly the reason the Vegas-retrain
+investigation surfaced: the two architectures are unconnected in code and
+have materially different accuracy, and conflating them silently is the
+kind of cross-harness mistake GAPS.md has documented more than once (e.g.
+the 2026-08-29 log1p-space metric mixing entry). Confirm which model is
+current production immediately before building the capture path, don't
+assume it's still true by the time this is picked up.

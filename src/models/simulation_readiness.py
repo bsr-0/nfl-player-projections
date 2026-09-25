@@ -15,8 +15,12 @@ def production_readiness(player_predictions: pd.DataFrame,
                          calibration_artifact: str | Path | None) -> SimulationReadiness:
     """Require data artifacts that turn an exploratory simulator into a model."""
     missing = []
-    required = {"player_id", "team", "position", "predicted_points",
-                "participation_prob"}
+    # Must match simulation_adapter.player_inputs_from_predictions's required
+    # columns ("opponent", "season", "week" are needed there to match a player
+    # row to its scheduled game) plus "participation_prob", which that adapter
+    # treats as optional with a fallback but production readiness should not.
+    required = {"player_id", "team", "opponent", "position", "predicted_points",
+                "participation_prob", "season", "week"}
     missing_columns = required - set(player_predictions.columns)
     if missing_columns:
         missing.append(f"player serving data lacks {sorted(missing_columns)}")

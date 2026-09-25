@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-09-24T05:44:46.728640+00:00",
+  "vegas_fix_date": "2026-09-19T00:00:00+00:00",
+  "vegas_formula_source": "src/data/external_data.py:763-780",
+  "metadata_source": "data/models/model_metadata.json",
+  "models": [
+    {
+      "path": "data/models/model_qb_1w.joblib",
+      "position": "QB",
+      "feature_count": 62,
+      "feature_version": "36",
+      "training_date": "2026-09-17T03:32:56.033952",
+      "file_mtime": "2026-09-24T05:28:38.186826+00:00",
+      "trained_before_vegas_fix": false,
+      "vegas_features": [
+        "implied_team_total",
+        "spread"
+      ]
+    },
+    {
+      "path": "data/models/model_rb_1w.joblib",
+      "position": "RB",
+      "feature_count": 67,
+      "feature_version": "36",
+      "training_date": "2026-09-17T03:32:56.033952",
+      "file_mtime": "2026-09-24T02:09:49.239981+00:00",
+      "trained_before_vegas_fix": false,
+      "vegas_features": [
+        "implied_team_total",
+        "spread"
+      ]
+    },
+    {
+      "path": "data/models/model_te_1w.joblib",
+      "position": "TE",
+      "feature_count": 68,
+      "feature_version": "36",
+      "training_date": "2026-09-17T03:32:56.033952",
+      "file_mtime": "2026-09-24T03:37:38.968837+00:00",
+      "trained_before_vegas_fix": false,
+      "vegas_features": [
+        "implied_team_total",
+        "spread"
+      ]
+    },
+    {
+      "path": "data/models/model_wr_1w.joblib",
+      "position": "WR",
+      "feature_count": 70,
+      "feature_version": "36",
+      "training_date": "2026-09-17T03:32:56.033952",
+      "file_mtime": "2026-09-24T02:58:07.153603+00:00",
+      "trained_before_vegas_fix": false,
+      "vegas_features": [
+        "implied_team_total",
+        "spread"
+      ]
+    }
+  ],
+  "read_only": true
+}

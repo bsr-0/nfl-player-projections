@@ -1,0 +1,15 @@
+{
+  "schema_version": "plan-a-served-export-v1",
+  "targets": [
+    "targets",
+    "rushing_attempts",
+    "receiving_yards",
+    "rushing_yards"
+  ],
+  "test_seasons": [
+    2024,
+    2025
+  ],
+  "rows": 100990,
+  "artifact_dir": "data/experiments/plan_a_served_artifacts"
+}

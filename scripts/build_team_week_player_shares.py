@@ -45,7 +45,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import DB_PATH, POSITIONS
-from src.models.team_allocation.features import ROLL_WINDOW, TABLE_NAME, VOLUME_COLS
+from src.models.team_allocation.features import ALL_VOLUME_COLS, OPPORTUNITY_COLS, ROLL_WINDOW, TABLE_NAME
 
 MIN_PRIOR_GAMES_FOR_FORM = 3
 
@@ -87,18 +87,23 @@ def load_population(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
 
 def load_volumes(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     cols = pd.read_sql("PRAGMA table_info(player_weekly_stats)", conn)["name"].tolist()
-    keep = ["player_id", "season", "week"] + [c for c in VOLUME_COLS if c in cols]
+    keep = ["player_id", "season", "week"] + [
+        c for c in [*ALL_VOLUME_COLS, *OPPORTUNITY_COLS] if c in cols
+    ]
     df = pd.read_sql(
         f"SELECT {','.join(keep)} FROM player_weekly_stats WHERE season BETWEEN ? AND ?",
         conn, params=(lo, hi),
     )
     if df.empty:
-        return pd.DataFrame(columns=["player_id", "season", "week", *VOLUME_COLS])
+        return pd.DataFrame(columns=["player_id", "season", "week", *ALL_VOLUME_COLS])
     df = df.drop_duplicates(["player_id", "season", "week"], keep="last")
-    for c in VOLUME_COLS:
+    for c in ALL_VOLUME_COLS:
         if c not in df.columns:
             df[c] = 0
-    return df[["player_id", "season", "week", *VOLUME_COLS]]
+    for c in OPPORTUNITY_COLS:
+        if c not in df.columns:
+            df[c] = 0
+    return df[["player_id", "season", "week", *ALL_VOLUME_COLS, *OPPORTUNITY_COLS]]
 
 
 def _safe_share(numer: pd.Series, denom: pd.Series) -> pd.Series:
@@ -122,7 +127,7 @@ def _lagged_team_totals(panel: pd.DataFrame) -> pd.DataFrame:
     correct signal for "can't reconstruct yet," not something to
     zero-fill or approximate.
     """
-    team_cols = [f"team_{c}" for c in VOLUME_COLS]
+    team_cols = [f"team_{c}" for c in ALL_VOLUME_COLS]
     team_week = panel[["team", "season", "week", *team_cols]].drop_duplicates(["team", "season", "week"])
     team_week = team_week.sort_values(["team", "season", "week"]).reset_index(drop=True)
     grp = team_week.groupby(["team", "season"], group_keys=False)
@@ -142,7 +147,9 @@ def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     vol = load_volumes(conn, lo, hi)
 
     panel = pop.merge(vol, on=["player_id", "season", "week"], how="left")
-    for c in VOLUME_COLS:
+    for c in ALL_VOLUME_COLS:
+        panel[c] = panel[c].fillna(0.0)
+    for c in OPPORTUNITY_COLS:
         panel[c] = panel[c].fillna(0.0)
 
     # "Share of team volume" is only a coherent concept for nonnegative
@@ -159,25 +166,25 @@ def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     # fantasy-point scoring elsewhere in the repo are untouched. A
     # net-negative week genuinely captured none of the team's positive
     # offensive output, so 0 is the correct share, not a fabricated value.
-    for c in VOLUME_COLS:
+    for c in ALL_VOLUME_COLS:
         panel[f"_share_basis_{c}"] = panel[c].clip(lower=0.0)
-    n_floored = {c: int((panel[c] < 0).sum()) for c in VOLUME_COLS}
+    n_floored = {c: int((panel[c] < 0).sum()) for c in ALL_VOLUME_COLS}
     if any(n_floored.values()):
         print(f"floored negative volume for share computation only: {n_floored}")
 
     team_totals = (
-        panel.groupby(["team", "season", "week"])[[f"_share_basis_{c}" for c in VOLUME_COLS]]
+        panel.groupby(["team", "season", "week"])[[f"_share_basis_{c}" for c in ALL_VOLUME_COLS]]
         .transform("sum")
-        .rename(columns={f"_share_basis_{c}": f"team_{c}" for c in VOLUME_COLS})
+        .rename(columns={f"_share_basis_{c}": f"team_{c}" for c in ALL_VOLUME_COLS})
     )
     panel = pd.concat([panel, team_totals], axis=1)
 
     share_cols = []
-    for c in VOLUME_COLS:
+    for c in ALL_VOLUME_COLS:
         share_col = f"share_of_team_{c}"
         panel[share_col] = _safe_share(panel[f"_share_basis_{c}"], panel[f"team_{c}"])
         share_cols.append(share_col)
-    panel = panel.drop(columns=[f"_share_basis_{c}" for c in VOLUME_COLS])
+    panel = panel.drop(columns=[f"_share_basis_{c}" for c in ALL_VOLUME_COLS])
 
     panel = panel.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
     grp = panel.groupby(["player_id", "season"], group_keys=False)
@@ -208,6 +215,43 @@ def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     drop_cols = [f"{c}_prior_season" for c in share_cols] + ["n_prior_games"]
     panel = panel.drop(columns=drop_cols)
 
+    # Lag role/opportunity history.  Same-week opportunity values are retained
+    # for auditability but explicitly excluded by feature_columns(); only the
+    # shifted player history and shifted team-opportunity history are usable.
+    opp_group = panel.groupby(["player_id", "season"], group_keys=False)
+    team_keys = ["team", "season", "week"]
+    team_group = panel.groupby(team_keys)
+    team_opp = team_group[OPPORTUNITY_COLS].transform("sum")
+    team_opp = team_opp.rename(columns={c: f"team_{c}" for c in OPPORTUNITY_COLS})
+    panel = pd.concat([panel, team_opp], axis=1)
+
+    # Player history and same-week opportunity shares are vectorized before
+    # constructing team history; avoid repeated many-column merges here (the
+    # table spans millions of player-weeks in a full rebuild).
+    for col in OPPORTUNITY_COLS:
+        panel[f"{col}_s2d"] = opp_group[col].transform(lambda s: s.shift(1).expanding().mean())
+        panel[f"{col}_roll{ROLL_WINDOW}"] = opp_group[col].transform(
+            lambda s: s.shift(1).rolling(ROLL_WINDOW, min_periods=1).mean()
+        )
+        panel[f"share_of_team_{col}"] = _safe_share(panel[col], panel[f"team_{col}"])
+        share_group = panel.groupby(["player_id", "season"], group_keys=False)[f"share_of_team_{col}"]
+        panel[f"share_of_team_{col}_s2d"] = share_group.transform(lambda s: s.shift(1).expanding().mean())
+        panel[f"share_of_team_{col}_roll{ROLL_WINDOW}"] = share_group.transform(
+            lambda s: s.shift(1).rolling(ROLL_WINDOW, min_periods=1).mean()
+        )
+
+    team_week = panel[team_keys + [f"team_{c}" for c in OPPORTUNITY_COLS]].drop_duplicates(team_keys)
+    team_week = team_week.sort_values(team_keys).reset_index(drop=True)
+    team_hist = team_week[team_keys].copy()
+    for col in OPPORTUNITY_COLS:
+        team_col = f"team_{col}"
+        tg = team_week.groupby(["team", "season"], group_keys=False)[team_col]
+        team_hist[f"{team_col}_s2d"] = tg.transform(lambda s: s.shift(1).expanding().mean())
+        team_hist[f"{team_col}_roll{ROLL_WINDOW}"] = tg.transform(
+            lambda s: s.shift(1).rolling(ROLL_WINDOW, min_periods=1).mean()
+        )
+    panel = panel.merge(team_hist, on=team_keys, how="left", validate="many_to_one")
+
     team_totals_lagged = _lagged_team_totals(panel)
     panel = panel.merge(team_totals_lagged, on=["team", "season", "week"], how="left")
 
@@ -219,13 +263,13 @@ def validate_shares(panel: pd.DataFrame) -> None:
         raise ValueError("team_week_player_shares panel is empty")
     if panel.duplicated(["player_id", "season", "week"]).any():
         raise ValueError("duplicate player_id/season/week rows")
-    for c in VOLUME_COLS:
+    for c in ALL_VOLUME_COLS:
         share_col = f"share_of_team_{c}"
         if (panel[share_col] < -1e-9).any() or (panel[share_col] > 1 + 1e-9).any():
             raise ValueError(f"{share_col} outside [0, 1]")
     # Same-week shares within a team must sum to <= 1 (+ float tolerance) --
     # a share > the whole team's total is a join or double-count bug.
-    for c in VOLUME_COLS:
+    for c in ALL_VOLUME_COLS:
         share_col = f"share_of_team_{c}"
         totals = panel.groupby(["team", "season", "week"])[share_col].sum()
         bad = totals[totals > 1 + 1e-6]
@@ -267,7 +311,7 @@ def audit_team_week_sums(panel: pd.DataFrame) -> pd.DataFrame:
     crash. This is a report to read, not a gate to pass.
     """
     rows = []
-    for c in VOLUME_COLS:
+    for c in ALL_VOLUME_COLS:
         share_col = f"share_of_team_{c}"
         totals = panel.groupby(["team", "season", "week"])[share_col].sum()
         rows.append({

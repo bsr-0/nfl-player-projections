@@ -140,6 +140,22 @@ changes acceptance criterion 2 below; it does not block continuing Plan A,
 but the comparison it was originally meant to buy (this vs. the production
 model's full-PPR accuracy) isn't available yet.
 
+#### Full-PPR schema extension (data foundation)
+
+The `team_week_player_shares` builder now also emits the component columns
+needed for a full-PPR reconstruction: `receptions`, `receiving_tds`,
+`rushing_tds`, `passing_yards`, `passing_tds`, and `interceptions`, together
+with same-week shares, lagged season-to-date/rolling-3 shares, and lagged team
+totals. Receiving targets exclude QB rows; passing targets are QB-only; rush
+attempts/rushing yards/rushing TDs remain all-position populations. The
+original four Plan A targets remain the default model set, so existing
+experiments are not silently expanded. Run
+`scripts/build_team_week_player_shares.py --write` to rebuild the table.
+
+This is only the schema and causal-history layer. Receptions/TDs/passing
+components still require their own allocation models and are not yet included
+in `POINTS_ELIGIBLE_VOLUME_COLS` or production artifacts.
+
 ### Evaluation
 
 Reuse `SeasonAwareTimeSeriesSplit` exactly as the `game_outcome` backtesters
@@ -549,6 +565,24 @@ building anything from the Plan B section.
       against real data**: criterion 1 failed first (see above), and this
       doc's own decision gate says not to proceed to reconstruction accuracy
       once that happens.
+- [x] Full-PPR guarded validation (2026-09-24): the eight-component
+      allocation/team-total reconstruction now has a three-fold 2006--2025
+      result on 40,559 identical player-weeks. A fold-local selector begins
+      with rolling-3, admits learned allocations and convex blends only after
+      a paired share-MAE non-inferiority gate on completed OOF folds, and
+      selects against reconstructed PPR. After correcting actual labels to
+      the raw eight player components, the selected configuration improved
+      MAE from 2.49130 to 2.36984 (40,559 rows; paired delta CI -0.13532
+      to -0.10674). Corrected artifacts are under
+      `data/experiments/full_ppr_raw_truth_20260924/`; the earlier 2.36521
+      estimate is superseded. This
+      supersedes the earlier blanket "Plan A failed" conclusion only for the
+      now-complete full-PPR guarded harness; it does **not** promote Plan A
+      into the serving/UI path. Sparse TD allocation remains rolling-3.
+      The shadow serving path now uses zero fallback for learned sparse
+      allocations and supports rolling-3 team totals; its frozen fold-zero
+      2023 export exactly matches all 13,404 OOF PPR predictions when the
+      saved prediction CSVs use round-trip float parsing.
 - [ ] Touchdown/reception share targets (needed for criterion 2 as
       originally stated -- moot for now; criterion 1 failed first, see
       Decision-gate review below).

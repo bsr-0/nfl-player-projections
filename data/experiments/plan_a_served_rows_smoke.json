@@ -1,0 +1,12 @@
+{
+  "schema_version": "plan-a-served-export-v1",
+  "targets": [
+    "targets"
+  ],
+  "test_seasons": [
+    2024,
+    2025
+  ],
+  "rows": 23340,
+  "artifact_dir": "data/experiments/plan_a_served_artifacts_smoke"
+}

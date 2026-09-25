@@ -1,0 +1,1131 @@
+{
+  "noninferiority_margin": 0.0005,
+  "inner_gate_bootstraps": 500,
+  "folds": [
+    {
+      "fold": 0,
+      "allocation_arms": {
+        "rushing_yards": "rolling3",
+        "receiving_yards": "rolling3",
+        "receptions": "rolling3",
+        "receiving_tds": "rolling3",
+        "rushing_tds": "rolling3",
+        "passing_yards": "rolling3",
+        "passing_tds": "rolling3",
+        "interceptions": "rolling3"
+      },
+      "allocation_eligibility": {
+        "rushing_yards": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        },
+        "receiving_yards": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        },
+        "receptions": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        },
+        "receiving_tds": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        },
+        "rushing_tds": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        },
+        "passing_yards": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        },
+        "passing_tds": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        },
+        "interceptions": {
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent_no_prior_evidence"
+          }
+        }
+      },
+      "team_total_arms": {
+        "rushing_yards": "rolling3",
+        "receiving_yards": "rolling3",
+        "receptions": "rolling3",
+        "receiving_tds": "rolling3",
+        "rushing_tds": "rolling3",
+        "passing_yards": "rolling3",
+        "passing_tds": "rolling3",
+        "interceptions": "rolling3"
+      },
+      "ppr_mae": 2.490059683676514,
+      "n": 13404
+    },
+    {
+      "fold": 1,
+      "allocation_arms": {
+        "rushing_yards": "ridge_blend_renorm",
+        "receiving_yards": "xgb_blend_renorm",
+        "receptions": "xgb_blend_renorm",
+        "receiving_tds": "multinomial_count_renorm",
+        "rushing_tds": "rolling3",
+        "passing_yards": "rolling3",
+        "passing_tds": "rolling3",
+        "interceptions": "rolling3"
+      },
+      "allocation_eligibility": {
+        "rushing_yards": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.00029532454525253764,
+            "ci_low": -0.0005059760201703269,
+            "ci_high": -8.08336002716731e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.00029532454525253764,
+            "ci_low": -0.0005059760201703269,
+            "ci_high": -8.08336002716731e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.00029532454525253764,
+            "ci_low": -0.0005059760201703269,
+            "ci_high": -8.08336002716731e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          }
+        },
+        "receiving_yards": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.0007130336749986719,
+            "ci_low": -0.0009715233290904623,
+            "ci_high": -0.00045558977860771693,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -9.30474971752981e-05,
+            "ci_low": -0.00020565262248101673,
+            "ci_high": 3.167651779072114e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.0008155890033518784,
+            "ci_low": -0.0011327767047691346,
+            "ci_high": -0.0004807962341138785,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          }
+        },
+        "receptions": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.0003875502614312464,
+            "ci_low": -0.0005685412623220032,
+            "ci_high": -0.00021840947904354867,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -8.319161975575996e-05,
+            "ci_low": -0.00019622836455915598,
+            "ci_high": 2.8589838479778624e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.0004987228794969159,
+            "ci_low": -0.0007314595942613095,
+            "ci_high": -0.0002720382819863067,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          }
+        },
+        "receiving_tds": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.006387790804651547,
+            "ci_low": 0.004318789222983281,
+            "ci_high": 0.008377778885784271,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": -0.008175497407807524,
+            "ci_low": -0.009701103934002822,
+            "ci_high": -0.006786688807954425,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.01046224115525805,
+            "ci_low": 0.009088152247760167,
+            "ci_high": 0.011927603287955325,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.014684575408520726,
+            "ci_low": 0.01311293557716618,
+            "ci_high": 0.016231506081145253,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": 0.006398351499023354,
+            "ci_low": 0.0054796470338965226,
+            "ci_high": 0.007307160425106103,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": 0.007012752326089587,
+            "ci_low": 0.006116900192016801,
+            "ci_high": 0.007894728191228419,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": 0.006398351499023354,
+            "ci_low": 0.0054796470338965226,
+            "ci_high": 0.007307160425106103,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.007893254459741065,
+            "ci_low": 0.00643183476731347,
+            "ci_high": 0.009424829872589274,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "rushing_tds": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.01602489755916987,
+            "ci_low": 0.013650227143350534,
+            "ci_high": 0.018403901486949932,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": 0.0006454665070960969,
+            "ci_low": -0.0006610925709804958,
+            "ci_high": 0.0020960258071501567,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.020027128814892232,
+            "ci_low": 0.018718982680858882,
+            "ci_high": 0.021594656171821793,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.025002427873711427,
+            "ci_low": 0.02353124193611154,
+            "ci_high": 0.02663136228753213,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": 0.007490062932518654,
+            "ci_low": 0.006337206553925604,
+            "ci_high": 0.00865980838769121,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": 0.010799558290039906,
+            "ci_low": 0.009685629787310796,
+            "ci_high": 0.011934887928501952,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": 0.007490062932518654,
+            "ci_low": 0.006337206553925604,
+            "ci_high": 0.00865980838769121,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.013405374752448731,
+            "ci_low": 0.01189169657954015,
+            "ci_high": 0.014968077662354019,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "passing_yards": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.0020363034656405324,
+            "ci_low": -0.005267292798311131,
+            "ci_high": 0.0010903211325298582,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.0020363034656405324,
+            "ci_low": -0.005267292798311131,
+            "ci_high": 0.0010903211325298582,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.0020363034656405324,
+            "ci_low": -0.005267292798311131,
+            "ci_high": 0.0010903211325298582,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "passing_tds": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.024142173842219995,
+            "ci_low": 0.008798511457312834,
+            "ci_high": 0.03767794218243135,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": 0.03040242362850381,
+            "ci_low": 0.02069224359131864,
+            "ci_high": 0.04057040583308325,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.016270696926048468,
+            "ci_low": 0.0078644689905961,
+            "ci_high": 0.023985483221503574,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.05437920837982615,
+            "ci_low": 0.043962506231968596,
+            "ci_high": 0.06536499230964807,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": -0.004574601483753531,
+            "ci_low": -0.012368712864415706,
+            "ci_high": 0.002540852417203555,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.0007114668259168877,
+            "ci_low": -0.008741720184490235,
+            "ci_high": 0.007089168420452663,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.004574601483753531,
+            "ci_low": -0.012368712864415706,
+            "ci_high": 0.002540852417203555,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.02225091445904969,
+            "ci_low": 0.015004594187406057,
+            "ci_high": 0.029060464469249703,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "interceptions": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.0157942087154489,
+            "ci_low": 0.0008020276450625066,
+            "ci_high": 0.030836414557077686,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": -0.006991726153645451,
+            "ci_low": -0.014341709403207097,
+            "ci_high": 0.0011939270510580753,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.03595860694592992,
+            "ci_low": 0.02391604641839623,
+            "ci_high": 0.04821449156305214,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.05122442282452583,
+            "ci_low": 0.039268229865922086,
+            "ci_high": 0.06493181752128112,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": 0.01671984872363788,
+            "ci_low": 0.0066399174323080075,
+            "ci_high": 0.028499376278781716,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": 0.033368119510981516,
+            "ci_low": 0.02281251133994738,
+            "ci_high": 0.04489524582207221,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": 0.01671984872363788,
+            "ci_low": 0.0066399174323080075,
+            "ci_high": 0.028499376278781716,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.042104250780616255,
+            "ci_low": 0.031132750697657374,
+            "ci_high": 0.05374872409381157,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        }
+      },
+      "team_total_arms": {
+        "rushing_yards": "ridge",
+        "receiving_yards": "xgb",
+        "receptions": "xgb",
+        "receiving_tds": "rolling3",
+        "rushing_tds": "ridge",
+        "passing_yards": "ridge",
+        "passing_tds": "xgb",
+        "interceptions": "xgb"
+      },
+      "ppr_mae": 2.314301945640873,
+      "n": 13466
+    },
+    {
+      "fold": 2,
+      "allocation_arms": {
+        "rushing_yards": "ridge_blend_renorm",
+        "receiving_yards": "xgb_blend_renorm",
+        "receptions": "rolling3_renorm",
+        "receiving_tds": "multinomial_count_renorm",
+        "rushing_tds": "rolling3",
+        "passing_yards": "rolling3",
+        "passing_tds": "rolling3",
+        "interceptions": "rolling3"
+      },
+      "allocation_eligibility": {
+        "rushing_yards": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.00026005103738893843,
+            "ci_low": -0.00041451473892311453,
+            "ci_high": -0.00011828806680510655,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.00026005103738893843,
+            "ci_low": -0.00041451473892311453,
+            "ci_high": -0.00011828806680510655,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.0002541600763114119,
+            "ci_low": -0.0004173237892259537,
+            "ci_high": -0.00010787393905278153,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          }
+        },
+        "receiving_yards": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.0005653676879915792,
+            "ci_low": -0.0007962612843957781,
+            "ci_high": -0.0003414708028662971,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.00012916192889682874,
+            "ci_low": -0.00021431166458756037,
+            "ci_high": -4.168312510223396e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.0007418624227716348,
+            "ci_low": -0.0010029052386931626,
+            "ci_high": -0.0004848435783116585,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          }
+        },
+        "receptions": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.00024985489493830704,
+            "ci_low": -0.0003831055040398116,
+            "ci_high": -0.00011441645234973381,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.00010341132677487996,
+            "ci_low": -0.00019096761845959276,
+            "ci_high": -3.0071640172794875e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.00038657004081972085,
+            "ci_low": -0.0005423748668068267,
+            "ci_high": -0.0002181092529121452,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          }
+        },
+        "receiving_tds": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.005204825406064466,
+            "ci_low": 0.0037333790381742643,
+            "ci_high": 0.0066422147122063135,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": -0.007508975656209456,
+            "ci_low": -0.00862515891722886,
+            "ci_high": -0.006295546160132413,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.010919555776053164,
+            "ci_low": 0.009752227974020542,
+            "ci_high": 0.012014644736646539,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.01501428362441157,
+            "ci_low": 0.013728867160387473,
+            "ci_high": 0.01632403136213669,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": 0.006028827822178776,
+            "ci_low": 0.005440224733334956,
+            "ci_high": 0.006678443719835069,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": 0.0067645027696262815,
+            "ci_low": 0.006155494460952171,
+            "ci_high": 0.00739409728230565,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": 0.006028827822178776,
+            "ci_low": 0.005440224733334956,
+            "ci_high": 0.006678443719835069,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.008446306653051691,
+            "ci_low": 0.0073178135440530225,
+            "ci_high": 0.009527314232279652,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "rushing_tds": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.014938688626794016,
+            "ci_low": 0.013422878053575152,
+            "ci_high": 0.016396573768433242,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": 0.0006374599362693693,
+            "ci_low": -0.00020794325532156693,
+            "ci_high": 0.0015710217227045884,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.019229624028969126,
+            "ci_low": 0.018307634888371616,
+            "ci_high": 0.02022326946480329,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.024976953129720317,
+            "ci_low": 0.023879357221866834,
+            "ci_high": 0.026294579197598516,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": 0.007598187093893679,
+            "ci_low": 0.00669406858231844,
+            "ci_high": 0.00847677568687067,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": 0.010053174185601298,
+            "ci_low": 0.009119063760409055,
+            "ci_high": 0.01096977211526141,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": 0.007598187093893679,
+            "ci_low": 0.00669406858231844,
+            "ci_high": 0.00847677568687067,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.012652088109901153,
+            "ci_low": 0.011716052929882113,
+            "ci_high": 0.013547048874659432,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "passing_yards": {
+          "ridge_blend_renorm": {
+            "point_estimate": -0.00040981351819603635,
+            "ci_low": -0.0028030591530019415,
+            "ci_high": 0.0018459781833527796,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.00040981351819603635,
+            "ci_low": -0.0028030591530019415,
+            "ci_high": 0.0018459781833527796,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.00040981351819603635,
+            "ci_low": -0.0028030591530019415,
+            "ci_high": 0.0018459781833527796,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "passing_tds": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.011568797835561908,
+            "ci_low": 0.0012851529316865098,
+            "ci_high": 0.02008070284165563,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": 0.028384137582389755,
+            "ci_low": 0.02257791902043454,
+            "ci_high": 0.03578837026497291,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.013056054525990275,
+            "ci_low": 0.006642137953483833,
+            "ci_high": 0.018887145939054432,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.050038122651872546,
+            "ci_low": 0.041578405109126804,
+            "ci_high": 0.05697463733477901,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": -0.005725582437138826,
+            "ci_low": -0.011171822802875195,
+            "ci_high": -0.0009750499510504736,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": -0.00187489837444063,
+            "ci_low": -0.007473837315054773,
+            "ci_high": 0.002987315782717696,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": -0.005725582437138826,
+            "ci_low": -0.011171822802875195,
+            "ci_high": -0.0009750499510504736,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.023657841679515873,
+            "ci_low": 0.018447449935304866,
+            "ci_high": 0.028763316900191217,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        },
+        "interceptions": {
+          "hierarchical_conditional_renorm": {
+            "point_estimate": 0.01826562753210221,
+            "ci_low": 0.007370578878886661,
+            "ci_high": 0.029226316660727652,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "multinomial_count_renorm": {
+            "point_estimate": -0.0056695542040405295,
+            "ci_low": -0.010989157084145978,
+            "ci_high": -3.033361057109357e-05,
+            "n_bootstrap": 500,
+            "significant_improvement": true,
+            "margin": 0.0005,
+            "eligible": true,
+            "reason": "noninferior"
+          },
+          "poisson_count_renorm": {
+            "point_estimate": 0.04286618288807311,
+            "ci_low": 0.033157467053884254,
+            "ci_high": 0.051774401886170385,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "residual_opportunity_renorm": {
+            "point_estimate": 0.056936070182782086,
+            "ci_low": 0.04684013664725836,
+            "ci_high": 0.06616989896339293,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "ridge_blend_renorm": {
+            "point_estimate": 0.023051474883009467,
+            "ci_low": 0.014618748847507504,
+            "ci_high": 0.030426604936177316,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "rolling3": {
+            "eligible": true,
+            "reason": "incumbent"
+          },
+          "rolling3_renorm": {
+            "point_estimate": 0.047451221190882985,
+            "ci_low": 0.038354865699189694,
+            "ci_high": 0.055077355228759936,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_blend_renorm": {
+            "point_estimate": 0.023051474883009467,
+            "ci_low": 0.014618748847507504,
+            "ci_high": 0.030426604936177316,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          },
+          "xgb_two_stage_renorm": {
+            "point_estimate": 0.049845956350431334,
+            "ci_low": 0.04079148730625144,
+            "ci_high": 0.05797868855685811,
+            "n_bootstrap": 500,
+            "significant_improvement": false,
+            "margin": 0.0005,
+            "eligible": false,
+            "reason": "ci_exceeds_noninferiority_margin"
+          }
+        }
+      },
+      "team_total_arms": {
+        "rushing_yards": "blend",
+        "receiving_yards": "blend",
+        "receptions": "xgb",
+        "receiving_tds": "rolling3",
+        "rushing_tds": "ridge",
+        "passing_yards": "ridge",
+        "passing_tds": "xgb",
+        "interceptions": "blend"
+      },
+      "ppr_mae": 2.2221236028928337,
+      "n": 13689
+    }
+  ],
+  "final_allocation_arms": {
+    "rushing_yards": "ridge_blend_renorm",
+    "receiving_yards": "xgb_blend_renorm",
+    "receptions": "rolling3_renorm",
+    "receiving_tds": "multinomial_count_renorm",
+    "rushing_tds": "rolling3",
+    "passing_yards": "rolling3",
+    "passing_tds": "rolling3",
+    "interceptions": "rolling3"
+  },
+  "final_team_total_arms": {
+    "rushing_yards": "blend",
+    "receiving_yards": "blend",
+    "receptions": "xgb",
+    "receiving_tds": "rolling3",
+    "rushing_tds": "ridge",
+    "passing_yards": "ridge",
+    "passing_tds": "xgb",
+    "interceptions": "blend"
+  }
+}

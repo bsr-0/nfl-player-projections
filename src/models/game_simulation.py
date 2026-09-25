@@ -33,6 +33,11 @@ class GameScriptInput:
     away: TeamVolumeBaseline = TeamVolumeBaseline()
     margin_sd: float = 10.0
     total_sd: float = 10.0
+    # Optional: set by simulation_adapter so a home/away team pair can be
+    # disambiguated across multiple weeks of schedule (see
+    # simulation_adapter.player_inputs_from_predictions).
+    season: int | None = None
+    week: int | None = None
 
 @dataclass(frozen=True)
 class PlayerSimulationInput:

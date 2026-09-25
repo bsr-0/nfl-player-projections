@@ -11,11 +11,12 @@ GAMES = pd.DataFrame([{
     "predicted_total_ridge": 45.0,
 }])
 PLAYERS = pd.DataFrame([
-    {"player_id": "h_qb", "team": "H", "opponent": "A", "position": "QB",
+    {"player_id": "h_qb", "team": "H", "opponent": "A", "position": "QB", "season": 2026, "week": 2,
      "predicted_points": 18.0, "prediction_ci80_lower": 12.0, "prediction_ci80_upper": 24.0},
-    {"player_id": "a_wr", "team": "A", "opponent": "H", "position": "WR",
+    {"player_id": "a_wr", "team": "A", "opponent": "H", "position": "WR", "season": 2026, "week": 2,
      "predicted_points": 14.0, "prediction_ci80_lower": 8.0, "prediction_ci80_upper": 20.0},
-    {"player_id": "bye", "team": "X", "opponent": "Y", "position": "RB", "predicted_points": 10.0},
+    {"player_id": "bye", "team": "X", "opponent": "Y", "position": "RB", "season": 2026, "week": 2,
+     "predicted_points": 10.0},
 ])
 
 def test_adapters_match_current_serving_columns():
@@ -51,3 +52,29 @@ def test_adapter_rejects_missing_or_nonfinite_game_prediction():
     bad.loc[0, "predicted_margin_ridge"] = np.nan
     with pytest.raises(ValueError, match="non-finite"):
         game_inputs_from_predictions(bad)
+
+def test_rematch_across_weeks_is_not_misrouted():
+    # Same two teams play twice in a season (e.g. division rivals) -- a
+    # team-pair-only lookup key would collapse both games together and
+    # silently misroute players to the wrong week's game.
+    two_games = pd.concat([
+        GAMES,
+        GAMES.assign(week=9, home_win_prob_logistic=.4, predicted_margin_ridge=-2.0, predicted_total_ridge=41.0),
+    ], ignore_index=True)
+    games = game_inputs_from_predictions(two_games)
+    assert set(games) == {"2026_2_H_A", "2026_9_H_A"}
+    players = pd.concat([
+        PLAYERS.iloc[:2],
+        PLAYERS.iloc[:2].assign(week=9, player_id=["h_qb_wk9", "a_wr_wk9"]),
+    ], ignore_index=True)
+    result = player_inputs_from_predictions(players, games)
+    assert [p.player_id for p in result["2026_2_H_A"]] == ["h_qb", "a_wr"]
+    assert [p.player_id for p in result["2026_9_H_A"]] == ["h_qb_wk9", "a_wr_wk9"]
+
+def test_missing_team_volume_falls_back_with_warning(caplog):
+    import logging
+    with caplog.at_level(logging.WARNING, logger="src.models.simulation_adapter"):
+        games = game_inputs_from_predictions(GAMES, team_volume={})
+    game = games["2026_2_H_A"]
+    assert game.home.plays == 64.0 and game.home.pass_rate == 0.58
+    assert any("no team_volume baseline" in message for message in caplog.messages)

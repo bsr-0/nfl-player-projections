@@ -1,0 +1,934 @@
+{
+  "folds": [
+    {
+      "fold": 0,
+      "target": "rushing_yards",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "rushing_yards",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "rushing_yards",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receiving_yards",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receiving_yards",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receiving_yards",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receptions",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receptions",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receptions",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receiving_tds",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receiving_tds",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "receiving_tds",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "rushing_tds",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "rushing_tds",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "rushing_tds",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "passing_yards",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "passing_yards",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "passing_yards",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "passing_tds",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "passing_tds",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "passing_tds",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "interceptions",
+      "dimension": "allocation",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "interceptions",
+      "dimension": "team_total",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 0,
+      "target": "interceptions",
+      "dimension": "both",
+      "n": 13404,
+      "selected_ppr_mae": 2.490059683676514,
+      "counterfactual_ppr_mae": 2.490059683676514,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 1,
+      "target": "rushing_yards",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3522634783900194,
+      "delta_mae_when_reverted": 0.005082429823258572,
+      "selected_allocation_arm": "ridge_blend_renorm",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 1,
+      "target": "rushing_yards",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3718602406059706,
+      "delta_mae_when_reverted": 0.024679192039209763,
+      "selected_allocation_arm": "ridge_blend_renorm",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 1,
+      "target": "rushing_yards",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3748284568543,
+      "delta_mae_when_reverted": 0.02764740828753931,
+      "selected_allocation_arm": "ridge_blend_renorm",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 1,
+      "target": "receiving_yards",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.358061042625873,
+      "delta_mae_when_reverted": 0.010879994059111997,
+      "selected_allocation_arm": "xgb_blend_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "receiving_yards",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3565676518639536,
+      "delta_mae_when_reverted": 0.009386603297192764,
+      "selected_allocation_arm": "xgb_blend_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "receiving_yards",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3688407841972374,
+      "delta_mae_when_reverted": 0.02165973563047663,
+      "selected_allocation_arm": "xgb_blend_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "receptions",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3494378434575967,
+      "delta_mae_when_reverted": 0.002256794890835856,
+      "selected_allocation_arm": "blend:xgb_blend_renorm:0.85",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "receptions",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.355865884449725,
+      "delta_mae_when_reverted": 0.008684835882964315,
+      "selected_allocation_arm": "blend:xgb_blend_renorm:0.85",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "receptions",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3588964800237635,
+      "delta_mae_when_reverted": 0.011715431457002712,
+      "selected_allocation_arm": "blend:xgb_blend_renorm:0.85",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "receiving_tds",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.347181048566761,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 1,
+      "target": "receiving_tds",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.347181048566761,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 1,
+      "target": "receiving_tds",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.347181048566761,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "rolling3"
+    },
+    {
+      "fold": 1,
+      "target": "rushing_tds",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.347181048566761,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 1,
+      "target": "rushing_tds",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3635155205703255,
+      "delta_mae_when_reverted": 0.01633447200356475,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 1,
+      "target": "rushing_tds",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3635155205703255,
+      "delta_mae_when_reverted": 0.01633447200356475,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 1,
+      "target": "passing_yards",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.347181048566761,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 1,
+      "target": "passing_yards",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.35997846428041,
+      "delta_mae_when_reverted": 0.01279741571364923,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 1,
+      "target": "passing_yards",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.35997846428041,
+      "delta_mae_when_reverted": 0.01279741571364923,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 1,
+      "target": "passing_tds",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.347181048566761,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "passing_tds",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.357429823258577,
+      "delta_mae_when_reverted": 0.010248774691816287,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "passing_tds",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.357429823258577,
+      "delta_mae_when_reverted": 0.010248774691816287,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "interceptions",
+      "dimension": "allocation",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.346723600178226,
+      "delta_mae_when_reverted": -0.00045744838853467584,
+      "selected_allocation_arm": "blend:hierarchical_conditional_event_mass:0.20",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "interceptions",
+      "dimension": "team_total",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.348912817466211,
+      "delta_mae_when_reverted": 0.001731768899450259,
+      "selected_allocation_arm": "blend:hierarchical_conditional_event_mass:0.20",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 1,
+      "target": "interceptions",
+      "dimension": "both",
+      "n": 13466,
+      "selected_ppr_mae": 2.347181048566761,
+      "counterfactual_ppr_mae": 2.3487509282637755,
+      "delta_mae_when_reverted": 0.00156987969701472,
+      "selected_allocation_arm": "blend:hierarchical_conditional_event_mass:0.20",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "rushing_yards",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2637738330046027,
+      "delta_mae_when_reverted": 0.0030754620498214535,
+      "selected_allocation_arm": "ridge_blend_renorm",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 2,
+      "target": "rushing_yards",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2799671268902038,
+      "delta_mae_when_reverted": 0.019268755935422544,
+      "selected_allocation_arm": "ridge_blend_renorm",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 2,
+      "target": "rushing_yards",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2824932427496534,
+      "delta_mae_when_reverted": 0.02179487179487216,
+      "selected_allocation_arm": "ridge_blend_renorm",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 2,
+      "target": "receiving_yards",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2778617868361457,
+      "delta_mae_when_reverted": 0.017163415881364497,
+      "selected_allocation_arm": "xgb_blend_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receiving_yards",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.269880926291183,
+      "delta_mae_when_reverted": 0.009182555336401776,
+      "selected_allocation_arm": "xgb_blend_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receiving_yards",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2899430199430197,
+      "delta_mae_when_reverted": 0.02924464898823853,
+      "selected_allocation_arm": "xgb_blend_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receptions",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.262435532179122,
+      "delta_mae_when_reverted": 0.0017371612243408663,
+      "selected_allocation_arm": "rolling3_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receptions",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2718701146906275,
+      "delta_mae_when_reverted": 0.011171743735846285,
+      "selected_allocation_arm": "rolling3_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receptions",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2742640075973406,
+      "delta_mae_when_reverted": 0.013565636642559387,
+      "selected_allocation_arm": "rolling3_renorm",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receiving_tds",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.260698370954781,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receiving_tds",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.27853385930309,
+      "delta_mae_when_reverted": 0.017835488348308726,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "receiving_tds",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.27853385930309,
+      "delta_mae_when_reverted": 0.017835488348308726,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "rushing_tds",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.260698370954781,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 2,
+      "target": "rushing_tds",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2727649937906347,
+      "delta_mae_when_reverted": 0.012066622835853469,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 2,
+      "target": "rushing_tds",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2727649937906347,
+      "delta_mae_when_reverted": 0.012066622835853469,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 2,
+      "target": "passing_yards",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.260698370954781,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 2,
+      "target": "passing_yards",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2830937248885967,
+      "delta_mae_when_reverted": 0.02239535393381553,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 2,
+      "target": "passing_yards",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2830937248885967,
+      "delta_mae_when_reverted": 0.02239535393381553,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "ridge"
+    },
+    {
+      "fold": 2,
+      "target": "passing_tds",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2609262911827015,
+      "delta_mae_when_reverted": 0.00022792022792028632,
+      "selected_allocation_arm": "blend:ridge_blend_renorm:0.05",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "passing_tds",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2866966177222587,
+      "delta_mae_when_reverted": 0.02599824676747753,
+      "selected_allocation_arm": "blend:ridge_blend_renorm:0.05",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "passing_tds",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.2867214551829935,
+      "delta_mae_when_reverted": 0.026023084228212312,
+      "selected_allocation_arm": "blend:ridge_blend_renorm:0.05",
+      "selected_team_total_arm": "xgb"
+    },
+    {
+      "fold": 2,
+      "target": "interceptions",
+      "dimension": "allocation",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.260698370954781,
+      "delta_mae_when_reverted": 0.0,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 2,
+      "target": "interceptions",
+      "dimension": "team_total",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.25999269486449,
+      "delta_mae_when_reverted": -0.0007056760902912629,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "blend"
+    },
+    {
+      "fold": 2,
+      "target": "interceptions",
+      "dimension": "both",
+      "n": 13689,
+      "selected_ppr_mae": 2.260698370954781,
+      "counterfactual_ppr_mae": 2.25999269486449,
+      "delta_mae_when_reverted": -0.0007056760902912629,
+      "selected_allocation_arm": "rolling3",
+      "selected_team_total_arm": "blend"
+    }
+  ],
+  "pooled": {
+    "rushing_yards": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.0027254123622378707,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.014697107916861803,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.016535170985478177,
+        "positive_means_selected_component_helped": true
+      }
+    },
+    "receiving_yards": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.009405064227421798,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.006215636480189395,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.017061564634236432,
+        "positive_means_selected_component_helped": true
+      }
+    },
+    "receptions": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.0013355851968736348,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.006654010207352185,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.008468157498951995,
+        "positive_means_selected_component_helped": true
+      }
+    },
+    "receiving_tds": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.0,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.006019625730417371,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.006019625730417371,
+        "positive_means_selected_component_helped": true
+      }
+    },
+    "rushing_tds": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.0,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.009495796247442023,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.009495796247442023,
+        "positive_means_selected_component_helped": true
+      }
+    },
+    "passing_yards": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.0,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.011807490322739745,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.011807490322739745,
+        "positive_means_selected_component_helped": true
+      }
+    },
+    "passing_tds": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 7.692497349542147e-05,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.01217732192608294,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.012185704775758683,
+        "positive_means_selected_component_helped": true
+      }
+    },
+    "interceptions": {
+      "allocation": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": -0.0001518775117731686,
+        "positive_means_selected_component_helped": true
+      },
+      "team_total": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.00033679331344461374,
+        "positive_means_selected_component_helped": true
+      },
+      "both": {
+        "n": 40559,
+        "weighted_delta_mae_when_reverted": 0.00028304445375879886,
+        "positive_means_selected_component_helped": true
+      }
+    }
+  }
+}

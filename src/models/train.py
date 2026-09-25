@@ -54,6 +54,7 @@ from src.models.ensemble import ModelTrainer
 from src.models.robust_validation import RobustTimeSeriesCV
 from src.evaluation.backtester import ModelBacktester
 from src.utils.models_dir import redirect_models_dir
+from src.utils.model_rollback import available_rollbacks, snapshot_models
 from src.data.lineage import (
     find_artifact_ids,
     get_artifact_id,
@@ -1071,6 +1072,22 @@ def train_models(positions: list = None,
         )
         return None, train_data, test_data, actual_test_season
 
+    # Archive the outgoing artifacts before anything overwrites them. This is
+    # the only moment they still exist; the metadata-history block further
+    # down runs after training and can only ever archive the NEW models,
+    # which is why `rollback_available` was true for years without a single
+    # recoverable weight file behind it (see src/utils/model_rollback.py).
+    # Only reached on the production path -- walk-forward returned above.
+    try:
+        snapshot = snapshot_models(MODELS_DIR)
+        if snapshot is not None:
+            print(f"  Archived outgoing models for rollback: {snapshot.name}")
+    except OSError as e:
+        # Worth continuing without a snapshot, but never silently: losing
+        # rollback is exactly the failure this module exists to prevent.
+        logger.warning("Model snapshot failed (%s); rollback will NOT be "
+                       "available for this run", e)
+
     # Shared preprocessing: DVP, external, season-long, utilization, targets,
     # feature engineering, bounded scaling, winsorization, model training, util-to-fp.
     print("\n[2/5] Preparing features, engineering, and training...")
@@ -1332,6 +1349,8 @@ def train_models(positions: list = None,
                 json.dump(version_history, f, indent=2, default=str)
             print(f"  Archived previous model version ({len(version_history)} versions available for rollback)")
 
+        rollback_snapshots = available_rollbacks(MODELS_DIR)
+
         metadata = {
             "training_date": datetime.now().isoformat(),
             "feature_version": FEATURE_VERSION.strip(),
@@ -1349,8 +1368,17 @@ def train_models(positions: list = None,
             },
             "previous_training_date": prev_metadata.get("training_date"),
             "previous_feature_version": prev_metadata.get("feature_version"),
-            "rollback_available": bool(prev_metadata.get("training_date")),
-            "n_rollback_versions": len(version_history),
+            # Derived from archived WEIGHTS, not from metadata history. The
+            # old definition -- `bool(prev_metadata.get("training_date"))` --
+            # reported rollback as available whenever a previous training
+            # summary existed, which said nothing about whether the previous
+            # models were still on disk. They never were.
+            "rollback_available": bool(rollback_snapshots),
+            "n_rollback_versions": len(rollback_snapshots),
+            "rollback_versions": [d.name for d in rollback_snapshots],
+            # Metadata-only history (dates/metrics for the last 5 runs). Kept
+            # separate so it is not mistaken for restorable artifacts again.
+            "n_metadata_history_versions": len(version_history),
             # Repo-relative so the committed artifact doesn't embed one
             # machine's home directory (AUDIT_REPORT.md #25). Nothing reads
             # these back; they're pointers for a human.

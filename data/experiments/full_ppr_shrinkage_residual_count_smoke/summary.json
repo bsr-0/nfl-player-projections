@@ -1,0 +1,248 @@
+{
+  "passing_tds": {
+    "hierarchical_conditional_renorm": {
+      "n": 1948,
+      "mae": 0.2035044153616265,
+      "mean_abs_team_sum_error": 0.3069852941176471,
+      "segment_mae": {
+        "position": {
+          "QB": 0.2035044153616265
+        },
+        "role_tier": {
+          "QB1": 0.4625956694409606,
+          "QB2": 0.229050685416887,
+          "QB3": 0.02706823631324609,
+          "QB4": 0.01729559748427673
+        },
+        "is_cold_start": {
+          "0": 0.21783707610463454,
+          "1": 0.14176071880932226
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.057184786380670705,
+        "ci_low": 0.041863949053481425,
+        "ci_high": 0.07263804835188795,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.06496369899356,
+        "ci_low": 0.04854562531732397,
+        "ci_high": 0.08199342292484686,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "poisson_count_renorm": {
+      "n": 1948,
+      "mae": 0.21169402000644402,
+      "mean_abs_team_sum_error": 1.734723475976807e-17,
+      "segment_mae": {
+        "position": {
+          "QB": 0.21169402000644402
+        },
+        "role_tier": {
+          "QB1": 0.38366842270242035,
+          "QB2": 0.19713393902120757,
+          "QB3": 0.11356673292090239,
+          "QB4": 0.10965502186091265
+        },
+        "is_cold_start": {
+          "0": 0.20690208691198228,
+          "1": 0.23233719772400255
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.06537439102548816,
+        "ci_low": 0.05877581196902181,
+        "ci_high": 0.07209823042168347,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.07315330363837746,
+        "ci_low": 0.06589196690685448,
+        "ci_high": 0.08039433246961918,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "residual_opportunity_renorm": {
+      "n": 1948,
+      "mae": 0.36062565379451034,
+      "mean_abs_team_sum_error": 1.3061447348531253e-17,
+      "segment_mae": {
+        "position": {
+          "QB": 0.36062565379451034
+        },
+        "role_tier": {
+          "QB1": 0.535818014137194,
+          "QB2": 0.33249627583955466,
+          "QB3": 0.295788123526411,
+          "QB4": 0.21955546192779932
+        },
+        "is_cold_start": {
+          "0": 0.36071874841649415,
+          "1": 0.36022461129490185
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.21430602481355454,
+        "ci_low": 0.20306764131824157,
+        "ci_high": 0.22557717955703577,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.22208493742644383,
+        "ci_low": 0.20775799396111827,
+        "ci_high": 0.23664629390191655,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "ridge_blend_renorm": {
+      "n": 1948,
+      "mae": 0.13725734881159835,
+      "mean_abs_team_sum_error": 0.009191176470588239,
+      "segment_mae": {
+        "position": {
+          "QB": 0.13725734881159835
+        },
+        "role_tier": {
+          "QB1": 0.32743143107863015,
+          "QB2": 0.13010610464055597,
+          "QB3": 0.022450395250195362,
+          "QB4": 0.01983893656651088
+        },
+        "is_cold_start": {
+          "0": 0.13106683533628505,
+          "1": 0.16392547361941948
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -0.00906228016935747,
+        "ci_low": -0.01578600504750839,
+        "ci_high": -0.0021433152770980817,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": -0.0012833675564681724,
+        "ci_low": -0.0024811772758384673,
+        "ci_high": -8.448836413416056e-05,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      }
+    },
+    "rolling3": {
+      "n": 1948,
+      "mae": 0.14631962898095585,
+      "mean_abs_team_sum_error": 0.2240642120818916,
+      "segment_mae": {
+        "position": {
+          "QB": 0.14631962898095585
+        },
+        "role_tier": {
+          "QB1": 0.36289227700884275,
+          "QB2": 0.12771830545943866,
+          "QB3": 0.02135789740250344,
+          "QB4": 0.020636792452830188
+        },
+        "is_cold_start": {
+          "0": 0.14083913135146534,
+          "1": 0.16992907517230324
+        }
+      }
+    },
+    "rolling3_renorm": {
+      "n": 1948,
+      "mae": 0.13854071636806656,
+      "mean_abs_team_sum_error": 3.673532066774415e-18,
+      "segment_mae": {
+        "position": {
+          "QB": 0.13854071636806656
+        },
+        "role_tier": {
+          "QB1": 0.3278909899021596,
+          "QB2": 0.130872036013105,
+          "QB3": 0.02537167446298749,
+          "QB4": 0.02062510008852346
+        },
+        "is_cold_start": {
+          "0": 0.13180476491671936,
+          "1": 0.16755853447318877
+        }
+      }
+    },
+    "xgb_blend_renorm": {
+      "n": 1948,
+      "mae": 0.13725734881159835,
+      "mean_abs_team_sum_error": 0.009191176470588239,
+      "segment_mae": {
+        "position": {
+          "QB": 0.13725734881159835
+        },
+        "role_tier": {
+          "QB1": 0.32743143107863015,
+          "QB2": 0.13010610464055597,
+          "QB3": 0.022450395250195362,
+          "QB4": 0.01983893656651088
+        },
+        "is_cold_start": {
+          "0": 0.13106683533628505,
+          "1": 0.16392547361941948
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -0.00906228016935747,
+        "ci_low": -0.01578600504750839,
+        "ci_high": -0.0021433152770980817,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": -0.0012833675564681724,
+        "ci_low": -0.0024811772758384673,
+        "ci_high": -8.448836413416056e-05,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      }
+    },
+    "xgb_two_stage_renorm": {
+      "n": 1948,
+      "mae": 0.16746848001549103,
+      "mean_abs_team_sum_error": 2.1020766826542485e-17,
+      "segment_mae": {
+        "position": {
+          "QB": 0.16746848001549103
+        },
+        "role_tier": {
+          "QB1": 0.34516026810239886,
+          "QB2": 0.15392053669175576,
+          "QB3": 0.06317833150714369,
+          "QB4": 0.06442133831850491
+        },
+        "is_cold_start": {
+          "0": 0.16234178416335163,
+          "1": 0.18955378285536145
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.021148851034535215,
+        "ci_low": 0.015064932734587814,
+        "ci_high": 0.027412379415786226,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.028927763647424515,
+        "ci_low": 0.02405052326883892,
+        "ci_high": 0.033813958076553595,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    }
+  }
+}

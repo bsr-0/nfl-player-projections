@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-17T04:38:51.619108+00:00",
+  "generated_at": "2026-09-24T07:48:07.661797+00:00",
   "status": "pass",
   "checks": {
     "completeness": {
@@ -10,7 +10,7 @@
       },
       "missing_teams": [],
       "missing_positions": [],
-      "active_players": 343
+      "active_players": 344
     },
     "anomalies": {
       "passed": true,
@@ -29,7 +29,7 @@
   },
   "latest_observed": {
     "season": 2026,
-    "week": 1,
-    "rows": 123615
+    "week": 2,
+    "rows": 123637
   }
 }

@@ -1,0 +1,786 @@
+{
+  "accuracy_gate": {
+    "targets": {
+      "2024": {
+        "season": 2024,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_volume_second_holdout/targets_predictions.csv",
+        "arm": "xgb_blend_renorm",
+        "rows": 11599,
+        "baseline_mae": 0.030304391903150533,
+        "candidate_mae": 0.02976579025284285,
+        "delta_candidate_minus_baseline": -0.0005386016503076824,
+        "bootstrap": {
+          "point_estimate": -0.0005386016503076803,
+          "ci_low": -0.0007676719533245264,
+          "ci_high": -0.00030846908267347534,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "RB": {
+              "n": 3223,
+              "baseline_mae": 0.022727669035058806,
+              "candidate_mae": 0.022270245599620965,
+              "delta_candidate_minus_baseline": -0.0004574234354378405
+            },
+            "TE": {
+              "n": 2936,
+              "baseline_mae": 0.028404440754611966,
+              "candidate_mae": 0.027934849689356472,
+              "delta_candidate_minus_baseline": -0.0004695910652554938
+            },
+            "WR": {
+              "n": 5440,
+              "baseline_mae": 0.03581873645755657,
+              "candidate_mae": 0.03519479428073442,
+              "delta_candidate_minus_baseline": -0.0006239421768221495
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 9275,
+              "baseline_mae": 0.02999252028721501,
+              "candidate_mae": 0.029455088525376455,
+              "delta_candidate_minus_baseline": -0.0005374317618385555
+            },
+            "1": {
+              "n": 2324,
+              "baseline_mae": 0.03154906024988116,
+              "candidate_mae": 0.031005789616978335,
+              "delta_candidate_minus_baseline": -0.0005432706329028258
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 3867,
+              "baseline_mae": 0.004110920024934715,
+              "candidate_mae": 0.004110920024934715,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 3866,
+              "baseline_mae": 0.017571549306854103,
+              "candidate_mae": 0.017906730213675764,
+              "delta_candidate_minus_baseline": 0.0003351809068216603
+            },
+            "high": {
+              "n": 3866,
+              "baseline_mae": 0.0692374817195868,
+              "candidate_mae": 0.06728635654429158,
+              "delta_candidate_minus_baseline": -0.0019511251752952208
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 4.622527850691139e-16,
+          "p95_abs_team_sum_error": 6.661338147750939e-16,
+          "max_abs_team_sum_error": 8.881784197001252e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      },
+      "2025": {
+        "season": 2025,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_volume_shrinkage/targets_predictions.csv",
+        "arm": "xgb_blend_renorm",
+        "rows": 11741,
+        "baseline_mae": 0.02961733900915174,
+        "candidate_mae": 0.029048652746280802,
+        "delta_candidate_minus_baseline": -0.0005686862628709391,
+        "bootstrap": {
+          "point_estimate": -0.0005686862628709336,
+          "ci_low": -0.0007656919837744124,
+          "ci_high": -0.0003725759378885607,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "RB": {
+              "n": 3371,
+              "baseline_mae": 0.021289379515100997,
+              "candidate_mae": 0.020882029661182983,
+              "delta_candidate_minus_baseline": -0.000407349853918014
+            },
+            "TE": {
+              "n": 2960,
+              "baseline_mae": 0.027438764525790478,
+              "candidate_mae": 0.0270937294119214,
+              "delta_candidate_minus_baseline": -0.00034503511386907784
+            },
+            "WR": {
+              "n": 5410,
+              "baseline_mae": 0.035998509420463086,
+              "candidate_mae": 0.035206926219398846,
+              "delta_candidate_minus_baseline": -0.0007915832010642401
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 9429,
+              "baseline_mae": 0.029891647148889967,
+              "candidate_mae": 0.029241952154403065,
+              "delta_candidate_minus_baseline": -0.0006496949944869018
+            },
+            "1": {
+              "n": 2312,
+              "baseline_mae": 0.02849863163476085,
+              "candidate_mae": 0.028260322244903272,
+              "delta_candidate_minus_baseline": -0.0002383093898575793
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 3914,
+              "baseline_mae": 0.005110158505983326,
+              "candidate_mae": 0.005110158505983326,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 3913,
+              "baseline_mae": 0.01710382463281388,
+              "candidate_mae": 0.017296000171424512,
+              "delta_candidate_minus_baseline": 0.00019217553861063108
+            },
+            "high": {
+              "n": 3914,
+              "baseline_mae": 0.066634836772057,
+              "candidate_mae": 0.06473679683977519,
+              "delta_candidate_minus_baseline": -0.0018980399322818114
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 4.891920202254596e-16,
+          "p95_abs_team_sum_error": 7.771561172376096e-16,
+          "max_abs_team_sum_error": 9.992007221626409e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      }
+    },
+    "receiving_yards": {
+      "2024": {
+        "season": 2024,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_volume_second_holdout/receiving_yards_predictions.csv",
+        "arm": "xgb_blend_renorm",
+        "rows": 11599,
+        "baseline_mae": 0.03776721863798843,
+        "candidate_mae": 0.03629353280343925,
+        "delta_candidate_minus_baseline": -0.0014736858345491821,
+        "bootstrap": {
+          "point_estimate": -0.0014736858345491763,
+          "ci_low": -0.0018541798888681534,
+          "ci_high": -0.0010799098604638367,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "RB": {
+              "n": 3223,
+              "baseline_mae": 0.023352057357381897,
+              "candidate_mae": 0.021995416601444197,
+              "delta_candidate_minus_baseline": -0.0013566407559377006
+            },
+            "TE": {
+              "n": 2936,
+              "baseline_mae": 0.03489570511030512,
+              "candidate_mae": 0.033690634325974265,
+              "delta_candidate_minus_baseline": -0.0012050707843308528
+            },
+            "WR": {
+              "n": 5440,
+              "baseline_mae": 0.04785744446972979,
+              "candidate_mae": 0.04616944060653985,
+              "delta_candidate_minus_baseline": -0.0016880038631899366
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 9275,
+              "baseline_mae": 0.037862677945626304,
+              "candidate_mae": 0.036101577856851204,
+              "delta_candidate_minus_baseline": -0.0017611000887751
+            },
+            "1": {
+              "n": 2324,
+              "baseline_mae": 0.037386243991542084,
+              "candidate_mae": 0.03705961805714155,
+              "delta_candidate_minus_baseline": -0.00032662593440053317
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 3867,
+              "baseline_mae": 0.004843525427385741,
+              "candidate_mae": 0.004843525427385741,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 3866,
+              "baseline_mae": 0.015743347889702594,
+              "candidate_mae": 0.016116867796001806,
+              "delta_candidate_minus_baseline": 0.000373519906299212
+            },
+            "high": {
+              "n": 3866,
+              "baseline_mae": 0.09272329881343427,
+              "candidate_mae": 0.08792834021211804,
+              "delta_candidate_minus_baseline": -0.004794958601316235
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 4.371503159461554e-16,
+          "p95_abs_team_sum_error": 6.661338147750939e-16,
+          "max_abs_team_sum_error": 9.992007221626409e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      },
+      "2025": {
+        "season": 2025,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_volume_2025_remaining/receiving_yards_predictions.csv",
+        "arm": "xgb_blend_renorm",
+        "rows": 11741,
+        "baseline_mae": 0.03727711291525577,
+        "candidate_mae": 0.03600173783385351,
+        "delta_candidate_minus_baseline": -0.0012753750814022552,
+        "bootstrap": {
+          "point_estimate": -0.0012753750814022502,
+          "ci_low": -0.0016688158129755748,
+          "ci_high": -0.0008899816388922998,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "RB": {
+              "n": 3371,
+              "baseline_mae": 0.02263512079713089,
+              "candidate_mae": 0.021482194084924296,
+              "delta_candidate_minus_baseline": -0.0011529267122065943
+            },
+            "TE": {
+              "n": 2960,
+              "baseline_mae": 0.0338427903095562,
+              "candidate_mae": 0.032993311382108856,
+              "delta_candidate_minus_baseline": -0.0008494789274473419
+            },
+            "WR": {
+              "n": 5410,
+              "baseline_mae": 0.04827965456831856,
+              "candidate_mae": 0.046694958587052145,
+              "delta_candidate_minus_baseline": -0.0015846959812664124
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 9429,
+              "baseline_mae": 0.03798743472629165,
+              "candidate_mae": 0.03654499540052256,
+              "delta_candidate_minus_baseline": -0.001442439325769089
+            },
+            "1": {
+              "n": 2312,
+              "baseline_mae": 0.03438021656739362,
+              "candidate_mae": 0.03378617745490782,
+              "delta_candidate_minus_baseline": -0.000594039112485803
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 3914,
+              "baseline_mae": 0.005892326064959102,
+              "candidate_mae": 0.005892326064959102,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 3913,
+              "baseline_mae": 0.01611909448706053,
+              "candidate_mae": 0.016374041898664107,
+              "delta_candidate_minus_baseline": 0.00025494741160357604
+            },
+            "high": {
+              "n": 3914,
+              "baseline_mae": 0.08981451246599392,
+              "candidate_mae": 0.0857338307970239,
+              "delta_candidate_minus_baseline": -0.004080681668970021
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 4.381707415202594e-16,
+          "p95_abs_team_sum_error": 6.661338147750939e-16,
+          "max_abs_team_sum_error": 9.992007221626409e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      }
+    },
+    "rushing_yards": {
+      "2024": {
+        "season": 2024,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_volume_second_holdout/rushing_yards_predictions.csv",
+        "arm": "ridge_blend_renorm",
+        "rows": 13466,
+        "baseline_mae": 0.029436996032965117,
+        "candidate_mae": 0.02878133541427427,
+        "delta_candidate_minus_baseline": -0.0006556606186908474,
+        "bootstrap": {
+          "point_estimate": -0.0006556606186908468,
+          "ci_low": -0.0010304273501294382,
+          "ci_high": -0.0002766442970014531,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "QB": {
+              "n": 1867,
+              "baseline_mae": 0.046422672314427336,
+              "candidate_mae": 0.0448247092928684,
+              "delta_candidate_minus_baseline": -0.001597963021558936
+            },
+            "RB": {
+              "n": 3223,
+              "baseline_mae": 0.08531248431334541,
+              "candidate_mae": 0.08409647757330861,
+              "delta_candidate_minus_baseline": -0.0012160067400368013
+            },
+            "TE": {
+              "n": 2936,
+              "baseline_mae": 0.0009508283713044413,
+              "candidate_mae": 0.00096393678304736,
+              "delta_candidate_minus_baseline": 1.3108411742918688e-05
+            },
+            "WR": {
+              "n": 5440,
+              "baseline_mae": 0.005877516604560716,
+              "candidate_mae": 0.005516298681071935,
+              "delta_candidate_minus_baseline": -0.0003612179234887807
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 10783,
+              "baseline_mae": 0.028992207496474017,
+              "candidate_mae": 0.028383596776067676,
+              "delta_candidate_minus_baseline": -0.0006086107204063412
+            },
+            "1": {
+              "n": 2683,
+              "baseline_mae": 0.03122460497406966,
+              "candidate_mae": 0.030379850410838422,
+              "delta_candidate_minus_baseline": -0.0008447545632312391
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 4489,
+              "baseline_mae": 0.0034094180881703543,
+              "candidate_mae": 0.0034094180881703543,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 4488,
+              "baseline_mae": 0.00395469828302801,
+              "candidate_mae": 0.00395469828302801,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "high": {
+              "n": 4489,
+              "baseline_mae": 0.08094119511870834,
+              "candidate_mae": 0.07897435932202959,
+              "delta_candidate_minus_baseline": -0.001966835796678751
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 2.2939166905858016e-16,
+          "p95_abs_team_sum_error": 4.440892098500626e-16,
+          "max_abs_team_sum_error": 7.771561172376096e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      },
+      "2025": {
+        "season": 2025,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_volume_2025_remaining/rushing_yards_predictions.csv",
+        "arm": "ridge_blend_renorm",
+        "rows": 13689,
+        "baseline_mae": 0.02717715586092907,
+        "candidate_mae": 0.026376957748489978,
+        "delta_candidate_minus_baseline": -0.0008001981124390913,
+        "bootstrap": {
+          "point_estimate": -0.0008001981124390919,
+          "ci_low": -0.0011295405428937999,
+          "ci_high": -0.0004990766773087208,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "QB": {
+              "n": 1948,
+              "baseline_mae": 0.04305561056914834,
+              "candidate_mae": 0.04168372304500047,
+              "delta_candidate_minus_baseline": -0.0013718875241478731
+            },
+            "RB": {
+              "n": 3371,
+              "baseline_mae": 0.07636370689323707,
+              "candidate_mae": 0.0738591028708186,
+              "delta_candidate_minus_baseline": -0.0025046040224184773
+            },
+            "TE": {
+              "n": 2960,
+              "baseline_mae": 0.0010060092493999696,
+              "candidate_mae": 0.0011437163588026529,
+              "delta_candidate_minus_baseline": 0.00013770710940268324
+            },
+            "WR": {
+              "n": 5410,
+              "baseline_mae": 0.0051304831564197816,
+              "candidate_mae": 0.00508499924728893,
+              "delta_candidate_minus_baseline": -4.548390913085114e-05
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 11010,
+              "baseline_mae": 0.02653038439781024,
+              "candidate_mae": 0.02563703642446847,
+              "delta_candidate_minus_baseline": -0.000893347973341771
+            },
+            "1": {
+              "n": 2679,
+              "baseline_mae": 0.029835219992671642,
+              "candidate_mae": 0.029417843816977037,
+              "delta_candidate_minus_baseline": -0.00041737617569460525
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 4563,
+              "baseline_mae": 0.0020680709716879428,
+              "candidate_mae": 0.0020680709716879428,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 4563,
+              "baseline_mae": 0.0036124603223927562,
+              "candidate_mae": 0.0036124603223927562,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "high": {
+              "n": 4563,
+              "baseline_mae": 0.07585093628870651,
+              "candidate_mae": 0.07345034195138923,
+              "delta_candidate_minus_baseline": -0.0024005943373172772
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 2.277589881400137e-16,
+          "p95_abs_team_sum_error": 4.440892098500626e-16,
+          "max_abs_team_sum_error": 6.661338147750939e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      }
+    },
+    "rushing_attempts": {
+      "2024": {
+        "season": 2024,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_two_stage_rushing_2024/rushing_attempts_predictions.csv",
+        "arm": "xgb_two_stage_rushing",
+        "rows": 13466,
+        "baseline_mae": 0.02459707557508281,
+        "candidate_mae": 0.024066426874852574,
+        "delta_candidate_minus_baseline": -0.0005306487002302365,
+        "bootstrap": {
+          "point_estimate": -0.0005306487002302376,
+          "ci_low": -0.0007859862501593819,
+          "ci_high": -0.0002903020633094335,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "QB": {
+              "n": 1867,
+              "baseline_mae": 0.034789626245029806,
+              "candidate_mae": 0.03439884938549698,
+              "delta_candidate_minus_baseline": -0.00039077685953282926
+            },
+            "RB": {
+              "n": 3223,
+              "baseline_mae": 0.07504958993355619,
+              "candidate_mae": 0.07412013512005214,
+              "delta_candidate_minus_baseline": -0.000929454813504052
+            },
+            "TE": {
+              "n": 2936,
+              "baseline_mae": 0.0009792270890640936,
+              "candidate_mae": 0.0009503199413736106,
+              "delta_candidate_minus_baseline": -2.8907147690482998e-05
+            },
+            "WR": {
+              "n": 5440,
+              "baseline_mae": 0.003954439045082849,
+              "candidate_mae": 0.0033412716276178247,
+              "delta_candidate_minus_baseline": -0.0006131674174650239
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 10783,
+              "baseline_mae": 0.024170141127755947,
+              "candidate_mae": 0.023817071088813695,
+              "delta_candidate_minus_baseline": -0.00035307003894225267
+            },
+            "1": {
+              "n": 2683,
+              "baseline_mae": 0.02631292877878225,
+              "candidate_mae": 0.025068589916543683,
+              "delta_candidate_minus_baseline": -0.0012443388622385664
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 4489,
+              "baseline_mae": 0.003128844549927717,
+              "candidate_mae": 0.003128844549927717,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 4488,
+              "baseline_mae": 0.00335242400080751,
+              "candidate_mae": 0.00335242400080751,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "high": {
+              "n": 4489,
+              "baseline_mae": 0.06730522557224673,
+              "candidate_mae": 0.06571339768244935,
+              "delta_candidate_minus_baseline": -0.0015918278897973787
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 2.504124358851226e-16,
+          "p95_abs_team_sum_error": 4.440892098500626e-16,
+          "max_abs_team_sum_error": 7.771561172376096e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      },
+      "2025": {
+        "season": 2025,
+        "source": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_a_two_stage_rushing_2025/rushing_attempts_predictions.csv",
+        "arm": "xgb_two_stage_rushing",
+        "rows": 13689,
+        "baseline_mae": 0.02230429341183384,
+        "candidate_mae": 0.021840870125789117,
+        "delta_candidate_minus_baseline": -0.00046342328604472363,
+        "bootstrap": {
+          "point_estimate": -0.0004634232860447231,
+          "ci_low": -0.0006850547357061111,
+          "ci_high": -0.00026062704143277294,
+          "n_bootstrap": 2000,
+          "significant_improvement": true
+        },
+        "segments": {
+          "position": {
+            "QB": {
+              "n": 1948,
+              "baseline_mae": 0.030137780052516407,
+              "candidate_mae": 0.029887509690237176,
+              "delta_candidate_minus_baseline": -0.0002502703622792313
+            },
+            "RB": {
+              "n": 3371,
+              "baseline_mae": 0.06577259125012196,
+              "candidate_mae": 0.0651727476943244,
+              "delta_candidate_minus_baseline": -0.0005998435557975496
+            },
+            "TE": {
+              "n": 2960,
+              "baseline_mae": 0.001339873099708932,
+              "candidate_mae": 0.0010973948800353768,
+              "delta_candidate_minus_baseline": -0.00024247821967355514
+            },
+            "WR": {
+              "n": 5410,
+              "baseline_mae": 0.0038686963942683736,
+              "candidate_mae": 0.0032926397325088548,
+              "delta_candidate_minus_baseline": -0.0005760566617595188
+            }
+          },
+          "cold_start": {
+            "0": {
+              "n": 11010,
+              "baseline_mae": 0.021370208985329563,
+              "candidate_mae": 0.021015751904505966,
+              "delta_candidate_minus_baseline": -0.0003544570808235968
+            },
+            "1": {
+              "n": 2679,
+              "baseline_mae": 0.026143139823111217,
+              "candidate_mae": 0.02523189349881169,
+              "delta_candidate_minus_baseline": -0.0009112463242995257
+            }
+          },
+          "volume_tier": {
+            "low": {
+              "n": 4563,
+              "baseline_mae": 0.002195412406731346,
+              "candidate_mae": 0.002195412406731346,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "mid": {
+              "n": 4563,
+              "baseline_mae": 0.003158837788706392,
+              "candidate_mae": 0.003158837788706392,
+              "delta_candidate_minus_baseline": 0.0
+            },
+            "high": {
+              "n": 4563,
+              "baseline_mae": 0.061558630040063775,
+              "candidate_mae": 0.060168360181929614,
+              "delta_candidate_minus_baseline": -0.0013902698581341605
+            }
+          }
+        },
+        "constraints": {
+          "group_count": 544,
+          "sparse_group_count": 0,
+          "mean_abs_team_sum_error": 2.5571864887046344e-16,
+          "p95_abs_team_sum_error": 4.440892098500626e-16,
+          "max_abs_team_sum_error": 7.771561172376096e-16,
+          "sparse_mean_abs_team_sum_error": null,
+          "sparse_max_abs_team_sum_error": null
+        },
+        "accuracy_pass": true
+      }
+    }
+  },
+  "served_comparison": {
+    "status": "ok",
+    "comparisons": {
+      "targets/2024": {
+        "status": "ok",
+        "expected_arm": "xgb_volume_blend_renorm",
+        "served_arms": [
+          "xgb_volume_blend_renorm"
+        ],
+        "matched_rows": 11599,
+        "holdout_mae": 0.02976579025284285,
+        "served_mae": 0.029708414355800895,
+        "served_minus_holdout_mae": -5.7375897041956475e-05
+      },
+      "targets/2025": {
+        "status": "ok",
+        "expected_arm": "xgb_volume_blend_renorm",
+        "served_arms": [
+          "xgb_volume_blend_renorm"
+        ],
+        "matched_rows": 11741,
+        "holdout_mae": 0.029048652746280802,
+        "served_mae": 0.029051012229208615,
+        "served_minus_holdout_mae": 2.3594829278127116e-06
+      },
+      "receiving_yards/2024": {
+        "status": "ok",
+        "expected_arm": "xgb_volume_blend_renorm",
+        "served_arms": [
+          "xgb_volume_blend_renorm"
+        ],
+        "matched_rows": 11599,
+        "holdout_mae": 0.03629353280343925,
+        "served_mae": 0.036281591491925856,
+        "served_minus_holdout_mae": -1.1941311513392894e-05
+      },
+      "receiving_yards/2025": {
+        "status": "ok",
+        "expected_arm": "xgb_volume_blend_renorm",
+        "served_arms": [
+          "xgb_volume_blend_renorm"
+        ],
+        "matched_rows": 11741,
+        "holdout_mae": 0.03600173783385351,
+        "served_mae": 0.03600173783385351,
+        "served_minus_holdout_mae": 0.0
+      },
+      "rushing_yards/2024": {
+        "status": "ok",
+        "expected_arm": "ridge_volume_blend_renorm",
+        "served_arms": [
+          "ridge_volume_blend_renorm"
+        ],
+        "matched_rows": 13466,
+        "holdout_mae": 0.02878133541427427,
+        "served_mae": 0.028810796465036616,
+        "served_minus_holdout_mae": 2.9461050762347174e-05
+      },
+      "rushing_yards/2025": {
+        "status": "ok",
+        "expected_arm": "ridge_volume_blend_renorm",
+        "served_arms": [
+          "ridge_volume_blend_renorm"
+        ],
+        "matched_rows": 13689,
+        "holdout_mae": 0.026376957748489978,
+        "served_mae": 0.026376957748489978,
+        "served_minus_holdout_mae": 0.0
+      },
+      "rushing_attempts/2024": {
+        "status": "ok",
+        "expected_arm": "xgb_two_stage_rushing",
+        "served_arms": [
+          "xgb_two_stage_rushing"
+        ],
+        "matched_rows": 13466,
+        "holdout_mae": 0.024066426874852574,
+        "served_mae": 0.02408910066609903,
+        "served_minus_holdout_mae": 2.2673791246454605e-05
+      },
+      "rushing_attempts/2025": {
+        "status": "ok",
+        "expected_arm": "xgb_two_stage_rushing",
+        "served_arms": [
+          "xgb_two_stage_rushing"
+        ],
+        "matched_rows": 13689,
+        "holdout_mae": 0.021840870125789117,
+        "served_mae": 0.02189116695778147,
+        "served_minus_holdout_mae": 5.029683199235177e-05
+      }
+    }
+  },
+  "status": "accuracy_and_constraints_ready"
+}

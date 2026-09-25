@@ -1,0 +1,46 @@
+{
+  "arms": [
+    "dvoa_opponent_fpa"
+  ],
+  "seasons": [
+    2023,
+    2024,
+    2025
+  ],
+  "positions": [
+    "QB"
+  ],
+  "feature_groups": {
+    "dvoa_opponent_fpa": [
+      "opp_fpts_allowed",
+      "opp_fpts_allowed_dvoa_adjusted_lag1"
+    ],
+    "weather": [
+      "wind_speed_mph",
+      "precipitation_flag",
+      "temperature_bucket",
+      "is_dome"
+    ],
+    "redzone_goal_line": [
+      "redzone_target_share_pct_roll3_mean",
+      "goal_line_carry_share_pct_roll3_mean"
+    ],
+    "coordinator_scheme": [
+      "coaching_change",
+      "coaching_adaptation_score",
+      "coaching_stability",
+      "coaching_change_impact"
+    ],
+    "wopr": [
+      "wopr_roll3"
+    ],
+    "personnel": [
+      "team_pct_11_personnel_roll3_mean",
+      "team_pct_12_personnel_roll3_mean",
+      "team_pct_13_personnel_roll3_mean",
+      "team_pct_21_personnel_roll3_mean",
+      "team_pct_22_personnel_roll3_mean"
+    ]
+  },
+  "jobs": {}
+}

@@ -1,0 +1,457 @@
+{
+  "target": "passing_tds",
+  "feature_columns": [
+    "share_of_team_targets_s2d",
+    "share_of_team_targets_roll3",
+    "share_of_team_rushing_attempts_s2d",
+    "share_of_team_rushing_attempts_roll3",
+    "share_of_team_receiving_yards_s2d",
+    "share_of_team_receiving_yards_roll3",
+    "share_of_team_rushing_yards_s2d",
+    "share_of_team_rushing_yards_roll3",
+    "share_of_team_receptions_s2d",
+    "share_of_team_receptions_roll3",
+    "share_of_team_receiving_tds_s2d",
+    "share_of_team_receiving_tds_roll3",
+    "share_of_team_rushing_tds_s2d",
+    "share_of_team_rushing_tds_roll3",
+    "share_of_team_passing_yards_s2d",
+    "share_of_team_passing_yards_roll3",
+    "share_of_team_passing_tds_s2d",
+    "share_of_team_passing_tds_roll3",
+    "share_of_team_interceptions_s2d",
+    "share_of_team_interceptions_roll3",
+    "is_cold_start",
+    "rush_inside_10_s2d",
+    "rush_inside_10_roll3",
+    "share_of_team_rush_inside_10_s2d",
+    "share_of_team_rush_inside_10_roll3",
+    "rush_inside_5_s2d",
+    "rush_inside_5_roll3",
+    "share_of_team_rush_inside_5_s2d",
+    "share_of_team_rush_inside_5_roll3",
+    "targets_15_plus_s2d",
+    "targets_15_plus_roll3",
+    "share_of_team_targets_15_plus_s2d",
+    "share_of_team_targets_15_plus_roll3",
+    "air_yards_s2d",
+    "air_yards_roll3",
+    "share_of_team_air_yards_s2d",
+    "share_of_team_air_yards_roll3",
+    "pass_plays_s2d",
+    "pass_plays_roll3",
+    "share_of_team_pass_plays_s2d",
+    "share_of_team_pass_plays_roll3",
+    "rush_plays_s2d",
+    "rush_plays_roll3",
+    "share_of_team_rush_plays_s2d",
+    "share_of_team_rush_plays_roll3",
+    "recv_targets_s2d",
+    "recv_targets_roll3",
+    "share_of_team_recv_targets_s2d",
+    "share_of_team_recv_targets_roll3",
+    "neutral_targets_s2d",
+    "neutral_targets_roll3",
+    "share_of_team_neutral_targets_s2d",
+    "share_of_team_neutral_targets_roll3",
+    "neutral_rushes_s2d",
+    "neutral_rushes_roll3",
+    "share_of_team_neutral_rushes_s2d",
+    "share_of_team_neutral_rushes_roll3",
+    "third_down_targets_s2d",
+    "third_down_targets_roll3",
+    "share_of_team_third_down_targets_s2d",
+    "share_of_team_third_down_targets_roll3",
+    "short_yardage_rushes_s2d",
+    "short_yardage_rushes_roll3",
+    "share_of_team_short_yardage_rushes_s2d",
+    "share_of_team_short_yardage_rushes_roll3",
+    "redzone_targets_s2d",
+    "redzone_targets_roll3",
+    "share_of_team_redzone_targets_s2d",
+    "share_of_team_redzone_targets_roll3",
+    "goal_line_touches_s2d",
+    "goal_line_touches_roll3",
+    "share_of_team_goal_line_touches_s2d",
+    "share_of_team_goal_line_touches_roll3",
+    "two_minute_targets_s2d",
+    "two_minute_targets_roll3",
+    "share_of_team_two_minute_targets_s2d",
+    "share_of_team_two_minute_targets_roll3",
+    "high_leverage_touches_s2d",
+    "high_leverage_touches_roll3",
+    "share_of_team_high_leverage_touches_s2d",
+    "share_of_team_high_leverage_touches_roll3",
+    "snap_count_s2d",
+    "snap_count_roll3",
+    "share_of_team_snap_count_s2d",
+    "share_of_team_snap_count_roll3",
+    "snap_share_s2d",
+    "snap_share_roll3",
+    "share_of_team_snap_share_s2d",
+    "share_of_team_snap_share_roll3",
+    "team_rush_inside_10_s2d",
+    "team_rush_inside_10_roll3",
+    "team_rush_inside_5_s2d",
+    "team_rush_inside_5_roll3",
+    "team_targets_15_plus_s2d",
+    "team_targets_15_plus_roll3",
+    "team_air_yards_s2d",
+    "team_air_yards_roll3",
+    "team_pass_plays_s2d",
+    "team_pass_plays_roll3",
+    "team_rush_plays_s2d",
+    "team_rush_plays_roll3",
+    "team_recv_targets_s2d",
+    "team_recv_targets_roll3",
+    "team_neutral_targets_s2d",
+    "team_neutral_targets_roll3",
+    "team_neutral_rushes_s2d",
+    "team_neutral_rushes_roll3",
+    "team_third_down_targets_s2d",
+    "team_third_down_targets_roll3",
+    "team_short_yardage_rushes_s2d",
+    "team_short_yardage_rushes_roll3",
+    "team_redzone_targets_s2d",
+    "team_redzone_targets_roll3",
+    "team_goal_line_touches_s2d",
+    "team_goal_line_touches_roll3",
+    "team_two_minute_targets_s2d",
+    "team_two_minute_targets_roll3",
+    "team_high_leverage_touches_s2d",
+    "team_high_leverage_touches_roll3",
+    "team_snap_count_s2d",
+    "team_snap_count_roll3",
+    "team_snap_share_s2d",
+    "team_snap_share_roll3",
+    "team_targets_s2d",
+    "team_targets_roll3",
+    "team_rushing_attempts_s2d",
+    "team_rushing_attempts_roll3",
+    "team_receiving_yards_s2d",
+    "team_receiving_yards_roll3",
+    "team_rushing_yards_s2d",
+    "team_rushing_yards_roll3",
+    "team_receptions_s2d",
+    "team_receptions_roll3",
+    "team_receiving_tds_s2d",
+    "team_receiving_tds_roll3",
+    "team_rushing_tds_s2d",
+    "team_rushing_tds_roll3",
+    "team_passing_yards_s2d",
+    "team_passing_yards_roll3",
+    "team_passing_tds_s2d",
+    "team_passing_tds_roll3",
+    "team_interceptions_s2d",
+    "team_interceptions_roll3"
+  ],
+  "sparse_feature_families": "all",
+  "n_rows": 50643,
+  "metrics": {
+    "hierarchical_conditional_event_mass": {
+      "n": 5627,
+      "mae": 0.18969063200168423,
+      "mean_abs_team_sum_error": 0.610688574851738,
+      "mean_predicted_team_sum": 0.3893252576718524,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.542833037477235,
+      "segment_mae": {
+        "position": {
+          "QB": 0.18969063200168423
+        },
+        "role_tier": {
+          "QB1": 0.5067572217286147,
+          "QB2": 0.1146021039088706,
+          "QB3": 0.0257572674151949,
+          "QB4": 0.015698981608780766
+        },
+        "is_cold_start": {
+          "0": 0.19346722047388706,
+          "1": 0.17379049516547468
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.03516415758868582,
+        "ci_low": 0.027700863222930586,
+        "ci_high": 0.04237318114205267,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.03908295497441097,
+        "ci_low": 0.029687210205632527,
+        "ci_high": 0.04809935602936976,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "multinomial_count_event_mass": {
+      "n": 5627,
+      "mae": 0.16561272669788105,
+      "mean_abs_team_sum_error": 0.2332011198810036,
+      "mean_predicted_team_sum": 0.7667988801189963,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.34647456605466814,
+      "segment_mae": {
+        "position": {
+          "QB": 0.16561272669788105
+        },
+        "role_tier": {
+          "QB1": 0.3934573001434267,
+          "QB2": 0.1382218474066403,
+          "QB3": 0.03157337803525992,
+          "QB4": 0.01768092413665921
+        },
+        "is_cold_start": {
+          "0": 0.16376500079229026,
+          "1": 0.1733919949318824
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.011086252284882624,
+        "ci_low": 0.007298788342818278,
+        "ci_high": 0.015070278882825775,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.015005049670607775,
+        "ci_low": 0.010319926085042288,
+        "ci_high": 0.019585416590250617,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "poisson_count_renorm": {
+      "n": 5627,
+      "mae": 0.1685458428352942,
+      "mean_abs_team_sum_error": 8.027347849618167e-18,
+      "mean_predicted_team_sum": 1.0,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.21907679738562094,
+      "segment_mae": {
+        "position": {
+          "QB": 0.1685458428352942
+        },
+        "role_tier": {
+          "QB1": 0.34790780491515694,
+          "QB2": 0.17656332275790937,
+          "QB3": 0.046827425468495686,
+          "QB4": 0.02255155215701508
+        },
+        "is_cold_start": {
+          "0": 0.1596496706402585,
+          "1": 0.20600037521568995
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.0140193684222958,
+        "ci_low": 0.009464812640405657,
+        "ci_high": 0.01876879758698367,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.017938165808020955,
+        "ci_low": 0.014183373010088292,
+        "ci_high": 0.02173313994702593,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "residual_opportunity_event_mass": {
+      "n": 5627,
+      "mae": 0.25555205790156976,
+      "mean_abs_team_sum_error": 0.45214456010263004,
+      "mean_predicted_team_sum": 1.225979497073085,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.6197249045060524,
+      "segment_mae": {
+        "position": {
+          "QB": 0.25555205790156976
+        },
+        "role_tier": {
+          "QB1": 0.41284653753686384,
+          "QB2": 0.3436362997638049,
+          "QB3": 0.10594916903351059,
+          "QB4": 0.043270334469099295
+        },
+        "is_cold_start": {
+          "0": 0.23053127257623734,
+          "1": 0.36089419759998304
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.10102558348857131,
+        "ci_low": 0.09347637513501696,
+        "ci_high": 0.1082325376074348,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.10494438087429647,
+        "ci_low": 0.0978189519901221,
+        "ci_high": 0.11216640573403183,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "ridge_blend_renorm": {
+      "n": 5627,
+      "mae": 0.14764576718780878,
+      "mean_abs_team_sum_error": 0.017769607843137258,
+      "mean_predicted_team_sum": 0.9822303921568627,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.2258169934640523,
+      "segment_mae": {
+        "position": {
+          "QB": 0.14764576718780878
+        },
+        "role_tier": {
+          "QB1": 0.3281200672992707,
+          "QB2": 0.1358846817567415,
+          "QB3": 0.036076285940561746,
+          "QB4": 0.020453746326196967
+        },
+        "is_cold_start": {
+          "0": 0.13813235904722762,
+          "1": 0.18769897720190368
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -0.0068807072251896376,
+        "ci_low": -0.011127793393499955,
+        "ci_high": -0.0026345961323315107,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": -0.002961909839464486,
+        "ci_low": -0.004043006930869023,
+        "ci_high": -0.001954860494046561,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      }
+    },
+    "rolling3": {
+      "n": 5627,
+      "mae": 0.1545264744129984,
+      "mean_abs_team_sum_error": 0.23449772065689026,
+      "mean_predicted_team_sum": 0.781816917943648,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.333445827268816,
+      "segment_mae": {
+        "position": {
+          "QB": 0.1545264744129984
+        },
+        "role_tier": {
+          "QB1": 0.3629731682297102,
+          "QB2": 0.12841418736612292,
+          "QB3": 0.03248176697362134,
+          "QB4": 0.020227950993481507
+        },
+        "is_cold_start": {
+          "0": 0.14740243872638856,
+          "1": 0.18451998391949373
+        }
+      }
+    },
+    "rolling3_renorm": {
+      "n": 5627,
+      "mae": 0.15060767702727326,
+      "mean_abs_team_sum_error": 2.44902137784961e-18,
+      "mean_predicted_team_sum": 1.0,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.21907679738562094,
+      "segment_mae": {
+        "position": {
+          "QB": 0.15060767702727326
+        },
+        "role_tier": {
+          "QB1": 0.32878387448881313,
+          "QB2": 0.13951009025347352,
+          "QB3": 0.041291073218546054,
+          "QB4": 0.02212263818200471
+        },
+        "is_cold_start": {
+          "0": 0.14150454583705244,
+          "1": 0.18893354510313823
+        }
+      }
+    },
+    "xgb_blend_renorm": {
+      "n": 5627,
+      "mae": 0.14764576718780878,
+      "mean_abs_team_sum_error": 0.017769607843137258,
+      "mean_predicted_team_sum": 0.9822303921568627,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.2258169934640523,
+      "segment_mae": {
+        "position": {
+          "QB": 0.14764576718780878
+        },
+        "role_tier": {
+          "QB1": 0.3281200672992707,
+          "QB2": 0.1358846817567415,
+          "QB3": 0.036076285940561746,
+          "QB4": 0.020453746326196967
+        },
+        "is_cold_start": {
+          "0": 0.13813235904722762,
+          "1": 0.18769897720190368
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -0.0068807072251896376,
+        "ci_low": -0.011127793393499955,
+        "ci_high": -0.0026345961323315107,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": -0.002961909839464486,
+        "ci_low": -0.004043006930869023,
+        "ci_high": -0.001954860494046561,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      }
+    },
+    "xgb_two_stage_renorm": {
+      "n": 5627,
+      "mae": 0.17741732697068782,
+      "mean_abs_team_sum_error": 2.4218100292068366e-17,
+      "mean_predicted_team_sum": 1.0,
+      "mean_actual_team_sum": 0.7809232026143791,
+      "team_sum_mae": 0.21907679738562094,
+      "segment_mae": {
+        "position": {
+          "QB": 0.17741732697068782
+        },
+        "role_tier": {
+          "QB1": 0.3498562967970393,
+          "QB2": 0.15681214869306068,
+          "QB3": 0.07459651044918827,
+          "QB4": 0.06815170622059731
+        },
+        "is_cold_start": {
+          "0": 0.17236248609763627,
+          "1": 0.19869914312787798
+        }
+      },
+      "vs_rolling3_bootstrap": {
+        "point_estimate": 0.022890852557689412,
+        "ci_low": 0.019078427921122704,
+        "ci_high": 0.02707044017522023,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.02680964994341456,
+        "ci_low": 0.023642583148504273,
+        "ci_high": 0.03016259154513979,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "folds": [
+    {
+      "fold": 0,
+      "selected_ppr_mae": 2.490059683676514,
+      "rolling3_ppr_mae": 2.490059683676514,
+      "delta_selected_minus_rolling3": 0.0,
+      "n": 13404
+    },
+    {
+      "fold": 1,
+      "selected_ppr_mae": 2.314301945640873,
+      "rolling3_ppr_mae": 2.5034627951878807,
+      "delta_selected_minus_rolling3": -0.18916084954700763,
+      "n": 13466
+    },
+    {
+      "fold": 2,
+      "selected_ppr_mae": 2.2221236028928337,
+      "rolling3_ppr_mae": 2.468013733654759,
+      "delta_selected_minus_rolling3": -0.24589013076192545,
+      "n": 13689
+    }
+  ],
+  "pooled_selected_mae": 2.3412756724771318,
+  "pooled_rolling3_mae": 2.4870689612663033,
+  "pooled_delta": -0.14579328878917153
+}

@@ -1,0 +1,99 @@
+{
+  "folds": [
+    {
+      "fold": 0,
+      "allocation_arms": {
+        "rushing_yards": "xgb_blend_renorm",
+        "receiving_yards": "xgb_blend_renorm",
+        "receptions": "xgb_blend_renorm",
+        "receiving_tds": "hierarchical_conditional_renorm",
+        "rushing_tds": "hierarchical_conditional_renorm",
+        "passing_yards": "xgb_blend_renorm",
+        "passing_tds": "hierarchical_conditional_renorm",
+        "interceptions": "hierarchical_conditional_renorm"
+      },
+      "team_total_arms": {
+        "rushing_yards": "blend",
+        "receiving_yards": "blend",
+        "receptions": "blend",
+        "receiving_tds": "blend",
+        "rushing_tds": "blend",
+        "passing_yards": "blend",
+        "passing_tds": "blend",
+        "interceptions": "blend"
+      },
+      "ppr_mae": 2.3495762458967473,
+      "n": 13404
+    },
+    {
+      "fold": 1,
+      "allocation_arms": {
+        "rushing_yards": "ridge_blend_renorm",
+        "receiving_yards": "rolling3_renorm",
+        "receptions": "xgb_blend_renorm",
+        "receiving_tds": "multinomial_count_renorm",
+        "rushing_tds": "multinomial_count_renorm",
+        "passing_yards": "ridge_blend_renorm",
+        "passing_tds": "rolling3",
+        "interceptions": "poisson_count_renorm"
+      },
+      "team_total_arms": {
+        "rushing_yards": "ridge",
+        "receiving_yards": "xgb",
+        "receptions": "xgb",
+        "receiving_tds": "rolling3",
+        "rushing_tds": "xgb",
+        "passing_yards": "ridge",
+        "passing_tds": "blend",
+        "interceptions": "xgb"
+      },
+      "ppr_mae": 2.3134197237487,
+      "n": 13466
+    },
+    {
+      "fold": 2,
+      "allocation_arms": {
+        "rushing_yards": "ridge_blend_renorm",
+        "receiving_yards": "xgb_blend_renorm",
+        "receptions": "rolling3_renorm",
+        "receiving_tds": "multinomial_count_renorm",
+        "rushing_tds": "multinomial_count_renorm",
+        "passing_yards": "ridge_blend_renorm",
+        "passing_tds": "rolling3",
+        "interceptions": "poisson_count_renorm"
+      },
+      "team_total_arms": {
+        "rushing_yards": "blend",
+        "receiving_yards": "blend",
+        "receptions": "xgb",
+        "receiving_tds": "rolling3",
+        "rushing_tds": "xgb",
+        "passing_yards": "ridge",
+        "passing_tds": "blend",
+        "interceptions": "blend"
+      },
+      "ppr_mae": 2.218862590401052,
+      "n": 13689
+    }
+  ],
+  "final_allocation_arms": {
+    "rushing_yards": "ridge_blend_renorm",
+    "receiving_yards": "xgb_blend_renorm",
+    "receptions": "rolling3_renorm",
+    "receiving_tds": "multinomial_count_renorm",
+    "rushing_tds": "multinomial_count_renorm",
+    "passing_yards": "ridge_blend_renorm",
+    "passing_tds": "rolling3",
+    "interceptions": "poisson_count_renorm"
+  },
+  "final_team_total_arms": {
+    "rushing_yards": "blend",
+    "receiving_yards": "blend",
+    "receptions": "xgb",
+    "receiving_tds": "rolling3",
+    "rushing_tds": "xgb",
+    "passing_yards": "ridge",
+    "passing_tds": "blend",
+    "interceptions": "blend"
+  }
+}

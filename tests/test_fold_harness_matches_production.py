@@ -42,7 +42,8 @@ def captured(monkeypatch):
     # caller that imports it directly, or after a module reimport rebinds
     # data_loading's copy. Patch both so no path can reach the real one.
     seasons = DatabaseManager().get_seasons_with_data()
-    fake_refresh = lambda: {"latest_season": max(seasons), "available_seasons": seasons}
+    fake_refresh = lambda force_check=False, allow_gate_failure=False: {
+        "latest_season": max(seasons), "available_seasons": seasons}
     monkeypatch.setattr(loading, "auto_refresh_data", fake_refresh)
     monkeypatch.setattr(data_manager, "auto_refresh_data", fake_refresh)
 

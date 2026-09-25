@@ -1,0 +1,230 @@
+{
+  "receiving_tds": {
+    "player_event_role": {
+      "families": [
+        "player_event_role"
+      ],
+      "arm": "hierarchical_conditional_player_event_role_renorm",
+      "metrics": {
+        "n": 11741,
+        "mae": 0.06232371807525587,
+        "mean_abs_team_sum_error": 0.05882352941176473,
+        "mean_predicted_team_sum": 0.9411764705882353,
+        "mean_actual_team_sum": 0.7783394607843137,
+        "team_sum_mae": 0.25474877450980393,
+        "segment_mae": {
+          "position": {
+            "RB": 0.020593237212671475,
+            "TE": 0.06714085685253768,
+            "WR": 0.08569057948135898
+          },
+          "role_tier": {
+            "RB1": 0.080548572009236,
+            "RB2": 0.03019112800820026,
+            "RB3": 0.010903005275852248,
+            "RB4": 0.0018666883061337505,
+            "TE1": 0.20849461945209058,
+            "TE2": 0.09274646043771965,
+            "TE3": 0.05255640148679161,
+            "TE4": 0.004722218685722969,
+            "WR1": 0.2789968845996247,
+            "WR2": 0.22675222254958366,
+            "WR3": 0.1740440640103764,
+            "WR4": 0.024822273658903667
+          },
+          "is_cold_start": {
+            "0": 0.06614807815051983,
+            "1": 0.04672687934270225
+          }
+        },
+        "vs_rolling3_bootstrap": {
+          "point_estimate": 0.004881444115449084,
+          "ci_low": 0.0029580481680892075,
+          "ci_high": 0.006779768878300679,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        },
+        "vs_rolling3_renorm_bootstrap": {
+          "point_estimate": -0.0019693603749749594,
+          "ci_low": -0.004258351533059807,
+          "ci_high": 0.0002946351340633958,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        }
+      }
+    },
+    "player_plus_team_event_context": {
+      "families": [
+        "player_event_role",
+        "team_event_context"
+      ],
+      "arm": "hierarchical_conditional_player_event_role+team_event_context_renorm",
+      "metrics": {
+        "n": 11741,
+        "mae": 0.06275876242854622,
+        "mean_abs_team_sum_error": 0.05882352941176472,
+        "mean_predicted_team_sum": 0.9411764705882353,
+        "mean_actual_team_sum": 0.7783394607843137,
+        "team_sum_mae": 0.25474877450980393,
+        "segment_mae": {
+          "position": {
+            "RB": 0.0208444613889826,
+            "TE": 0.0683514498787629,
+            "WR": 0.08581583339929065
+          },
+          "role_tier": {
+            "RB1": 0.0814527833923611,
+            "RB2": 0.030626749810036526,
+            "RB3": 0.010988266903193092,
+            "RB4": 0.0019078758394588794,
+            "TE1": 0.21292689086579775,
+            "TE2": 0.09466290411313782,
+            "TE3": 0.052822993897163203,
+            "TE4": 0.00471064344317807,
+            "WR1": 0.27731769786427685,
+            "WR2": 0.22425852516537864,
+            "WR3": 0.17312167022467803,
+            "WR4": 0.02573531094753971
+          },
+          "is_cold_start": {
+            "0": 0.06640403612386304,
+            "1": 0.04789228938652955
+          }
+        },
+        "vs_rolling3_bootstrap": {
+          "point_estimate": 0.005316488468739416,
+          "ci_low": 0.0034420573991300056,
+          "ci_high": 0.007239994503716267,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        },
+        "vs_rolling3_renorm_bootstrap": {
+          "point_estimate": -0.0015343160216846282,
+          "ci_low": -0.0036874515697432253,
+          "ci_high": 0.0006716165996404532,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        }
+      }
+    }
+  },
+  "rushing_tds": {
+    "player_event_role": {
+      "families": [
+        "player_event_role"
+      ],
+      "arm": "hierarchical_conditional_player_event_role_renorm",
+      "metrics": {
+        "n": 13689,
+        "mae": 0.045679168896631095,
+        "mean_abs_team_sum_error": 0.06250000000000003,
+        "mean_predicted_team_sum": 0.9375,
+        "mean_actual_team_sum": 0.5974264705882353,
+        "team_sum_mae": 0.4172794117647059,
+        "segment_mae": {
+          "position": {
+            "QB": 0.08269531581767167,
+            "RB": 0.11907366166543178,
+            "TE": 0.010326689953367003,
+            "WR": 0.005960693544735997
+          },
+          "role_tier": {
+            "QB1": 0.24924709024278038,
+            "QB2": 0.03405400534927962,
+            "QB3": 0.006410847252294801,
+            "QB4": 0.0110062893081761,
+            "RB1": 0.3813960964797339,
+            "RB2": 0.25009724089841295,
+            "RB3": 0.07433718864724294,
+            "RB4": 0.01002041823827402,
+            "TE1": 0.03661907582844016,
+            "TE2": 0.010040172453882302,
+            "TE3": 0.004663008915043294,
+            "TE4": 0.001993745742921203,
+            "WR1": 0.020713210336058913,
+            "WR2": 0.01942490570912789,
+            "WR3": 0.009352668681626031,
+            "WR4": 0.0014093078839691805
+          },
+          "is_cold_start": {
+            "0": 0.04840714661210192,
+            "1": 0.03446788310068713
+          }
+        },
+        "vs_rolling3_bootstrap": {
+          "point_estimate": 0.010102162264236495,
+          "ci_low": 0.008335963183588252,
+          "ci_high": 0.011953954093638494,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        },
+        "vs_rolling3_renorm_bootstrap": {
+          "point_estimate": -4.778913947864414e-05,
+          "ci_low": -0.0022419924396389814,
+          "ci_high": 0.0021679461170832194,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        }
+      }
+    },
+    "player_plus_team_event_context": {
+      "families": [
+        "player_event_role",
+        "team_event_context"
+      ],
+      "arm": "hierarchical_conditional_player_event_role+team_event_context_renorm",
+      "metrics": {
+        "n": 13689,
+        "mae": 0.04624835132481232,
+        "mean_abs_team_sum_error": 0.06250000000000001,
+        "mean_predicted_team_sum": 0.9375,
+        "mean_actual_team_sum": 0.5974264705882353,
+        "team_sum_mae": 0.4172794117647059,
+        "segment_mae": {
+          "position": {
+            "QB": 0.08596270283247281,
+            "RB": 0.12018134006371026,
+            "TE": 0.010043691744453822,
+            "WR": 0.005689040896367513
+          },
+          "role_tier": {
+            "QB1": 0.26146706369910644,
+            "QB2": 0.03358788586382076,
+            "QB3": 0.0063569235339938045,
+            "QB4": 0.0110062893081761,
+            "RB1": 0.37684815495870594,
+            "RB2": 0.26165195481524023,
+            "RB3": 0.07443852110377494,
+            "RB4": 0.00994403804329327,
+            "TE1": 0.03507713994376507,
+            "TE2": 0.010136429583515327,
+            "TE3": 0.004318206560649038,
+            "TE4": 0.0020964166955946533,
+            "WR1": 0.019257269825987244,
+            "WR2": 0.01885516924829139,
+            "WR3": 0.009150619435762312,
+            "WR4": 0.0013410819004462604
+          },
+          "is_cold_start": {
+            "0": 0.048863798496074695,
+            "1": 0.035499537082334304
+          }
+        },
+        "vs_rolling3_bootstrap": {
+          "point_estimate": 0.010671344692417723,
+          "ci_low": 0.008838848319018924,
+          "ci_high": 0.012606817015543262,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        },
+        "vs_rolling3_renorm_bootstrap": {
+          "point_estimate": 0.0005213932887025826,
+          "ci_low": -0.0018143182228087713,
+          "ci_high": 0.00279860025688659,
+          "n_bootstrap": 2000,
+          "significant_improvement": false
+        }
+      }
+    }
+  }
+}

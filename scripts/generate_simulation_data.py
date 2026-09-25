@@ -58,6 +58,8 @@ def generate_week(season: int, week: int, draws: int, seed: int,
         return None
     games = _read(game_path)
     players = _read(player_path)
+    games["season"], games["week"] = season, week
+    players["season"], players["week"] = season, week
     if production:
         require_production_ready(
             players, role_correlation_artifact=role_correlation_artifact,
@@ -65,7 +67,6 @@ def generate_week(season: int, week: int, draws: int, seed: int,
         raise RuntimeError(
             "production simulation is disabled: artifact loading and calibration "
             "application must be implemented and evaluated before use")
-    games["season"], games["week"] = season, week
     inputs = simulation_inputs_from_predictions(games, players)
     if not inputs:
         print(f"  wk{week}: no matched player/game rows, skipped")

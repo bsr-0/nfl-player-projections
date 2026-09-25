@@ -160,3 +160,7 @@ data/espn_*.json
 # ~0.5 GB each. The backtest.json / rows.csv beside them ARE tracked.
 /data/models_v5_production_*/
 /data/experiments/pace_feature_ab/*/models/
+
+# Model rollback snapshots: ~500MB each, weights plus the bookkeeping that
+# describes them. Local safety net for a destructive retrain, never shared.
+data/models/rollback/

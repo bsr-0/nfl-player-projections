@@ -1,0 +1,340 @@
+[
+  {
+    "target": "rushing_attempts",
+    "arm": "ridge",
+    "n": 13689,
+    "mae": 0.025684860196178248,
+    "mae_established": 0.024917060225981613,
+    "mae_cold_start": 0.02884032032005467,
+    "mean_abs_team_sum_error": 0.03992671182729445,
+    "p95_abs_team_sum_error": 0.21575253324833393,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.02884032032005467,
+    "by_position": {
+      "QB": 0.03286296615855429,
+      "RB": 0.06881066909581643,
+      "TE": 0.005348102285005627,
+      "WR": 0.007355239346211909
+    },
+    "by_volume_tier": {
+      "low": 0.00549347083863192,
+      "mid": 0.006899716036042305,
+      "high": 0.06466139371386052
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": 0.0033805667843444026,
+      "ci_low": 0.0031112555261105365,
+      "ci_high": 0.003643341867980678,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "ridge_blend",
+    "n": 13689,
+    "mae": 0.022101347473061632,
+    "mae_established": 0.02113089155031854,
+    "mae_cold_start": 0.02608967136608197,
+    "mean_abs_team_sum_error": 0.07453805887808873,
+    "p95_abs_team_sum_error": 0.20621981391813649,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.02608967136608197,
+    "by_position": {
+      "QB": 0.029838216231151904,
+      "RB": 0.06510431538980385,
+      "TE": 0.0013294700624629885,
+      "WR": 0.0038851426574006576
+    },
+    "by_volume_tier": {
+      "low": 0.0021954124067313473,
+      "mid": 0.0031588377887063926,
+      "high": 0.06094979222374716
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": -0.00020294593877221229,
+      "ci_low": -0.00036808838383367765,
+      "ci_high": -4.050587327483423e-05,
+      "n_bootstrap": 2000,
+      "significant_improvement": true
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "ridge_blend_renorm",
+    "n": 13689,
+    "mae": 0.022189970607972818,
+    "mae_established": 0.02132617242286393,
+    "mae_cold_start": 0.025739958669954467,
+    "mean_abs_team_sum_error": 2.0612596596900885e-17,
+    "p95_abs_team_sum_error": 1.1102230246251565e-16,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.025739958669954467,
+    "by_position": {
+      "QB": 0.030791372465623947,
+      "RB": 0.06473581380680807,
+      "TE": 0.0013527540752409784,
+      "WR": 0.0039830561338338585
+    },
+    "by_volume_tier": {
+      "low": 0.0021954124067313473,
+      "mid": 0.0031588377887063926,
+      "high": 0.061215661628480716
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": -0.00011432280386102712,
+      "ci_low": -0.00029641920527130253,
+      "ci_high": 6.896808219542617e-05,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    },
+    "mean_abs_renorm_distortion": 0.002962137777023907,
+    "p95_abs_renorm_distortion": 0.019778070268192446
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "ridge_bounded",
+    "n": 13689,
+    "mae": 0.030585027928060032,
+    "mae_established": 0.030867034629449883,
+    "mae_cold_start": 0.029426053018652695,
+    "mean_abs_team_sum_error": 0.3800469198753721,
+    "p95_abs_team_sum_error": 0.9710401172700873,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.029426053018652695,
+    "by_position": {
+      "QB": 0.036404279671595235,
+      "RB": 0.09791279652581733,
+      "TE": 0.0009886710334977723,
+      "WR": 0.002730574336277751
+    },
+    "by_volume_tier": {
+      "low": 0.0023734737047481913,
+      "mid": 0.002433116714186121,
+      "high": 0.08694849336524578
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": 0.008280734516226186,
+      "ci_low": 0.007231527934143939,
+      "ci_high": 0.009333343731550625,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "ridge_residual",
+    "n": 13689,
+    "mae": 0.025643710510195844,
+    "mae_established": 0.024867684145024025,
+    "mae_cold_start": 0.02883297899863992,
+    "mean_abs_team_sum_error": 0.040331768939083766,
+    "p95_abs_team_sum_error": 0.21601926413413244,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.02883297899863992,
+    "by_position": {
+      "QB": 0.03286027947433752,
+      "RB": 0.06880465552874447,
+      "TE": 0.00532443349277541,
+      "WR": 0.007268782224038555
+    },
+    "by_volume_tier": {
+      "low": 0.005376530238225428,
+      "mid": 0.00689919501176777,
+      "high": 0.06465540628059432
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": 0.003339417098361997,
+      "ci_low": 0.003070780975206743,
+      "ci_high": 0.0036025103382661128,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "rolling3",
+    "n": 13689,
+    "mae": 0.022304293411833844,
+    "mae_established": 0.02137020898532957,
+    "mae_cold_start": 0.026143139823111228,
+    "mean_abs_team_sum_error": 0.0314185997856084,
+    "p95_abs_team_sum_error": 0.23091108115863979,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.026143139823111228,
+    "by_position": {
+      "QB": 0.030137780052516418,
+      "RB": 0.06577259125012197,
+      "TE": 0.0013398730997089337,
+      "WR": 0.003868696394268378
+    },
+    "by_volume_tier": {
+      "low": 0.0021954124067313473,
+      "mid": 0.0031588377887063926,
+      "high": 0.0615586300400638
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "xgb",
+    "n": 13689,
+    "mae": 0.02495536588632573,
+    "mae_established": 0.023754423611148615,
+    "mae_cold_start": 0.029890929324063713,
+    "mean_abs_team_sum_error": 0.05745658335412346,
+    "p95_abs_team_sum_error": 0.22998124205041692,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.029890929324063713,
+    "by_position": {
+      "QB": 0.03230706906913227,
+      "RB": 0.07027400413412972,
+      "TE": 0.003309894867903474,
+      "WR": 0.005912916141607703
+    },
+    "by_volume_tier": {
+      "low": 0.0026857494179145687,
+      "mid": 0.004195137428986496,
+      "high": 0.06798521081207613
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": 0.002651072474491883,
+      "ci_low": 0.0023585221775062094,
+      "ci_high": 0.0029569076384549768,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "xgb_blend",
+    "n": 13689,
+    "mae": 0.02219806958350151,
+    "mae_established": 0.021195247256002307,
+    "mae_cold_start": 0.026319411063817383,
+    "mean_abs_team_sum_error": 0.0538921440626699,
+    "p95_abs_team_sum_error": 0.21788073779240139,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.026319411063817383,
+    "by_position": {
+      "QB": 0.029854948569111743,
+      "RB": 0.06558675995397144,
+      "TE": 0.00129554930575625,
+      "WR": 0.0038418005482525473
+    },
+    "by_volume_tier": {
+      "low": 0.0021954124067313473,
+      "mid": 0.0031588377887063926,
+      "high": 0.061239958555066795
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": -0.00010622382833233412,
+      "ci_low": -0.00023257908864583038,
+      "ci_high": 2.2385008218021326e-05,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "xgb_blend_renorm",
+    "n": 13689,
+    "mae": 0.02221485334868728,
+    "mae_established": 0.021310594985325414,
+    "mae_cold_start": 0.025931122322414093,
+    "mean_abs_team_sum_error": 2.5510639352600103e-17,
+    "p95_abs_team_sum_error": 1.1102230246251565e-16,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.025931122322414093,
+    "by_position": {
+      "QB": 0.030563328680621345,
+      "RB": 0.0651516960148473,
+      "TE": 0.0013083678555557245,
+      "WR": 0.00389327672862007
+    },
+    "by_volume_tier": {
+      "low": 0.0021954124067313473,
+      "mid": 0.0031588377887063926,
+      "high": 0.06129030985062411
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": -8.94400631465647e-05,
+      "ci_low": -0.0002708299112662659,
+      "ci_high": 9.030580476833083e-05,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    },
+    "mean_abs_renorm_distortion": 0.00214167041932153,
+    "p95_abs_renorm_distortion": 0.011280837548858766
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "xgb_bounded",
+    "n": 13689,
+    "mae": 0.027743807890019505,
+    "mae_established": 0.027206582368811592,
+    "mae_cold_start": 0.029951666415028513,
+    "mean_abs_team_sum_error": 0.6182971911626256,
+    "p95_abs_team_sum_error": 0.8553823919462441,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.029951666415028513,
+    "by_position": {
+      "QB": 0.03262119285885376,
+      "RB": 0.08857588025604289,
+      "TE": 0.000980840552955698,
+      "WR": 0.002725752705648876
+    },
+    "by_volume_tier": {
+      "low": 0.0014218620173791407,
+      "mid": 0.0017156371084415165,
+      "high": 0.08009392454423786
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": 0.00543951447818566,
+      "ci_low": 0.004452876674505917,
+      "ci_high": 0.006466153713760164,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    }
+  },
+  {
+    "target": "rushing_attempts",
+    "arm": "xgb_residual",
+    "n": 13689,
+    "mae": 0.024826563773022874,
+    "mae_established": 0.023620114910377764,
+    "mae_cold_start": 0.02978475786698429,
+    "mean_abs_team_sum_error": 0.05770018973008937,
+    "p95_abs_team_sum_error": 0.21939874851662153,
+    "actual_team_sum_error": 6.530723674265627e-18,
+    "sparse_group_mean_abs_sum_error": null,
+    "cold_start_mae": 0.02978475786698429,
+    "by_position": {
+      "QB": 0.03203261543785481,
+      "RB": 0.0697973400727766,
+      "TE": 0.00338048855978591,
+      "WR": 0.005944217577388675
+    },
+    "by_volume_tier": {
+      "low": 0.0027735675897454853,
+      "mid": 0.004337634599476845,
+      "high": 0.06736848912984628
+    },
+    "vs_rolling3_bootstrap": {
+      "point_estimate": 0.0025222703611890267,
+      "ci_low": 0.002250033728210071,
+      "ci_high": 0.0028006230195342465,
+      "n_bootstrap": 2000,
+      "significant_improvement": false
+    }
+  }
+]

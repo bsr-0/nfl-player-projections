@@ -1,0 +1,49 @@
+{
+  "schema_version": "plan-a-reconstruction-served-report-v1",
+  "seasons": [
+    2023,
+    2024,
+    2025
+  ],
+  "report": {
+    "2023": {
+      "n_rows": 12465,
+      "candidate_mae": 1.0892868030485359,
+      "rolling3_mae": 1.1107452868030485,
+      "candidate_minus_rolling3": -0.021458483754512626,
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -0.021458483754512626,
+        "ci_low": -0.029491075010028074,
+        "ci_high": -0.013593261131167263,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      }
+    },
+    "2024": {
+      "n_rows": 12483,
+      "candidate_mae": 1.0814411599775695,
+      "rolling3_mae": 1.097120083313306,
+      "candidate_minus_rolling3": -0.015678923335736603,
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -0.015678923335736603,
+        "ci_low": -0.025183809981574944,
+        "ci_high": -0.0063290074501321835,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      }
+    },
+    "2025": {
+      "n_rows": 12740,
+      "candidate_mae": 1.0426334379905808,
+      "rolling3_mae": 1.0602668759811615,
+      "candidate_minus_rolling3": -0.01763343799058085,
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -0.01763343799058085,
+        "ci_low": -0.02606242150706436,
+        "ci_high": -0.00911613029827316,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      }
+    }
+  }
+}

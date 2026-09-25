@@ -1,0 +1,97 @@
+{
+  "target": "receptions",
+  "feature_columns": [
+    "share_of_team_targets_s2d",
+    "share_of_team_targets_roll3",
+    "share_of_team_rushing_attempts_s2d",
+    "share_of_team_rushing_attempts_roll3",
+    "share_of_team_receiving_yards_s2d",
+    "share_of_team_receiving_yards_roll3",
+    "share_of_team_rushing_yards_s2d",
+    "share_of_team_rushing_yards_roll3",
+    "share_of_team_receptions_s2d",
+    "share_of_team_receptions_roll3",
+    "share_of_team_receiving_tds_s2d",
+    "share_of_team_receiving_tds_roll3",
+    "share_of_team_rushing_tds_s2d",
+    "share_of_team_rushing_tds_roll3",
+    "share_of_team_passing_yards_s2d",
+    "share_of_team_passing_yards_roll3",
+    "share_of_team_passing_tds_s2d",
+    "share_of_team_passing_tds_roll3",
+    "share_of_team_interceptions_s2d",
+    "share_of_team_interceptions_roll3",
+    "is_cold_start",
+    "team_targets_s2d",
+    "team_targets_roll3",
+    "team_rushing_attempts_s2d",
+    "team_rushing_attempts_roll3",
+    "team_receiving_yards_s2d",
+    "team_receiving_yards_roll3",
+    "team_rushing_yards_s2d",
+    "team_rushing_yards_roll3",
+    "team_receptions_s2d",
+    "team_receptions_roll3",
+    "team_receiving_tds_s2d",
+    "team_receiving_tds_roll3",
+    "team_rushing_tds_s2d",
+    "team_rushing_tds_roll3",
+    "team_passing_yards_s2d",
+    "team_passing_yards_roll3",
+    "team_passing_tds_s2d",
+    "team_passing_tds_roll3",
+    "team_interceptions_s2d",
+    "team_interceptions_roll3"
+  ],
+  "n_rows": 139728,
+  "metrics": {
+    "ridge_blend_renorm": {
+      "n": 34932,
+      "mae": 0.03327815332588761,
+      "mean_abs_team_sum_error": 1.0136227369433108e-17,
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -9.492640160674353e-05,
+        "ci_low": -0.00015477175686552517,
+        "ci_high": -3.334523906265898e-05,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    },
+    "rolling3": {
+      "n": 34932,
+      "mae": 0.033373079727494356,
+      "mean_abs_team_sum_error": 0.029589281061586797
+    },
+    "rolling3_renorm": {
+      "n": 34932,
+      "mae": 0.03327815332588761,
+      "mean_abs_team_sum_error": 1.0136227369433108e-17
+    },
+    "xgb_blend_renorm": {
+      "n": 34932,
+      "mae": 0.03327815332588761,
+      "mean_abs_team_sum_error": 1.0136227369433108e-17,
+      "vs_rolling3_bootstrap": {
+        "point_estimate": -9.492640160674353e-05,
+        "ci_low": -0.00015477175686552517,
+        "ci_high": -3.334523906265898e-05,
+        "n_bootstrap": 2000,
+        "significant_improvement": true
+      },
+      "vs_rolling3_renorm_bootstrap": {
+        "point_estimate": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "n_bootstrap": 2000,
+        "significant_improvement": false
+      }
+    }
+  }
+}

@@ -33,7 +33,26 @@ ROLL_WINDOW = 3
 # Single source of truth -- scripts/build_team_week_player_shares.py imports
 # these rather than keeping its own copy.
 VOLUME_COLS = ["targets", "rushing_attempts", "receiving_yards", "rushing_yards"]
+FULL_PPR_VOLUME_COLS = [
+    "receptions", "receiving_tds", "rushing_tds",
+    "passing_yards", "passing_tds", "interceptions",
+]
+# Opportunity/role measures are deliberately separate from the predicted
+# volume labels.  The builder stores their same-week audit values, but only
+# their shifted history is admitted as a feature.  These are especially
+# important for sparse touchdown allocation, where ordinary volume shares are
+# zero-inflated and do not identify goal-line/red-zone roles.
+OPPORTUNITY_COLS = [
+    "rush_inside_10", "rush_inside_5", "targets_15_plus", "air_yards",
+    "pass_plays", "rush_plays", "recv_targets", "neutral_targets",
+    "neutral_rushes", "third_down_targets", "short_yardage_rushes",
+    "redzone_targets", "goal_line_touches", "two_minute_targets",
+    "high_leverage_touches", "snap_count", "snap_share",
+]
+ALL_VOLUME_COLS = VOLUME_COLS + FULL_PPR_VOLUME_COLS
 SHARE_COLS = [f"share_of_team_{c}" for c in VOLUME_COLS]
+FULL_PPR_SHARE_COLS = [f"share_of_team_{c}" for c in FULL_PPR_VOLUME_COLS]
+ALL_SHARE_COLS = SHARE_COLS + FULL_PPR_SHARE_COLS
 
 ID_COLS = ["player_id", "season", "week", "team", "position"]
 
@@ -47,6 +66,12 @@ TARGET_POPULATIONS: dict[str, Optional[str]] = {
     "receiving_yards": "exclude_qb",
     "rushing_attempts": None,
     "rushing_yards": None,
+    "receptions": "exclude_qb",
+    "receiving_tds": "exclude_qb",
+    "rushing_tds": None,
+    "passing_yards": "qb_only",
+    "passing_tds": "qb_only",
+    "interceptions": "qb_only",
 }
 
 
@@ -54,6 +79,8 @@ def filter_population(df: pd.DataFrame, target: str) -> pd.DataFrame:
     rule = TARGET_POPULATIONS.get(target)
     if rule == "exclude_qb":
         return df[df["position"] != "QB"].copy()
+    if rule == "qb_only":
+        return df[df["position"] == "QB"].copy()
     return df
 
 
@@ -95,9 +122,22 @@ def load_share_rows(
     return df
 
 
-def feature_columns(df: pd.DataFrame) -> list:
-    excluded = set(ID_COLS) | set(VOLUME_COLS) | set(SHARE_COLS) | {f"team_{c}" for c in VOLUME_COLS}
+def feature_columns(df: pd.DataFrame, *, include_full_ppr: bool = False) -> list:
+    excluded = (
+        set(ID_COLS) | set(ALL_VOLUME_COLS) | set(ALL_SHARE_COLS)
+        | set(OPPORTUNITY_COLS)
+        | {f"team_{c}" for c in ALL_VOLUME_COLS}
+        | {f"team_{c}" for c in OPPORTUNITY_COLS}
+        | {f"share_of_team_{c}" for c in OPPORTUNITY_COLS}
+    )
     feature_cols = [c for c in df.columns if c not in excluded]
+    if not include_full_ppr:
+        full_history = set(FULL_PPR_SHARE_COLS)
+        full_history |= {f"{c}_s2d" for c in FULL_PPR_SHARE_COLS}
+        full_history |= {f"{c}_roll{ROLL_WINDOW}" for c in FULL_PPR_SHARE_COLS}
+        full_history |= {f"team_{c}_s2d" for c in FULL_PPR_VOLUME_COLS}
+        full_history |= {f"team_{c}_roll{ROLL_WINDOW}" for c in FULL_PPR_VOLUME_COLS}
+        feature_cols = [c for c in feature_cols if c not in full_history]
 
     unclassified = audit_feature_availability(feature_cols)
     if unclassified:

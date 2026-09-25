@@ -1,0 +1,204 @@
+{
+  "schema_version": "plan-a-joint-serving-v1",
+  "model_version": "plan-a-raw-truth-fold0-replay",
+  "created_at": "2026-09-25T03:00:32.354951+00:00",
+  "train_from": 2013,
+  "train_through": 2022,
+  "source_selector": "data/experiments/full_ppr_raw_truth_20260924/joint_selector.json#fold=0",
+  "targets": [
+    "rushing_yards",
+    "receiving_yards",
+    "receptions",
+    "receiving_tds",
+    "rushing_tds",
+    "passing_yards",
+    "passing_tds",
+    "interceptions"
+  ],
+  "allocation_arms": {
+    "rushing_yards": "rolling3",
+    "receiving_yards": "rolling3",
+    "receptions": "rolling3",
+    "receiving_tds": "rolling3",
+    "rushing_tds": "rolling3",
+    "passing_yards": "rolling3",
+    "passing_tds": "rolling3",
+    "interceptions": "rolling3"
+  },
+  "team_total_arms": {
+    "rushing_yards": "rolling3",
+    "receiving_yards": "rolling3",
+    "receptions": "rolling3",
+    "receiving_tds": "rolling3",
+    "rushing_tds": "rolling3",
+    "passing_yards": "rolling3",
+    "passing_tds": "rolling3",
+    "interceptions": "rolling3"
+  },
+  "allocation_details": {
+    "rushing_yards": {
+      "target": "rushing_yards",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_rushing_yards_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    },
+    "receiving_yards": {
+      "target": "receiving_yards",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_receiving_yards_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    },
+    "receptions": {
+      "target": "receptions",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_receptions_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    },
+    "receiving_tds": {
+      "target": "receiving_tds",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_receiving_tds_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    },
+    "rushing_tds": {
+      "target": "rushing_tds",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_rushing_tds_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    },
+    "passing_yards": {
+      "target": "passing_yards",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_passing_yards_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    },
+    "passing_tds": {
+      "target": "passing_tds",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_passing_tds_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    },
+    "interceptions": {
+      "target": "interceptions",
+      "arm": "rolling3",
+      "roll_column": "share_of_team_interceptions_roll3",
+      "kind": "rolling3",
+      "renormalize": false,
+      "zero_fallback": "equal"
+    }
+  },
+  "team_total_details": {
+    "rushing_yards": {
+      "target": "rushing_yards",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_rushing_yards_roll3"
+    },
+    "receiving_yards": {
+      "target": "receiving_yards",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_receiving_yards_roll3"
+    },
+    "receptions": {
+      "target": "receptions",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_receptions_roll3"
+    },
+    "receiving_tds": {
+      "target": "receiving_tds",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_receiving_tds_roll3"
+    },
+    "rushing_tds": {
+      "target": "rushing_tds",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_rushing_tds_roll3"
+    },
+    "passing_yards": {
+      "target": "passing_yards",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_passing_yards_roll3"
+    },
+    "passing_tds": {
+      "target": "passing_tds",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_passing_tds_roll3"
+    },
+    "interceptions": {
+      "target": "interceptions",
+      "arm": "rolling3",
+      "feature_columns": [],
+      "roll_column": "team_interceptions_roll3"
+    }
+  },
+  "output": "data/experiments/full_ppr_raw_truth_20260924/fold0_shadow_2023.csv",
+  "seasons": [
+    2023
+  ],
+  "weeks": null,
+  "n_rows": 13404,
+  "include_actual": true,
+  "columns": [
+    "player_id",
+    "season",
+    "week",
+    "team",
+    "position",
+    "predicted_share_rushing_yards",
+    "predicted_team_rushing_yards",
+    "predicted_rushing_yards",
+    "predicted_share_receiving_yards",
+    "predicted_team_receiving_yards",
+    "predicted_receiving_yards",
+    "predicted_share_receptions",
+    "predicted_team_receptions",
+    "predicted_receptions",
+    "predicted_share_receiving_tds",
+    "predicted_team_receiving_tds",
+    "predicted_receiving_tds",
+    "predicted_share_rushing_tds",
+    "predicted_team_rushing_tds",
+    "predicted_rushing_tds",
+    "predicted_share_passing_yards",
+    "predicted_team_passing_yards",
+    "predicted_passing_yards",
+    "predicted_share_passing_tds",
+    "predicted_team_passing_tds",
+    "predicted_passing_tds",
+    "predicted_share_interceptions",
+    "predicted_team_interceptions",
+    "predicted_interceptions",
+    "predicted_ppr",
+    "rushing_yards",
+    "receiving_yards",
+    "receptions",
+    "receiving_tds",
+    "rushing_tds",
+    "passing_yards",
+    "passing_tds",
+    "interceptions",
+    "actual_ppr",
+    "model_version",
+    "artifact_schema_version"
+  ]
+}

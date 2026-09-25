@@ -7,10 +7,13 @@ their DataFrames.
 from __future__ import annotations
 
 from collections.abc import Mapping
+import logging
 import math
 import pandas as pd
 
 from src.models.game_simulation import GameScriptInput, PlayerSimulationInput, TeamVolumeBaseline
+
+logger = logging.getLogger(__name__)
 
 _Z_80 = 1.281551565545
 
@@ -50,11 +53,26 @@ def game_inputs_from_predictions(
         if not all(math.isfinite(value) for value in values):
             raise ValueError(f"non-finite prediction for {key}")
         home_prob, expected_margin, expected_total = values
+        home_team, away_team = str(row.home_team), str(row.away_team)
+        home_baseline = volume.get(home_team)
+        if home_baseline is None:
+            logger.warning(
+                "no team_volume baseline for %r (game %s); falling back to league-average plays/pass_rate",
+                home_team, key,
+            )
+            home_baseline = TeamVolumeBaseline()
+        away_baseline = volume.get(away_team)
+        if away_baseline is None:
+            logger.warning(
+                "no team_volume baseline for %r (game %s); falling back to league-average plays/pass_rate",
+                away_team, key,
+            )
+            away_baseline = TeamVolumeBaseline()
         out[key] = GameScriptInput(
-            game_id=key, home_team=str(row.home_team), away_team=str(row.away_team),
+            game_id=key, home_team=home_team, away_team=away_team,
             home_win_prob=home_prob, predicted_margin=expected_margin, predicted_total=expected_total,
-            home=volume.get(str(row.home_team), TeamVolumeBaseline()),
-            away=volume.get(str(row.away_team), TeamVolumeBaseline()),
+            home=home_baseline, away=away_baseline,
+            season=int(row.season), week=int(row.week),
         )
     return out
 
@@ -81,14 +99,25 @@ def player_inputs_from_predictions(
     interval is unavailable, the conservative 8-point fallback is retained.
     Participation stays 1.0 until the availability model is connected.
     """
-    _require(player_predictions, {"player_id", "team", "opponent", "position", "predicted_points"},
+    _require(player_predictions,
+             {"player_id", "team", "opponent", "position", "predicted_points", "season", "week"},
              "player_predictions")
-    by_pair = {frozenset((game.home_team, game.away_team)): game_id
-               for game_id, game in games.items()}
+    # Keyed on (season, week, team pair) rather than just the team pair: two
+    # teams can play each other more than once across a season (or games
+    # dicts spanning multiple weeks can be passed in together), and a
+    # team-pair-only key would silently misroute players to the wrong game.
+    by_pair: dict[tuple[int, int, frozenset[str]], str] = {}
+    for game_id, game in games.items():
+        if game.season is None or game.week is None:
+            raise ValueError(
+                f"game {game_id!r} is missing season/week; build it via "
+                "game_inputs_from_predictions so games can be disambiguated"
+            )
+        by_pair[(game.season, game.week, frozenset((game.home_team, game.away_team)))] = game_id
     out = {game_id: [] for game_id in games}
     for row in player_predictions.itertuples(index=False):
         team, opponent = str(row.team), str(row.opponent)
-        game_id = by_pair.get(frozenset((team, opponent)))
+        game_id = by_pair.get((int(row.season), int(row.week), frozenset((team, opponent))))
         if game_id is None:
             continue
         position = str(row.position).upper()

@@ -34,8 +34,13 @@ class ShareRidgeModel:
             Ridge(alpha=a),
         )
 
-    def fit(self, X: pd.DataFrame, y) -> "ShareRidgeModel":
-        self.pipeline.fit(X, y)
+    def fit(self, X: pd.DataFrame, y, sample_weight=None) -> "ShareRidgeModel":
+        fit_kwargs = {}
+        if sample_weight is not None:
+            # The imputer/scaler are unsupervised; only the final estimator
+            # should receive the reconstruction-volume weights.
+            fit_kwargs["ridge__sample_weight"] = np.asarray(sample_weight, dtype=float)
+        self.pipeline.fit(X, y, **fit_kwargs)
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -50,8 +55,8 @@ class ShareXGBModel:
         params.update(overrides)
         self.model = XGBRegressor(**params)
 
-    def fit(self, X: pd.DataFrame, y) -> "ShareXGBModel":
-        self.model.fit(X, y)
+    def fit(self, X: pd.DataFrame, y, sample_weight=None) -> "ShareXGBModel":
+        self.model.fit(X, y, sample_weight=sample_weight)
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:

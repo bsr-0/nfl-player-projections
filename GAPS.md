@@ -890,6 +890,17 @@ evaluator, and restores the feature list in a `finally` block. The harness
 does not write production model artifacts; its outputs belong under
 `data/experiments/backlog_ablations/`.
 
+**Unfinished — QB DVOA ablation (2026-09-23).** This is an ablation of the
+weekly fantasy-points model, **not** a Plan A team-share experiment. The first
+QB attempt wrote the 2023 fold (5,026 row-level predictions across seven
+model variants) but was terminated while returning from protected artifact
+cleanup, before the 2024 and 2025 folds or a completion manifest could be
+written. It is therefore not interpretable as a three-season result. A second
+background attempt was terminated before startup while the corrected-Vegas
+walk-forward retrain was saturating the host. Preserve the partial CSV as
+debug evidence; rerun QB DVOA alone, into a fresh output directory, after the
+retrain completes. Do not treat this as a dependency or signal for Plan A.
+
 #### Plan A improvement experiment (2026-09-22)
 
 The follow-up Plan A experiment is implemented in
@@ -926,6 +937,37 @@ lift is promising but is not yet sufficient evidence for production
 promotion; repeat the final-season check for all four targets and preferably
 on a second untouched season.
 
+**Two-holdout accuracy qualification of the unsegmented candidate (2024 and
+2025; completed 2026-09-23).**
+The existing final-holdout outputs cover every target on two distinct test
+seasons and every candidate/baseline pair has the identical player-week key
+set (11,599/11,741 target or receiving rows and 13,466/13,689 rushing rows
+in 2024/2025 respectively). Applying the predeclared rule — a target passes
+only when its selected blend-plus-renormalization candidate has a paired 95%
+MAE-delta CI strictly below zero on **both** seasons — produces:
+
+| Target | Candidate | 2024 delta CI | 2025 delta CI | Strict two-season gate |
+|---|---|---:|---:|---|
+| targets | ridge blend + renorm | [-0.000239, -0.000024] | [-0.000186, +0.000016] | FAIL |
+| rushing attempts | ridge blend + renorm | [-0.000406, -0.000026] | [-0.000295, +0.000039] | FAIL |
+| receiving yards | XGBoost blend + renorm | [-0.000568, -0.000046] | [-0.000529, -0.000099] | PASS |
+| rushing yards | ridge blend + renorm | [-0.000411, -0.000037] | [-0.000334, +0.000018] | FAIL |
+
+This closes the first qualification gate for the **unsegmented** candidate:
+it does **not** pass the all-four-target promotion requirement. Receiving-yard
+share is the only target with replicated held-out accuracy evidence for that
+arm. Keep the work validation-only; do not promote a pooled or selectively
+reported result.
+
+This is not yet the final verdict for the volume-tier shrinkage variant. That
+variant significantly improved all four targets on the 2024 holdout, and its
+pre-existing 2025 `targets` confirmation improved MAE from 0.029617 to
+0.029049 (paired CI [-0.000766, -0.000373]). The same locked volume-tier
+procedure has not yet been evaluated on the 2025 rushing-attempt, receiving-
+yard, and rushing-yard targets. That is the next accuracy experiment; it must
+be run unchanged for all three before claiming a target-specific promotion
+result.
+
 The role-aware extension calibrates blend weights separately by position and
 cold-start flag. On the pooled 2023-2025 folds it selected the XGBoost blend
 plus renormalization for all four targets: MAE was 0.030093 (targets),
@@ -941,6 +983,99 @@ renormalization), with paired CI [-0.000766, -0.000373]. Overall MAE was
 0.029049. This targeted improvement still needs confirmation on another
 untouched season before promotion.
 
+That confirmation is now complete for the remaining 2025 targets using the
+same locked volume-tier procedure (`--by-volume`, final-season holdout):
+
+| Target | 2025 best volume-tier arm | MAE delta CI vs rolling-3 | Gate |
+|---|---|---:|---|
+| targets | XGBoost blend + renorm | [-0.000766, -0.000373] | PASS |
+| rushing attempts | Ridge blend + renorm | [-0.000296, +0.000069] | FAIL |
+| receiving yards | XGBoost blend + renorm | [-0.001669, -0.000890] | PASS |
+| rushing yards | Ridge blend + renorm | [-0.001130, -0.000499] | PASS |
+
+Combined with the four-target 2024 volume-tier holdout, this leaves only
+rushing-attempt share short of the all-target gate. The failure is small and
+directionally positive, but it is not statistically conclusive. Diagnostics
+show the improvement is concentrated in RB/high-volume and cold-start rows,
+while QB rows are slightly worse; the next targeted experiment is a
+position-by-volume blend with partial pooling toward the global alpha. Do not
+promote the volume-tier variant until that final target is either improved on
+a locked holdout or explicitly accepted as a documented exception.
+
+The position-by-volume experiment is now implemented as
+`--by-position-volume --alpha-shrinkage-k 100`. Each calibration-cell alpha is
+shrunk toward the fold-local global alpha with a 100-row pseudo-count. It
+improves rushing-attempt MAE on both holdouts, but does not yet clear the 2025
+significance gate: 2024 CI [-0.000541, -0.000115] (PASS), 2025 CI
+[-0.000322, +0.000039] (FAIL). The method is directionally correct but still
+not a promotion candidate; use the 2025 result as a diagnostic and reserve a
+future complete season for the next locked confirmation.
+
+The harness also now supports `--guard-group-loss`, which falls back to
+rolling-3 for a position/volume cell unless that cell improves on its own
+inner calibration slice. On the 2025 rushing-attempt diagnostic this guard
+did not change the result (CI [-0.000324, +0.000043] for the ridge arm), so
+the QB loss is a temporal regime shift rather than a simple calibration-cell
+overfit. The attempted `--carry-context` switch likewise found that lagged
+team-rush totals were already in the generic Plan A feature set and added no
+new signal. The remaining meaningful build is therefore a dedicated
+rushing-attempt baseline/model, not another alpha-only variation.
+
+The first dedicated architecture is now implemented as `--dedicated-rb`: fit
+the learned arm on RB rows only, keep QB/TE/WR on rolling-3, and renormalize
+the resulting team/week shares. It did not improve the 2025 holdout (ridge
+delta CI [-0.000194, +0.000187]; XGBoost [-0.000164, +0.000206]). This rules
+out a naive RB-only fit as the final fix; the next model must improve the
+carry-role target itself while preserving composition, rather than merely
+partitioning the existing predictor by position.
+
+### Rushing-attempt two-stage arm (2026-09-23)
+
+The next dedicated architecture is implemented in
+`scripts/run_plan_a_improvements.py` as `--two-stage-rushing`. For each
+position and fold it first classifies whether the player has positive rushing
+share, then fits the positive-share regressor only on active rows. The
+probability-weighted positive prediction is blended with the fold-local
+position/volume baseline and renormalized across team/week. This uses the
+existing leakage-safe role, acceleration, depth-chart, and team-context
+features; no current-week outcome fields are added.
+
+Using `k=25` position/volume alpha shrinkage selected before the 2025 holdout,
+the XGBoost two-stage arm passes rushing-attempt accuracy on both untouched
+seasons:
+
+| Holdout | MAE | Paired 95% CI vs rolling-3 | Gate |
+|---|---:|---:|---|
+| 2024 | 0.024066 | [-0.000786, -0.000290] | PASS |
+| 2025 | 0.021841 | [-0.000685, -0.000261] | PASS |
+
+Renormalization remains exact to floating-point precision (mean absolute
+team-sum error below `3e-17`, p95 below `2e-16`) on both seasons. Together
+with the volume-tier arms for targets, receiving yards, and rushing yards,
+this supplies a replicated candidate for all four Plan A targets. It remained
+validation-only until the segment, sparse-group, and identical-row serving
+checks below were completed; those checks are now automated and passing.
+
+The remaining diagnostics are now automated by
+`scripts/plan_a_acceptance_report.py`. It verifies baseline/candidate key
+identity, reports MAE by position, cold-start flag, and baseline-volume tier,
+and reports team/week sum error plus sparse-group counts. Running it against
+the retained 2024/2025 artifacts passes the four-target accuracy gate and
+reports zero sparse groups in the current rushing-attempt population with
+renormalized sums at floating-point zero. The served comparison now uses
+serialized target-specific artifacts and a 100,990-row exact export; it
+performs target/season/player/week/team joins and refuses mismatched
+populations.
+
+A pre-2025 shrinkage sweep (`k` = 25, 50, 100, 200, 400) across the 2023
+and 2024 validation folds selected light pooling (`k=25`, XGBoost) by a very
+small MAE margin. Locked and applied to 2025, it produced CI
+[-0.000312, +0.000051] for rushing attempts: a slightly larger point lift,
+but still not significant. This rules out shrinkage strength alone as the
+missing fix; the next meaningful lever is a QB-specific rolling-3 fallback or
+a carry-specific baseline/features model, developed without reopening the
+2025 holdout.
+
 The experiment now records team-share constraint diagnostics: predicted
 team/week share sums, p95 sum error, actual-label sum error, sparse-group sum
 error, and absolute renormalization distortion. On the 2025 targets holdout,
@@ -950,20 +1085,240 @@ distortion 0.00820. The target population had no groups with two or fewer
 players, so sparse-group behavior still needs a rushing/receiving slice with
 that population present.
 
-An exact-row comparison against a served Plan A model is currently blocked:
-the repository contains Plan A metadata sidecars but no
-`team_share_*_*.joblib` artifacts or row-level serving export. The new
-`scripts/compare_plan_a_served.py` refuses aggregate-only comparisons and
-will run once such an export exists.
+The exact-row served comparison is implemented by
+`src/models/team_allocation/serving.py` and
+`scripts/export_plan_a_served_rows.py`. Versioned artifacts are written under
+`data/experiments/plan_a_served_artifacts_validated/`, reloaded through the
+serving path, and exported under
+`data/experiments/plan_a_served_rows_validated.csv`. The final report records
+`served_comparison: ok` for all four target-specific arms on both 2024 and
+2025; served-vs-validation MAE deltas are all within ±0.000058 share points.
 
 #### Next test-set accuracy work
 
-The next low-risk experiments are: (a) final-season confirmation of the
-blend/renormalization arm, (b) position and cold-start stratification with
-minimum-sample confidence intervals, (c) calibration/shrinkage of the blend
-weight by target and role, and (d) a leakage audit of all feature families
-used by the winning arm. These are validation-only until the corrected-Vegas
-retrain and final holdout comparison are complete.
+**Active priority: qualify Plan A before expanding its scope.** The DVOA
+ablation above remains unfinished but is separate from Plan A. Plan A has a
+credible low-cost candidate (fold-local blend plus team/week renormalization),
+while its promotion gates are only partially met. Work the gates in this
+order:
+
+1. Lock the candidate specification — target-specific blend family,
+   fold-local alpha selection, and renormalization — before looking at another
+   final holdout.
+2. Re-run all four targets on two untouched seasons with the exact same
+   player-week population as rolling-3; require paired-MAE improvement with a
+   95% CI below zero for each target, rather than accepting a pooled result.
+3. Report established, rookie, backup/cold-start, and low/mid/high-volume
+   slices with minimum sample counts and CIs. A pooled win must not conceal a
+   material degradation in sparse or role-defined groups.
+4. Run constraint diagnostics for every target and slice; demonstrate that
+   renormalization keeps team/week totals valid without unacceptable distortion
+   in sparse or cold-start groups.
+5. Produce a row-level served-model export or recover the served Plan A
+   artifacts, then use `scripts/compare_plan_a_served.py` to compare the
+   candidate, rolling-3, and serving path on identical rows.
+6. Audit the selected feature families for temporal leakage only after the
+   candidate clears the accuracy and constraint gates.
+
+These are validation-only until the corrected-Vegas retrain and final holdout
+comparison are complete.
+
+#### Reconstruction-aware yardage evaluation (2026-09-23)
+
+The original partial-yardage benchmark optimized share MAE and then multiplied
+shares by lagged team totals. A second harness now optimizes the actual
+reconstruction objective without leakage:
+`scripts/evaluate_plan_a_reconstruction_candidates.py` and
+`src/evaluation/team_reconstruction_candidates.py`. It tests lagged-team-total
+weighted share regressors, fold-local blend weights selected on reconstructed
+volume error, and a separate team-total forecaster. All arms are scored on the
+same 25,223 player-weeks as rolling-3, excluding the same 1,932 cold-start
+rows. The run must be bounded explicitly at 2025; allowing the current
+partial 2026 season changes the holdout population.
+
+On the fixed 2024/2025 holdouts, the best research candidate was
+`xgb_reconstruction_blend_teamtotal_ridge`: XGBoost share allocation with a
+volume-objective blend and a Ridge team-total forecast. Partial-yardage MAE
+fell from 1.071633 (rolling-3) to 1.062207, with paired bootstrap 95% delta CI
+[-0.015270, -0.003516]. This is a replicated yardage-slice improvement, but it
+is not yet a served Plan A artifact and does not establish full-PPR accuracy.
+The candidate must still be checked season-by-season, on a fresh untouched
+season, and through the serialized serving path before promotion. The
+team-total model is deliberately retained as a separate arm because its
+benefit is not interchangeable with share-model accuracy.
+
+Because Ridge won on 2024/2025 while XGBoost won on 2023, the team-total
+choice is now calibrated inside each walk-forward fold on the latest training
+season. The frozen arm `xgb_reconstruction_blend_teamtotal_blend` was then
+evaluated across all three completed holdouts (2023–2025): pooled MAE was
+1.070962 versus 1.083105 for rolling-3, with paired 95% delta CI
+[-0.016845, -0.007383]. Its MAE was lower than rolling-3 in each individual
+season. This is the appropriate candidate to carry into the next serialized
+serving-path check; do not select Ridge or XGBoost after inspecting a test
+season.
+
+The serialized serving check is now implemented in
+`src/models/team_allocation/reconstruction_serving.py` and
+`scripts/export_plan_a_reconstruction_served.py`. Reloaded artifacts were
+scored on identical valid rows for each season: 2023 candidate MAE 1.08929 vs
+1.11075 rolling-3 (CI [-0.02949, -0.01359]); 2024 1.08144 vs 1.09712 (CI
+[-0.02518, -0.00633]); 2025 1.04263 vs 1.06027 (CI [-0.02606, -0.00912]).
+These are still experiment artifacts under
+`data/experiments/plan_a_reconstruction_served_artifacts/`; production Plan A
+has not been replaced. The remaining gate is a controlled promotion review
+and, separately, extending the target table before claiming full-PPR gains.
+`scripts/check_plan_a_reconstruction_promotion.py` now records this state as
+`research_ready_not_promotable`: all three serialized seasons and CIs pass,
+but production promotion is fail-closed because receptions, touchdowns, and
+passing production are not yet part of the reconstruction target table.
+
+The first full-PPR prerequisite is now complete at the data layer. The share
+builder/table includes receptions, receiving TDs, rushing TDs, passing yards,
+passing TDs, and interceptions, with causal lagged shares and team totals.
+Existing four-target Plan A experiments remain the default and were not
+silently retrained. New component models and the full scoring reconstruction
+are still unfinished.
+
+#### Full-PPR team-total forecasts (2026-09-23)
+
+The second prerequisite is now implemented in
+`src/evaluation/team_total_backtester.py` and
+`scripts/evaluate_team_total_forecasts.py`. It deduplicates one row per
+team/week, uses only lagged team features, fits Ridge and XGBoost forecasts,
+and selects their blend inside each walk-forward fold. The primary comparison
+uses the identical non-cold-start rows as rolling-3.
+
+Across completed 2023–2025 holdouts, the fold-local blend improved team-total
+MAE for every new PPR component: receptions 4.3226, receiving TDs 0.9169,
+rushing TDs 0.7416, passing yards 55.9776, passing TDs 0.9252, and
+interceptions 0.7121. Every paired bootstrap CI versus rolling-3 excluded
+zero. These are team-total forecasts only; player allocation models and the
+full PPR scoring reconstruction remain separate work.
+
+#### Full-PPR player allocation models (2026-09-23)
+
+Player allocation evaluation is implemented in
+`src/evaluation/full_ppr_allocation_backtester.py` and
+`scripts/evaluate_full_ppr_allocations.py`. It uses the opt-in full-PPR
+history features, target-specific populations, team/week renormalization, and
+two-stage active/positive models for sparse TD/interception targets. The
+2023–2025 results are intentionally mixed: receptions show a small but
+significant share-MAE improvement (0.03328; CI [-0.00015, -0.00003]); passing
+yards are effectively tied; and receiving TDs, rushing TDs, passing TDs, and
+interceptions are worse than their rolling-3 share baselines. The two-stage
+variants do not rescue the sparse events. Therefore no full-PPR component
+allocation model is promoted yet; the next work should improve sparse-event
+allocation using red-zone/goal-line opportunity and hierarchical shrinkage,
+not simply add more generic regressors. As of 2026-09-23, the share builder
+now carries leakage-safe prior-history features for red-zone targets,
+goal-line/inside-5 carries, air yards, snaps, neutral usage, short-yardage and
+high-leverage touches (plus player/team rolling and season-to-date histories).
+Sparse-event renormalization also has a zero-preserving fallback, so an
+allocator that predicts no active TD/interception player no longer invents an
+equal share for every rostered player. These changes require a fresh
+2023–2025 backtest before promotion; they do not make same-week event totals
+available to the serving path.
+
+#### Hierarchical conditional sparse-event arm (2026-09-24)
+
+The next experimental arm is implemented but not promoted. It assigns
+lagged-history role tiers (for example RB1/RB2 and WR1/WR2), fits a player
+random-intercept mixed-effects positive-share model, and conditions sparse
+events on a fold-local team-positive classifier. Activation is learned only
+on team-positive weeks; predicted non-event team-weeks remain all-zero rather
+than receiving an invented equal roster split. The strict backtest reports
+position, role-tier, and cold-start segments and preserves the raw and
+renormalized rolling-3 comparators.
+
+Promotion remains gated on both share non-inferiority and reconstructed
+full-PPR improvement versus both rolling-3 baselines. The reconstruction
+evaluator uses the same fold-local team-total blend for every component, so a
+player allocator cannot receive credit from a different team-total population.
+
+The sparse-event arm now also uses a soft team-event probability rather than a
+hard 0.5 gate. Each target has its own lagged opportunity exposure: red-zone
+targets for receiving TDs, goal-line/inside-5 carries for rushing TDs, and
+pass-play/dropback proxies for passing TDs and interceptions. Positive-share
+models predict conversion relative to that opportunity share before applying
+the calibrated team-event probability. Full-fold results are required before
+any component can be promoted.
+
+The next comparison adds fold-local empirical-Bayes shrinkage selection over
+alpha values, a residual-over-opportunity arm, and count-based benchmarks. The
+Poisson arm models nonnegative player counts directly; the multinomial arm
+models the conditional player allocation within event-positive team-weeks
+with a grouped softmax likelihood. Both are intentionally diagnostic only and
+must beat both rolling-3 baselines before promotion. Their outputs are now
+included in the same strict full-PPR backtester and joint-PPR selector, so the
+remaining work is empirical evaluation rather than missing infrastructure.
+
+Event-specific eligibility is now enforced in the sparse allocator: receiving
+players need prior receiving/red-zone or snap evidence, rushers need prior
+rushing/goal-line evidence, and quarterbacks need prior pass-volume evidence.
+The joint-PPR selector evaluates allocation arms and team-total arms using
+only completed prior out-of-fold folds, then applies the selected combination
+to the next fold. This makes reconstructed PPR MAE the calibration objective
+while retaining share-MAE diagnostics; it does not alter served artifacts.
+Sparse arms also report both predicted-vs-actual team event mass and the
+legacy sum-to-one diagnostic: an expected sparse share legitimately sums to
+the probability of an event, not always to one, so ``team_sum_mae`` is the
+relevant calibration check for the multinomial/Poisson benchmarks.
+
+The complete PPR selector evaluation now includes all eight reconstructed
+components (rushing/receiving yards plus the six scoring-event components),
+not only the six ``FULL_PPR_VOLUME_COLS`` event labels. The 2006--2025,
+three-fold run is stored as an isolated validation artifact under
+``data/experiments/full_ppr_allocations_20260924``; the fold-local joint
+selection report and its exact-row rolling-3 comparison are under
+``data/experiments/full_ppr_joint_selector_20260924.json`` and
+``data/experiments/full_ppr_joint_selector_comparison_20260924.json``.
+These are validation results only; no served model artifact has been changed.
+
+#### Constrained joint-PPR selection (2026-09-24)
+
+The joint selector now applies a fold-local share non-inferiority gate before
+optimizing reconstructed PPR. An allocation arm is eligible only if its prior
+OOF paired-MAE 95% CI has an upper bound no worse than 0.0005 share points
+versus rolling-3; fold zero uses rolling-3 because there is no completed OOF
+evidence. This prevents a component that happens to improve total PPR from
+being selected when it materially worsens its own allocation. The constrained
+2006--2025 run retained a pooled PPR improvement of 0.1458 points/player-week
+over the exact rolling-3 incumbent (2.3413 vs 2.4871), while rejecting unsafe
+Poisson/hierarchical sparse-event arms. It remains validation-only.
+
+#### Sparse-event calibration, attribution, and safe blending (2026-09-24)
+
+The next joint-Plan-A iteration is implemented and awaiting a fresh full
+walk-forward run. Sparse team-event gates now receive a temporal,
+last-training-season Brier-score calibration: class-balanced event classifiers
+are shrunk toward the historical event rate by a weight selected before the
+held-out fold. This corrects an important distinction between event ranking
+and event mass; a classifier can identify likely TD weeks while still
+overstating the absolute chance of a TD.
+
+The selector can now choose a serialized fold-local convex allocation blend
+(``blend:<arm>:<weight>``) between an eligible learned arm and rolling-3.
+Every blend is separately subjected to the identical paired share-MAE
+non-inferiority gate on completed OOF folds; it is not an unconstrained blend
+selected from a test fold. ``scripts/evaluate_joint_ppr_contributions.py``
+also produces allocation-only, team-total-only, and joint rolling-3
+counterfactuals for each component on identical player-week rows, so future
+PPR gains can be attributed without confusing player allocation with team
+volume.
+
+Finally, sparse-event features are separated into two explicit, lagged
+families: player event role (red-zone/goal-line/target opportunity) and team
+event context (team pace/play volume and event environment). Run
+``scripts/evaluate_sparse_event_feature_families.py`` to test role alone,
+then role plus team context. The output is an ablation artifact, not a served
+feature change. No post-calibration/blend/full-context metric should be
+claimed until its multi-fold rerun completes.
+
+The evaluator explicitly preserves sparse arms' unconditional team-event
+mass. It must not renormalize a nonzero sparse team-week to one, since that
+would destroy the calibrated probability before the component is combined
+with its team-total forecast. Earlier partial 2026-09-24 output produced
+before this guard is diagnostic only and must not be used for selection.
 
 | # | Technique/Variable | Category | What It Replaces/Adds | Expected Impact | Effort |
 |---|-------------------|----------|----------------------|-----------------|--------|
@@ -14577,6 +14932,25 @@ component-level sparse share improvement was multinomial interceptions
 (0.17907 versus rolling-3's 0.18216), but that is not enough for selection.
 Plan A has **not** been exported through a UI/production inference path and
 must not be described as the UI model or as replacing the weekly artifacts.
+
+**Raw-label correction (2026-09-24):** The above 2.36521 result is
+superseded. Its actual PPR was reconstructed from nonnegative shares and
+positive team totals, which erased negative yards and off-position trick-play
+stats. A checked replay against the eight raw player components found 641
+changed labels among the same 40,559 player-weeks. The corrected fold-local
+selector scored **2.36984** MAE versus **2.49130** for rolling-3 (delta
+**-0.12146**, paired 95% CI **[-0.13532, -0.10674]**). Fold row counts
+remain 13,404 / 13,466 / 13,689. See
+`data/experiments/full_ppr_raw_truth_20260924/` for the selector, exact-row
+scores, attribution, and input audit. This is an eight-component score;
+fumbles lost and two-point conversions are outside it. The result remains
+validation-only. The subsequent shadow-serving fix aligns learned sparse-TD
+zero fallbacks with the backtester and supports fold-zero rolling-3 team
+totals. A frozen fold-zero artifact exported all 13,404 2023 player-weeks;
+its PPR predictions match the saved OOF values exactly when prediction CSVs
+are read with round-trip float precision. The old 2025 sparse passing-TD
+artifact's 1,948 QB share predictions also match its validation arm after
+the fallback fix. Neither check promotes Plan A into production.
 
 ## Walk-forward validation was overwriting the production models (2026-09-24)
 

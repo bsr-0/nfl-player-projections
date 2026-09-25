@@ -158,6 +158,18 @@ class TestFeatureAvailabilityRegistry:
         # A column with NaNs is still a column name — audit only inspects names.
         assert audit_feature_availability(["targets_roll3_mean"]) == []
 
+    @pytest.mark.parametrize("col", ["slot", "slot_rank"])
+    def test_slot_columns_are_classified(self, col):
+        assert col not in audit_feature_availability([col])
+
+    @pytest.mark.parametrize("col", ["slot_pct", "slot_snaps"])
+    def test_slot_prefix_does_not_swallow_unrelated_columns(self, col):
+        # slot_pct/slot_snaps are unaudited current-week snap-alignment
+        # columns, not the depth-chart-derived slot/slot_rank family; a bare
+        # "slot" substring pattern would incorrectly wave these through as
+        # pregame-known.
+        assert col in audit_feature_availability([col])
+
 
 class TestInjuryTimingGuard:
     @pytest.fixture(autouse=True)

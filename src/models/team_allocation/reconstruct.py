@@ -38,7 +38,12 @@ from src.utils.helpers import calculate_fantasy_points_df
 POINTS_ELIGIBLE_VOLUME_COLS = ["rushing_yards", "receiving_yards"]
 
 
-def renormalize_shares(predicted_share: np.ndarray, group_keys: pd.DataFrame) -> np.ndarray:
+def renormalize_shares(
+    predicted_share: np.ndarray,
+    group_keys: pd.DataFrame,
+    *,
+    zero_fallback: str = "equal",
+) -> np.ndarray:
     """Renormalize predicted shares so every (team, season, week) group
     sums to 1. Raw independent per-player regressor outputs have no reason
     to sum to 1 on their own -- see docs/TEAM_LEVEL_ALLOCATION_MODELS.md's
@@ -72,7 +77,10 @@ def renormalize_shares(predicted_share: np.ndarray, group_keys: pd.DataFrame) ->
     degenerate = group_sum <= 1e-9
     with np.errstate(invalid="ignore", divide="ignore"):
         normal_case = df["_pred"] / group_sum
-    return np.where(degenerate, 1.0 / group_size, normal_case).astype(float)
+    if zero_fallback not in {"equal", "zeros"}:
+        raise ValueError("zero_fallback must be 'equal' or 'zeros'")
+    fallback = 1.0 / group_size if zero_fallback == "equal" else 0.0
+    return np.where(degenerate, fallback, normal_case).astype(float)
 
 
 def share_constraint_report(raw_share: np.ndarray, normalized_share: np.ndarray,
