@@ -57,8 +57,9 @@ from src.utils.models_dir import redirect_models_dir
 from src.utils.model_rollback import available_rollbacks, snapshot_models
 from src.utils.atomic_io import atomic_write_json
 from src.models.oof_capture import (
-    OOF_PANEL_FILENAME, OOFLeakageError, build_panel, capture_fold_rows,
-    segment_report, write_panel,
+    OOF_PANEL_FILENAME, OOFLeakageError, add_career_experience_segments,
+    build_panel, capture_fold_rows, fold_coverage, segment_report,
+    write_panel, write_run_panel,
 )
 from src.data.lineage import (
     find_artifact_ids,
@@ -776,6 +777,7 @@ def _run_one_fold(
     tune_hyperparameters: bool,
     n_trials: int,
     oof_collector: list = None,
+    oof_coverage_collector: list = None,
 ):
     """
     Run one fold: prepare features, train models, run backtest.
@@ -845,8 +847,17 @@ def _run_one_fold(
     # (see src/models/oof_capture.py).
     if oof_collector is not None:
         try:
-            oof_collector.append(capture_fold_rows(
-                test_data, train_seasons=train_seasons, test_season=actual_test_season))
+            captured = capture_fold_rows(
+                test_data, train_seasons=train_seasons, test_season=actual_test_season)
+            oof_collector.append(captured)
+            # Coverage: offered (this fold's full test_data, before the NaN
+            # filter above) vs captured, per position. Two arms with
+            # different per-position success rates can otherwise produce
+            # different row sets with nothing recording that they differ --
+            # see src/models/oof_capture.py's module docstring, item 4.
+            if oof_coverage_collector is not None:
+                oof_coverage_collector.append(fold_coverage(
+                    test_data, captured, test_season=actual_test_season))
         except OOFLeakageError:
             raise
         except (KeyError, ValueError) as e:
@@ -868,7 +879,8 @@ def train_models(positions: list = None,
                  skip_cache_check: bool = False,
                  skip_quality_gate: bool = False,
                  loyo_backtest: bool = False,
-                 loyo_seasons: list = None):
+                 loyo_seasons: list = None,
+                 oof_label: str = "default"):
     """
     Main training function with automatic train/test split.
 
@@ -882,6 +894,11 @@ def train_models(positions: list = None,
               with minimal accuracy loss.
         loyo_backtest: If True, run LOYO walk-forward backtest across multiple seasons.
         loyo_seasons: Override test seasons for LOYO (default: 2018-2024).
+        oof_label: Stamped into the walk-forward OOF panel's run directory
+            name and manifest (src/models/oof_capture.py:write_run_panel).
+            Set this to something identifying, e.g. "pre-vegas-fix", when
+            running two deliberate walk-forward variants to compare -- the
+            default label makes both runs indistinguishable on disk.
     """
     # Apply fast-mode overrides before reading any config values
     if fast:
@@ -1051,6 +1068,8 @@ def train_models(positions: list = None,
         wf_metrics = []
         wf_seasons = []
         oof_folds = []
+        oof_coverage = []
+        skipped_folds = []
         for ts in test_seasons_wf:
             td, td_test, tr_ss, _ = load_training_data(
                 positions,
@@ -1059,6 +1078,11 @@ def train_models(positions: list = None,
                 strict_requirements=strict_requirements,
             )
             if len(td_test) < 20:
+                # This fold contributes NOTHING to the OOF panel either --
+                # logged explicitly so a thin/partial season's absence from
+                # the panel is visible rather than looking like full coverage.
+                skipped_folds.append({"test_season": ts, "n_test_rows": len(td_test),
+                                      "reason": "fewer than 20 total test rows"})
                 continue
             # redirect_models_dir, not `settings.MODELS_DIR = ...`: the latter
             # leaves every `from config.settings import MODELS_DIR` binding
@@ -1068,12 +1092,16 @@ def train_models(positions: list = None,
                 try:
                     _, res = _run_one_fold(td, td_test, tr_ss, ts, positions,
                                            tune_hyperparameters, n_trials,
-                                           oof_collector=oof_folds)
+                                           oof_collector=oof_folds,
+                                           oof_coverage_collector=oof_coverage)
                     if res:
                         wf_metrics.append(res.get("by_position", {}))
                         wf_seasons.append(ts)
                 except Exception as e:
                     print(f"  Walk-forward fold {ts} failed: {e}")
+        if skipped_folds:
+            print(f"\n  {len(skipped_folds)} fold(s) excluded from BOTH metrics and the "
+                  f"OOF panel (too few test rows): {skipped_folds}")
         if wf_metrics:
             # Persist the per-fold metrics. The mean+/-std printed below cannot
             # support an A/B: comparing two runs' bands throws away the pairing,
@@ -1105,13 +1133,47 @@ def train_models(positions: list = None,
             if oof_folds:
                 try:
                     panel = build_panel(oof_folds)
-                    panel_path = DATA_DIR / "experiments" / OOF_PANEL_FILENAME
-                    write_panel(panel, panel_path)
-                    print(f"OOF panel written: {panel_path} "
-                          f"({len(panel):,} rows, {panel['player_id'].nunique():,} players)")
-                    print("\nOOF segment report (MAE / bias by position and cold-start):")
-                    print(segment_report(panel, by=("position", "is_cold_start")
-                                         ).to_string(index=False))
+                    # Best-effort: real career history from the DB, since
+                    # panel-relative is_cold_start mislabels a returning
+                    # veteran whenever their first PANEL row happens to be
+                    # the panel's earliest season for them (measured: 73% of
+                    # the QB "cold-start" cell was 2023 opening-day starters,
+                    # not new players -- see oof_capture.py module docstring).
+                    panel = add_career_experience_segments(panel)
+
+                    coverage = pd.concat(oof_coverage, ignore_index=True) if oof_coverage else None
+                    written = write_run_panel(
+                        panel, DATA_DIR / "experiments", coverage=coverage, label=oof_label)
+                    print(f"OOF panel written: {written['panel_path']} "
+                          f"({len(panel):,} rows, {panel['player_id'].nunique():,} players, "
+                          f"label={oof_label!r})")
+                    print(f"  latest pointer (overwritten each run): {written['latest_path']}")
+                    if coverage is not None:
+                        total_dropped = int(coverage["n_dropped"].sum())
+                        if total_dropped:
+                            print(f"  {total_dropped} row(s) offered but not captured "
+                                  f"(no prediction/actual) -- see {written['coverage_path']}")
+
+                    # week_bucket alongside is_cold_start: is_cold_start is
+                    # confounded with early-season weeks (measured: 65% of
+                    # cold-start rows are week<=2 vs 12% of returning rows),
+                    # so a table that hides week_bucket hides that confound.
+                    # cluster="player_id": rows are not independent draws: a
+                    # naive point estimate here can look like a segment
+                    # effect that is really just an underpowered or
+                    # non-independent sample -- see oof_capture.py.
+                    print("\nOOF segment report (position x cold-start x week bucket; "
+                          "MAE 95% CI clustered by player):")
+                    print(segment_report(
+                        panel, by=("position", "is_cold_start", "week_bucket"),
+                        cluster="player_id",
+                    ).to_string(index=False))
+                    if panel["is_cold_start_career"].notna().any():
+                        print("\nOOF segment report (career-relative cold-start; "
+                              "panel-relative is_cold_start above is NOT this):")
+                        print(segment_report(
+                            panel, by=("position", "is_cold_start_career"),
+                        ).to_string(index=False))
                 except OOFLeakageError:
                     raise
                 except (OSError, ValueError) as e:
@@ -1606,6 +1668,14 @@ def main():
         help="Run walk-forward validation (train on 1..N-1, test on N for last 4 seasons); report mean +/- std RMSE/MAE"
     )
     parser.add_argument(
+        "--oof-label",
+        default="default",
+        help="Label stamped into the walk-forward OOF panel's run directory and "
+             "manifest (see src/models/oof_capture.py:write_run_panel). Set this "
+             "to something identifying when running two variants to compare -- "
+             "the default label makes both runs indistinguishable on disk."
+    )
+    parser.add_argument(
         "--strict-requirements",
         action="store_true",
         help="Fail training when minimum data requirements are not met (seasons/player counts)."
@@ -1651,6 +1721,7 @@ def main():
         test_season=args.test_season,
         optimize_training_years=args.optimize_years,
         walk_forward=args.walk_forward,
+        oof_label=args.oof_label,
         strict_requirements=args.strict_requirements,
         fast=args.fast,
         skip_cache_check=args.skip_cache_check,

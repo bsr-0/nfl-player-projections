@@ -151,3 +151,47 @@ it landed, so they will not produce one; the next walk-forward run will.
 Remaining for the correlation layer: work item 2 (fit
 `fit_role_residual_correlation` keyed by role, not `player_id`) and work
 item 3 (the backtest driver). Both now have their input.
+
+### Methodology review (2026-09-25): five problems found and fixed
+
+An adversarial review of the OOF panel design (one lens completed before the
+reviewing session hit a rate limit; every load-bearing claim was
+independently re-verified against `data/nfl_data.db` before acting on it --
+composition percentages, zero-rates, and skew all replicated within
+rounding) found five real problems in the first version:
+
+1. **`is_cold_start` confounded with early-season weeks and the shortest
+   fold.** Measured: of ~930 panel-defined cold-start rows, 65% are week<=2
+   (vs 12% of returning rows) and 63% fall in the 2023 fold, the shortest
+   training window; for QB specifically, 73% of the "cold-start" cell was
+   2023 opening-day veterans, not new players. `week_bucket` now surfaces
+   this in the default segmentation, and `add_career_experience_segments`
+   builds the metric the module always claimed to describe (using real
+   `player_weekly_stats` history, best-effort, fails open).
+2. **No uncertainty on non-independent rows.** `segment_report(..., cluster="player_id")`
+   now reports a cluster-bootstrap 95% CI, so a segment table stops looking
+   like eight independent verdicts.
+3. **No provenance, single overwritable path.** `write_run_panel` stamps
+   `git_commit`/`generated_at`/`label` and writes an immutable per-run copy
+   under `data/experiments/oof_panels/<run_id>/`, the same discipline commit
+   ca4b5e1 added for model artifacts one commit before this module shipped
+   without it. `train.py --oof-label` lets a deliberate A/B tag its two runs.
+4. **Dropped rows unrecorded.** `fold_coverage` persists offered/captured/
+   dropped counts per (fold, position) alongside the panel.
+5. **MAE alone on a zero-inflated outcome.** `segment_report` now also
+   reports `zero_rate`, `mae_positive` (conditional on a nonzero actual),
+   and Spearman rank correlation.
+
+**The missing consumer, also built:** `scripts/compare_oof_panels.py`
+inner-joins two run-scoped panels on (player_id, season, week), computes the
+per-row paired |error| delta, and reports cluster-bootstrapped segment
+deltas -- refusing to report anything if the row overlap is too small to
+mean anything. Without this, the panel could describe one run but not
+compare two, which was the entire stated purpose.
+
+**Deliberately not automated:** multiple-comparison correction across
+segment cells, and a minimum-detectable-effect column. The CI half-width
+serves the same purpose a reader needs most (a wide interval says "this cell
+can't support a conclusion"); the right correction depends on which cells
+are primary vs exploratory for a given comparison, which the tooling cannot
+know on its own. Documented in `compare_oof_panels.py`'s output instead.
