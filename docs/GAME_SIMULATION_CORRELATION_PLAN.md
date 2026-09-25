@@ -111,3 +111,43 @@ kind of cross-harness mistake GAPS.md has documented more than once (e.g.
 the 2026-08-29 log1p-space metric mixing entry). Confirm which model is
 current production immediately before building the capture path, don't
 assume it's still true by the time this is picked up.
+### Work item 1 built (2026-09-25): row-level OOF capture
+
+`src/models/oof_capture.py` + wiring in `train.py`'s walk-forward loop.
+Each fold trains on seasons 1..N-1 and predicts season N, so its test-set
+predictions are genuinely out-of-fold; the folds concatenate into
+`data/experiments/walk_forward_oof_predictions.parquet` with
+`(player_id, season, week, team, opponent, position, predicted_points,
+actual_points, residual)` plus the fold's training seasons.
+
+`team` and `opponent` are retained specifically for work item 2 -- the
+correlation layer groups residuals by `(season, week, team)` to form
+same-game vectors, and would otherwise have to re-join them.
+
+The leakage conditions are enforced rather than assumed, because a
+contaminated panel makes every downstream number look better than it is and
+does so silently: `capture_fold_rows` raises if a fold's test season is also
+a training season or if the frame carries rows from any other season, and
+`build_panel` raises if two folds predict the same player-week (overlapping
+test seasons would double-count rows and reweight every aggregate).
+
+Also included is the segmentation this was originally asked for: rows carry
+`prior_weeks_in_panel` (strict shift -- a row never counts itself) and
+`is_cold_start` (a player's first appearance in the panel), and
+`segment_report()` breaks MAE/RMSE/**bias**/n down by any grouping. Bias is
+reported alongside the error magnitudes because a change can leave MAE flat
+while shifting the whole distribution, which is precisely what the aggregate
+four-number summary hid.
+
+Note the segmentation is panel-relative, not career-relative: it answers
+"how much had this model seen of this player by this point in validation",
+which is the question segment evaluation asks. A career-relative split needs
+pre-panel history and is a different metric -- do not conflate them.
+
+**Not yet populated.** The artifact only appears after a walk-forward run
+executes with this code. The two arms running the Vegas A/B started before
+it landed, so they will not produce one; the next walk-forward run will.
+
+Remaining for the correlation layer: work item 2 (fit
+`fit_role_residual_correlation` keyed by role, not `player_id`) and work
+item 3 (the backtest driver). Both now have their input.

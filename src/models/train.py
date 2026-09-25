@@ -56,6 +56,10 @@ from src.evaluation.backtester import ModelBacktester
 from src.utils.models_dir import redirect_models_dir
 from src.utils.model_rollback import available_rollbacks, snapshot_models
 from src.utils.atomic_io import atomic_write_json
+from src.models.oof_capture import (
+    OOF_PANEL_FILENAME, OOFLeakageError, build_panel, capture_fold_rows,
+    segment_report, write_panel,
+)
 from src.data.lineage import (
     find_artifact_ids,
     get_artifact_id,
@@ -771,6 +775,7 @@ def _run_one_fold(
     positions: list,
     tune_hyperparameters: bool,
     n_trials: int,
+    oof_collector: list = None,
 ):
     """
     Run one fold: prepare features, train models, run backtest.
@@ -831,6 +836,22 @@ def _run_one_fold(
             except Exception as e:
                 logger.warning("FP conversion for %s skipped: %s", position, e)
     test_data = _populate_actual_for_backtest(test_data, converters, qb_target)
+
+    # Row-level OOF capture. This fold trained on 1..N-1 and is predicting
+    # season N, so these rows are genuinely out-of-fold; capture_fold_rows
+    # enforces that rather than trusting it. Aggregate fold metrics cannot
+    # answer "does this help starters and hurt cold-start players equally",
+    # and the correlation layer needs row-level residuals to fit on at all
+    # (see src/models/oof_capture.py).
+    if oof_collector is not None:
+        try:
+            oof_collector.append(capture_fold_rows(
+                test_data, train_seasons=train_seasons, test_season=actual_test_season))
+        except OOFLeakageError:
+            raise
+        except (KeyError, ValueError) as e:
+            logger.warning("OOF capture skipped for fold %s: %s", actual_test_season, e)
+
     results = _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season,
                                                train_data=train_data)
     return trainer, results
@@ -1029,6 +1050,7 @@ def train_models(positions: list = None,
         old_models_dir = settings.MODELS_DIR
         wf_metrics = []
         wf_seasons = []
+        oof_folds = []
         for ts in test_seasons_wf:
             td, td_test, tr_ss, _ = load_training_data(
                 positions,
@@ -1044,7 +1066,9 @@ def train_models(positions: list = None,
             # artifacts (see src/utils/models_dir.py).
             with tempfile.TemporaryDirectory() as tmp, redirect_models_dir(tmp):
                 try:
-                    _, res = _run_one_fold(td, td_test, tr_ss, ts, positions, tune_hyperparameters, n_trials)
+                    _, res = _run_one_fold(td, td_test, tr_ss, ts, positions,
+                                           tune_hyperparameters, n_trials,
+                                           oof_collector=oof_folds)
                     if res:
                         wf_metrics.append(res.get("by_position", {}))
                         wf_seasons.append(ts)
@@ -1075,6 +1099,23 @@ def train_models(positions: list = None,
             except (OSError, ValueError) as e:
                 logger.warning("Per-fold metrics write failed (%s); only the "
                                "rounded summary below will be available", e)
+
+            # Row-level OOF panel: the artifact segment evaluation and the
+            # correlation layer both need and neither had.
+            if oof_folds:
+                try:
+                    panel = build_panel(oof_folds)
+                    panel_path = DATA_DIR / "experiments" / OOF_PANEL_FILENAME
+                    write_panel(panel, panel_path)
+                    print(f"OOF panel written: {panel_path} "
+                          f"({len(panel):,} rows, {panel['player_id'].nunique():,} players)")
+                    print("\nOOF segment report (MAE / bias by position and cold-start):")
+                    print(segment_report(panel, by=("position", "is_cold_start")
+                                         ).to_string(index=False))
+                except OOFLeakageError:
+                    raise
+                except (OSError, ValueError) as e:
+                    logger.warning("OOF panel write failed: %s", e)
 
             print("\n" + "=" * 60)
             print("Walk-Forward Validation Summary (mean +/- std)")
