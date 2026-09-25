@@ -15146,7 +15146,7 @@ practice regardless of whether this particular retrain moved the needle --
 but it should not be reported as an accuracy improvement, because the
 evidence does not support that.
 
-### A real mistake, caught and fixed: `fit_models=False` is not side-effect-free
+### `fit_models=False` is not side-effect-free (real, but not what it first looked like)
 
 While building check (2) above, an ad hoc comparison script called
 `_prepare_training_data(..., fit_models=False)` directly against the live
@@ -15154,21 +15154,34 @@ While building check (2) above, an ad hoc comparison script called
 refits and writes `data/models/utilization_percentile_bounds.json` and
 `data/models/utilization_weights.json` *before* its `fit_models` check --
 that flag only skips fitting the sklearn ensembles, not these two files.
-Both were silently overwritten with a fit from the same 2006-2025 training
-window but a measurably different result (e.g. QB `dropback_rate_pct`'s
-upper percentile bound moved from 98.15 to 93.65) -- the actual retrain's
-fitted values are now unrecoverable; no artifact captured them separately.
+That part is a real, fixed-once gap: every OTHER `fit_models=False` caller
+in this repo (`single_week_ppr/evaluate.py`, `train.py`'s walk-forward loop,
+`backtester.py`'s LOYO loop) already wraps itself in `redirect_models_dir()`
+for exactly this reason, and the new ad hoc script simply didn't.
+`_prepare_training_data`'s docstring now says this explicitly.
 
-Both files were reverted to their last-committed (pre-retrain) state rather
-than committing the contaminated fit under the retrain's name -- neither
-value is what the Sep 25 retrain actually produced, and shipping the wrong
-one as if it were would misrepresent a result nobody measured. They need a
-clean regeneration (a full retrain, or a `redirect_models_dir`-wrapped
-diagnostic call) before they can be trusted again.
+**Correction to the first version of this entry.** Seeing the two files'
+values change after that script ran, the initial conclusion was that it had
+overwritten the actual retrain's fit with a different one, and both files
+were reverted to their last-committed (pre-retrain, 2026-09-16) state as a
+precaution -- announced then as protecting an "unrecoverable" retrain
+result. That conclusion was checked, not just asserted, and turned out to
+be wrong: `fit_utilization_weights` and the percentile-bound fit have no
+random_state, shuffle, or other randomness anywhere in
+`utilization_weight_optimizer.py` (confirmed by reading it), and running
+the identical `_prepare_training_data(fit_models=False)` call a second
+time, hours later, produced **bit-identical output** to the "contaminating"
+run (e.g. QB `dropback_rate_pct`'s upper bound: 93.64978047956768 both
+times). Same code plus the same deterministic algorithm on the same
+2006-2025 training window means the same output --the ad hoc script's fit
+was almost certainly identical to what the Sep 25 retrain itself produced,
+not a corruption of it. The revert therefore undid a correct, current fit
+in favor of a nine-day-stale one, for a full day, based on an assumption
+that was never actually verified.
 
-Every EXISTING `fit_models=False` caller in this repo already wraps the call
-in `redirect_models_dir()` for exactly this reason (`single_week_ppr/evaluate.py`,
-`train.py`'s walk-forward loop, `backtester.py`'s LOYO loop) -- this was a
-gap in a new, ad hoc script, not a latent defect in the shared function.
-Documented directly in `_prepare_training_data`'s docstring so the next ad
-hoc caller doesn't repeat it.
+Reverting on suspicion before confirming the mechanism was the right
+instinct given what was known at the time -- but the verification step
+(read the fitting code for randomness; or just rerun it and diff) should
+have happened before writing "unrecoverable" into this file, not after.
+Both files are now regenerated (bit-identical to the pre-revert values) and
+committed for real.
