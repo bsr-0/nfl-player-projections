@@ -14658,3 +14658,27 @@ that morning. The test now asserts path containment *before* writing
 anything, so a broken redirect fails the assertion instead of landing on
 production. Worth remembering: a test that writes through the very path it
 is validating is only safe if it checks the path first.
+
+### Follow-up: artifacts now record their own provenance (2026-09-25)
+
+The walk-forward overwrite above was expensive to diagnose mainly because
+the artifacts said nothing about themselves -- establishing that the models
+in `data/models` were fold models took file mtimes, shell history, and a
+log-timestamp coincidence. `PositionModel.save()` and `MultiWeekModel.save()`
+now stamp a `provenance` block: `saved_at` (tz-aware UTC),
+`destination_dir`, `feature_version`, and `git_commit` (explicitly `None`
+outside a checkout, so "not collected" stays distinguishable from "not
+available").
+
+`destination_dir` is the field that does the work. A validation fold writes
+into a sandbox temp directory and a real retrain writes into `data/models`,
+so a stamped artifact claiming a temp path is provably a fold model wherever
+it later sits -- the exact question that took hours on 2026-09-24 is now a
+one-line read via `read_artifact_provenance()`. Artifacts predating the
+stamp return `None`, which is itself informative: an unstamped file in
+`data/models` cannot have its origin established from the file alone.
+
+Tests: `tests/test_artifact_provenance.py`, including a round-trip load (the
+new key must not disturb `PositionModel.load`) and an end-to-end check that
+a save through a redirected MODELS_DIR is identifiable as sandboxed
+afterwards.

@@ -26,9 +26,11 @@ try:
 except ImportError:
     HAS_LIGHTGBM = False
 
+import subprocess
 import sys
+from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config.settings import HUBER_DELTA, MODEL_CONFIG, MODELS_DIR, POSITIONS
+from config.settings import FEATURE_VERSION, HUBER_DELTA, MODEL_CONFIG, MODELS_DIR, POSITIONS
 
 VALIDATION_PCT = MODEL_CONFIG.get("validation_pct", 0.2)
 EARLY_STOPPING_ROUNDS = MODEL_CONFIG.get("early_stopping_rounds", 25)
@@ -350,6 +352,60 @@ def _select_blend_weights(oof_abs_resid: np.ndarray, components: Dict[str, np.nd
             best_loss = loss
             best_weights = weights
     return best_weights, best_loss
+
+
+_GIT_COMMIT_UNSET = object()
+_git_commit_cache = _GIT_COMMIT_UNSET
+
+
+def _git_commit() -> Optional[str]:
+    """Short HEAD sha, or None outside a git checkout. Resolved once."""
+    global _git_commit_cache
+    if _git_commit_cache is _GIT_COMMIT_UNSET:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=Path(__file__).resolve().parent, capture_output=True, timeout=5,
+            )
+            _git_commit_cache = (result.stdout.decode().strip() or None
+                                 if result.returncode == 0 else None)
+        except (OSError, subprocess.SubprocessError):
+            _git_commit_cache = None
+    return _git_commit_cache
+
+
+def _training_provenance(destination: Path) -> dict:
+    """Stamp when, from what code, and into where an artifact was written.
+
+    Model artifacts carried no provenance until 2026-09-24, and that cost
+    hours: a walk-forward fold's models were sitting in `data/models` and
+    there was no way to tell them from a production retrain, so the state
+    had to be reconstructed from file mtimes and shell history (GAPS.md,
+    that date). `destination_dir` is the field that distinguishes them --
+    a validation fold writes into a sandbox temp directory, a real retrain
+    writes into `data/models` -- so an artifact that claims a temp
+    directory is provably a fold model regardless of where it now sits.
+
+    `git_commit` is None outside a checkout; that is recorded honestly
+    rather than omitted, so a missing value is distinguishable from a
+    value that was never collected.
+    """
+    return {
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "destination_dir": str(Path(destination).parent),
+        "feature_version": str(FEATURE_VERSION).strip(),
+        "git_commit": _git_commit(),
+    }
+
+
+def read_artifact_provenance(filepath: Path) -> Optional[dict]:
+    """Provenance stamp from a saved artifact.
+
+    Returns None for artifacts written before stamping existed, which is
+    itself informative: an unstamped file in `data/models` predates
+    2026-09-25 and its origin cannot be established from the file alone.
+    """
+    return joblib.load(filepath).get("provenance")
 
 
 class PositionModel:
@@ -1448,8 +1504,9 @@ class PositionModel:
     def save(self, filepath: Path = None):
         """Save model to disk."""
         filepath = filepath or MODELS_DIR / f"model_{self.position.lower()}_{self.n_weeks}w.joblib"
-        
+
         model_data = {
+            "provenance": _training_provenance(filepath),
             "position": self.position,
             "n_weeks": self.n_weeks,
             "models": self.models,
@@ -1678,6 +1735,7 @@ class MultiWeekModel:
         
         from datetime import datetime
         save_data = {
+            "provenance": _training_provenance(filepath),
             "position": self.position,
             "unique_models": unique_models,
             "horizon_groups": self.horizon_groups,
