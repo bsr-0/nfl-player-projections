@@ -15056,3 +15056,55 @@ Tests: `tests/test_artifact_provenance.py`, including a round-trip load (the
 new key must not disturb `PositionModel.load`) and an end-to-end check that
 a save through a redirected MODELS_DIR is identifiable as sandboxed
 afterwards.
+
+## `rollback_available: true` was never true (2026-09-25)
+
+`model_metadata.json` has advertised `rollback_available` since the field was
+added. Its definition:
+
+    "rollback_available": bool(prev_metadata.get("training_date"))
+
+That is true whenever a previous training *summary* exists. It says nothing
+about whether the previous models are still on disk -- and they never were.
+`model_version_history.json` holds a list of prior training summaries (dates,
+feature versions, OOF metrics), not weights, and no artifact archive existed
+anywhere in the repo. The flag promised a capability that had no
+implementation behind it.
+
+Compounding it, the block that maintains that history runs *after* training
+(`train.py`, right before the metadata write). By then the outgoing
+`model_{pos}_1w.joblib` / `multiweek_{pos}.joblib` have already been
+overwritten, so even an artifact-aware version of that block could only ever
+have archived the new models.
+
+This stopped being hypothetical the day before: a walk-forward run overwrote
+all four positions' served artifacts (see the entry above), and the only
+reason the QB models were recoverable was an ad-hoc manual copy taken an
+hour earlier for an unrelated reason.
+
+### Fix
+
+`src/utils/model_rollback.py` snapshots the served artifacts -- plus
+`model_metadata.json` and `feature_version.txt`, since restoring weights
+without their bookkeeping recreates the 2026-09-24 mismatch in the other
+direction -- into `data/models/rollback/<UTC timestamp>/`. The snapshot is
+taken in `train_models()` immediately before `_prepare_training_data()`,
+which is the only moment the outgoing weights still exist, and after the
+walk-forward early return so validation runs never create one. Copies build
+into a `.partial` directory and rename on completion, so an interrupted
+snapshot is never listed as restorable.
+
+Retention defaults to 2, not the 5 versions kept for metadata history: one
+snapshot is ~500 MB, where metadata costs nothing. `data/models/rollback/`
+is gitignored -- `*.joblib` already was, but the copied `model_metadata.json`
+and `feature_version.txt` would otherwise have been committed.
+
+`rollback_available` and `n_rollback_versions` are now derived from the
+snapshots actually on disk, with the metadata-only count moved to
+`n_metadata_history_versions` so the two cannot be confused again.
+
+`scripts/rollback_models.py --list / --restore <version|latest>` makes the
+capability executable; previously there was no command to run even in
+principle. Restore deliberately does not snapshot the current state first --
+the caller is restoring because that state is unwanted, and archiving it
+would evict a good snapshot under the two-version retention.
