@@ -4,7 +4,7 @@ import json
 import logging
 import warnings
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 # Suppress SciPy/NumPy version mismatch warning (env may have numpy>=1.23 with older scipy)
@@ -55,6 +55,7 @@ from src.models.robust_validation import RobustTimeSeriesCV
 from src.evaluation.backtester import ModelBacktester
 from src.utils.models_dir import redirect_models_dir
 from src.utils.model_rollback import available_rollbacks, snapshot_models
+from src.utils.atomic_io import atomic_write_json
 from src.data.lineage import (
     find_artifact_ids,
     get_artifact_id,
@@ -1027,6 +1028,7 @@ def train_models(positions: list = None,
         import config.settings as settings
         old_models_dir = settings.MODELS_DIR
         wf_metrics = []
+        wf_seasons = []
         for ts in test_seasons_wf:
             td, td_test, tr_ss, _ = load_training_data(
                 positions,
@@ -1045,9 +1047,35 @@ def train_models(positions: list = None,
                     _, res = _run_one_fold(td, td_test, tr_ss, ts, positions, tune_hyperparameters, n_trials)
                     if res:
                         wf_metrics.append(res.get("by_position", {}))
+                        wf_seasons.append(ts)
                 except Exception as e:
                     print(f"  Walk-forward fold {ts} failed: {e}")
         if wf_metrics:
+            # Persist the per-fold metrics. The mean+/-std printed below cannot
+            # support an A/B: comparing two runs' bands throws away the pairing,
+            # which at n=4 folds is the only thing that makes the comparison
+            # informative (each band spans four SEASONS, whose difficulty varies
+            # far more than any change under test). These were previously
+            # discarded with the function's local scope, so the only recourse
+            # was scraping the log -- which rounds to 2dp and therefore cannot
+            # resolve effects below ~0.005 MAE. See
+            # scripts/compare_walkforward_runs.py.
+            fold_metrics_path = DATA_DIR / "experiments" / "walk_forward_fold_metrics.json"
+            try:
+                atomic_write_json({
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "test_seasons": [int(s) for s in wf_seasons],
+                    "positions": list(POSITIONS),
+                    "folds": [
+                        {"test_season": int(season), "by_position": by_position}
+                        for season, by_position in zip(wf_seasons, wf_metrics)
+                    ],
+                }, fold_metrics_path)
+                print(f"\nPer-fold metrics written: {fold_metrics_path}")
+            except (OSError, ValueError) as e:
+                logger.warning("Per-fold metrics write failed (%s); only the "
+                               "rounded summary below will be available", e)
+
             print("\n" + "=" * 60)
             print("Walk-Forward Validation Summary (mean +/- std)")
             print("=" * 60)
