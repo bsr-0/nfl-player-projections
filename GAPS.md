@@ -15108,3 +15108,67 @@ capability executable; previously there was no command to run even in
 principle. Restore deliberately does not snapshot the current state first --
 the caller is restoring because that state is unwanted, and archiving it
 would evict a good snapshot under the two-version retention.
+
+## Retrain completed and evaluated (2026-09-25): a wash, and a diagnostic-script contamination lesson
+
+The production retrain queued after the Vegas A/B walk-forward arms (see the
+"Walk-forward validation was overwriting the production models" entry above)
+completed at 06:24:24, exit 0, ~5h12m runtime. All three bookkeeping files
+(`feature_version.txt`, `model_metadata.json`, `model_version_history.json`)
+moved from 2026-09-17 to 2026-09-25 together -- the thing their absence-of-
+movement made impossible to verify two days ago. `rollback_available` is
+real this time: one snapshot exists on disk at
+`data/models/rollback/20260925T061307Z/`, confirmed loadable.
+
+### Did the retrain help?
+
+**No measurable effect, consistent with the Vegas A/B's own finding.** Two
+independent checks, both against the risk that the model's own
+`test_metrics` (old: test_season 2025, n=630-2493; new: test_season 2026,
+n=34-124) are not comparable -- different seasons, wildly different sample
+sizes, and 2026 is a partial in-progress season:
+
+1. **Walk-forward, by test year, by position** (from the two already-
+   completed A/B arms, each fold trained only on prior seasons so every year
+   is genuinely held out for both): every year, every position, both arms
+   land within 0.01-0.06 MAE/RMSE of each other, no consistent direction.
+2. **Head-to-head on IDENTICAL 2026 rows** (old model's saved weights vs new
+   model's saved weights, both scored on the same 648 feature-prepared test
+   rows -- regenerated via `_prepare_training_data(..., fit_models=False)`,
+   no retraining): QB and TE slightly worse (+0.25, +0.09 MAE), RB slightly
+   better (-0.03), WR a tie (+0.006). All within the noise band (1) already
+   established, and QB's n=34 is far below the sample size needed to detect
+   anything this small (see the OOF panel methodology review above).
+
+The retrain was still worth doing -- it corrects the Vegas sign bug, and
+serving a five-week-stale (relative to feature_version) model is worse
+practice regardless of whether this particular retrain moved the needle --
+but it should not be reported as an accuracy improvement, because the
+evidence does not support that.
+
+### A real mistake, caught and fixed: `fit_models=False` is not side-effect-free
+
+While building check (2) above, an ad hoc comparison script called
+`_prepare_training_data(..., fit_models=False)` directly against the live
+`MODELS_DIR`, without wrapping it in `redirect_models_dir()`. The function
+refits and writes `data/models/utilization_percentile_bounds.json` and
+`data/models/utilization_weights.json` *before* its `fit_models` check --
+that flag only skips fitting the sklearn ensembles, not these two files.
+Both were silently overwritten with a fit from the same 2006-2025 training
+window but a measurably different result (e.g. QB `dropback_rate_pct`'s
+upper percentile bound moved from 98.15 to 93.65) -- the actual retrain's
+fitted values are now unrecoverable; no artifact captured them separately.
+
+Both files were reverted to their last-committed (pre-retrain) state rather
+than committing the contaminated fit under the retrain's name -- neither
+value is what the Sep 25 retrain actually produced, and shipping the wrong
+one as if it were would misrepresent a result nobody measured. They need a
+clean regeneration (a full retrain, or a `redirect_models_dir`-wrapped
+diagnostic call) before they can be trusted again.
+
+Every EXISTING `fit_models=False` caller in this repo already wraps the call
+in `redirect_models_dir()` for exactly this reason (`single_week_ppr/evaluate.py`,
+`train.py`'s walk-forward loop, `backtester.py`'s LOYO loop) -- this was a
+gap in a new, ad hoc script, not a latent defect in the shared function.
+Documented directly in `_prepare_training_data`'s docstring so the next ad
+hoc caller doesn't repeat it.

@@ -3,43 +3,43 @@
   "top_shap_features": [
     {
       "feature": "snap_share_accel",
-      "mean_abs_shap": 0.05088244796963755
+      "mean_abs_shap": 0.05214610031304358
     },
     {
       "feature": "targets_roll3_mean",
-      "mean_abs_shap": 0.0423931007668634
+      "mean_abs_shap": 0.04136195020851664
     },
     {
       "feature": "prev_season_ppg",
-      "mean_abs_shap": 0.03310617514243529
+      "mean_abs_shap": 0.02553064478697065
     },
     {
       "feature": "depth_chart_rank",
-      "mean_abs_shap": 0.021245311230635822
+      "mean_abs_shap": 0.020691257111979958
     },
     {
       "feature": "rushing_attempts_roll3_mean",
-      "mean_abs_shap": 0.01223039287490777
-    },
-    {
-      "feature": "rush_share_pct_roll3_mean",
-      "mean_abs_shap": 0.011548571157447165
-    },
-    {
-      "feature": "speed_score",
-      "mean_abs_shap": 0.009427849851547258
+      "mean_abs_shap": 0.012872840428212538
     },
     {
       "feature": "catch_rate_roll3_mean",
-      "mean_abs_shap": 0.009205006410108359
+      "mean_abs_shap": 0.012559350337918435
+    },
+    {
+      "feature": "rush_share_pct_roll3_mean",
+      "mean_abs_shap": 0.011552688744407489
+    },
+    {
+      "feature": "speed_score",
+      "mean_abs_shap": 0.01020166308336122
     },
     {
       "feature": "spread",
-      "mean_abs_shap": 0.008238576693315002
+      "mean_abs_shap": 0.007925673606619115
     },
     {
-      "feature": "rookie_ceiling_ppg",
-      "mean_abs_shap": 0.007361731469923381
+      "feature": "fp_volatility_roll5",
+      "mean_abs_shap": 0.005353340789493864
     }
   ]
 }

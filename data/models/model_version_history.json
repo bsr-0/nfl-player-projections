@@ -1,183 +1,5 @@
 [
   {
-    "training_date": "2026-09-03T00:22:07.529286",
-    "feature_version": "35",
-    "train_seasons": [
-      2018,
-      2019,
-      2020,
-      2021,
-      2022,
-      2023,
-      2024
-    ],
-    "test_season": 2025,
-    "positions_trained": [
-      "QB",
-      "RB",
-      "WR",
-      "TE"
-    ],
-    "oof_metrics": {
-      "QB": {
-        "1w": {
-          "rmse": 6.93610139571263,
-          "mae": 5.513642904187464,
-          "r2": 0.3706257758665036,
-          "target_space": "original"
-        },
-        "4w": {
-          "rmse": 17.816341373075744,
-          "mae": 14.162877736262635,
-          "r2": 0.5067242616322049,
-          "target_space": "original"
-        }
-      },
-      "RB": {
-        "1w": {
-          "rmse": 6.298554532265641,
-          "mae": 4.474295478615068,
-          "r2": 0.29523787576822247,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 16.912186536582524,
-          "mae": 12.660710333334622,
-          "r2": 0.49453388069346516,
-          "target_space": "log1p"
-        }
-      },
-      "WR": {
-        "1w": {
-          "rmse": 5.9925215029968175,
-          "mae": 4.172765373617436,
-          "r2": 0.36904684805730903,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 15.172697778471688,
-          "mae": 11.333686062782718,
-          "r2": 0.5809417821975134,
-          "target_space": "log1p"
-        }
-      },
-      "TE": {
-        "1w": {
-          "rmse": 4.375593077580822,
-          "mae": 2.789438487615083,
-          "r2": 0.36562864103792225,
-          "target_space": "log1p"
-        },
-        "4w": {
-          "rmse": 10.59996754974119,
-          "mae": 7.41362856276592,
-          "r2": 0.6417836933926517,
-          "target_space": "log1p"
-        }
-      }
-    },
-    "test_metrics": {
-      "QB": {
-        "FP (owner objective)": {
-          "rmse": 8.036287961147071,
-          "mae": 6.553221747040237,
-          "r2": 0.20909618010339348,
-          "within_7pt_pct": 60.15873015873016,
-          "within_10pt_pct": 77.46031746031747,
-          "n_samples": 630,
-          "mape": 88.60545175375925,
-          "spearman_rho": 0.4444758157714606,
-          "expert_benchmark_rmse": 7.5,
-          "vs_expert_pct": -7.2
-        }
-      },
-      "RB": {
-        "util": {
-          "rmse": 32.966987693780254,
-          "mae": 28.062433240350728,
-          "r2": -1.47665422365426,
-          "within_7pt_pct": 14.626288659793815,
-          "within_10pt_pct": 19.716494845360824,
-          "n_samples": 1552,
-          "mape": 74.45356361122322,
-          "spearman_rho": 0.6847353278679142
-        },
-        "FP": {
-          "rmse": 6.35146166604357,
-          "mae": 4.6250829061332155,
-          "r2": 0.3801265781353378,
-          "within_7pt_pct": 78.27317763623496,
-          "within_10pt_pct": 88.39348903043171,
-          "n_samples": 1413,
-          "mape": 69.52053627612713,
-          "spearman_rho": 0.6592515821215881,
-          "expert_benchmark_rmse": 8.5,
-          "vs_expert_pct": 25.3
-        }
-      },
-      "WR": {
-        "util": {
-          "rmse": 46.32527068110102,
-          "mae": 41.862070679529225,
-          "r2": -3.196096847394232,
-          "within_7pt_pct": 10.931768158473956,
-          "within_10pt_pct": 12.545854732208364,
-          "n_samples": 2726,
-          "mape": 84.43022268974966,
-          "spearman_rho": 0.690714684446426
-        },
-        "FP": {
-          "rmse": 5.906854068246224,
-          "mae": 4.15761540913077,
-          "r2": 0.33088587493540034,
-          "within_7pt_pct": 80.94665062174087,
-          "within_10pt_pct": 90.17248295226634,
-          "n_samples": 2493,
-          "mape": 67.01917051896763,
-          "spearman_rho": 0.6276515455719829,
-          "expert_benchmark_rmse": 8.0,
-          "vs_expert_pct": 26.2
-        }
-      },
-      "TE": {
-        "util": {
-          "rmse": 42.4464031330189,
-          "mae": 38.389230463961965,
-          "r2": -3.269481592334153,
-          "within_7pt_pct": 1.1255924170616114,
-          "within_10pt_pct": 5.983412322274882,
-          "n_samples": 1688,
-          "mape": 91.75019518778596,
-          "spearman_rho": 0.7342088748382585
-        },
-        "FP": {
-          "rmse": 4.492312302828095,
-          "mae": 2.9813139258403774,
-          "r2": 0.3785607867719848,
-          "within_7pt_pct": 88.40952994204766,
-          "within_10pt_pct": 95.36381197681905,
-          "n_samples": 1553,
-          "mape": 53.08872433982936,
-          "spearman_rho": 0.6590536619180546,
-          "expert_benchmark_rmse": 6.5,
-          "vs_expert_pct": 30.9
-        }
-      }
-    },
-    "n_features_per_position": {
-      "QB": 442,
-      "RB": 67,
-      "WR": 70,
-      "TE": 68
-    },
-    "previous_training_date": "2026-09-02T23:02:05.695290",
-    "previous_feature_version": "35",
-    "rollback_available": true,
-    "n_rollback_versions": 5,
-    "horizon_status_file": "/Users/benrosen/nfl-player-projections/data/models/horizon_model_status.json",
-    "bounded_scaler_file": "/Users/benrosen/nfl-player-projections/data/models/feature_scaler_bounded.joblib"
-  },
-  {
     "training_date": "2026-09-03T13:51:39.623471",
     "feature_version": "35",
     "train_seasons": [
@@ -821,6 +643,172 @@
       "TE": 68
     },
     "previous_training_date": "2026-09-15T23:56:52.965896",
+    "previous_feature_version": "36",
+    "rollback_available": true,
+    "n_rollback_versions": 5,
+    "horizon_status_file": "data/models/horizon_model_status.json",
+    "bounded_scaler_file": "data/models/feature_scaler_bounded.joblib"
+  },
+  {
+    "training_date": "2026-09-17T03:32:56.033952",
+    "feature_version": "36",
+    "train_seasons": [
+      2006,
+      2007,
+      2008,
+      2009,
+      2010,
+      2011,
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "test_season": 2025,
+    "positions_trained": [
+      "QB",
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "oof_metrics": {
+      "QB": {
+        "1w": {
+          "rmse": 7.8629655279865664,
+          "mae": 6.475189615318403,
+          "r2": 0.29191005921884283,
+          "target_space": "original"
+        }
+      },
+      "RB": {
+        "1w": {
+          "rmse": 6.755939321380964,
+          "mae": 4.884383508932071,
+          "r2": 0.2636729084994921,
+          "target_space": "log1p"
+        }
+      },
+      "WR": {
+        "1w": {
+          "rmse": 6.356996727063136,
+          "mae": 4.444136633307203,
+          "r2": 0.3127022090487067,
+          "target_space": "log1p"
+        }
+      },
+      "TE": {
+        "1w": {
+          "rmse": 4.423981016716557,
+          "mae": 2.9333900667238955,
+          "r2": 0.35116166627875045,
+          "target_space": "log1p"
+        }
+      }
+    },
+    "test_metrics": {
+      "QB": {
+        "FP (owner objective)": {
+          "rmse": 8.16357692377028,
+          "mae": 6.610629933443011,
+          "r2": 0.18121979806703759,
+          "within_7pt_pct": 59.84126984126984,
+          "within_10pt_pct": 76.34920634920634,
+          "n_samples": 630,
+          "mape": 90.68761198914459,
+          "spearman_rho": 0.4367193107744765,
+          "expert_benchmark_rmse": 7.5,
+          "vs_expert_pct": -8.8
+        }
+      },
+      "RB": {
+        "util": {
+          "rmse": 16.18009146278004,
+          "mae": 12.844238354402698,
+          "r2": -0.43559686751524285,
+          "within_7pt_pct": 35.70973901973266,
+          "within_10pt_pct": 45.95798854232972,
+          "n_samples": 1571,
+          "mape": 58.53541605267737,
+          "spearman_rho": 0.6545778118831032
+        },
+        "FP": {
+          "rmse": 6.415490321923945,
+          "mae": 4.759516555091568,
+          "r2": 0.3657988454317993,
+          "within_7pt_pct": 77.90209790209789,
+          "within_10pt_pct": 88.18181818181819,
+          "n_samples": 1430,
+          "mape": 74.9178563333871,
+          "spearman_rho": 0.6643141735075874,
+          "expert_benchmark_rmse": 8.5,
+          "vs_expert_pct": 24.5
+        }
+      },
+      "WR": {
+        "util": {
+          "rmse": 36.27084490287781,
+          "mae": 32.7212186507695,
+          "r2": -2.747235664395187,
+          "within_7pt_pct": 15.223771093176817,
+          "within_10pt_pct": 16.507703595011005,
+          "n_samples": 2726,
+          "mape": 77.7722166332368,
+          "spearman_rho": 0.7093296081709004
+        },
+        "FP": {
+          "rmse": 5.8308833308647365,
+          "mae": 4.279465061200228,
+          "r2": 0.35026613438114373,
+          "within_7pt_pct": 81.10709987966305,
+          "within_10pt_pct": 90.5736060970718,
+          "n_samples": 2493,
+          "mape": 76.61203131734817,
+          "spearman_rho": 0.6352585280117854,
+          "expert_benchmark_rmse": 8.0,
+          "vs_expert_pct": 27.1
+        }
+      },
+      "TE": {
+        "util": {
+          "rmse": 34.17597719841402,
+          "mae": 30.68862543425886,
+          "r2": -2.8871822779539085,
+          "within_7pt_pct": 6.698564593301436,
+          "within_10pt_pct": 11.124401913875598,
+          "n_samples": 1672,
+          "mape": 88.74942033102455,
+          "spearman_rho": 0.7195343702173824
+        },
+        "FP": {
+          "rmse": 4.581302314661857,
+          "mae": 3.08553772889908,
+          "r2": 0.3645246986465015,
+          "within_7pt_pct": 88.81664499349804,
+          "within_10pt_pct": 95.12353706111834,
+          "n_samples": 1538,
+          "mape": 56.445503105083446,
+          "spearman_rho": 0.6578403781706921,
+          "expert_benchmark_rmse": 6.5,
+          "vs_expert_pct": 29.5
+        }
+      }
+    },
+    "n_features_per_position": {
+      "QB": 62,
+      "RB": 67,
+      "WR": 70,
+      "TE": 68
+    },
+    "previous_training_date": "2026-09-16T09:27:20.571879",
     "previous_feature_version": "36",
     "rollback_available": true,
     "n_rollback_versions": 5,

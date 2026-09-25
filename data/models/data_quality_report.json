@@ -1,216 +1,215 @@
 {
-  "generated_at": "2026-09-17T03:27:15.569163",
+  "generated_at": "2026-09-25T06:13:17.849795",
   "strict_requirements": false,
   "distribution_shift": {
-    "adversarial_auc": 0.9981,
+    "adversarial_auc": 0.9993,
     "shift_detected": true,
     "top_shifted_features": [
       {
-        "feature": "expected_game_total",
-        "ks_stat": 0.917,
+        "feature": "coaching_adaptation_score",
+        "ks_stat": 0.949,
         "p_value": 0.0
       },
       {
-        "feature": "expected_point_diff",
-        "ks_stat": 0.587,
+        "feature": "coaching_stability",
+        "ks_stat": 0.949,
+        "p_value": 0.0
+      },
+      {
+        "feature": "coaching_tenure_weeks",
+        "ks_stat": 0.949,
+        "p_value": 0.0
+      },
+      {
+        "feature": "coaching_change_impact",
+        "ks_stat": 0.667,
         "p_value": 0.0
       },
       {
         "feature": "draft_season",
-        "ks_stat": 0.505,
+        "ks_stat": 0.518,
+        "p_value": 0.0
+      },
+      {
+        "feature": "any_coaching_change",
+        "ks_stat": 0.465,
+        "p_value": 0.0
+      },
+      {
+        "feature": "coaching_change",
+        "ks_stat": 0.465,
         "p_value": 0.0
       },
       {
         "feature": "contract_apy_rank",
-        "ks_stat": 0.331,
+        "ks_stat": 0.44,
         "p_value": 0.0
       },
       {
-        "feature": "current_qb_epa_per_att",
-        "ks_stat": 0.33,
+        "feature": "defense_data_available",
+        "ks_stat": 0.353,
         "p_value": 0.0
       },
       {
         "feature": "combine_score",
-        "ks_stat": 0.328,
-        "p_value": 0.0
-      },
-      {
-        "feature": "fantasy_points_allowed_qb",
-        "ks_stat": 0.17,
-        "p_value": 0.0
-      },
-      {
-        "feature": "availability_3yr",
-        "ks_stat": 0.146,
-        "p_value": 0.0
-      },
-      {
-        "feature": "depth_chart_rank",
-        "ks_stat": 0.141,
-        "p_value": 0.0
-      },
-      {
-        "feature": "blowout_risk",
-        "ks_stat": 0.138,
+        "ks_stat": 0.337,
         "p_value": 0.0
       }
     ],
     "top_discriminative_features": [
       {
-        "feature": "expected_game_total",
-        "importance": 0.8912
+        "feature": "weeks_since_coaching_change",
+        "importance": 0.5337
       },
       {
-        "feature": "team_b_total_yards",
-        "importance": 0.0475
+        "feature": "coaching_tenure_weeks",
+        "importance": 0.345
+      },
+      {
+        "feature": "team_snaps",
+        "importance": 0.0297
+      },
+      {
+        "feature": "team_points",
+        "importance": 0.0254
+      },
+      {
+        "feature": "rookie_projected_total",
+        "importance": 0.0151
+      },
+      {
+        "feature": "redzone_targets_norm",
+        "importance": 0.0125
       },
       {
         "feature": "team_b_passing_yards",
-        "importance": 0.0194
+        "importance": 0.0072
       },
       {
-        "feature": "team_b_points_allowed",
-        "importance": 0.0148
-      },
-      {
-        "feature": "team_b_rushing_yards",
-        "importance": 0.008
+        "feature": "position_rank",
+        "importance": 0.0067
       },
       {
         "feature": "draft_season",
-        "importance": 0.0073
-      },
-      {
-        "feature": "team_b_points_scored",
-        "importance": 0.0066
-      },
-      {
-        "feature": "team_a_points_scored",
-        "importance": 0.0042
+        "importance": 0.0058
       },
       {
         "feature": "team_a_rushing_yards",
-        "importance": 0.0003
-      },
-      {
-        "feature": "season_position_rank",
-        "importance": 0.0003
+        "importance": 0.0058
       }
     ]
   },
   "missingness_above_5pct": {
     "train": {
-      "ngs_rush_yards_over_expected_per_att": 0.9639553964346983,
-      "ngs_completion_percentage_above_expectation": 0.9540445289773999,
-      "ngs_avg_air_yards_to_sticks": 0.9540352054896696,
-      "ngs_avg_time_to_throw": 0.9540352054896696,
-      "ngs_aggressiveness": 0.9540352054896696,
-      "ngs_percent_attempts_gte_eight_defenders": 0.954016558514209,
-      "ngs_efficiency": 0.954016558514209,
-      "qb_pocket_time_prior": 0.9519467442380846,
-      "qb_bad_throw_pct_prior": 0.9513034235846946,
-      "ngs_avg_time_to_throw_roll3_mean": 0.9507813082717983,
-      "ngs_avg_air_yards_to_sticks_roll3_mean": 0.9507813082717983,
-      "ngs_completion_percentage_above_expectation_roll3_mean": 0.9507813082717983,
-      "ngs_aggressiveness_roll3_mean": 0.9507813082717983,
-      "ngs_rush_yards_over_expected_per_att_roll3_mean": 0.9485157007533378,
-      "ngs_efficiency_roll3_mean": 0.9343533228910271,
-      "ngs_percent_attempts_gte_eight_defenders_roll3_mean": 0.9343533228910271,
-      "ngs_avg_yac_above_expectation": 0.8873256507794436,
-      "ngs_avg_cushion": 0.8868501529051988,
-      "ngs_avg_separation": 0.886822182442008,
-      "ngs_avg_intended_air_yards": 0.886822182442008,
-      "ngs_catch_percentage": 0.886822182442008,
-      "team_shotgun_rate": 0.8757458790184232,
-      "team_motion_rate": 0.8757458790184232,
-      "team_play_action_rate": 0.8757458790184232,
-      "ngs_avg_yac_above_expectation_roll3_mean": 0.8307041097933915,
-      "ngs_avg_cushion_roll3_mean": 0.8303498172596405,
-      "ngs_avg_intended_air_yards_roll3_mean": 0.8303125233087193,
-      "ngs_catch_percentage_roll3_mean": 0.8303125233087193,
-      "ngs_avg_separation_roll3_mean": 0.8303125233087193,
-      "rb_broken_tackles_prior": 0.8262474826583128,
-      "recv_drop_pct_season_prior": 0.7423733870366227,
-      "recv_drop_pct_roll3_mean": 0.5895148056985157,
-      "rb_yac_avg_roll3_mean": 0.5895148056985157,
-      "rb_ybc_avg_roll3_mean": 0.5895148056985157,
-      "qb_pressure_pct_roll3_mean": 0.5895148056985157,
-      "team_sack_rate_allowed_roll3_mean": 0.5895148056985157,
-      "team_run_block_ybc_avg_roll3_mean": 0.5895148056985157,
-      "qb_blitz_rate_roll3_mean": 0.5822984261952712,
-      "qb_hurry_rate_roll3_mean": 0.5822984261952712,
-      "qb_hit_rate_roll3_mean": 0.5822984261952712,
-      "qb_sack_rate_roll3_mean": 0.5822984261952712,
-      "snap_share_pct_roll3_mean": 0.32414037443126725,
-      "snap_share_accel": 0.3201033042440516,
-      "snap_count": 0.318732751547699,
-      "snap_share": 0.318732751547699,
-      "team_snaps": 0.31777243231147906,
-      "snap_share_pct": 0.3077310360259566,
-      "injury_score": 0.3077310360259566,
-      "depth_chart_rank": 0.3077310360259566,
-      "bmi": 0.2763761467889908,
-      "speed_score": 0.2763761467889908,
-      "fp_late6_vs_season": 0.22940441560378907,
-      "availability_3yr": 0.2037461773700306,
-      "target_1w": 0.09382225702990975
+      "ngs_rush_yards_over_expected_per_att": 0.9608335381482391,
+      "ngs_completion_percentage_above_expectation": 0.9518099785822127,
+      "ngs_avg_air_yards_to_sticks": 0.9518012008005337,
+      "ngs_aggressiveness": 0.9518012008005337,
+      "ngs_avg_time_to_throw": 0.9518012008005337,
+      "ngs_percent_attempts_gte_eight_defenders": 0.9514764228784102,
+      "ngs_efficiency": 0.9514764228784102,
+      "ngs_avg_time_to_throw_roll3_mean": 0.9481671991854218,
+      "ngs_avg_air_yards_to_sticks_roll3_mean": 0.9481671991854218,
+      "ngs_aggressiveness_roll3_mean": 0.9481671991854218,
+      "ngs_completion_percentage_above_expectation_roll3_mean": 0.9481671991854218,
+      "qb_pocket_time_prior": 0.9472016432007303,
+      "qb_bad_throw_pct_prior": 0.9469031986236438,
+      "ngs_rush_yards_over_expected_per_att_roll3_mean": 0.9443664197184087,
+      "ngs_efficiency_roll3_mean": 0.9310329693479864,
+      "ngs_percent_attempts_gte_eight_defenders_roll3_mean": 0.9310329693479864,
+      "ngs_avg_yac_above_expectation": 0.882772725676767,
+      "ngs_avg_cushion": 0.8822987254661002,
+      "ngs_avg_separation": 0.8822723921210631,
+      "ngs_avg_intended_air_yards": 0.8822723921210631,
+      "ngs_catch_percentage": 0.8822723921210631,
+      "team_shotgun_rate": 0.8243741441662863,
+      "team_motion_rate": 0.8243741441662863,
+      "team_play_action_rate": 0.8243741441662863,
+      "ngs_avg_yac_above_expectation_roll3_mean": 0.8230574769144342,
+      "ngs_avg_cushion_roll3_mean": 0.8227151434289527,
+      "ngs_avg_intended_air_yards_roll3_mean": 0.8226800323022366,
+      "ngs_catch_percentage_roll3_mean": 0.8226800323022366,
+      "ngs_avg_separation_roll3_mean": 0.8226800323022366,
+      "rb_broken_tackles_prior": 0.8099522488676661,
+      "recv_drop_pct_season_prior": 0.7160036515571785,
+      "recv_drop_pct_roll3_mean": 0.5557564692250975,
+      "rb_yac_avg_roll3_mean": 0.5557564692250975,
+      "rb_ybc_avg_roll3_mean": 0.5557564692250975,
+      "qb_pressure_pct_roll3_mean": 0.5557564692250975,
+      "team_sack_rate_allowed_roll3_mean": 0.5557564692250975,
+      "team_run_block_ybc_avg_roll3_mean": 0.5557564692250975,
+      "qb_blitz_rate_roll3_mean": 0.5481022436009971,
+      "qb_hurry_rate_roll3_mean": 0.5481022436009971,
+      "qb_hit_rate_roll3_mean": 0.5481022436009971,
+      "qb_sack_rate_roll3_mean": 0.5481022436009971,
+      "snap_share_pct_roll3_mean": 0.30594958042203574,
+      "snap_share_accel": 0.30214880095502267,
+      "snap_count": 0.30003335557038024,
+      "snap_share": 0.30003335557038024,
+      "team_snaps": 0.29910291071240475,
+      "snap_share_pct": 0.2896492398441066,
+      "injury_score": 0.2896492398441066,
+      "depth_chart_rank": 0.2896492398441066,
+      "bmi": 0.2818633474948211,
+      "speed_score": 0.2818633474948211,
+      "fp_late6_vs_season": 0.22759910115515608,
+      "availability_3yr": 0.2018714230539658,
+      "target_1w": 0.09346581931814192
     },
     "test": {
-      "ngs_completion_percentage_above_expectation": 0.9159802306425041,
-      "ngs_aggressiveness": 0.9159802306425041,
-      "ngs_avg_air_yards_to_sticks": 0.9159802306425041,
-      "ngs_avg_time_to_throw": 0.9159802306425041,
-      "ngs_rush_yards_over_expected_per_att": 0.9107383555488993,
-      "ngs_efficiency": 0.9107383555488993,
-      "ngs_percent_attempts_gte_eight_defenders": 0.9107383555488993,
-      "ngs_avg_air_yards_to_sticks_roll3_mean": 0.9062453197543807,
-      "ngs_avg_time_to_throw_roll3_mean": 0.9062453197543807,
-      "ngs_aggressiveness_roll3_mean": 0.9062453197543807,
-      "ngs_completion_percentage_above_expectation_roll3_mean": 0.9062453197543807,
-      "ngs_rush_yards_over_expected_per_att_roll3_mean": 0.8777894263890968,
-      "ngs_percent_attempts_gte_eight_defenders_roll3_mean": 0.8777894263890968,
-      "ngs_efficiency_roll3_mean": 0.8777894263890968,
-      "qb_bad_throw_pct_prior": 0.8762917477909241,
-      "qb_pocket_time_prior": 0.8710498726973191,
-      "ngs_avg_yac_above_expectation": 0.8097948180320503,
-      "ngs_catch_percentage": 0.8093455144525985,
-      "ngs_avg_separation": 0.8093455144525985,
-      "ngs_avg_cushion": 0.8093455144525985,
-      "ngs_avg_intended_air_yards": 0.8093455144525985,
-      "ngs_avg_yac_above_expectation_roll3_mean": 0.7004642803654336,
-      "ngs_avg_cushion_roll3_mean": 0.7003145125056163,
-      "ngs_avg_intended_air_yards_roll3_mean": 0.7003145125056163,
-      "ngs_catch_percentage_roll3_mean": 0.7003145125056163,
-      "ngs_avg_separation_roll3_mean": 0.7003145125056163,
-      "rb_broken_tackles_prior": 0.5487494383705257,
-      "speed_score": 0.37112475662722777,
-      "bmi": 0.37112475662722777,
-      "recv_drop_pct_season_prior": 0.2927961659427887,
-      "fp_late6_vs_season": 0.19934102141680396,
-      "availability_3yr": 0.17253257450951026,
-      "target_1w": 0.08776396585292796
+      "head_coach": 1.0,
+      "ngs_avg_separation": 1.0,
+      "rb_broken_tackles_prior": 1.0,
+      "qb_pocket_time_prior": 1.0,
+      "qb_bad_throw_pct_prior": 1.0,
+      "ngs_avg_yac_above_expectation": 1.0,
+      "ngs_catch_percentage": 1.0,
+      "ngs_avg_intended_air_yards": 1.0,
+      "ngs_avg_cushion": 1.0,
+      "recv_drop_pct_season_prior": 1.0,
+      "ngs_percent_attempts_gte_eight_defenders": 1.0,
+      "ngs_efficiency": 1.0,
+      "ngs_rush_yards_over_expected_per_att": 1.0,
+      "ngs_avg_air_yards_to_sticks": 1.0,
+      "ngs_avg_time_to_throw": 1.0,
+      "ngs_completion_percentage_above_expectation": 1.0,
+      "ngs_aggressiveness": 1.0,
+      "ngs_aggressiveness_roll3_mean": 0.8919753086419753,
+      "ngs_avg_air_yards_to_sticks_roll3_mean": 0.8919753086419753,
+      "ngs_completion_percentage_above_expectation_roll3_mean": 0.8919753086419753,
+      "ngs_avg_time_to_throw_roll3_mean": 0.8919753086419753,
+      "ngs_rush_yards_over_expected_per_att_roll3_mean": 0.8580246913580247,
+      "ngs_efficiency_roll3_mean": 0.8580246913580247,
+      "ngs_percent_attempts_gte_eight_defenders_roll3_mean": 0.8580246913580247,
+      "ngs_avg_cushion_roll3_mean": 0.6820987654320988,
+      "ngs_avg_intended_air_yards_roll3_mean": 0.6820987654320988,
+      "ngs_catch_percentage_roll3_mean": 0.6820987654320988,
+      "ngs_avg_yac_above_expectation_roll3_mean": 0.6820987654320988,
+      "ngs_avg_separation_roll3_mean": 0.6820987654320988,
+      "target_1w": 0.5493827160493827,
+      "speed_score": 0.3487654320987654,
+      "bmi": 0.3487654320987654
     }
   },
   "train_outliers_3sigma": {
     "fantasy_points": {
-      "n_outliers": 1194,
-      "n_samples": 107256,
-      "pct_outliers": 1.113
+      "n_outliers": 1275,
+      "n_samples": 113924,
+      "pct_outliers": 1.119
     },
     "target_1w": {
-      "n_outliers": 1111,
-      "n_samples": 97193,
-      "pct_outliers": 1.143
+      "n_outliers": 1192,
+      "n_samples": 103276,
+      "pct_outliers": 1.154
     },
     "target_util_1w": {
       "n_outliers": 0,
-      "n_samples": 107256,
+      "n_samples": 113924,
       "pct_outliers": 0.0
     },
     "utilization_score": {
       "n_outliers": 0,
-      "n_samples": 107256,
+      "n_samples": 113924,
       "pct_outliers": 0.0
     }
   }

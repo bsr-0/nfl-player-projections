@@ -470,6 +470,23 @@ def _prepare_training_data(
     Returns (train_data, test_data, trainer).
     Offline architecture experiments may set fit_models=False to return the
     identical prepared frames with trainer=None, without fitting unused models.
+
+    fit_models=False is NOT side-effect-free. It skips fitting the sklearn
+    ensembles, but utilization percentile bounds and weights are refit and
+    WRITTEN TO MODELS_DIR unconditionally, before the fit_models check --
+    calculate_utilization_scores/recalculate_utilization_with_weights need
+    them in memory to produce the same features a real run would, and the
+    current implementation round-trips them through disk to get there
+    (save_percentile_bounds then load_percentile_bounds, a few lines below).
+    An offline/diagnostic caller that does not wrap this in
+    src.utils.models_dir.redirect_models_dir WILL silently overwrite the live
+    utilization_percentile_bounds.json / utilization_weights.json with a
+    fit from whatever train_data it passed -- observed 2026-09-25, when an
+    ad hoc comparison script did exactly this and had to be cleaned up by
+    hand (see GAPS.md, that date). Every existing fit_models=False caller in
+    this repo (single_week_ppr/evaluate.py, train.py's walk-forward loop,
+    backtester.py's LOYO loop) already wraps its call in redirect_models_dir
+    for this reason -- do the same for any new one.
     """
     from config.settings import MODELS_DIR
 

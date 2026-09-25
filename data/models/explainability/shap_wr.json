@@ -3,43 +3,43 @@
   "top_shap_features": [
     {
       "feature": "prev_season_ppg",
-      "mean_abs_shap": 0.05545378030990691
+      "mean_abs_shap": 0.05116965692452699
     },
     {
       "feature": "receptions_roll3_mean",
-      "mean_abs_shap": 0.05508325097347194
+      "mean_abs_shap": 0.04728857011203177
     },
     {
       "feature": "snap_share_accel",
-      "mean_abs_shap": 0.02299045210421319
+      "mean_abs_shap": 0.027997800951385335
     },
     {
       "feature": "depth_chart_rank",
-      "mean_abs_shap": 0.020918045333444494
+      "mean_abs_shap": 0.025891648383067966
     },
     {
       "feature": "contract_apy_rank",
-      "mean_abs_shap": 0.010244700978627
+      "mean_abs_shap": 0.012220145482771377
     },
     {
       "feature": "wopr_roll3",
-      "mean_abs_shap": 0.009936587006928647
-    },
-    {
-      "feature": "bayesian_prior_ppg",
-      "mean_abs_shap": 0.009205617560745666
-    },
-    {
-      "feature": "fp_volatility_roll5",
-      "mean_abs_shap": 0.008890903038239145
-    },
-    {
-      "feature": "rookie_ceiling_ppg",
-      "mean_abs_shap": 0.006301976244919592
+      "mean_abs_shap": 0.009183785123934056
     },
     {
       "feature": "availability_3yr",
-      "mean_abs_shap": 0.004982518197824174
+      "mean_abs_shap": 0.007761975294473348
+    },
+    {
+      "feature": "fp_volatility_roll5",
+      "mean_abs_shap": 0.007507788502110622
+    },
+    {
+      "feature": "bayesian_prior_ppg",
+      "mean_abs_shap": 0.006133617698059332
+    },
+    {
+      "feature": "targets_roll3_mean",
+      "mean_abs_shap": 0.005651434806377123
     }
   ]
 }
