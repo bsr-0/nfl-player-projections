@@ -384,6 +384,48 @@ def _prune_old_run_panels(root: Path, *, keep: int) -> None:
         shutil.rmtree(stale, ignore_errors=True)
 
 
+def cluster_bootstrap_distribution(
+    values: np.ndarray,
+    clusters: np.ndarray,
+    *,
+    statistic,
+    n_boot: int = 1000,
+    seed: int = 0,
+) -> np.ndarray:
+    """The raw bootstrap draws behind `cluster_bootstrap_ci`.
+
+    Exposed separately (rather than only returning percentiles) because a
+    bootstrap p-value derived from the SAME draws as the CI is internally
+    consistent by construction -- p < alpha and "the (1-alpha) CI excludes
+    zero" agree, which mixing this bootstrap with a separately-computed
+    t-test p-value would not guarantee. See
+    scripts/compare_oof_panels.py, which needs both for its
+    multiple-comparison correction.
+
+    Rows here are not independent draws -- many rows per player, several per
+    same-game team-week -- so a per-row bootstrap understates the standard
+    error. Resampling whole clusters (with replacement) and recomputing the
+    statistic on each resample is the standard correction; it is approximate
+    (a single clustering dimension, not the fully crossed player x game
+    structure) but is a large improvement over ignoring clustering entirely.
+
+    Returns an empty array when there are fewer than 2 unique clusters (not
+    enough to resample) -- callers must handle that rather than treating an
+    empty result as "no effect".
+    """
+    unique = np.unique(clusters)
+    if len(unique) < 2:
+        return np.array([])
+    rng = np.random.default_rng(seed)
+    by_cluster = {c: values[clusters == c] for c in unique}
+    stats = np.empty(n_boot)
+    for i in range(n_boot):
+        sampled = rng.choice(unique, size=len(unique), replace=True)
+        pooled = np.concatenate([by_cluster[c] for c in sampled])
+        stats[i] = statistic(pooled)
+    return stats
+
+
 def cluster_bootstrap_ci(
     values: np.ndarray,
     clusters: np.ndarray,
@@ -392,25 +434,13 @@ def cluster_bootstrap_ci(
     n_boot: int = 1000,
     seed: int = 0,
 ) -> tuple:
-    """Bootstrap a CI by resampling CLUSTERS, not rows.
-
-    Rows here are not independent draws -- many rows per player, several per
-    same-game team-week -- so a per-row bootstrap understates the standard
-    error. Resampling whole clusters (with replacement) and recomputing the
-    statistic on each resample is the standard correction; it is approximate
-    (a single clustering dimension, not the fully crossed player x game
-    structure) but is a large improvement over ignoring clustering entirely.
+    """Bootstrap a 95% CI by resampling CLUSTERS, not rows. See
+    `cluster_bootstrap_distribution` for why rows aren't resampled directly.
     """
-    unique = np.unique(clusters)
-    if len(unique) < 2:
+    stats = cluster_bootstrap_distribution(
+        values, clusters, statistic=statistic, n_boot=n_boot, seed=seed)
+    if stats.size == 0:
         return float("nan"), float("nan")
-    rng = np.random.default_rng(seed)
-    by_cluster = {c: values[clusters == c] for c in unique}
-    stats = np.empty(n_boot)
-    for i in range(n_boot):
-        sampled = rng.choice(unique, size=len(unique), replace=True)
-        pooled = np.concatenate([by_cluster[c] for c in sampled])
-        stats[i] = statistic(pooled)
     return float(np.percentile(stats, 2.5)), float(np.percentile(stats, 97.5))
 
 

@@ -20,6 +20,12 @@ Refuses to report anything if the two panels' row overlap is too small to
 mean anything (default: fewer than 30 paired rows, or under 50% of either
 panel's rows) -- a comparison built on 4 shared rows out of 900 offered is
 not a comparison, it is noise with a p-value.
+
+The printed table is a FAMILY of tests, one per segment cell -- a false
+positive rate of 5% per cell becomes far worse than 5% across the whole
+table (16 cells -> ~56% chance at least one looks "significant" with no
+real effect anywhere). `--correction holm` (the default) controls that;
+see `significant_corrected` in the output and src/utils/multiple_comparisons.py.
 """
 from __future__ import annotations
 
@@ -32,11 +38,15 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.models.oof_capture import cluster_bootstrap_ci  # noqa: E402
+from src.models.oof_capture import cluster_bootstrap_distribution  # noqa: E402
+from src.utils.multiple_comparisons import (  # noqa: E402
+    benjamini_hochberg, bootstrap_two_sided_p_value, holm_bonferroni,
+)
 
 JOIN_KEYS = ("player_id", "season", "week")
 MIN_OVERLAP_ROWS = 30
 MIN_OVERLAP_FRACTION = 0.5
+CORRECTIONS = {"holm": holm_bonferroni, "bh": benjamini_hochberg, "none": None}
 
 
 def _load(path: Path) -> pd.DataFrame:
@@ -88,20 +98,45 @@ def paired_frame(baseline: pd.DataFrame, variant: pd.DataFrame) -> pd.DataFrame:
     return merged
 
 
-def segment_comparison(paired: pd.DataFrame, *, by, cluster="player_id", n_boot=1000, seed=0):
+def segment_comparison(paired: pd.DataFrame, *, by, cluster="player_id", n_boot=1000, seed=0,
+                       correction="holm", alpha=0.05):
+    """One row per segment cell, with a p-value and correction-aware verdict.
+
+    The p-value comes from the SAME bootstrap draws as the CI (`ci_lo`/
+    `ci_hi`), not a separately-computed test -- so `straddles_zero` (per-cell,
+    uncorrected) and `p_value < alpha` agree by construction. `correction`
+    ('holm', 'bh', or 'none') is then applied ACROSS all cells in this table
+    to get `significant_corrected`, which is the number that should actually
+    drive a decision -- `straddles_zero`/`p_value` alone repeat the
+    multiple-comparisons mistake this function exists to prevent.
+    """
     rows = []
     for key, group in paired.groupby(list(by), dropna=False):
         key = key if isinstance(key, tuple) else (key,)
         entry = dict(zip(by, key))
         entry["n"] = len(group)
         entry["mean_paired_delta"] = float(group["paired_delta"].mean())
-        lo, hi = cluster_bootstrap_ci(
+        draws = cluster_bootstrap_distribution(
             group["paired_delta"].to_numpy(), group[cluster].to_numpy(),
             statistic=np.mean, n_boot=n_boot, seed=seed)
-        entry["ci_lo"], entry["ci_hi"] = lo, hi
-        entry["straddles_zero"] = bool(lo <= 0 <= hi) if not (np.isnan(lo) or np.isnan(hi)) else None
+        if draws.size == 0:
+            entry["ci_lo"], entry["ci_hi"], entry["p_value"] = float("nan"), float("nan"), float("nan")
+            entry["straddles_zero"] = None
+        else:
+            lo, hi = float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))
+            entry["ci_lo"], entry["ci_hi"] = lo, hi
+            entry["p_value"] = bootstrap_two_sided_p_value(draws)
+            entry["straddles_zero"] = bool(lo <= 0 <= hi)
         rows.append(entry)
-    return pd.DataFrame(rows).sort_values(list(by)).reset_index(drop=True)
+
+    report = pd.DataFrame(rows).sort_values(list(by)).reset_index(drop=True)
+
+    correction_fn = CORRECTIONS[correction]
+    if correction_fn is None:
+        report["significant_corrected"] = None
+    else:
+        report["significant_corrected"] = correction_fn(report["p_value"].tolist(), alpha=alpha)
+    return report
 
 
 def main() -> int:
@@ -117,6 +152,13 @@ def main() -> int:
     ap.add_argument("--n-boot", type=int, default=1000)
     ap.add_argument("--min-overlap-rows", type=int, default=MIN_OVERLAP_ROWS)
     ap.add_argument("--min-overlap-fraction", type=float, default=MIN_OVERLAP_FRACTION)
+    ap.add_argument("--correction", choices=sorted(CORRECTIONS), default="holm",
+                    help="multiple-comparison correction across the printed cells: "
+                         "'holm' (family-wise error rate, default -- use when a false "
+                         "positive would drive a real decision), 'bh' (false discovery "
+                         "rate -- less conservative, for exploratory screening), or "
+                         "'none' (per-cell only, NOT recommended for >1 cell)")
+    ap.add_argument("--alpha", type=float, default=0.05)
     args = ap.parse_args()
 
     baseline, variant = _load(args.baseline), _load(args.variant)
@@ -146,19 +188,41 @@ def main() -> int:
         return 1
 
     by = tuple(args.by.split(","))
-    report = segment_comparison(paired, by=by, cluster=args.cluster, n_boot=args.n_boot)
+    report = segment_comparison(paired, by=by, cluster=args.cluster, n_boot=args.n_boot,
+                                correction=args.correction, alpha=args.alpha)
 
     print(f"\nPaired per-row |error| delta ({args.variant_label} - {args.baseline_label}; "
           f"negative = variant more accurate), clustered by {args.cluster}:\n")
     print(report.to_string(index=False))
 
-    print("\nRead the CI, not just the sign of mean_paired_delta: "
-          "'straddles_zero'=True means this cell cannot distinguish the "
-          "variant from the baseline at the given cluster-bootstrap "
-          "resolution -- it is not evidence of 'no effect', it is an "
-          "underpowered cell. No multiple-comparison correction is applied "
-          "across the printed cells; treat any single cell picked out after "
-          "seeing this table as exploratory, not confirmatory.")
+    testable = report["p_value"].notna()
+    # `straddles_zero` is an object-dtype column (None for untestable cells),
+    # and Python bool is an int subclass -- `~True` is -2, not False. Force a
+    # real bool dtype before negating, or this silently sums garbage.
+    n_uncorrected = int((report.loc[testable, "straddles_zero"].astype(bool) == False).sum())
+    if args.correction == "none":
+        print(f"\n{n_uncorrected}/{int(testable.sum())} testable cell(s) look significant at "
+              f"alpha={args.alpha} PER CELL. --correction is 'none': that rate applies to EACH "
+              "cell individually, not to the table as a whole -- with multiple cells this WILL "
+              "overstate how many real differences exist. Rerun with --correction holm or bh "
+              "before treating any of these as confirmatory.")
+    else:
+        n_corrected = int(report.loc[testable, "significant_corrected"].sum())
+        method = "Holm (family-wise error rate)" if args.correction == "holm" else "Benjamini-Hochberg (false discovery rate)"
+        print(f"\n{n_uncorrected}/{int(testable.sum())} testable cell(s) looked significant "
+              f"per-cell at alpha={args.alpha}; {n_corrected}/{int(testable.sum())} remain "
+              f"significant after {method} correction across this table "
+              f"(see 'significant_corrected').")
+        if n_uncorrected > n_corrected:
+            print(f"  {n_uncorrected - n_corrected} cell(s) that looked interesting alone did "
+                  "NOT survive correction for testing multiple cells at once -- treat those as "
+                  "noise, not findings, regardless of how large mean_paired_delta looks.")
+
+    print("\nRead 'significant_corrected', not 'straddles_zero' alone, before acting on any "
+          "cell: straddles_zero is per-cell and does not account for how many cells were "
+          "tested. A cell with straddles_zero=False but significant_corrected=False looked "
+          "real in isolation but is not distinguishable from noise once you account for "
+          "testing this many segments at once.")
     return 0
 
 

@@ -15185,3 +15185,36 @@ instinct given what was known at the time -- but the verification step
 have happened before writing "unrecoverable" into this file, not after.
 Both files are now regenerated (bit-identical to the pre-revert values) and
 committed for real.
+
+## Multiple-comparison correction added to compare_oof_panels.py (2026-09-25)
+
+`compare_oof_panels.py`'s segment table runs one test per cell (position x
+cold-start x week-bucket, etc.). A 5% per-cell false-positive rate becomes
+much worse across the whole table: at M=16 cells, P(>=1 false positive) =
+1-0.95**16 ~= 56% even with no real effect anywhere. The tool shipped
+without correcting for this, flagged explicitly in its own output as a
+documented limitation rather than a silent gap.
+
+Fixed. `src/utils/multiple_comparisons.py` implements Holm-Bonferroni
+(family-wise error rate control, the default -- use when a false positive
+would drive a real decision) and Benjamini-Hochberg (false discovery rate,
+less conservative, for exploratory screening), both worked-example-tested
+against textbook cases, with no scipy/statsmodels dependency. NaN p-values
+(a cell with too few clusters to bootstrap) are excluded from the family
+rather than treated as non-significant, so an untestable cell doesn't tax
+the multiplicity budget of cells that could be tested.
+
+The per-cell p-value is derived from the SAME bootstrap draws as the CI
+(`oof_capture.cluster_bootstrap_distribution`, extracted from
+`cluster_bootstrap_ci` for this purpose) rather than a separately-computed
+test -- so `straddles_zero` and `p_value < alpha` agree by construction,
+verified directly in tests. `segment_comparison()` now returns `p_value` and
+`significant_corrected` alongside the existing `ci_lo`/`ci_hi`/
+`straddles_zero`; the CLI prints how many cells looked significant per-cell
+versus after correction, and calls out explicitly when correction erased a
+cell that looked real in isolation.
+
+`--correction none` is kept for the case where a caller genuinely wants the
+old per-cell view, with an unmissable warning about what that number means
+(a per-cell rate, not a table-wide one) rather than silently reverting to
+the two-day-old behavior.
