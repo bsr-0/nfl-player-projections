@@ -1,0 +1,30 @@
+{
+  "status": "plan_a_inputs_verified_production_export_pending",
+  "rows": 40559,
+  "folds": {
+    "0": {
+      "season": 2023,
+      "rows": 13404
+    },
+    "1": {
+      "season": 2024,
+      "rows": 13466
+    },
+    "2": {
+      "season": 2025,
+      "rows": 13689
+    }
+  },
+  "scoring_definition": "raw_eight_component_ppr_excludes_fumbles_and_two_point_conversions",
+  "raw_truth_csv_sha256": "4698ea6280c4b98eb549fecfd31e5388fe6f93a9fd57d5871c76d966e7348007",
+  "population_keys_sha256": "c64b3b18a3411acc9d5c8f4415bdd021bbaa0c9bb84ccff9e1b011b735ca8ba3",
+  "selector_report_sha256": "26aaba943d3a755ab399a7501f5dd9ea89c5418145a400b3ce1884130ad59291",
+  "selector_rows_sha256": "6cd0ad14aca0f4c82ae5ae6aff4b665ff6070e25d18f096466408192655cda69",
+  "verified_saved_input_files": 16,
+  "production_requirements": [
+    "Completed row-level prediction export and manifest",
+    "Target-game keys, not the origin-week keys of target_1w",
+    "Predictions for the same eight-component scoring definition",
+    "Explicit population file if coverage differs; no automatic intersection"
+  ]
+}

@@ -1,0 +1,470 @@
+{
+  "by_position": {
+    "RB": {
+      "fixed_ridge": {
+        "mae": 0.034445197553663265,
+        "n": 6523
+      },
+      "mixed_effects": {
+        "mae": 0.034964049855922906,
+        "n": 6523
+      },
+      "rolling3": {
+        "mae": 0.03345235778441157,
+        "n": 6523
+      }
+    },
+    "TE": {
+      "fixed_ridge": {
+        "mae": 0.05515191956463685,
+        "n": 4896
+      },
+      "mixed_effects": {
+        "mae": 0.05582926469337993,
+        "n": 4896
+      },
+      "rolling3": {
+        "mae": 0.05551685962282695,
+        "n": 4896
+      }
+    },
+    "WR": {
+      "fixed_ridge": {
+        "mae": 0.0758289129223404,
+        "n": 9792
+      },
+      "mixed_effects": {
+        "mae": 0.07720014551080853,
+        "n": 9792
+      },
+      "rolling3": {
+        "mae": 0.07353573318023741,
+        "n": 9792
+      }
+    }
+  },
+  "by_season": {
+    "2023": {
+      "fixed_ridge": {
+        "mae": 0.05750755859228665,
+        "n": 7067
+      },
+      "mixed_effects": {
+        "mae": 0.05851715204877629,
+        "n": 7067
+      },
+      "rolling3": {
+        "mae": 0.05735570184831649,
+        "n": 7067
+      }
+    },
+    "2024": {
+      "fixed_ridge": {
+        "mae": 0.05876392373740546,
+        "n": 7072
+      },
+      "mixed_effects": {
+        "mae": 0.05958881963729921,
+        "n": 7072
+      },
+      "rolling3": {
+        "mae": 0.05761244894560018,
+        "n": 7072
+      }
+    },
+    "2025": {
+      "fixed_ridge": {
+        "mae": 0.05871636763630423,
+        "n": 7072
+      },
+      "mixed_effects": {
+        "mae": 0.059728726808134645,
+        "n": 7072
+      },
+      "rolling3": {
+        "mae": 0.05618130513809746,
+        "n": 7072
+      }
+    }
+  },
+  "by_unseen_player": {
+    "False": {
+      "fixed_ridge": {
+        "mae": 0.06067630614652923,
+        "n": 17529
+      },
+      "mixed_effects": {
+        "mae": 0.061563724973110155,
+        "n": 17529
+      },
+      "rolling3": {
+        "mae": 0.059626119010117544,
+        "n": 17529
+      }
+    },
+    "True": {
+      "fixed_ridge": {
+        "mae": 0.04715686222815147,
+        "n": 3682
+      },
+      "mixed_effects": {
+        "mae": 0.0483986602219344,
+        "n": 3682
+      },
+      "rolling3": {
+        "mae": 0.04478433832526118,
+        "n": 3682
+      }
+    }
+  },
+  "comparisons": {
+    "mixed_effects_minus_fixed_ridge": {
+      "blocks_by_season": {
+        "2023": 18,
+        "2024": 18,
+        "2025": 18
+      },
+      "ci_high": 0.00108921480936767,
+      "ci_low": 0.000811750602187272,
+      "method": "paired_calendar_week_blocks_stratified_by_season",
+      "n_bootstrap": 2000,
+      "point_estimate": 0.000948935214004318,
+      "seed": 42,
+      "significant_improvement": false,
+      "status": "ok"
+    },
+    "mixed_effects_minus_rolling3": {
+      "blocks_by_season": {
+        "2023": 18,
+        "2024": 18,
+        "2025": 18
+      },
+      "ci_high": 0.0027980231315421276,
+      "ci_low": 0.0016648685744227961,
+      "method": "paired_calendar_week_blocks_stratified_by_season",
+      "n_bootstrap": 2000,
+      "point_estimate": 0.002228665699346944,
+      "seed": 42,
+      "significant_improvement": false,
+      "status": "ok"
+    }
+  },
+  "coverage": {
+    "by_season": {
+      "2013": {
+        "eligible": 6879,
+        "excluded": 594,
+        "represented": 6285
+      },
+      "2014": {
+        "eligible": 6826,
+        "excluded": 482,
+        "represented": 6344
+      },
+      "2015": {
+        "eligible": 6824,
+        "excluded": 457,
+        "represented": 6367
+      },
+      "2016": {
+        "eligible": 8550,
+        "excluded": 1989,
+        "represented": 6561
+      },
+      "2017": {
+        "eligible": 13943,
+        "excluded": 7287,
+        "represented": 6656
+      },
+      "2018": {
+        "eligible": 14168,
+        "excluded": 7512,
+        "represented": 6656
+      },
+      "2019": {
+        "eligible": 13627,
+        "excluded": 6971,
+        "represented": 6656
+      },
+      "2020": {
+        "eligible": 11271,
+        "excluded": 4615,
+        "represented": 6656
+      },
+      "2021": {
+        "eligible": 11991,
+        "excluded": 4919,
+        "represented": 7072
+      },
+      "2022": {
+        "eligible": 11700,
+        "excluded": 4654,
+        "represented": 7046
+      },
+      "2023": {
+        "eligible": 11592,
+        "excluded": 4525,
+        "represented": 7067
+      },
+      "2024": {
+        "eligible": 11599,
+        "excluded": 4527,
+        "represented": 7072
+      },
+      "2025": {
+        "eligible": 11741,
+        "excluded": 4669,
+        "represented": 7072
+      }
+    },
+    "eligible_rows": 140711,
+    "excluded_rows": 53201,
+    "represented_rows": 87510
+  },
+  "features": [
+    "slot",
+    "depth_chart_rank",
+    "roster_snap_share_s2d",
+    "is_cold_start",
+    "share_of_team_receiving_yards_roll3",
+    "share_of_team_receiving_yards_s2d",
+    "team_receiving_yards_roll3",
+    "team_receiving_yards_s2d"
+  ],
+  "folds": [
+    {
+      "clipped_rows": {
+        "fixed_ridge": 116,
+        "mixed_effects": 110
+      },
+      "fit": {
+        "all_missing_columns": [],
+        "attempts": [
+          {
+            "method": "lbfgs",
+            "warnings": [
+              "Random effects covariance is singular",
+              "The MLE may be on the boundary of the parameter space."
+            ]
+          }
+        ],
+        "converged": true,
+        "dropped_redundant_columns": [],
+        "fallback": false,
+        "fixed_effect_columns": [
+          "slot",
+          "depth_chart_rank",
+          "roster_snap_share_s2d",
+          "is_cold_start",
+          "share_of_team_receiving_yards_roll3",
+          "share_of_team_receiving_yards_s2d",
+          "team_receiving_yards_roll3",
+          "team_receiving_yards_s2d"
+        ],
+        "missing_training_cells": 22662,
+        "n_players": 1588,
+        "n_train": 66299,
+        "used_training_rows": 66299
+      },
+      "n_test": 7067,
+      "n_train": 66299,
+      "prediction": {
+        "mean_fallback_rows": 0,
+        "missing_feature_cells": 1981,
+        "n_rows": 7067,
+        "unseen_players": 1165,
+        "unseen_slots": 0
+      },
+      "rolling3_null_to_zero_rows": 41,
+      "test_season": 2023,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022
+      ]
+    },
+    {
+      "clipped_rows": {
+        "fixed_ridge": 165,
+        "mixed_effects": 159
+      },
+      "fit": {
+        "all_missing_columns": [],
+        "attempts": [
+          {
+            "method": "lbfgs",
+            "warnings": [
+              "Random effects covariance is singular",
+              "The MLE may be on the boundary of the parameter space."
+            ]
+          }
+        ],
+        "converged": true,
+        "dropped_redundant_columns": [],
+        "fallback": false,
+        "fixed_effect_columns": [
+          "slot",
+          "depth_chart_rank",
+          "roster_snap_share_s2d",
+          "is_cold_start",
+          "share_of_team_receiving_yards_roll3",
+          "share_of_team_receiving_yards_s2d",
+          "team_receiving_yards_roll3",
+          "team_receiving_yards_s2d"
+        ],
+        "missing_training_cells": 24643,
+        "n_players": 1688,
+        "n_train": 73366,
+        "used_training_rows": 73366
+      },
+      "n_test": 7072,
+      "n_train": 73366,
+      "prediction": {
+        "mean_fallback_rows": 0,
+        "missing_feature_cells": 2114,
+        "n_rows": 7072,
+        "unseen_players": 1148,
+        "unseen_slots": 0
+      },
+      "rolling3_null_to_zero_rows": 33,
+      "test_season": 2024,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ]
+    },
+    {
+      "clipped_rows": {
+        "fixed_ridge": 157,
+        "mixed_effects": 153
+      },
+      "fit": {
+        "all_missing_columns": [],
+        "attempts": [
+          {
+            "method": "lbfgs",
+            "warnings": [
+              "Random effects covariance is singular",
+              "The MLE may be on the boundary of the parameter space."
+            ]
+          }
+        ],
+        "converged": true,
+        "dropped_redundant_columns": [],
+        "fallback": false,
+        "fixed_effect_columns": [
+          "slot",
+          "depth_chart_rank",
+          "roster_snap_share_s2d",
+          "is_cold_start",
+          "share_of_team_receiving_yards_roll3",
+          "share_of_team_receiving_yards_s2d",
+          "team_receiving_yards_roll3",
+          "team_receiving_yards_s2d"
+        ],
+        "missing_training_cells": 26757,
+        "n_players": 1798,
+        "n_train": 80438,
+        "used_training_rows": 80438
+      },
+      "n_test": 7072,
+      "n_train": 80438,
+      "prediction": {
+        "mean_fallback_rows": 0,
+        "missing_feature_cells": 2077,
+        "n_rows": 7072,
+        "unseen_players": 1369,
+        "unseen_slots": 0
+      },
+      "rolling3_null_to_zero_rows": 32,
+      "test_season": 2025,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ]
+    }
+  ],
+  "limitations": [
+    "Share accuracy on capped roster rows; not PPR accuracy or full-panel accuracy.",
+    "Player random intercept baseline; no joint team constraint or serving integration.",
+    "Retrospective seasonal evaluation; lagged in-season observed features are available each week.",
+    "Week-block intervals do not capture serial dependence across weeks."
+  ],
+  "maxiter": 200,
+  "metric": "player_week_share_mae",
+  "missing_feature_cells": 28834,
+  "n_panel": 87510,
+  "pooled": {
+    "fixed_ridge": {
+      "mae": 0.05832947702449507,
+      "n": 21211
+    },
+    "mixed_effects": {
+      "mae": 0.05927841223849937,
+      "n": 21211
+    },
+    "rolling3": {
+      "mae": 0.05704974653915243,
+      "n": 21211
+    }
+  },
+  "prediction_bounds": [
+    0,
+    1
+  ],
+  "predictions_sha256": "92475ef594ad78fd2e4ff905b54bd66b8403039f025f8ae6352427c2daed338c",
+  "reml": true,
+  "represented_team_mass": {
+    "arms": {
+      "fixed_ridge": {
+        "mass_mae": 0.060372233430209414,
+        "mean_predicted_share_sum": 0.9569600132277402,
+        "teams_above_one": 198
+      },
+      "mixed_effects": {
+        "mass_mae": 0.067011992223011,
+        "mean_predicted_share_sum": 0.9928312426848377,
+        "teams_above_one": 744
+      },
+      "rolling3": {
+        "mass_mae": 0.06376558064682189,
+        "mean_predicted_share_sum": 0.9635272858332249,
+        "teams_above_one": 161
+      }
+    },
+    "mean_actual_share_sum": 0.9501992126426866,
+    "n_team_weeks": 1632
+  },
+  "ridge_alpha": 1.0,
+  "rolling3_null_to_zero_rows": 106,
+  "saved_row_mae_verified": true,
+  "status": "complete",
+  "target": "receiving_yards",
+  "team_renormalization": false
+}

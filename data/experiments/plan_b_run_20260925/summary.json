@@ -1,0 +1,228 @@
+{
+  "code_sha256": {
+    "scripts/evaluate_plan_b_shares.py": "b01c721520ac051ffe17fda57c19909b17716ad50601fe7745bfb8bfee736705",
+    "src/evaluation/paired_ppr_comparison.py": "ec13eecc3134a428a7b94d5d5058dbc833ff1ee84a02253cf0fab1e7000b558b",
+    "src/evaluation/team_hierarchical_backtester.py": "7ef51685286f8af3b1454d088274318a8c640c31d1755519170d8d65713aa38d",
+    "src/models/team_allocation/features.py": "336b3d22e65ebf3cf929972817fb04b52daeb2ef7dea8db12dc32cc90959168b",
+    "src/models/team_hierarchical/features.py": "0a654a082f46d17f6925094510cd2577ab85283eb77bf376145b4769c77c60d3",
+    "src/models/team_hierarchical/models.py": "8144c37a4492f8d971119bd11182dfcbf934959fcc4e781c981de3cfc9960993",
+    "src/utils/leakage.py": "5e52de868b39cd0326e4979f9a827ed71041cbb3a11e3fd06246d4ef1aa2d3d1"
+  },
+  "comparison": "mixed_effects_minus_control; positive means mixed effects is worse",
+  "limitations": [
+    "Four share targets only; no PPR or full joint-team result.",
+    "Roster caps exclude many canonical player-weeks; metrics are on represented rows.",
+    "All mixed-effects folds warned that the random-effects covariance is singular or at the boundary.",
+    "Intervals use paired calendar-week blocks within season and do not cover serial dependence across weeks."
+  ],
+  "metric": "held_out_player_week_share_mae",
+  "slot_csv_sha256": "24ab8997d0b1ebd5ab716d3d752e93af7592fbe495f38914e307b66cce1f07d8",
+  "status": "verified",
+  "targets": {
+    "receiving_yards": {
+      "converged_folds": 3,
+      "excluded_rows": 53201,
+      "fit_warnings_by_season": {
+        "2023": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2024": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2025": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ]
+      },
+      "heldout_by_season": {
+        "2023": 7067,
+        "2024": 7072,
+        "2025": 7072
+      },
+      "heldout_rows": 21211,
+      "joined_input_sha256": "3c57710e3e3936921ca927079c9363446e4bc46baae0b3fb186d50bec8602992",
+      "mae": {
+        "fixed_ridge": 0.05832947702449507,
+        "mixed_effects": 0.05927841223849937,
+        "rolling3": 0.05704974653915243
+      },
+      "model_clipped_rows": 422,
+      "paired_intervals": {
+        "fixed_ridge": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.00108921480936767,
+          "ci_low": 0.000811750602187272,
+          "delta": 0.000948935214004318,
+          "interval_excludes_zero": true
+        },
+        "rolling3": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.0027980231315421276,
+          "ci_low": 0.0016648685744227961,
+          "delta": 0.002228665699346944,
+          "interval_excludes_zero": true
+        }
+      },
+      "predictions_sha256": "92475ef594ad78fd2e4ff905b54bd66b8403039f025f8ae6352427c2daed338c",
+      "represented_rows": 87510,
+      "rolling3_null_to_zero_rows": 106
+    },
+    "rushing_attempts": {
+      "converged_folds": 3,
+      "excluded_rows": 62220,
+      "fit_warnings_by_season": {
+        "2023": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2024": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2025": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ]
+      },
+      "heldout_by_season": {
+        "2023": 8155,
+        "2024": 8160,
+        "2025": 8160
+      },
+      "heldout_rows": 24475,
+      "joined_input_sha256": "c57c6e08e3da3a68c45d5261bd8017d1df86ab4e7291df15f06dca28d36a496d",
+      "mae": {
+        "fixed_ridge": 0.03782735331228283,
+        "mixed_effects": 0.03850817940898708,
+        "rolling3": 0.035549303103352324
+      },
+      "model_clipped_rows": 3980,
+      "paired_intervals": {
+        "fixed_ridge": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.0008530830620657241,
+          "ci_low": 0.0005055894306308608,
+          "delta": 0.0006808260967042421,
+          "interval_excludes_zero": true
+        },
+        "rolling3": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.0032954834751614806,
+          "ci_low": 0.0026178008152730847,
+          "delta": 0.002958876305634754,
+          "interval_excludes_zero": true
+        }
+      },
+      "predictions_sha256": "b491b163251a074dd0756528feca90fd85bda0326753ddf4be49bfe29fbd316d",
+      "represented_rows": 101138,
+      "rolling3_null_to_zero_rows": 118
+    },
+    "rushing_yards": {
+      "converged_folds": 3,
+      "excluded_rows": 62220,
+      "fit_warnings_by_season": {
+        "2023": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2024": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2025": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ]
+      },
+      "heldout_by_season": {
+        "2023": 8155,
+        "2024": 8160,
+        "2025": 8160
+      },
+      "heldout_rows": 24475,
+      "joined_input_sha256": "c57c6e08e3da3a68c45d5261bd8017d1df86ab4e7291df15f06dca28d36a496d",
+      "mae": {
+        "fixed_ridge": 0.045499661818442644,
+        "mixed_effects": 0.046301114748119064,
+        "rolling3": 0.04329819692987339
+      },
+      "model_clipped_rows": 3659,
+      "paired_intervals": {
+        "fixed_ridge": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.0009850546559390298,
+          "ci_low": 0.0006167654164505638,
+          "delta": 0.0008014529296764132,
+          "interval_excludes_zero": true
+        },
+        "rolling3": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.003428840123225504,
+          "ci_low": 0.0025583797386845033,
+          "delta": 0.0030029178182456695,
+          "interval_excludes_zero": true
+        }
+      },
+      "predictions_sha256": "54f43aab98f01d98a6060a64d93d3531635fe1f61bd886b278f6c8c7a1f36a25",
+      "represented_rows": 101138,
+      "rolling3_null_to_zero_rows": 118
+    },
+    "targets": {
+      "converged_folds": 3,
+      "excluded_rows": 53201,
+      "fit_warnings_by_season": {
+        "2023": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2024": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ],
+        "2025": [
+          "Random effects covariance is singular",
+          "The MLE may be on the boundary of the parameter space."
+        ]
+      },
+      "heldout_by_season": {
+        "2023": 7067,
+        "2024": 7072,
+        "2025": 7072
+      },
+      "heldout_rows": 21211,
+      "joined_input_sha256": "3c57710e3e3936921ca927079c9363446e4bc46baae0b3fb186d50bec8602992",
+      "mae": {
+        "fixed_ridge": 0.04605710171484164,
+        "mixed_effects": 0.04669515315707372,
+        "rolling3": 0.044570897724663355
+      },
+      "model_clipped_rows": 208,
+      "paired_intervals": {
+        "fixed_ridge": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.0007499898409455576,
+          "ci_low": 0.0005343115974835184,
+          "delta": 0.0006380514422320841,
+          "interval_excludes_zero": true
+        },
+        "rolling3": {
+          "bootstrap_method": "paired_calendar_week_blocks_stratified_by_season",
+          "ci_high": 0.0025973713797372636,
+          "ci_low": 0.0016659019380105078,
+          "delta": 0.0021242554324103647,
+          "interval_excludes_zero": true
+        }
+      },
+      "predictions_sha256": "c16635cd23d3c5135d291c6bc518e7c8de238f766d9ced2ce562edefdefd2d05",
+      "represented_rows": 87510,
+      "rolling3_null_to_zero_rows": 106
+    }
+  },
+  "test_seasons": [
+    2023,
+    2024,
+    2025
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "scope": "data-contract and row-coverage checks only; no real-data fits",
+  "slots_sha256": "24ab8997d0b1ebd5ab716d3d752e93af7592fbe495f38914e307b66cce1f07d8",
+  "snapshot_manifest": "../plan_b_inputs_20260925/manifest.json",
+  "status": "all_four_targets_passed_preflight",
+  "targets": {
+    "receiving_yards": {
+      "eligible_rows": 140711,
+      "excluded_rows": 53201,
+      "heldout_by_season": {
+        "2023": 7067,
+        "2024": 7072,
+        "2025": 7072
+      },
+      "heldout_rows": 21211,
+      "joined_input_sha256": "3c57710e3e3936921ca927079c9363446e4bc46baae0b3fb186d50bec8602992",
+      "missing_feature_cells": 28834,
+      "represented_rows": 87510,
+      "rolling3_null_to_zero_rows": 106,
+      "status": "passed"
+    },
+    "rushing_attempts": {
+      "eligible_rows": 163358,
+      "excluded_rows": 62220,
+      "heldout_by_season": {
+        "2023": 8155,
+        "2024": 8160,
+        "2025": 8160
+      },
+      "heldout_rows": 24475,
+      "joined_input_sha256": "c57c6e08e3da3a68c45d5261bd8017d1df86ab4e7291df15f06dca28d36a496d",
+      "missing_feature_cells": 33829,
+      "represented_rows": 101138,
+      "rolling3_null_to_zero_rows": 118,
+      "status": "passed"
+    },
+    "rushing_yards": {
+      "eligible_rows": 163358,
+      "excluded_rows": 62220,
+      "heldout_by_season": {
+        "2023": 8155,
+        "2024": 8160,
+        "2025": 8160
+      },
+      "heldout_rows": 24475,
+      "joined_input_sha256": "c57c6e08e3da3a68c45d5261bd8017d1df86ab4e7291df15f06dca28d36a496d",
+      "missing_feature_cells": 33829,
+      "represented_rows": 101138,
+      "rolling3_null_to_zero_rows": 118,
+      "status": "passed"
+    },
+    "targets": {
+      "eligible_rows": 140711,
+      "excluded_rows": 53201,
+      "heldout_by_season": {
+        "2023": 7067,
+        "2024": 7072,
+        "2025": 7072
+      },
+      "heldout_rows": 21211,
+      "joined_input_sha256": "3c57710e3e3936921ca927079c9363446e4bc46baae0b3fb186d50bec8602992",
+      "missing_feature_cells": 28834,
+      "represented_rows": 87510,
+      "rolling3_null_to_zero_rows": 106,
+      "status": "passed"
+    }
+  }
+}

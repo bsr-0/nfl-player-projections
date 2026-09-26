@@ -1,0 +1,72 @@
+{
+  "by_season": {
+    "2013": {
+      "eligible": 6879,
+      "excluded": 594,
+      "represented": 6285
+    },
+    "2014": {
+      "eligible": 6826,
+      "excluded": 482,
+      "represented": 6344
+    },
+    "2015": {
+      "eligible": 6824,
+      "excluded": 457,
+      "represented": 6367
+    },
+    "2016": {
+      "eligible": 8550,
+      "excluded": 1989,
+      "represented": 6561
+    },
+    "2017": {
+      "eligible": 13943,
+      "excluded": 7287,
+      "represented": 6656
+    },
+    "2018": {
+      "eligible": 14168,
+      "excluded": 7512,
+      "represented": 6656
+    },
+    "2019": {
+      "eligible": 13627,
+      "excluded": 6971,
+      "represented": 6656
+    },
+    "2020": {
+      "eligible": 11271,
+      "excluded": 4615,
+      "represented": 6656
+    },
+    "2021": {
+      "eligible": 11991,
+      "excluded": 4919,
+      "represented": 7072
+    },
+    "2022": {
+      "eligible": 11700,
+      "excluded": 4654,
+      "represented": 7046
+    },
+    "2023": {
+      "eligible": 11592,
+      "excluded": 4525,
+      "represented": 7067
+    },
+    "2024": {
+      "eligible": 11599,
+      "excluded": 4527,
+      "represented": 7072
+    },
+    "2025": {
+      "eligible": 11741,
+      "excluded": 4669,
+      "represented": 7072
+    }
+  },
+  "eligible_rows": 140711,
+  "excluded_rows": 53201,
+  "represented_rows": 87510
+}

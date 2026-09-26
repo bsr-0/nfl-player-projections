@@ -5,13 +5,13 @@ actually apply a known player's random effect on top of the fixed-effects
 prediction (statsmodels' own .predict() does not, by default -- see the
 module docstring), a genuinely new player must fall back to fixed-effects-
 only, an unseen slot must fall back sensibly rather than crash, and a
-degenerate fold must not crash the caller.
+degenerate fold must fail unless a fallback was explicitly requested.
 """
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.team_hierarchical.models import MixedEffectsShareModel
+from src.models.team_hierarchical.models import MixedEffectsFitError, MixedEffectsShareModel
 
 
 def _multi_team_data(n_teams=6, n_weeks=12, seed=0):
@@ -117,11 +117,60 @@ def test_degenerate_fold_falls_back_to_constant_without_crashing():
     tiny = pd.DataFrame({
         "player_id": ["a"], "slot": ["RB1"], "x": [0.0],
     })
-    model = MixedEffectsShareModel(target_col="share").fit(tiny, np.array([0.4]))
+    model = MixedEffectsShareModel(target_col="share", failure_policy="mean").fit(tiny, np.array([0.4]))
     assert model.converged_ is False
     assert model.result_ is None
     pred = model.predict(pd.DataFrame({"player_id": ["a", "b"], "slot": ["RB1", "RB2"], "x": [0.0, 0.0]}))
     np.testing.assert_allclose(pred, [0.4, 0.4])
+    assert model.fit_diagnostics_["fallback"] is True
+
+
+def test_degenerate_fold_fails_by_default():
+    model = MixedEffectsShareModel()
+    with pytest.raises(MixedEffectsFitError, match="insufficient"):
+        model.fit(pd.DataFrame({"player_id": ["a"], "slot": ["RB1"]}), np.array([0.4]))
+    with pytest.raises(MixedEffectsFitError, match="previous fit failed"):
+        model.predict(pd.DataFrame({"player_id": ["a"], "slot": ["RB1"]}))
+
+
+def test_training_only_imputation_and_redundant_slot_rank():
+    df, _ = _multi_team_data()
+    X = df[["player_id", "slot", "x"]].copy()
+    X.loc[::5, "x"] = np.nan
+    X["slot_rank"] = X.slot.str[-1].astype(int)
+    X["all_missing"] = np.nan
+    model = MixedEffectsShareModel().fit(X, df.share.to_numpy())
+    assert model.fit_diagnostics_["used_training_rows"] == len(X)
+    assert {"slot_rank", "all_missing"} <= set(model.fit_diagnostics_["dropped_redundant_columns"])
+    median = model._medians.copy()
+    test = X.iloc[:3].copy()
+    test.index = [0, 0, 0]
+    test["x"] = [np.nan, 100, np.nan]
+    pred = model.predict(test)
+    imputed = test.fillna(median)
+    np.testing.assert_allclose(pred, model.predict(imputed))
+    pd.testing.assert_series_equal(median, model._medians)
+    assert np.isfinite(pred).all()
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_nonfinite_training_labels_rejected(bad):
+    X = pd.DataFrame({"player_id": ["a", "b"], "slot": ["RB1", "RB2"]})
+    with pytest.raises(ValueError, match="labels must be finite"):
+        MixedEffectsShareModel().fit(X, np.array([bad, 0.1]))
+
+
+def test_numeric_optimizer_failure_is_visible(monkeypatch):
+    class FailingFit:
+        def fit(self, **kwargs):
+            raise np.linalg.LinAlgError("synthetic singular covariance")
+    monkeypatch.setattr("src.models.team_hierarchical.models.smf.mixedlm", lambda *a, **kw: FailingFit())
+    df, _ = _multi_team_data()
+    model = MixedEffectsShareModel()
+    with pytest.raises(MixedEffectsFitError, match="all mixed-effects optimizer"):
+        model.fit(df[["player_id", "slot", "x"]], df.share.to_numpy())
+    assert len(model.fit_diagnostics_["attempts"]) == 2
+    assert all("synthetic singular" in a["error"] for a in model.fit_diagnostics_["attempts"])
 
 
 def test_fit_requires_player_id_and_slot_columns():

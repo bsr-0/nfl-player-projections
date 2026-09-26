@@ -1,0 +1,5 @@
+{
+  "error": "team_week_roster_slots table not found -- run scripts/build_team_week_roster_slots.py --dry-run --csv PATH and pass that snapshot as slots_frame (CLI: --slots-csv PATH)",
+  "error_type": "ValueError",
+  "status": "failed"
+}

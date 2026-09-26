@@ -1,0 +1,14 @@
+{
+  "current_rebuild_slot_sha256": "24ab8997d0b1ebd5ab716d3d752e93af7592fbe495f38914e307b66cce1f07d8",
+  "current_recomputed_joined_input_sha256": "c57c6e08e3da3a68c45d5261bd8017d1df86ab4e7291df15f06dca28d36a496d",
+  "db_mtime_ns": 1790327694917177096,
+  "db_path": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/nfl_data.db",
+  "db_size_bytes": 757059584,
+  "joined_rows": 101138,
+  "reason": "database file changed after snapshot build when other training jobs finished",
+  "result": "exact match for roster CSV and represented joined share panel; other database changes did not alter these Plan B inputs",
+  "saved_joined_input_sha256": "c57c6e08e3da3a68c45d5261bd8017d1df86ab4e7291df15f06dca28d36a496d",
+  "slot_rows": 101138,
+  "slot_sha256": "24ab8997d0b1ebd5ab716d3d752e93af7592fbe495f38914e307b66cce1f07d8",
+  "verified_at_utc": "2026-09-25T11:35:37.840983+00:00"
+}

@@ -1,0 +1,24 @@
+{
+  "code_sha256": {
+    "scripts/evaluate_plan_b_joint_mae.py": "bf0a707b3c76fa551f74d18c667cc5bf9f241f0e3df429bf7a2ec4179d65b9e9",
+    "src/evaluation/plan_b_joint_mae_backtester.py": "8ef8881537bad41f99b69a8b7b15e7c009e8749723d086cfe303d5661cc2b812",
+    "src/evaluation/team_hierarchical_backtester.py": "7ef51685286f8af3b1454d088274318a8c640c31d1755519170d8d65713aa38d",
+    "src/models/team_hierarchical/features.py": "0a654a082f46d17f6925094510cd2577ab85283eb77bf376145b4769c77c60d3",
+    "src/models/team_hierarchical/joint_other.py": "1f2ab71d4d76c5c63071d0b012dbc5a0ada54846a3d238c986dd8ede92f2b6ec",
+    "src/models/team_hierarchical/joint_other_mae.py": "2d3c746f8fef16a6da4535da92d0524454fa7e23d84a4c63dea02bde96f54641"
+  },
+  "epsilon": 0.001,
+  "input_panel": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_b_preflight_20260925/targets/input_panel.csv",
+  "input_panel_sha256": "3c57710e3e3936921ca927079c9363446e4bc46baae0b3fb186d50bec8602992",
+  "n_bootstrap": 2000,
+  "penalty": 1e-05,
+  "predictions_sha256": "8c7237fb7ebe4cf510090ebe7978e9a866ac01dc663d6906b84a6a0fa2f90837",
+  "preflight_manifest_sha256": "18c198052bc34c7ca6642678aa557f0085c89a7f88849b1526c9ffad04794c43",
+  "smooth_width": 0.002,
+  "target": "targets",
+  "test_seasons": [
+    2020,
+    2021,
+    2022
+  ]
+}

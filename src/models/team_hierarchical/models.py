@@ -1,172 +1,175 @@
-"""Mixed-effects share regressor for Plan B.
+"""Plan B's mixed-effects baseline: roster fixed effects and player intercepts.
 
-IMPORTANT DESIGN CORRECTION from this doc's original Plan B sketch (see
-docs/TEAM_LEVEL_ALLOCATION_MODELS.md's Architecture section) -- found while
-actually implementing this, not assumed away:
-
-1. A random effect's value is a per-group deviation estimated FROM THAT
-   GROUP'S OWN DATA. A walk-forward test row is, by construction, always a
-   genuinely NEW (team, season, week) -- so a random effect GROUPED BY
-   team-week has no observations to estimate from at prediction time and
-   contributes nothing to a forecast. Grouping by `player_id` instead
-   avoids this: a player with prior training history keeps the same group
-   across future weeks, so their estimated persistent deviation (talent/
-   role tendency beyond what slot+features predict) DOES carry forward. A
-   player with no prior history (true cold start) correctly falls back to
-   the fixed-effects-only prediction. Team-environment effects (what a
-   team-week grouping was meant to capture) are instead carried by Plan
-   A's existing lagged team-total features already in the fixed-effects
-   design (`team_{stat}_s2d/roll3`) -- an observed, pre-game-known proxy,
-   unlike an unobservable-until-the-fact team-week intercept.
-
-2. statsmodels' `MixedLMResults.predict()` uses ONLY the fixed effects for
-   EVERY row, known group or not (verified empirically: a known group's
-   prediction via `.predict()` ignores its own estimated random effect
-   entirely). Using a per-player random effect at prediction time requires
-   manually adding `result.random_effects[group]["Group"]` on top of the
-   fixed-effects prediction -- which `predict()` below does -- falling back
-   to 0 (fixed-effects-only) for a group absent from `random_effects`
-   (never seen in training).
+Known-player random effects are added explicitly because MixedLM.predict only
+returns fixed effects. This baseline is not a jointly constrained team model.
 """
 from __future__ import annotations
 
 import warnings
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+from scipy.linalg import qr
 import statsmodels.formula.api as smf
 
 
+class MixedEffectsFitError(RuntimeError):
+    """No usable converged fit; callers must not score a hidden substitute."""
+
+
 class MixedEffectsShareModel:
-    """Random intercept per `player_id`, fixed effects = `slot` (categorical)
-    plus every other column in X. See module docstring for why `player_id`,
-    not team-week, is the random-effect group.
-
-    `fit(X, y)`: X must include `player_id` (the random-effect group) and
-    `slot` (the key fixed effect) alongside the usual feature columns --
-    deliberately NOT the same "X is exactly feature_columns(df)" contract
-    Plan A's Ridge/XGB wrappers use, since this model has a structural
-    dependency (groups) a tree/linear regressor doesn't. Documented here
-    rather than silently pretending to match an interface it doesn't.
-    """
-
-    def __init__(self, target_col: str = "y", reml: bool = True):
-        self.target_col = target_col
-        self.reml = reml
+    def __init__(self, target_col: str = "y", reml: bool = True,
+                 failure_policy: str = "raise", maxiter: int = 200):
+        if failure_policy not in {"raise", "mean"}:
+            raise ValueError("failure_policy must be 'raise' or explicitly 'mean'")
+        if not isinstance(maxiter, int) or maxiter < 1:
+            raise ValueError("maxiter must be positive")
+        self.target_col, self.reml = target_col, reml
+        self.failure_policy, self.maxiter = failure_policy, maxiter
         self.result_ = None
         self.converged_ = None
-        self._fixed_effect_cols: List[str] = []
-        self._slot_categories: Optional[pd.Index] = None
-        self._fallback_mean_: Optional[float] = None
+        self._slot_categories = None
+        self._fixed_effect_cols = []
+        self._fallback_mean_ = None
+        self._random_effects = {}
+        self.fit_diagnostics_ = {}
+        self.prediction_diagnostics_ = {}
 
-    def _formula(self) -> str:
-        numeric = [c for c in self._fixed_effect_cols if c != "slot"]
-        rhs = " + ".join(["C(slot)"] + numeric) if numeric else "C(slot)"
-        return f"{self.target_col} ~ {rhs}"
+    @staticmethod
+    def _check_identity(X):
+        if X.columns.duplicated().any():
+            raise ValueError("X has duplicate columns; feature_columns already includes 'slot'")
+        if not {"player_id", "slot"}.issubset(X):
+            raise ValueError("X must include player_id and slot")
+        for col in ("player_id", "slot"):
+            if X[col].isna().any() or not X[col].map(lambda v: isinstance(v, str) and bool(v.strip())).all():
+                raise ValueError(f"missing or invalid {col}")
+
+    def _formula(self):
+        terms = [f"Q({col!r})" for col in self._fixed_effect_cols if col != "slot"]
+        return f"Q({self.target_col!r}) ~ " + " + ".join(["C(slot)"] + terms)
+
+    def _failed(self, reason):
+        self.result_, self.converged_ = None, False
+        self._random_effects = {}
+        self.fit_diagnostics_.update(converged=False, failure_reason=reason,
+                                     fallback=self.failure_policy == "mean")
+        if self.failure_policy == "raise":
+            raise MixedEffectsFitError(reason)
+        return self
 
     def fit(self, X: pd.DataFrame, y: np.ndarray) -> "MixedEffectsShareModel":
-        if X.columns.duplicated().any():
-            # Easy mistake to make: features.py's feature_columns() already
-            # includes "slot" (it's a real fixed-effect feature, not an id
-            # column) -- a caller building X as
-            # df[["player_id", "slot"] + feature_columns(df)] double-counts
-            # it. The intended contract is
-            # df[["player_id"] + feature_columns(df)]. Failing clearly here
-            # beats the confusing pandas AttributeError a duplicate "slot"
-            # column produces downstream (X["slot"] returns a DataFrame,
-            # not a Series, once .dropna()/.unique() promptly break on).
-            dupes = sorted(set(X.columns[X.columns.duplicated()]))
-            raise ValueError(
-                f"X has duplicate columns {dupes} -- feature_columns(df) already "
-                "includes 'slot', so X should be df[['player_id'] + feature_columns(df)], "
-                "not with 'slot' added again separately"
-            )
-        if "player_id" not in X.columns or "slot" not in X.columns:
-            raise ValueError("X must include 'player_id' (random-effect group) and 'slot' (fixed effect)")
-        self._fixed_effect_cols = [c for c in X.columns if c != "player_id"]
-        # Categories fixed to what training actually saw -- a slot with a
-        # coefficient statsmodels never estimated (never appeared in this
-        # fold's training data) is handled at predict() time by falling
-        # back to that position's rank-1 slot (see predict()'s docstring),
-        # not by pretending the category exists here.
-        self._slot_categories = pd.Index(sorted(X["slot"].dropna().unique()))
-        self._fallback_mean_ = float(np.nanmean(y))
+        # An invalid refit must not leave the previous fit usable by accident.
+        self.result_, self.converged_, self._slot_categories = None, False, None
+        self._random_effects = {}
+        self.fit_diagnostics_ = {}
+        self.prediction_diagnostics_ = {}
+        self._check_identity(X)
+        y = np.asarray(y, dtype=float)
+        if X.empty or y.shape != (len(X),) or not np.isfinite(y).all():
+            raise ValueError("training labels must be finite, nonempty, and align one-to-one with X")
+        if self.target_col in X:
+            raise ValueError("target_col must not also be an input feature")
+        self.result_, self.converged_ = None, False
+        self._random_effects = {}
+        self._input_cols = list(X)
+        self._slot_categories = pd.Index(sorted(X.slot.unique()))
+        self._fallback_mean_ = float(y.mean())
+        data = X.reset_index(drop=True).copy()
+        numeric_cols = [col for col in X if col not in {"slot", "player_id"}]
+        numeric = data[numeric_cols].apply(pd.to_numeric, errors="raise").astype(float)
+        if np.isinf(numeric.to_numpy()).any():
+            raise ValueError("numeric features contain infinity")
+        self._medians = numeric.median().fillna(0.0)
+        self._fixed_effect_cols = ["slot"]
+        self.fit_diagnostics_ = {"n_train": len(X), "n_players": X.player_id.nunique(),
+                                 "missing_training_cells": int(numeric.isna().sum().sum()),
+                                 "all_missing_columns": numeric.columns[numeric.isna().all()].tolist(),
+                                 "dropped_redundant_columns": [], "attempts": []}
+        numeric = numeric.fillna(self._medians)
+        # C(slot) already spans numeric slot_rank. Residualize numeric columns
+        # on slot means and use rank-revealing QR to discard redundant directions.
+        # This uses only training data. Missing values use training medians.
+        if numeric_cols:
+            scales = numeric.std(ddof=0).replace(0, 1)
+            normalized = numeric / scales
+            residual = normalized - normalized.groupby(data.slot, observed=True).transform("mean")
+            _, triangular, pivots = qr(residual.to_numpy(), mode="economic", pivoting=True)
+            tolerance = np.finfo(float).eps * max(residual.shape) * max(1.0, float(np.abs(triangular).max(initial=0)))
+            rank = int((np.abs(np.diag(triangular)) > tolerance).sum())
+            keep = set(pivots[:rank])
+            self._fixed_effect_cols += [col for i, col in enumerate(numeric_cols) if i in keep]
+            self.fit_diagnostics_["dropped_redundant_columns"] = [col for i, col in enumerate(numeric_cols) if i not in keep]
+        data[numeric_cols] = numeric
+        data[self.target_col] = y
+        data["slot"] = pd.Categorical(data.slot, categories=self._slot_categories)
+        n_fixed = len(self._slot_categories) + len(self._fixed_effect_cols) - 1
+        if len(X) <= n_fixed or X.player_id.nunique() < 2:
+            return self._failed("insufficient rows or player groups for mixed-effects fitting")
 
-        data = X.copy()
-        data[self.target_col] = np.asarray(y, dtype=float)
-        data["slot"] = pd.Categorical(data["slot"], categories=self._slot_categories)
-        data = data.dropna(subset=[self.target_col, "slot"] + [
-            c for c in self._fixed_effect_cols if c not in ("slot", "player_id")
-        ])
-        # A numeric fixed-effect column with zero variance (e.g. every
-        # training row cold-start) makes the design matrix singular --
-        # drop it rather than let statsmodels fail opaquely; a constant
-        # feature carries no information for this fold regardless.
-        for col in list(self._fixed_effect_cols):
-            if col != "slot" and col in data.columns and data[col].nunique(dropna=True) <= 1:
-                self._fixed_effect_cols.remove(col)
-
-        try:
-            with warnings.catch_warnings():
-                # A degenerate fold (too little data, singular design) is an
-                # expected, handled code path here, not a bug -- statsmodels/
-                # numpy's convergence and numerical-stability warnings for it
-                # are noise once the non-converged result below is discarded.
-                warnings.simplefilter("ignore")
-                model = smf.mixedlm(self._formula(), data=data, groups=data["player_id"])
-                fitted = model.fit(reml=self.reml, method="lbfgs")
-            self.converged_ = bool(fitted.converged)
-        except Exception:
-            fitted = None
-            self.converged_ = False
-
-        # A non-converged fit does not raise -- statsmodels returns a
-        # result object with `converged=False` and, found empirically,
-        # NaN/garbage parameters rather than an exception. Discarding it
-        # here (not just on the exception path above) matters: keeping a
-        # non-converged result would silently feed untrustworthy
-        # coefficients into predict() instead of falling back to the
-        # trivial constant, the same degenerate-fold treatment
-        # VegasFavoriteBaseline (src/models/game_outcome/baseline.py)
-        # already gives elsewhere in this repo.
-        self.result_ = fitted if self.converged_ else None
-        return self
+        model = smf.mixedlm(self._formula(), data=data, groups=data.player_id, missing="raise")
+        # Retry only numerical convergence, never selecting on holdout accuracy.
+        for method in ("lbfgs", "powell"):
+            attempt = {"method": method, "warnings": []}
+            captured = []
+            try:
+                with warnings.catch_warnings(record=True) as captured:
+                    warnings.simplefilter("always")
+                    fitted = model.fit(reml=self.reml, method=method, maxiter=self.maxiter)
+                attempt["warnings"] = [str(w.message) for w in captured]
+                if not fitted.converged or not np.isfinite(np.asarray(fitted.params)).all():
+                    raise ValueError("optimizer did not converge to finite parameters")
+                # Converged results can still have singular random-effect
+                # covariance. Extract now, rather than failing during serving.
+                effects = {key: float(value.iloc[0]) for key, value in fitted.random_effects.items()}
+                if not np.isfinite(list(effects.values())).all():
+                    raise ValueError("nonfinite player random effects")
+            except (ValueError, np.linalg.LinAlgError, FloatingPointError) as exc:
+                attempt["warnings"] = [str(w.message) for w in captured]
+                attempt["error"] = f"{type(exc).__name__}: {exc}"
+                self.fit_diagnostics_["attempts"].append(attempt)
+                continue
+            self.fit_diagnostics_["attempts"].append(attempt)
+            self.result_, self.converged_, self._random_effects = fitted, True, effects
+            self.fit_diagnostics_.update(converged=True, fallback=False, used_training_rows=len(data),
+                                         fixed_effect_columns=list(self._fixed_effect_cols))
+            return self
+        return self._failed("all mixed-effects optimizer attempts failed; inspect fit_diagnostics_['attempts']")
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         if self._slot_categories is None:
             raise RuntimeError("call fit() before predict()")
+        if self.result_ is None and self.failure_policy != "mean":
+            raise MixedEffectsFitError("the previous fit failed")
+        self._check_identity(X)
+        missing = set(self._input_cols) - set(X)
+        if missing:
+            raise ValueError(f"prediction features missing: {sorted(missing)}")
+        data = X[self._input_cols].reset_index(drop=True).copy()
+        numeric_cols = list(self._medians.index)
+        numeric = data[numeric_cols].apply(pd.to_numeric, errors="raise").astype(float)
+        if np.isinf(numeric.to_numpy()).any():
+            raise ValueError("prediction features contain infinity")
+        data[numeric_cols] = numeric.fillna(self._medians)
+        unseen = ~data.slot.isin(self._slot_categories)
+        self.prediction_diagnostics_ = {"n_rows": len(X), "unseen_players": int((~data.player_id.isin(self._random_effects)).sum()),
+                                        "unseen_slots": int(unseen.sum()), "mean_fallback_rows": 0,
+                                        "missing_feature_cells": int(numeric.isna().sum().sum())}
         if self.result_ is None:
-            # fit() hit the degenerate-fold fallback -- the trivial
-            # constant is the only thing left to predict.
+            if self.failure_policy != "mean":
+                raise MixedEffectsFitError("the previous fit failed")
+            self.prediction_diagnostics_["mean_fallback_rows"] = len(X)
             return np.full(len(X), self._fallback_mean_)
-
-        data = X.copy()
-        # A slot unseen in training has no estimated coefficient. Fall back
-        # to that same position's rank-1 slot (e.g. unseen "WR5" -> "WR1")
-        # -- rank-1 slots are the ones virtually always populated (starters
-        # are filled almost every week), so this is the least-arbitrary
-        # known category to borrow, not a genuinely informed guess about
-        # the unseen slot itself. Documented, not silently dropped.
-        unseen = ~data["slot"].isin(self._slot_categories)
         if unseen.any():
-            position = data.loc[unseen, "slot"].astype(str).str.extract(r"^([A-Za-z]+)")[0]
-            fallback_slot = position + "1"
-            still_unseen = ~fallback_slot.isin(self._slot_categories)
-            # If even the rank-1 fallback was never seen in training,
-            # there is no fixed-effect coefficient this fold can offer at
-            # all for that position -- leave those rows to the constant
-            # fallback via NaN-then-fillna below rather than guess further.
-            fallback_slot = fallback_slot.where(~still_unseen, np.nan)
-            data.loc[unseen, "slot"] = fallback_slot.values
-        data["slot"] = pd.Categorical(data["slot"], categories=self._slot_categories)
-
-        fixed_pred = self.result_.predict(exog=data)
-        fixed_pred = fixed_pred.reindex(data.index)
-        fixed_pred = fixed_pred.fillna(self._fallback_mean_)
-
-        random_effects = self.result_.random_effects
-        re_adjustment = data["player_id"].map(
-            lambda pid: float(random_effects[pid]["Group"]) if pid in random_effects else 0.0
-        )
-        return (fixed_pred.to_numpy() + re_adjustment.to_numpy())
+            fallback = data.loc[unseen, "slot"].str.extract(r"^([A-Za-z]+)")[0] + "1"
+            data.loc[unseen, "slot"] = fallback.where(fallback.isin(self._slot_categories), np.nan).to_numpy()
+        valid_slot = data.slot.notna()
+        self.prediction_diagnostics_["mean_fallback_rows"] = int((~valid_slot).sum())
+        data["slot"] = pd.Categorical(data.slot, categories=self._slot_categories)
+        fixed = np.full(len(data), self._fallback_mean_, dtype=float)
+        if valid_slot.any():
+            fixed[valid_slot] = np.asarray(self.result_.predict(exog=data.loc[valid_slot]), dtype=float)
+        prediction = fixed + data.player_id.map(self._random_effects).fillna(0).to_numpy(float)
+        if not np.isfinite(prediction).all():
+            raise MixedEffectsFitError("nonfinite prediction from a converged mixed-effects model")
+        return prediction

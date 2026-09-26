@@ -1,5 +1,22 @@
 # Team/Game-Level Player Allocation Models: Plan A and Plan B
 
+## Current Plan B update — 2026-09-25
+
+Plan B has been reopened for future research at the user's request. The checked
+roster join, stricter mixed-effects baseline, and separate seasonal share
+evaluator ran on a verified 2013–2025 roster CSV. On 2023–2025 held-out rows,
+mixed effects scored worse than rolling-3 and fixed ridge for all four share
+targets; see [the saved result](../data/experiments/plan_b_run_20260925/README.md)
+and [Plan B evaluation details](PLAN_B_FUTURE_RUN.md). The current database
+lacks the roster-slot table, but the evaluator reads the CSV directly. This
+result concerns the first-cut player random-intercept model, not PPR or the
+proposed full joint roster model.
+This update supersedes the historical instruction below to stop Plan B
+evaluator work. A later grouped share prototype with an omitted-player bucket
+also failed the 2020–2022 development gate on all four share targets; see the
+joint allocation development update in the linked Plan B document. The full
+joint roster architecture and PPR comparison remain unimplemented.
+
 ## Motivation
 
 Every production model in this repo (`src/models/single_week_ppr/`) predicts a

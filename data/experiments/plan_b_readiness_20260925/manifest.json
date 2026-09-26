@@ -1,0 +1,38 @@
+{
+  "code_sha256": {
+    "scripts/evaluate_plan_b_shares.py": "c18236433c9ab78e5ee1a026946092717c98bc956fe2c822e4790bcdba10265f",
+    "src/evaluation/paired_ppr_comparison.py": "ec13eecc3134a428a7b94d5d5058dbc833ff1ee84a02253cf0fab1e7000b558b",
+    "src/evaluation/team_hierarchical_backtester.py": "7ef51685286f8af3b1454d088274318a8c640c31d1755519170d8d65713aa38d",
+    "src/models/team_allocation/features.py": "336b3d22e65ebf3cf929972817fb04b52daeb2ef7dea8db12dc32cc90959168b",
+    "src/models/team_hierarchical/features.py": "0a654a082f46d17f6925094510cd2577ab85283eb77bf376145b4769c77c60d3",
+    "src/models/team_hierarchical/models.py": "8144c37a4492f8d971119bd11182dfcbf934959fcc4e781c981de3cfc9960993",
+    "src/utils/leakage.py": "5e52de868b39cd0326e4979f9a827ed71041cbb3a11e3fd06246d4ef1aa2d3d1"
+  },
+  "created_at_utc": "2026-09-25T05:26:51.490562+00:00",
+  "database": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/nfl_data.db",
+  "database_access": "read-only transaction",
+  "mode": "preflight",
+  "parameters": {
+    "maxiter": 200,
+    "n_bootstrap": 2000,
+    "seed": 42
+  },
+  "seasons": [
+    2013,
+    2025
+  ],
+  "target": "rushing_yards",
+  "test_seasons": [
+    2023,
+    2024,
+    2025
+  ],
+  "versions": {
+    "numpy": "1.26.3",
+    "pandas": "2.1.4",
+    "python": "3.11.15",
+    "scipy": "1.16.3",
+    "sklearn": "1.4.0",
+    "statsmodels": "0.14.6"
+  }
+}

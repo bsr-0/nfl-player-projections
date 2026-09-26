@@ -1,0 +1,41 @@
+{
+  "builder_sha256": "b6623a92c1ae28f562a16d2df32c776062b24ebc1bab043c47d0131694095507",
+  "checks": [
+    "canonical and share keys equal",
+    "unique player-week and team-slot",
+    "all slots match source identities",
+    "complete contiguous slots through position cap for every team-week"
+  ],
+  "db_mtime_ns": 1790309741928354859,
+  "db_path": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/nfl_data.db",
+  "db_size_bytes": 756981760,
+  "excluded_by_caps": 62220,
+  "files": {
+    "slot_coverage.csv": {
+      "rows": 15,
+      "sha256": "e8bd7ad5868d0468e64bb8090c3a36f3740d3e107a945f3b621d5649a6a19625",
+      "size_bytes": 310
+    },
+    "slot_coverage_by_season.csv": {
+      "rows": 52,
+      "sha256": "50bb60d4141cf88e703f9169c4b280d867b5569229e3db3730380ed13c5a582b",
+      "size_bytes": 1028
+    },
+    "slots.csv": {
+      "rows": 101138,
+      "sha256": "24ab8997d0b1ebd5ab716d3d752e93af7592fbe495f38914e307b66cce1f07d8",
+      "size_bytes": 5109947
+    }
+  },
+  "n_team_position_weeks": 27256,
+  "seasons": [
+    2013,
+    2025
+  ],
+  "slot_rows": 101138,
+  "source_rows": {
+    "canonical_player_weeks": 163358,
+    "team_week_player_shares": 163358
+  },
+  "status": "verified"
+}
