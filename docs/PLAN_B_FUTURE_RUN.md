@@ -33,8 +33,8 @@ preflight panels below, with hash checks. Development outputs are in
 `data/experiments/plan_b_joint_other_dev_20260925/`,
 `data/experiments/plan_b_joint_mae_dev_20260925/` (unconstrained diagnostic),
 and `data/experiments/plan_b_joint_mae_mass_dev_20260925/` (mass-aware).
-The large frozen panels and prediction CSVs remain local; their manifests and
-reports identify the inputs and code. The 2023–2025 confirmation was not run
+The frozen input panels remain local; the smaller row-level prediction CSVs,
+manifests, and reports are tracked. The 2023–2025 confirmation was not run
 because the development gate failed. No Plan B model was selected, promoted,
 or used in serving. A future attempt should first address omitted-player mass
 calibration and sparse zero rows on development seasons, then use a separate
