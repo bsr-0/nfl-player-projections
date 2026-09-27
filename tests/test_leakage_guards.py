@@ -218,6 +218,31 @@ class TestInjuryTimingGuard:
 
         assert len(result) == 1
 
+    def test_latest_pregame_report_is_unique_player_week(self):
+        injuries = pd.DataFrame({
+            "gsis_id": ["P4", "P4"], "season": [2024, 2024],
+            "week": [5, 5], "team": ["AAA", "AAA"],
+            "report_status": ["Questionable", "Out"],
+            "date_modified": [
+                pd.Timestamp("2024-10-04 20:00:00", tz="UTC"),
+                pd.Timestamp("2024-10-05 20:00:00", tz="UTC"),
+            ],
+        })
+        result = InjuryDataLoader().get_player_injury_status(injuries)
+        assert len(result) == 1
+        assert result.iloc[0]["injury_status"] == "Out"
+        assert result.iloc[0]["injury_score"] == 0.0
+
+    def test_conflicting_latest_report_time_fails(self):
+        injuries = pd.DataFrame({
+            "gsis_id": ["P5", "P5"], "season": [2024, 2024],
+            "week": [5, 5], "team": ["AAA", "AAA"],
+            "report_status": ["Questionable", "Out"],
+            "date_modified": [pd.Timestamp("2024-10-05 20:00:00", tz="UTC")] * 2,
+        })
+        with pytest.raises(ValueError, match="conflicting injury statuses"):
+            InjuryDataLoader().get_player_injury_status(injuries)
+
 
 class TestContractYearBoundedBySeason:
     """A row for season S must never see a contract signed after S."""

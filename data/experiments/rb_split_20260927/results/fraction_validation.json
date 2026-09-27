@@ -1,0 +1,35 @@
+[
+  {
+    "cold_start_rows": 27,
+    "fraction_mae": 0.27746284941682486,
+    "positive_component_rows": 1371,
+    "prior_receiving_fraction": 0.4028421383790649,
+    "rows": 1535,
+    "status": "development_auxiliary_not_PPR_accuracy",
+    "train_through_season": 2022,
+    "undefined_zero_component_rows": 164,
+    "validation_season": 2023
+  },
+  {
+    "cold_start_rows": 33,
+    "fraction_mae": 0.27912275904901385,
+    "positive_component_rows": 1380,
+    "prior_receiving_fraction": 0.40337571956824075,
+    "rows": 1540,
+    "status": "development_auxiliary_not_PPR_accuracy",
+    "train_through_season": 2023,
+    "undefined_zero_component_rows": 160,
+    "validation_season": 2024
+  },
+  {
+    "cold_start_rows": 43,
+    "fraction_mae": 0.2815660321454257,
+    "positive_component_rows": 1437,
+    "prior_receiving_fraction": 0.4018187013148444,
+    "rows": 1596,
+    "status": "development_auxiliary_not_PPR_accuracy",
+    "train_through_season": 2024,
+    "undefined_zero_component_rows": 159,
+    "validation_season": 2025
+  }
+]

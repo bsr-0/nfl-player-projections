@@ -19,7 +19,8 @@ def _metrics(rows: pd.DataFrame) -> dict:
 
 def run_backtest(panel: pd.DataFrame, target: str, seasons: list[int], *,
                  epsilon: float = 0.001, penalty: float = 0.00001,
-                 smooth_width: float = 0.002, n_bootstrap: int = 2000,
+                 smooth_width: float = 0.002, other_weight: float = 1.0,
+                 n_bootstrap: int = 2000,
                  seed: int = 42) -> tuple[pd.DataFrame, dict]:
     meta = validate_panel(panel, target, seasons)
     if type(n_bootstrap) is not int or n_bootstrap < 100:
@@ -42,9 +43,10 @@ def run_backtest(panel: pd.DataFrame, target: str, seasons: list[int], *,
         train = panel[panel.season < season].reset_index(drop=True)
         test = panel[panel.season == season].reset_index(drop=True)
         model = JointOtherMAEModel(target, epsilon=epsilon, penalty=penalty,
-                                   smooth_width=smooth_width).fit(train)
+                                   smooth_width=smooth_width,
+                                   other_weight=other_weight).fit(train)
         candidate, prior, other = model.predict(test)
-        out = test[KEYS + ["slot"]].copy()
+        out = test[KEYS + ["slot", "is_cold_start"]].copy()
         out["train_end_season"] = int(train.season.max())
         out["actual_share"] = test[label].to_numpy(float)
         out["rolling3"] = test[f"{label}_roll3"].fillna(0).to_numpy(float)
@@ -57,6 +59,7 @@ def run_backtest(panel: pd.DataFrame, target: str, seasons: list[int], *,
                 | (out[list(ARMS) + ["predicted_other_mass"]] > 1)).any().any():
             raise ValueError(f"out-of-bounds prediction for {season}")
         fold["fit"] = model.fit_diagnostics_
+        fold["prediction"] = model.prediction_diagnostics_
         fold["first_week_rolling3_null_to_zero_rows"] = int(test[f"{label}_roll3"].isna().sum())
         fold["n_team_weeks"] = int(test.groupby(GROUP).ngroups)
         outputs.append(out)
@@ -80,6 +83,7 @@ def run_backtest(panel: pd.DataFrame, target: str, seasons: list[int], *,
             paired, n_bootstrap, seed)
     meta.update(status="complete", model="joint_softmax_smooth_player_mae_with_other_bucket",
                 epsilon=epsilon, penalty=penalty, smooth_width=smooth_width,
+                other_weight=other_weight,
                 represented_team_mass={"actual_mean": float(mass.actual_share.mean()),
                                        "candidate_mean": float(mass.joint_other_mae.mean()),
                                        "candidate_mass_mae": float(np.abs(mass.joint_other_mae - mass.actual_share).mean()),

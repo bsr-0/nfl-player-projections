@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from scripts.evaluate_plan_b_shares import main
-from src.evaluation.team_hierarchical_backtester import ARMS, KEYS, run_backtest, validate_panel
+from src.evaluation.team_hierarchical_backtester import ARMS, KEYS, evaluation_features, run_backtest, validate_panel
 from src.models.team_hierarchical.models import MixedEffectsFitError
 
 
@@ -161,3 +161,22 @@ def test_cli_missing_slots_stops_cleanly(tmp_path):
     assert main(args) == 2
     failure = json.loads((tmp_path / "missing" / "failure.json").read_text())
     assert "team_week_roster_slots table not found" in failure["error"]
+
+
+@pytest.mark.parametrize("target", ["receptions", "passing_yards"])
+def test_evaluation_features_accepts_the_two_new_plan_b_targets(target):
+    """Regression test for widening evaluation_features()'s target check from
+    VOLUME_COLS to PLAN_B_TARGETS (2026-09-25) -- receptions/passing_yards
+    must no longer raise "unsupported Plan B target"."""
+    features = evaluation_features(target)
+    assert f"share_of_team_{target}_roll3" in features
+    assert f"share_of_team_{target}_s2d" in features
+    assert f"team_{target}_roll3" in features
+    assert f"team_{target}_s2d" in features
+
+
+def test_evaluation_features_still_rejects_sparse_targets():
+    """The 4 sparse zero-inflated TD/INT targets remain explicitly out of
+    scope for Plan B's joint architecture -- this must keep raising."""
+    with pytest.raises(ValueError, match="unsupported Plan B target"):
+        evaluation_features("receiving_tds")

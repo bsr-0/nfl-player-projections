@@ -1,0 +1,340 @@
+diff --git a/src/models/game_simulation.py b/src/models/game_simulation.py
+index a82fbf0..b2855a2 100644
+--- a/src/models/game_simulation.py
++++ b/src/models/game_simulation.py
+@@ -6,8 +6,9 @@ availability, and role-correlation artifacts are separate inputs.
+ """
+ from dataclasses import dataclass
+ from hashlib import blake2b
+-from math import sqrt
++from math import erf, sqrt
+ from typing import Iterable
++import logging
+ import numpy as np
+ 
+ from src.models.player_correlation import (
+@@ -16,6 +17,16 @@ from src.models.player_correlation import (
+ )
+ from src.models.usage_allocation import draw_usage_shares
+ 
++logger = logging.getLogger(__name__)
++
++# Chosen loosely: existing test fixtures' predicted_margin/margin_sd pairs
++# (e.g. .75 win prob with a 3-point margin at margin_sd=10) imply a
++# probability roughly 10-15 points away from the supplied home_win_prob and
++# should not warn; a mismatch this large (e.g. a 1% win probability paired
++# with a double-digit positive predicted home margin) means the two model
++# heads are describing different games, not just disagreeing on degree.
++MARGIN_WIN_PROBABILITY_DISAGREEMENT_THRESHOLD = 0.20
++
+ @dataclass(frozen=True)
+ class TeamVolumeBaseline:
+     plays: float = 64.0
+@@ -109,6 +120,46 @@ def _draw_margin(rng, home_win_prob: float, predicted_margin: float,
+     magnitude = rng.exponential(home_margin_mean if home_won else away_margin_mean)
+     return (float(magnitude) if home_won else -float(magnitude)), home_won
+ 
++def implied_win_probability_from_margin(predicted_margin: float, margin_sd: float) -> float:
++    """Win probability implied by treating margin ~ Normal(predicted_margin, margin_sd).
++
++    An independent estimate of P(home wins), distinct from home_win_prob,
++    used only to check the two inputs for mutual consistency -- see
++    margin_win_probability_disagreement.
++
++    margin_sd is treated as the SD of the margin variable itself, matching
++    how _draw_margin above already uses it directly (`margin_sd * sqrt(2/pi)`
++    is the mean-absolute-value of N(0, margin_sd)) -- not as a per-team score
++    SD requiring a further sqrt(2) inflation. Keep this consistent with
++    _draw_margin if either changes; the two disagreeing was a real bug
++    caught by two independent implementations landing here at once
++    (2026-09-26).
++    """
++    if margin_sd <= 0:
++        if predicted_margin > 0:
++            return 1.0
++        if predicted_margin < 0:
++            return 0.0
++        return 0.5
++    z = predicted_margin / (margin_sd * sqrt(2.0))
++    return 0.5 * (1.0 + erf(z))
++
++def margin_win_probability_disagreement(game: GameScriptInput) -> float:
++    """Absolute gap between game.home_win_prob and the margin's own implied probability.
++
++    _draw_margin is internally self-consistent (the unconditional expected
++    margin it produces always equals predicted_margin given home_win_prob),
++    but nothing upstream guarantees home_win_prob and predicted_margin
++    describe the same game consistently -- they can come from independently
++    trained model heads. A large gap here means _draw_margin will solve for
++    extreme, one-sided exponential means to reconcile them, producing a
++    silently bimodal, unrealistic score distribution rather than a warning
++    (docs/GAME_SIMULATION_CORRELATION_PLAN.md, "Code review findings
++    (2026-09-26)").
++    """
++    return abs(game.home_win_prob - implied_win_probability_from_margin(
++        game.predicted_margin, game.margin_sd))
++
+ def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
+                           seed: int = 42) -> list[GameDraw]:
+     if n_draws < 1:
+@@ -117,6 +168,16 @@ def simulate_game_scripts(game: GameScriptInput, n_draws: int = 1000,
+         raise ValueError("home_win_prob must be in [0, 1]")
+     if game.predicted_total < 0 or game.margin_sd < 0 or game.total_sd < 0:
+         raise ValueError("totals and standard deviations must be nonnegative")
++    disagreement = margin_win_probability_disagreement(game)
++    if disagreement > MARGIN_WIN_PROBABILITY_DISAGREEMENT_THRESHOLD:
++        logger.warning(
++            "game %s: home_win_prob=%.3f disagrees with the margin-implied "
++            "win probability=%.3f (predicted_margin=%.2f, margin_sd=%.2f) by "
++            "%.3f -- _draw_margin will solve for an extreme, one-sided "
++            "exponential mean to reconcile them",
++            game.game_id, game.home_win_prob,
++            implied_win_probability_from_margin(game.predicted_margin, game.margin_sd),
++            game.predicted_margin, game.margin_sd, disagreement)
+     rng = np.random.default_rng(_seed_for_game(seed, game.game_id))
+     output = []
+     for draw in range(n_draws):
+@@ -202,38 +263,95 @@ def _draw_usage_multipliers(game: GameScriptInput,
+                 else actual * draw_share / max(1e-6, expected_pool * base_share))
+     return multipliers
+ 
+-def role_keys_for_players(game: GameScriptInput,
+-                          players: list[PlayerSimulationInput]) -> tuple[str, ...]:
+-    """Assign stable within-game roles such as home_WR1 and away_RB2."""
++def _grouped_role_assignments(game: GameScriptInput,
++                              players: list[PlayerSimulationInput]) -> dict:
++    """Group players by (side, position) and rank each group.
++
++    Shared by role_keys_for_players and role_assignment_diagnostics so the
++    two can never drift apart on what counts as which role.
++
++    Ranks on mean_fantasy_points/player_id only -- usage_share is
++    deliberately NOT used here, even though it is often a better serving-time
++    signal, because the role-keyed correlation model these keys are used to
++    query (RoleResidualCorrelationModel) is fit from the historical OOF
++    panel via role_keys_from_panel_game (src/models/residual_calibration.py),
++    which has no usage_share column to rank on at all (oof_capture.py never
++    captures it). A role label is only meaningful if it means the same thing
++    at fit time and serve time; ranking on a signal the fitting side
++    structurally cannot see would silently misapply one player's fitted
++    correlation to a different player whenever usage_share reordered them
++    relative to points (docs/GAME_SIMULATION_CORRELATION_PLAN.md, "Code
++    review findings (2026-09-26)"). If usage_share is ever added to the OOF
++    panel, both ranking functions should start using it together, not just
++    this one.
++    """
+     grouped = {}
+     for index, player in enumerate(players):
+         side = "home" if player.team == game.home_team else "away"
+         grouped.setdefault((side, player.position), []).append((index, player))
+-    assigned = {}
+-    for (side, position), entries in grouped.items():
++    for entries in grouped.values():
+         entries.sort(
+-            key=lambda item: (
+-                item[1].usage_share is not None,
+-                item[1].usage_share if item[1].usage_share is not None else -1.0,
+-                item[1].mean_fantasy_points,
+-                item[1].player_id,
+-            ),
++            key=lambda item: (item[1].mean_fantasy_points, item[1].player_id),
+             reverse=True,
+         )
++    return grouped
++
++def role_keys_for_players(game: GameScriptInput,
++                          players: list[PlayerSimulationInput]) -> tuple[str, ...]:
++    """Assign stable within-game roles such as home_WR1 and away_RB2."""
++    grouped = _grouped_role_assignments(game, players)
++    assigned = {}
++    for (side, position), entries in grouped.items():
+         for rank, (index, _) in enumerate(entries, start=1):
+             assigned[index] = f"{side}_{position}{rank}"
+     return tuple(assigned[index] for index in range(len(players)))
+ 
++def role_assignment_diagnostics(game: GameScriptInput,
++                                players: list[PlayerSimulationInput]) -> dict[str, bool]:
++    """Flag which role keys were assigned via a genuine mean_fantasy_points tie.
++
++    _grouped_role_assignments ranks on mean_fantasy_points then player_id --
++    player_id carries no role information, so whenever two players in the
++    same (side, position) group have equal mean_fantasy_points, which one
++    lands in the higher-numbered role slot is arbitrary. A role like
++    home_RB2, fit from many historical games, can therefore end up
++    representing whichever depth player happened to tie-break ahead that
++    week rather than a stable role, which dilutes any real correlation
++    signal for that slot.
++
++    Returns one entry per role key: True if that slot's occupant shared its
++    exact mean_fantasy_points value with at least one other player in the
++    same (side, position) group (rank order between them was decided by the
++    player_id tiebreak, not by an actual difference in projected points).
++    """
++    grouped = _grouped_role_assignments(game, players)
++    diagnostics = {}
++    for (side, position), entries in grouped.items():
++        points = [player.mean_fantasy_points for _, player in entries]
++        tied_values = {value for value in points if points.count(value) > 1}
++        for rank, (_, player) in enumerate(entries, start=1):
++            diagnostics[f"{side}_{position}{rank}"] = player.mean_fantasy_points in tied_values
++    return diagnostics
++
+ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationInput],
+                      n_draws: int = 1000, seed: int = 42,
+                      correlation_model: (ResidualCorrelationModel
+                                          | RoleResidualCorrelationModel
+-                                         | None) = None) -> list[dict]:
++                                         | None) = None,
++                     residual_draws: np.ndarray | None = None,
++                     apply_game_script: bool = True) -> list[dict]:
+     scripts = simulate_game_scripts(game, n_draws, seed)
+     player_list = list(players)
+     player_keys = tuple(player.player_id for player in player_list)
+     marginal_sds = np.asarray(
+         [max(0.01, player.sd_fantasy_points) for player in player_list], dtype=float)
++    empirical_noise = None
++    if residual_draws is not None:
++        empirical_noise = np.asarray(residual_draws, dtype=float)
++        if empirical_noise.shape != (n_draws, len(player_list)) or not np.isfinite(empirical_noise).all():
++            raise ValueError("residual_draws must be finite and shaped (n_draws, players)")
++        if correlation_model is not None:
++            raise ValueError("apply shared dependence to residual_draws before simulate_players")
+     correlated_noise = None
+     if isinstance(correlation_model, ResidualCorrelationModel):
+         if correlation_model.player_keys != player_keys:
+@@ -257,13 +375,18 @@ def simulate_players(game: GameScriptInput, players: Iterable[PlayerSimulationIn
+             team_plays = script.home_plays if is_home else script.away_plays
+             team_pass = script.home_pass_attempts if is_home else script.away_pass_attempts
+             active = rng.random() < _clip_probability(player.participation_prob)
+-            multiplier = usage_multipliers.get(
++            multiplier = (usage_multipliers.get(
+                 index, _opportunity_multiplier(player, team_plays, team_pass, baseline))
+-            noise = (correlated_noise[script.draw, index]
+-                     if correlated_noise is not None
+-                     else rng.normal(0.0, marginal_sds[index]))
+-            value = 0.0 if not active else max(
+-                0.0, player.mean_fantasy_points * multiplier + noise)
++                if apply_game_script else 1.0)
++            noise = (empirical_noise[script.draw, index]
++                     if empirical_noise is not None else
++                     correlated_noise[script.draw, index]
++                     if correlated_noise is not None else rng.normal(0.0, marginal_sds[index]))
++            raw_value = player.mean_fantasy_points * multiplier + noise
++            # Empirical OOF residuals may legitimately yield negative PPR;
++            # clipping them would shift their center away from the served
++            # point forecast and invalidate marginal calibration.
++            value = 0.0 if not active else (raw_value if empirical_noise is not None else max(0.0, raw_value))
+             rows.append({"game_id": game.game_id, "draw": script.draw, "player_id": player.player_id,
+                          "team": player.team, "position": player.position,
+                          "home_score": script.home_score, "away_score": script.away_score,
+diff --git a/src/models/player_correlation.py b/src/models/player_correlation.py
+index 8f7e57e..4658ab1 100644
+--- a/src/models/player_correlation.py
++++ b/src/models/player_correlation.py
+@@ -34,12 +34,6 @@ class ResidualCorrelationModel:
+     covariance: np.ndarray
+     shrinkage: float
+ 
+-    def sample_residuals(self, n_draws: int, seed: int = 42) -> np.ndarray:
+-        if n_draws < 1:
+-            raise ValueError("n_draws must be positive")
+-        return np.random.default_rng(seed).multivariate_normal(
+-            self.means, self.covariance, size=n_draws, check_valid="raise")
+-
+     def sample_scaled_residuals(self, marginal_sds: np.ndarray,
+                                 n_draws: int, seed: int = 42) -> np.ndarray:
+         return _sample_scaled(self.covariance, marginal_sds, n_draws, seed)
+@@ -92,9 +86,39 @@ def fit_role_residual_correlation(rows: np.ndarray, role_keys: list[str],
+     means, covariance = _fit(rows, role_keys, shrinkage)
+     return RoleResidualCorrelationModel(tuple(role_keys), means, covariance, shrinkage)
+ 
+-def apply_shared_residuals(point_predictions: np.ndarray,
+-                           model: ResidualCorrelationModel, seed: int = 42) -> np.ndarray:
+-    point = np.asarray(point_predictions, dtype=float)
+-    if point.ndim != 1 or point.shape[0] != len(model.player_keys):
+-        raise ValueError("point predictions must align with fitted keys")
+-    return point + model.sample_residuals(1, seed)[0]
++
++def fit_sparse_role_residual_correlation(rows: np.ndarray, role_keys: list[str],
++                                         shrinkage: float = 0.25,
++                                         min_pair_rows: int = 20) -> RoleResidualCorrelationModel:
++    """Fit a role artifact from incomplete historical game vectors.
++
++    NFL game lineups do not contain every role in every game. Pairwise-complete
++    covariance lets sparse roles retain a diagonal variance while unseen role
++    pairs default to zero covariance; shrinkage plus PSD projection makes the
++    result safe to sample for any later lineup.
++    """
++    residuals = np.asarray(rows, dtype=float)
++    if residuals.ndim != 2 or residuals.shape[1] != len(role_keys):
++        raise ValueError("rows must be games by correlation keys")
++    if residuals.shape[0] < 2 or len(set(role_keys)) != len(role_keys):
++        raise ValueError("need at least two games and unique role keys")
++    if not 0 <= shrinkage <= 1 or min_pair_rows < 2:
++        raise ValueError("invalid shrinkage or min_pair_rows")
++    means = np.nanmean(residuals, axis=0)
++    if not np.isfinite(means).all():
++        raise ValueError("every role must have at least one finite residual")
++    covariance = np.zeros((len(role_keys), len(role_keys)), dtype=float)
++    for i in range(len(role_keys)):
++        valid_i = np.isfinite(residuals[:, i])
++        if valid_i.sum() < 2:
++            raise ValueError(f"role {role_keys[i]!r} has fewer than two residuals")
++        covariance[i, i] = float(np.var(residuals[valid_i, i], ddof=1))
++        for j in range(i + 1, len(role_keys)):
++            valid = valid_i & np.isfinite(residuals[:, j])
++            if valid.sum() >= min_pair_rows:
++                value = float(np.cov(residuals[valid, i], residuals[valid, j], ddof=1)[0, 1])
++                covariance[i, j] = covariance[j, i] = value
++    diagonal = np.diag(np.diag(covariance))
++    return RoleResidualCorrelationModel(
++        tuple(role_keys), means,
++        _nearest_psd((1 - shrinkage) * covariance + shrinkage * diagonal), shrinkage)
+diff --git a/src/models/simulation_adapter.py b/src/models/simulation_adapter.py
+index 760276a..34aeb6c 100644
+--- a/src/models/simulation_adapter.py
++++ b/src/models/simulation_adapter.py
+@@ -113,7 +113,21 @@ def player_inputs_from_predictions(
+                 f"game {game_id!r} is missing season/week; build it via "
+                 "game_inputs_from_predictions so games can be disambiguated"
+             )
+-        by_pair[(game.season, game.week, frozenset((game.home_team, game.away_team)))] = game_id
++        pair_key = (game.season, game.week, frozenset((game.home_team, game.away_team)))
++        if pair_key in by_pair:
++            # game_inputs_from_predictions only rejects an exact duplicate
++            # (season, week, home, away) key -- it would not catch two
++            # distinct game_ids for the same week's matchup (e.g. a data
++            # quality issue producing both a "H at A" and an "A at H" row
++            # for one real game). Silently keeping only the
++            # last-encountered game_id here would route that game's players
++            # to it and leave the other game with none, with nothing to
++            # show for it.
++            raise ValueError(
++                f"duplicate game for season={game.season} week={game.week} "
++                f"teams={sorted(pair_key[2])}: {by_pair[pair_key]!r} and {game_id!r}"
++            )
++        by_pair[pair_key] = game_id
+     out = {game_id: [] for game_id in games}
+     for row in player_predictions.itertuples(index=False):
+         team, opponent = str(row.team), str(row.opponent)
+diff --git a/src/models/simulation_evaluation.py b/src/models/simulation_evaluation.py
+index d5539be..0b30a54 100644
+--- a/src/models/simulation_evaluation.py
++++ b/src/models/simulation_evaluation.py
+@@ -51,8 +51,14 @@ def empirical_crps(samples: np.ndarray, observation: float) -> float:
+     values = _thin_draws(np.asarray(samples, dtype=float).reshape(-1, 1)).reshape(-1)
+     if len(values) < 2 or not np.isfinite(values).all() or not np.isfinite(observation):
+         raise ValueError("need at least two finite draws and a finite observation")
+-    return float(np.abs(values - observation).mean()
+-                 - .5 * np.abs(values[:, None] - values[None, :]).mean())
++    # The direct pairwise matrix is O(n²) per player and makes a 1,000-draw
++    # production panel impractical.  For sorted samples, the upper-triangle
++    # sum of pairwise absolute differences is sum((2*i-n+1) * x[i]), giving
++    # exactly the same ensemble CRPS in O(n log n).
++    ordered = np.sort(values)
++    n = len(ordered)
++    upper_pair_sum = np.dot(2 * np.arange(n) - n + 1, ordered)
++    return float(np.abs(values - observation).mean() - upper_pair_sum / (n * n))
+ 
+ def _require_actual_coverage(simulated_ids: set[str], actual_frame: pd.DataFrame,
+                              game_id: str) -> None:

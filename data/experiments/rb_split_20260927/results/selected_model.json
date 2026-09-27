@@ -1,0 +1,8 @@
+{
+  "lookback_games": 8,
+  "prior_games": 4.0,
+  "receiving_prior": 3.4069750469173554,
+  "rushing_prior": 5.086112462639883,
+  "train_through_season": 2025,
+  "training_rows": 28774
+}

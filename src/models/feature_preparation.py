@@ -537,6 +537,11 @@ def _prepare_training_data(
             train_data, test_data, add_external_features, "external features",
             context_df=context_data, seasons=all_seasons,
         )
+    except ValueError:
+        # ExternalDataIntegrator raises on changed row counts or conflicting
+        # source identities. Continuing without the feature block would hide
+        # a broken training lineage behind valid-looking metrics.
+        raise
     except Exception as e:
         logger.warning("External features (weather/injury/Vegas) skipped: %s", e)
 

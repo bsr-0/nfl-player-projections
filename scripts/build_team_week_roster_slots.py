@@ -3,9 +3,13 @@
 
 See docs/TEAM_LEVEL_ALLOCATION_MODELS.md's Plan B section. This script
 assigns each QB/RB/WR/TE player-week in the audited `canonical_player_weeks`
-panel to a fixed SLOT (e.g. "RB1", "WR3") within their team-week, so a
-mixed-effects or set-model architecture has a stable, fixed-width structure
-to key off of instead of a variable-length roster.
+panel to a unique SLOT (e.g. "RB1", "WR3") within their team-week, so a
+mixed-effects or joint-softmax architecture has a stable categorical label to
+key off of instead of a variable-length roster. Every rostered player at a
+position gets a slot -- there is no ceiling on how many slots a position can
+have in a given team-week (uncapped 2026-09-25; an earlier
+`MAX_SLOTS_PER_POSITION` cap excluded ~38% of otherwise-eligible rows and was
+removed once evaluated -- see docs/PLAN_B_FUTURE_RUN.md).
 
 IMPORTANT: this reuses the codebase's EXISTING, already-audited pregame-safe
 depth-chart lookup (`_load_depth_chart_asof_table` in
@@ -49,14 +53,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config.settings import DB_PATH, POSITIONS
 
 TABLE_NAME = "team_week_roster_slots"
-
-# Starting assumption, not a measured constant -- how many active roster
-# slots per position to represent in the fixed-width shape. A team-week
-# with more rostered players at a position than its cap simply cannot be
-# represented (those extra players are dropped from this table entirely,
-# flagged in the coverage report rather than silently lost). Revisit once
-# the coverage report below is run against real data.
-MAX_SLOTS_PER_POSITION = {"QB": 2, "RB": 4, "WR": 6, "TE": 3}
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -171,19 +167,9 @@ def build_roster_slots(conn: sqlite3.Connection, lo: int, hi: int, db_path: Path
 
     grp = pop.groupby(["team", "season", "week", "position"], group_keys=False)
     pop["slot_rank"] = grp.cumcount() + 1
+    pop["slot"] = pop["position"] + pop["slot_rank"].astype(str)
 
-    pop["max_slot"] = pop["position"].map(MAX_SLOTS_PER_POSITION)
-    dropped = pop[pop["slot_rank"] > pop["max_slot"]].copy()
-    kept = pop[pop["slot_rank"] <= pop["max_slot"]].copy()
-    kept["slot"] = kept["position"] + kept["slot_rank"].astype(str)
-
-    if len(dropped):
-        print(
-            f"  {len(dropped):,} player-week(s) exceeded their position's "
-            f"MAX_SLOTS_PER_POSITION cap and were dropped (see coverage report)"
-        )
-
-    out = kept[[
+    out = pop[[
         "team", "season", "week", "position", "slot", "slot_rank", "player_id",
         "depth_chart_rank", "snap_share_s2d",
     ]].reset_index(drop=True)
@@ -201,10 +187,6 @@ def validate_roster_slots(panel: pd.DataFrame) -> None:
         raise ValueError("duplicate (team, season, week, slot) rows -- slot uniqueness violated")
     if panel.duplicated(["team", "season", "week", "player_id"]).any():
         raise ValueError("a player was assigned to more than one slot in the same team-week")
-    for pos, cap in MAX_SLOTS_PER_POSITION.items():
-        bad = panel[(panel["position"] == pos) & (panel["slot_rank"] > cap)]
-        if not bad.empty:
-            raise ValueError(f"{pos} slot_rank exceeds its cap of {cap}")
 
 
 def audit_slot_coverage(panel: pd.DataFrame) -> pd.DataFrame:
@@ -217,9 +199,10 @@ def audit_slot_coverage(panel: pd.DataFrame) -> pd.DataFrame:
     noise for that population, same discipline as Plan A's coverage report.
     """
     rows = []
-    for pos, cap in MAX_SLOTS_PER_POSITION.items():
+    for pos in sorted(panel["position"].unique()):
         pos_df = panel[panel["position"] == pos]
-        for slot_rank in range(1, cap + 1):
+        max_rank = int(pos_df["slot_rank"].max())
+        for slot_rank in range(1, max_rank + 1):
             slot_df = pos_df[pos_df["slot_rank"] == slot_rank]
             n_filled = len(slot_df)
             n_default_rank = int((slot_df["depth_chart_rank"] >= 3).sum())

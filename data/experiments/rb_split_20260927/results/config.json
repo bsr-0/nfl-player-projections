@@ -1,0 +1,50 @@
+{
+  "bootstrap_replicates": 5000,
+  "bootstrap_seed": 20260927,
+  "candidate": {
+    "lookback_games": 8,
+    "prior_games": 4.0
+  },
+  "confirmation_seasons_weeks": {
+    "2026": [
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18
+    ]
+  },
+  "draws_per_seed": 10000,
+  "final_train_through": 2025,
+  "scoring": {
+    "fumbles_lost": -2.0,
+    "interceptions": -2.0,
+    "passing_tds": 4.0,
+    "passing_yards": 0.04,
+    "receiving_tds": 6.0,
+    "receiving_yards": 0.1,
+    "receptions": 1.0,
+    "rushing_tds": 6.0,
+    "rushing_yards": 0.1,
+    "two_point_conversions": 2.0
+  },
+  "simulation_seeds": [
+    42,
+    20260927
+  ],
+  "validation_seasons": [
+    2023,
+    2024,
+    2025
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "inputs": {
+    "mapping": {
+      "file": "target_map.csv",
+      "sha256": "aa8e28beb59e73b302fbdd90c4c35b0ff4aca71aef586098264ba5b70a534605"
+    },
+    "test": {
+      "file": "raw_test.parquet",
+      "sha256": "224c1de56cd57a429ffd84683998e5643e48e0c3fe0bf8605062cbdfca5a70d8"
+    },
+    "train": {
+      "file": "raw_train.parquet",
+      "sha256": "5e853ac3fdf58bf51e81bb82baf4590fc4927b859b73f16f3ea1570f5b032106"
+    }
+  },
+  "rows": {
+    "next_game_origins": 6093,
+    "test": 6680,
+    "train": 107242
+  },
+  "source_code_sha256": {
+    "config/settings.py": "366479949900291fed76d2cf9d53af919a155db7feb5b26f1fa80f43996a39a6",
+    "scripts/export_served_fold_full_ppr.py": "5dbc53d4309eff63efb2296e6c252a3550dcd948262d52c030c646a8159a5c76",
+    "src/data/entity_resolver.py": "6860e09f4a28fbc2fb8278765cd00cab6413bb3fe6d1ec2d61dd8a1cea07c96c",
+    "src/data/external_data.py": "a59e7a65eed18dfa341956ca2bda4ca00351b111ca926e423294846f7eded78b",
+    "src/evaluation/full_ppr_head_to_head.py": "1d973c589e9b314bba7c56123b62f28abdd4dc4e08bcd9d1f956163a95aa9547",
+    "src/evaluation/paired_ppr_comparison.py": "ec13eecc3134a428a7b94d5d5058dbc833ff1ee84a02253cf0fab1e7000b558b",
+    "src/evaluation/ppr_truth.py": "038b65d6a5db444bc8a026ed3d7baa497569b1c26e790a84603f6142b4610c16",
+    "src/features/advanced_rookie_injury.py": "334135d7758463d7f7931e8585a153c324e69d4da9fa48cd62a30f2e4ee08b78",
+    "src/features/college_conference.py": "698cc870e7077792579c0a44635d7797a4d79a588231da719b9bcf9e31eb8433",
+    "src/features/feature_engineering.py": "e292d06c7bd4715a34c48a74a3aabdac2aa33ddecd92a2729d5f3de203ac7ed0",
+    "src/features/season_long_features.py": "b97eb0b1d054beca53ea087664ff29814455091361f0ddf8afed17c406958f9a",
+    "src/features/utilization_score.py": "8357aa28ba393d25c0002da59f13b1eeebdea8598e9fb46369bcea7b6a9b0a96",
+    "src/models/advanced_techniques.py": "31ab80aaef3268c731665fbae5322be41fb1b0ee0ba598995f0e44e9765012ff",
+    "src/models/data_loading.py": "b4f137a87587bd2cc84e37f245938e95aa47474a3162c064b7e1b7999350afe7",
+    "src/models/ensemble.py": "612f5f0023c7c6b5d91ca8460eb39c4de25451a1aa232c46962745066462a7e4",
+    "src/models/feature_preparation.py": "c809469acbf54d99a0583ff4526f0bb50c7fe8d282c563473521ca1f5f0dd97d",
+    "src/models/oof_capture.py": "2fe39b04f24ca6268fe21353e16e5bbeb2d3db0adb359c73e686a51acbb7db36",
+    "src/models/position_models.py": "dd06b7266fe60ca475ad15c510558c8086304d3e4494f5c353fcc424e53aa622",
+    "src/models/train.py": "8bce18e617b522688072a9e000e9412f6fc427d291ef800432e2de036edd98e6",
+    "src/models/utilization_to_fp.py": "600f65563259e7229a4183feb47c53c00fd556657ed9e76930233ca30391be9d",
+    "src/utils/data_manager.py": "146a5d2b53c392f62fc93c1a61d348947bdebe42b5af1addde9c7fd0a29d3506",
+    "src/utils/database.py": "a9494f0e11dfea3089634ca4da4e2a338bbddf72f61436348c721bcddbde6ee6",
+    "src/utils/helpers.py": "31de110b6c8cc2ccf31f170ec6f0a27ede9c068204c2db3c72c5addf93f4518a",
+    "src/utils/models_dir.py": "4962c38d5a43e9a98128e553780b28df0c21496f12084e1e4d1fbb6d2340685f"
+  },
+  "status": "prepared",
+  "test_season": 2025,
+  "train_seasons": [
+    2006,
+    2007,
+    2008,
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ]
+}

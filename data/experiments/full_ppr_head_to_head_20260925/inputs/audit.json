@@ -1,0 +1,26 @@
+{
+  "changed_full_vs_eight_labels": 816,
+  "cohorts": {
+    "draft_rookie": 4101,
+    "first_observed_season": 8335,
+    "returning_player": 32224,
+    "snap_segment": {
+      "nonzero": 19854,
+      "unknown": 19522,
+      "zero": 1183
+    }
+  },
+  "fold_rows": {
+    "2023": 13404,
+    "2024": 13466,
+    "2025": 13689
+  },
+  "full_truth_sha256": "b29ee26f59ef84b9594195e5e839dea66510f6a352d6546accc2ce14b5107e46",
+  "mean_absolute_extra_points": 0.04181562661801327,
+  "n_rows": 40559,
+  "plan_a_full_ppr_mae": 2.368755639931951,
+  "prediction_sha256": "33f4a9612afe91d5f49bd69c45314219ac3588993d81c9f962f0ec6dee80cd82",
+  "saved_mae_recomputed": true,
+  "scoring_definition": "raw_ten_component_full_ppr_plan_a_zero_extra_forecast",
+  "status": "complete"
+}

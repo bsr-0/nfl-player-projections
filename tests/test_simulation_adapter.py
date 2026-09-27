@@ -71,6 +71,20 @@ def test_rematch_across_weeks_is_not_misrouted():
     assert [p.player_id for p in result["2026_2_H_A"]] == ["h_qb", "a_wr"]
     assert [p.player_id for p in result["2026_9_H_A"]] == ["h_qb_wk9", "a_wr_wk9"]
 
+def test_duplicate_game_for_same_week_and_matchup_raises_instead_of_silently_dropping():
+    # game_inputs_from_predictions only rejects an exact duplicate
+    # (season, week, home, away) key; two distinct game_ids for the same
+    # real matchup/week (e.g. a data quality issue) must not silently
+    # collapse into one, routing all players to whichever game_id happened
+    # to be processed last and leaving the other with none.
+    from src.models.game_simulation import GameScriptInput
+    games = {
+        "g1": GameScriptInput("g1", "H", "A", .5, 0, 42, season=2026, week=2),
+        "g2": GameScriptInput("g2", "H", "A", .5, 0, 42, season=2026, week=2),
+    }
+    with pytest.raises(ValueError, match="duplicate game"):
+        player_inputs_from_predictions(PLAYERS.iloc[:1], games)
+
 def test_missing_team_volume_falls_back_with_warning(caplog):
     import logging
     with caplog.at_level(logging.WARNING, logger="src.models.simulation_adapter"):

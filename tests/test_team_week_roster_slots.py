@@ -12,7 +12,6 @@ import pandas as pd
 import pytest
 
 from scripts.build_team_week_roster_slots import (
-    MAX_SLOTS_PER_POSITION,
     audit_slot_coverage,
     build_roster_slots,
     load_depth_chart_rank_asof,
@@ -146,10 +145,14 @@ def test_sentinel_snap_share_spike_does_not_leak_into_its_own_week(tmp_path):
     assert week4.loc["a", "slot"] == "RB1"
 
 
-def test_cap_enforcement_drops_excess_players(tmp_path):
+def test_no_cap_every_rostered_player_gets_a_slot(tmp_path):
+    """Uncapped (2026-09-25): a team-week with more RBs than the old
+    MAX_SLOTS_PER_POSITION=4 cap must keep every one of them, not drop the
+    excess -- 6 is deliberately above the old cap to prove there's genuinely
+    no ceiling anymore, not just a raised one."""
     db_path = tmp_path / "test.db"
-    cap = MAX_SLOTS_PER_POSITION["RB"]
-    players = [(f"rb{i}", "RB") for i in range(cap + 2)]
+    n = 6
+    players = [(f"rb{i}", "RB") for i in range(n)]
     depth_chart = {pid: i + 1 for i, (pid, _) in enumerate(players)}
     db = _seed(db_path, players, depth_chart=depth_chart)
     _add_snap_shares(db, {pid: {} for pid, _ in players})
@@ -157,8 +160,26 @@ def test_cap_enforcement_drops_excess_players(tmp_path):
     validate_roster_slots(panel)
 
     week1 = panel[panel.week == 1]
-    assert len(week1[week1.position == "RB"]) == cap
-    assert set(week1[week1.position == "RB"]["slot_rank"]) == set(range(1, cap + 1))
+    assert len(week1[week1.position == "RB"]) == n
+    assert set(week1[week1.position == "RB"]["slot_rank"]) == set(range(1, n + 1))
+    assert set(week1[week1.position == "RB"]["slot"]) == {f"RB{i}" for i in range(1, n + 1)}
+
+
+def test_audit_slot_coverage_is_data_driven_not_a_fixed_ceiling(tmp_path):
+    """audit_slot_coverage's per-position max slot rank must come from the
+    actual panel, not a removed fixed constant -- 9 WRs must produce
+    coverage rows through WR9, not silently truncate at some old cap."""
+    db_path = tmp_path / "test.db"
+    n = 9
+    players = [(f"wr{i}", "WR") for i in range(n)]
+    depth_chart = {pid: i + 1 for i, (pid, _) in enumerate(players)}
+    db = _seed(db_path, players, depth_chart=depth_chart)
+    _add_snap_shares(db, {pid: {} for pid, _ in players})
+    panel = _build(db_path)
+    coverage = audit_slot_coverage(panel)
+
+    wr_slots = set(coverage[coverage.position == "WR"]["slot"])
+    assert wr_slots == {f"WR{i}" for i in range(1, n + 1)}
 
 
 def test_validate_rejects_duplicate_slot(tmp_path):

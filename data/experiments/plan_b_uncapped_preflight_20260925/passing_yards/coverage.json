@@ -1,0 +1,72 @@
+{
+  "by_season": {
+    "2013": {
+      "eligible": 1344,
+      "excluded": 0,
+      "represented": 1344
+    },
+    "2014": {
+      "eligible": 1277,
+      "excluded": 0,
+      "represented": 1277
+    },
+    "2015": {
+      "eligible": 1317,
+      "excluded": 0,
+      "represented": 1317
+    },
+    "2016": {
+      "eligible": 1513,
+      "excluded": 0,
+      "represented": 1513
+    },
+    "2017": {
+      "eligible": 1957,
+      "excluded": 0,
+      "represented": 1957
+    },
+    "2018": {
+      "eligible": 1940,
+      "excluded": 0,
+      "represented": 1940
+    },
+    "2019": {
+      "eligible": 2074,
+      "excluded": 0,
+      "represented": 2074
+    },
+    "2020": {
+      "eligible": 1844,
+      "excluded": 0,
+      "represented": 1844
+    },
+    "2021": {
+      "eligible": 1916,
+      "excluded": 0,
+      "represented": 1916
+    },
+    "2022": {
+      "eligible": 1838,
+      "excluded": 0,
+      "represented": 1838
+    },
+    "2023": {
+      "eligible": 1812,
+      "excluded": 0,
+      "represented": 1812
+    },
+    "2024": {
+      "eligible": 1867,
+      "excluded": 0,
+      "represented": 1867
+    },
+    "2025": {
+      "eligible": 1948,
+      "excluded": 0,
+      "represented": 1948
+    }
+  },
+  "eligible_rows": 22647,
+  "excluded_rows": 0,
+  "represented_rows": 22647
+}

@@ -714,6 +714,13 @@ class AdvancedRookieProjector:
         
         if historical_df.empty:
             return []
+        # Caller-supplied comparables need the same historical cutoff as
+        # database-loaded ones; a target season's outcomes are unavailable
+        # when its rookie features are generated.
+        historical_df = historical_df[
+            pd.to_numeric(historical_df['season'], errors='coerce').between(
+                min_season, max_season)
+        ]
         
         # Filter to position
         pos_df = historical_df[historical_df['position'] == position].copy()
@@ -820,9 +827,9 @@ class AdvancedRookieProjector:
         player_weekly_stats aggregated to season level using the same
         SCORING-backed fantasy_points already in the table (AUDIT_REPORT.md
         #24), rather than recomputing it from components a second time.
-        max_season is capped at CURRENT_NFL_SEASON - 1: a rookie CLASS is
-        only a valid comparable once its season is complete, and excluding
-        the in-progress season also avoids depending on it being ingested.
+        max_season is capped at CURRENT_NFL_SEASON - 1. The feature caller
+        additionally passes the row's season minus one so historical folds
+        cannot read outcomes from their own or later seasons.
         """
         max_season = min(max_season, CURRENT_NFL_SEASON - 1)
         if max_season < min_season:
@@ -892,7 +899,8 @@ class AdvancedRookieProjector:
         draft_round: int,
         draft_pick: int,
         combine_score: float = None,
-        historical_df: pd.DataFrame = None
+        historical_df: pd.DataFrame = None,
+        max_season: int = CURRENT_NFL_SEASON - 1,
     ) -> Dict:
         """
         Generate projection based on comparable players.
@@ -908,7 +916,8 @@ class AdvancedRookieProjector:
             draft_round=draft_round,
             draft_pick=draft_pick,
             combine_score=combine_score,
-            historical_df=historical_df
+            historical_df=historical_df,
+            max_season=max_season,
         )
         
         if not comparables:
@@ -1014,7 +1023,9 @@ class AdvancedRookieProjector:
                 position=position,
                 draft_round=draft_round,
                 draft_pick=draft_pick,
-                combine_score=combine_score
+                combine_score=combine_score,
+                max_season=(int(as_of_season) - 1 if as_of_season is not None
+                            else CURRENT_NFL_SEASON - 1),
             )
             
             # Blend archetype and comparable projections
@@ -1197,11 +1208,13 @@ class AdvancedRookieProjector:
                 draft_round=draft_round,
                 draft_pick=draft_pick,
                 opportunity_score=opportunity_by_row.loc[idx],
+                as_of_season=int(row['season']),
+                as_of_week=int(row['week']),
                 # Re-enabled: _load_historical_rookies() was rebuilt on the
                 # local DB (draft_picks_v2 + player_weekly_stats, no live
                 # fetch for the two-query part) and is now cached at the
                 # class level -- see _historical_rookies_cache -- so this is
-                # one real DB read per process, not one nfl_data_py fetch per
+                # one DB read per historical cutoff rather than per
                 # rookie-week. Only rookie_ceiling_ppg/rookie_floor_ppg
                 # actually change: get_comparable_projection() blends into
                 # project_rookie's floor/ceiling, but nothing here reads

@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-from src.models.team_allocation.features import VOLUME_COLS
+from src.models.team_hierarchical.features import PLAN_B_TARGETS
 
 GROUP = ["team", "season", "week"]
 
@@ -19,7 +19,7 @@ GROUP = ["team", "season", "week"]
 class JointOtherShareModel:
     def __init__(self, target: str, *, epsilon: float = 0.001, penalty: float = 0.001,
                  maxiter: int = 200):
-        if target not in VOLUME_COLS:
+        if target not in PLAN_B_TARGETS:
             raise ValueError(f"unsupported share target: {target}")
         if not (np.isfinite(epsilon) and 0 < epsilon < 1):
             raise ValueError("epsilon must be finite in (0, 1)")
@@ -29,6 +29,7 @@ class JointOtherShareModel:
             raise ValueError("maxiter must be a positive integer")
         self.target, self.epsilon, self.penalty, self.maxiter = target, epsilon, penalty, maxiter
         self.fit_diagnostics_: dict = {}
+        self.prediction_diagnostics_: dict = {}
         self._coef: np.ndarray | None = None
 
     @property
@@ -78,6 +79,24 @@ class JointOtherShareModel:
         group, unique = pd.factorize(index, sort=False)
         return group.astype(int), len(unique)
 
+    def _resolve_unseen_slots(self, slots: pd.Series) -> tuple[pd.Series, int]:
+        """A `slot` absent from the training vocabulary must not silently
+        fall through to an all-zero one-hot row (equivalent to whichever
+        slot happens to be the lexicographically-first reference category,
+        e.g. QB1 -- semantically wrong for, say, an unseen WR9 row). Fall
+        back explicitly to the row's own position's rank-1 slot if that was
+        seen in training (same policy as models.py's mixed-effects
+        predict()); if even that is unseen, fall back to the fixed reference
+        category explicitly. Counted, not silent."""
+        unseen = ~slots.isin(self._slot_category_set)
+        if not unseen.any():
+            return slots, 0
+        resolved = slots.copy()
+        position_rank1 = resolved[unseen].str.extract(r"^([A-Za-z]+)")[0] + "1"
+        has_rank1 = position_rank1.isin(self._slot_category_set)
+        resolved.loc[unseen] = position_rank1.where(has_rank1, self._slot_categories[0]).to_numpy()
+        return resolved, int(unseen.sum())
+
     def _prepare(self, frame: pd.DataFrame, *, fit: bool):
         prior = pd.to_numeric(frame[self.prior], errors="raise").fillna(0).to_numpy(float)
         group, n_groups = self._groups(frame)
@@ -91,6 +110,7 @@ class JointOtherShareModel:
         if fit:
             self._median = pd.DataFrame(numeric).median().fillna(0.0).to_numpy(float)
             self._slot_categories = sorted(frame.slot.unique())
+            self._slot_category_set = set(self._slot_categories)
         numeric = np.where(np.isnan(numeric), self._median, numeric)
         if fit:
             self._mean = numeric.mean(axis=0)
@@ -99,9 +119,14 @@ class JointOtherShareModel:
             self._other_mean = float(log_other.mean())
             self._other_scale = float(log_other.std()) or 1.0
         z = (numeric - self._mean) / self._scale
+        if fit:
+            slot_series = frame.slot
+        else:
+            slot_series, fallback_rows = self._resolve_unseen_slots(frame.slot)
+            self.prediction_diagnostics_ = {"n_rows": len(frame), "fallback_slot_rows": fallback_rows}
         slots = np.zeros((len(frame), max(len(self._slot_categories) - 1, 0)), dtype=float)
         slot_index = {value: i - 1 for i, value in enumerate(self._slot_categories) if i > 0}
-        for row, slot in enumerate(frame.slot):
+        for row, slot in enumerate(slot_series):
             if slot in slot_index:
                 slots[row, slot_index[slot]] = 1.0
         player_x = np.column_stack([np.ones(len(frame)), slots, z])

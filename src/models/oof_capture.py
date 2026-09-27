@@ -72,6 +72,7 @@ exploratory for a given comparison, which this module cannot know.
 from __future__ import annotations
 
 import logging
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
@@ -99,6 +100,7 @@ ZERO_FLOOR = 0.05
 # separate from IDENTITY_COLUMNS since it requires a DB round-trip that
 # build_panel (deliberately DB-independent, for testability) does not do.
 CAREER_LOOKBACK_TABLE = "player_weekly_stats"
+SCHEDULE_TABLE = "schedule"
 
 
 class OOFLeakageError(RuntimeError):
@@ -160,6 +162,7 @@ def fold_coverage(
     captured: pd.DataFrame,
     *,
     test_season: int,
+    skipped_positions: Optional[Sequence[str]] = None,
 ) -> pd.DataFrame:
     """Per-position offered vs captured row counts for one fold.
 
@@ -182,7 +185,15 @@ def fold_coverage(
     coverage = pd.concat([offered, got], axis=1).fillna(0).astype(int).reset_index()
     coverage["test_season"] = int(test_season)
     coverage["n_dropped"] = coverage["n_offered"] - coverage["n_captured"]
-    return coverage[["test_season", "position", "n_offered", "n_captured", "n_dropped"]]
+    skipped = set(str(p) for p in (skipped_positions or ()))
+    coverage["n_intentionally_skipped"] = np.where(
+        coverage["position"].astype(str).isin(skipped), coverage["n_offered"], 0)
+    coverage["n_missing_prediction_or_actual"] = (
+        coverage["n_dropped"] - coverage["n_intentionally_skipped"]
+    ).clip(lower=0)
+    return coverage[["test_season", "position", "n_offered", "n_captured",
+                     "n_dropped", "n_intentionally_skipped",
+                     "n_missing_prediction_or_actual"]]
 
 
 def add_experience_segments(panel: pd.DataFrame) -> pd.DataFrame:
@@ -271,6 +282,60 @@ def add_career_experience_segments(
     return out
 
 
+def add_game_context(panel: pd.DataFrame, *, db_path=None) -> pd.DataFrame:
+    """Attach the scheduled game and home/away orientation to OOF rows.
+
+    A role correlation is portable only when its role keys have a stable game
+    side. The player panel already carries team/opponent, but not which team
+    was home. Resolve that from the canonical schedule by exact season/week
+    and team pair; this is static schedule context, never an outcome field.
+    """
+    out = panel.copy()
+    required = {"season", "week", "team", "opponent"}
+    missing = required - set(out.columns)
+    if missing:
+        raise ValueError(f"cannot attach game context; panel lacks {sorted(missing)}")
+    if out.empty:
+        out["game_id"] = pd.Series(dtype="object")
+        out["home_team"] = pd.Series(dtype="object")
+        out["away_team"] = pd.Series(dtype="object")
+        return out
+    try:
+        import sqlite3
+        from src.utils.database import DatabaseManager
+
+        db = DatabaseManager(db_path) if db_path else DatabaseManager()
+        conn = sqlite3.connect(f"file:{db.db_path}?mode=ro", uri=True)
+        schedule = pd.read_sql(
+            f"SELECT season, week, home_team, away_team, game_id FROM {SCHEDULE_TABLE}", conn)
+    except Exception as e:  # noqa: BLE001 -- schedule context is required for correlation fitting
+        raise RuntimeError(f"scheduled game context unavailable: {e}") from e
+    finally:
+        try:
+            conn.close()
+        except UnboundLocalError:
+            pass
+
+    if schedule.duplicated(["season", "week", "home_team", "away_team"]).any():
+        raise ValueError("schedule has duplicate season/week/home/away keys")
+    schedule["game_id"] = schedule["game_id"].fillna(
+        schedule["season"].astype(int).astype(str) + "_" +
+        schedule["week"].astype(int).astype(str) + "_" +
+        schedule["home_team"].astype(str) + "_" + schedule["away_team"].astype(str))
+    home = schedule.copy()
+    home["team"], home["opponent"] = home["home_team"], home["away_team"]
+    away = schedule.copy()
+    away["team"], away["opponent"] = away["away_team"], away["home_team"]
+    oriented = pd.concat([home, away], ignore_index=True)
+    out = out.merge(
+        oriented[["season", "week", "team", "opponent", "game_id", "home_team", "away_team"]],
+        on=["season", "week", "team", "opponent"], how="left", validate="many_to_one")
+    if out[["game_id", "home_team", "away_team"]].isna().any().any():
+        sample = out.loc[out["game_id"].isna(), ["season", "week", "team", "opponent"]].head(5)
+        raise ValueError(f"OOF rows lack a scheduled game: {sample.to_dict('records')}")
+    return out
+
+
 def build_panel(fold_rows: Iterable[pd.DataFrame]) -> pd.DataFrame:
     """Concatenate captured folds into one OOF panel."""
     frames = [f for f in fold_rows if f is not None and not f.empty]
@@ -314,6 +379,7 @@ def write_run_panel(
     coverage: Optional[pd.DataFrame] = None,
     label: str = "default",
     keep: int = RUN_PANEL_KEEP,
+    metadata: Optional[dict] = None,
 ) -> dict:
     """Persist an immutable, provenance-stamped copy, plus a convenience pointer.
 
@@ -349,7 +415,9 @@ def write_run_panel(
 
     panel_path = atomic_write_parquet(panel, run_dir / "panel.parquet")
 
+    panel_sha256 = hashlib.sha256(panel_path.read_bytes()).hexdigest()
     manifest = {
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "git_commit": _git_commit(),
         "label": label,
@@ -357,7 +425,22 @@ def write_run_panel(
         "n_players": int(panel["player_id"].nunique()) if "player_id" in panel.columns and not panel.empty else 0,
         "seasons": sorted(int(s) for s in panel["season"].unique()) if "season" in panel.columns and not panel.empty else [],
         "positions": sorted(str(p) for p in panel["position"].unique()) if "position" in panel.columns and not panel.empty else [],
+        "panel_sha256": panel_sha256,
+        "identity_columns": list(IDENTITY_COLUMNS),
+        "prediction_column": PREDICTION_COLUMN,
+        "actual_column": "actual_points",
+        "residual_definition": "predicted_points - actual_points",
     }
+    if coverage is not None and not coverage.empty:
+        manifest["coverage_summary"] = {
+            "n_offered": int(coverage["n_offered"].sum()),
+            "n_captured": int(coverage["n_captured"].sum()),
+            "n_dropped": int(coverage["n_dropped"].sum()),
+            "n_intentionally_skipped": int(coverage.get("n_intentionally_skipped", pd.Series(dtype=int)).sum()),
+            "n_missing_prediction_or_actual": int(coverage.get("n_missing_prediction_or_actual", pd.Series(dtype=int)).sum()),
+        }
+    if metadata:
+        manifest.update(metadata)
     manifest_path = atomic_write_json(manifest, run_dir / "manifest.json")
 
     coverage_path = None

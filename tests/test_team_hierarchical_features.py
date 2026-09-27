@@ -122,3 +122,41 @@ def test_known_leakage_column_rejected():
     df["fantasy_points_ppr"] = 10
     with pytest.raises(ValueError):
         feature_columns(df)
+
+
+def _row_with_full_ppr_history():
+    """Plan B's joint architecture now also covers receptions/passing_yards
+    (2026-09-25) -- a row must carry their lagged history columns the same
+    way it already does for the original 4 VOLUME_COLS."""
+    row = _row()
+    for c in ("receptions", "passing_yards"):
+        row[c] = 5.0
+        row[f"team_{c}"] = 20.0
+        row[f"share_of_team_{c}"] = 0.25
+        row[f"share_of_team_{c}_s2d"] = 0.20
+        row[f"share_of_team_{c}_roll3"] = 0.22
+        row[f"team_{c}_s2d"] = 18.0
+        row[f"team_{c}_roll3"] = 19.0
+    return row
+
+
+def test_full_ppr_lagged_history_columns_survive_as_features():
+    """Regression test for feature_columns()'s missing include_full_ppr=True
+    (found 2026-09-25): before that fix, allocation_feature_columns()'s
+    default include_full_ppr=False silently stripped
+    share_of_team_receptions_roll3/team_receptions_s2d and their
+    passing_yards equivalents, which would have hard-failed Plan B's feature
+    audit the moment those targets were used, since evaluation_features()
+    requires exactly these columns."""
+    df = pd.DataFrame([_row_with_full_ppr_history()])
+    cols = set(feature_columns(df))
+    for c in ("receptions", "passing_yards"):
+        assert f"share_of_team_{c}_s2d" in cols
+        assert f"share_of_team_{c}_roll3" in cols
+        assert f"team_{c}_s2d" in cols
+        assert f"team_{c}_roll3" in cols
+        # Same-week raw/share/team-total values must never survive as
+        # features, full-PPR or not -- only the lagged history should.
+        assert c not in cols
+        assert f"team_{c}" not in cols
+        assert f"share_of_team_{c}" not in cols

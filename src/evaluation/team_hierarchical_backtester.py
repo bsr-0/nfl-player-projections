@@ -14,8 +14,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.evaluation.paired_ppr_comparison import paired_week_interval
-from src.models.team_allocation.features import VOLUME_COLS, filter_population
-from src.models.team_hierarchical.features import feature_columns
+from src.models.team_allocation.features import filter_population
+from src.models.team_hierarchical.features import PLAN_B_TARGETS, feature_columns
 from src.models.team_hierarchical.models import MixedEffectsFitError, MixedEffectsShareModel
 
 KEYS = ["player_id", "season", "week", "team", "position"]
@@ -23,9 +23,14 @@ ARMS = ["rolling3", "fixed_ridge", "mixed_effects"]
 
 
 def evaluation_features(target: str) -> list[str]:
-    """A predeclared small feature set; no sweep on the evaluation seasons."""
-    if target not in VOLUME_COLS:
-        raise ValueError(f"unsupported Plan B volume target: {target}")
+    """A predeclared small feature set; no sweep on the evaluation seasons.
+    Shared by both the mixed-effects backtester below and (via
+    validate_panel) the joint-softmax backtester -- PLAN_B_TARGETS is the
+    wider set of targets Plan B's joint architecture covers, even though the
+    mixed-effects run_backtest in this file has only ever been run against
+    the original 4."""
+    if target not in PLAN_B_TARGETS:
+        raise ValueError(f"unsupported Plan B target: {target}")
     return ["slot", "depth_chart_rank", "roster_snap_share_s2d", "is_cold_start",
             f"share_of_team_{target}_roll3", f"share_of_team_{target}_s2d",
             f"team_{target}_roll3", f"team_{target}_s2d"]

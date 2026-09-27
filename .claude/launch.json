@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docs-static-site",
+      "runtimeExecutable": "/Users/benrosen/.pyenv/versions/3.11.15/bin/python",
+      "runtimeArgs": ["-m", "http.server", "8899", "--directory", "."],
+      "port": 8899
+    }
+  ]
+}

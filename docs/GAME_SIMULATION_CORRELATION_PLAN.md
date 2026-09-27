@@ -195,3 +195,132 @@ serves the same purpose a reader needs most (a wide interval says "this cell
 can't support a conclusion"); the right correction depends on which cells
 are primary vs exploratory for a given comparison, which the tooling cannot
 know on its own. Documented in `compare_oof_panels.py`'s output instead.
+
+### Code review findings (2026-09-26): two open risks for work item 2
+
+Reviewed `player_correlation.py` and `game_simulation.py` closely ahead of
+fitting real data. The core math (linear shrinkage toward the diagonal,
+eigenvalue-floor PSD projection, correlation-then-rescale-by-marginal-sd) is
+internally consistent and unaffected by these. Two risks are specific to
+role-keying and aren't caught by the existing synthetic-fixture tests, so
+they're recorded here to check once work item 2 actually fits real data:
+
+1. **Role-key tie-breaking degrades for low-usage players.**
+   `role_keys_for_players` (`game_simulation.py`) ranks players within a
+   `(side, position)` group by `usage_share is not None`, then
+   `usage_share`, then `mean_fantasy_points`, then `player_id`. Backup/depth
+   players with no `usage_share` and similar `mean_fantasy_points` fall back
+   to sorting by `player_id` -- an identifier with no relationship to actual
+   role. Across many historical games this means a role like `home_RB2` is
+   trained on a mix of whichever depth player happened to sort second
+   alphabetically/numerically, not a stable role, which dilutes any real
+   correlation signal for that slot.
+
+   **First pass (2026-09-26, superseded below):** built
+   `role_assignment_diagnostics(game, players)` to flag roles assigned with
+   no `usage_share` at all, on the reasoning that `PlayerSimulationInput`
+   has no better role-magnitude signal to tiebreak on. True as far as it
+   went, but incomplete -- it didn't yet account for how the correlation
+   model these roles feed actually gets fit.
+
+   **What that first pass missed, found while reviewing the other session's
+   new fitting-side code:** `src/models/residual_calibration.py`'s
+   `role_keys_from_panel_game` -- which builds the role-keyed rows
+   `fit_sparse_role_residual_correlation` actually fits on, from the OOF
+   panel -- ranks by `predicted_points`/`player_id` only. It has no
+   `usage_share` to rank on, because `oof_capture.py` never captures that
+   column. So `role_keys_for_players`'s `usage_share`-aware ranking wasn't
+   just missing a tiebreak improvement -- it was actively **inconsistent
+   with the fitting side**: the same real player could rank as `home_WR1` at
+   serve time (usage_share available this week) but have been fit into the
+   `home_WR2` slot historically (no usage_share existed in the panel), so
+   the model's fitted `home_WR2` correlation column would get applied to
+   the wrong player. A role label only means anything if fit time and serve
+   time agree on how it's assigned; a better serving-time-only signal that
+   the fitting side structurally can't see makes this worse, not better.
+
+   **Fixed (2026-09-26, same day):** `_grouped_role_assignments` now ranks
+   on `mean_fantasy_points`/`player_id` only, matching
+   `role_keys_from_panel_game`'s convention exactly (verified:
+   `role_keys_for_players`'s only production caller is `simulate_players`'s
+   `RoleResidualCorrelationModel` lookup, so this has no other blast
+   radius). `role_assignment_diagnostics` was redefined to match: it now
+   flags a role key as diluted only when its occupant has a genuine tie in
+   `mean_fantasy_points` with another player in the same `(side, position)`
+   group (the literal trigger for the arbitrary `player_id` tiebreak),
+   rather than "no `usage_share`" as a proxy for it. Tests updated
+   (`tests/test_game_simulation_correlation.py`): a new test pins that
+   `usage_share` no longer affects ranking even when it would reorder
+   players relative to points, and the diagnostics tests were rewritten
+   around genuine point ties instead of `usage_share` presence.
+
+   **If `usage_share` is ever added to `oof_capture.py`'s captured columns,**
+   both `role_keys_from_panel_game` and `_grouped_role_assignments` should
+   start using it together, not just one -- update both or neither.
+
+   **Still gated on work item 1 (the real OOF panel) for the empirical
+   check:** once real per-game residual rows exist, correlate
+   `role_assignment_diagnostics`'s per-role tie rate with that role's fitted
+   correlation magnitude -- a role with a high tie rate showing near-zero
+   fitted correlation is this mechanism, not evidence that depth players are
+   truly uncorrelated.
+2. **No consistency check between `home_win_prob` and `predicted_margin`.**
+   `_draw_margin` (`game_simulation.py`) is internally self-consistent (the
+   unconditional expected margin algebraically equals `predicted_margin`
+   given `home_win_prob`), but nothing checked whether the two inputs
+   plausibly come from the same underlying game. If they disagree (e.g. a
+   1% home win probability paired with a strongly positive predicted home
+   margin), the solved exponential means become extreme to reconcile them,
+   producing a silently bimodal, unrealistic score distribution rather than
+   a warning.
+
+   **Fixed (2026-09-26):** `implied_win_probability_from_margin(predicted_margin,
+   margin_sd)` (`game_simulation.py`) treats margin as
+   `Normal(predicted_margin, margin_sd)` and returns the win probability that
+   implies -- an independent second estimate of the same quantity
+   `home_win_prob` is. `margin_win_probability_disagreement(game)` returns
+   the absolute gap between the two. `simulate_game_scripts` now logs a
+   `WARNING` (not a hard failure -- the two heads can legitimately differ
+   somewhat, and a raise would break any caller whose inputs disagree only
+   mildly) whenever that gap exceeds
+   `MARGIN_WIN_PROBABILITY_DISAGREEMENT_THRESHOLD` (0.20, chosen so existing
+   test fixtures' mild disagreements -- e.g. .75 win prob against a 3-point
+   margin at `margin_sd=10`, which implies ~.62 -- don't fire, while a 1%
+   win probability paired with a double-digit positive margin, which
+   implies ~.84, does). Tested
+   (`tests/test_game_simulation_correlation.py`): known Phi values including
+   the `margin_sd=0` step-function edge case, the disagreement calculation
+   on a consistent vs. an inconsistent game, and that `simulate_game_scripts`
+   actually emits (or withholds) the log warning via `caplog`.
+
+   Not yet wired to anything beyond a log line -- `simulation_adapter.py`
+   does not currently surface or aggregate these warnings across a slate,
+   so today this is only visible to someone reading logs for a specific
+   game. Aggregating a rate across `simulation_adapter.py`'s real weekly
+   game population, once it exists, is a natural follow-up but wasn't done
+   here since it doesn't yet have real week-over-week data to be useful on.
+3. **`player_inputs_from_predictions` silently collapsed duplicate games for
+   the same week/matchup.** `simulation_adapter.py` indexes games by
+   `(season, week, frozenset(home_team, away_team))` to route each player
+   row to its scheduled game -- deliberately undirected, per its own
+   comment, so a `home=A,away=B` row and a `home=B,away=A` row for what
+   should be the same real game still match. But nothing checked whether
+   two *different* `game_id`s collided on that same key.
+   `game_inputs_from_predictions` only rejects an exact duplicate
+   `(season, week, home, away)` tuple, so two distinct game_ids for one
+   real matchup/week (e.g. a data-quality issue upstream) were not caught
+   there either -- the dict assignment silently kept whichever game_id was
+   processed last, routing all of that matchup's players to it and leaving
+   the other game_id with none (confirmed live: reproduced with two
+   `GameScriptInput`s sharing season/week/teams -- the first's players
+   vanished with no error, and the final `if players` filter dropped that
+   game_id from the output entirely, silently).
+
+   **Fixed (2026-09-26):** the `by_pair` construction loop in
+   `player_inputs_from_predictions` now raises `ValueError` naming both
+   colliding `game_id`s instead of overwriting silently. This should never
+   fire against a real, correct NFL schedule (no two games between the same
+   teams in the same week) -- it's a defensive fail-loud guard against
+   upstream data-quality bugs, consistent with `game_inputs_from_predictions`'s
+   own existing duplicate check a few lines above it. Tested
+   (`tests/test_simulation_adapter.py`), verified failing before the fix.

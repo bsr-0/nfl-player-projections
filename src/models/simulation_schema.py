@@ -53,8 +53,6 @@ def validate_player_draws(rows: Iterable[Mapping]) -> list[dict]:
         _validate_required(row, _REQUIRED_PLAYER, "player draw")
         item = dict(row)
         item["fantasy_points"] = _finite(item["fantasy_points"], "fantasy_points")
-        if item["fantasy_points"] < 0:
-            raise ValueError("fantasy_points must be nonnegative")
         if not isinstance(item["game_id"], str) or not item["game_id"]:
             raise ValueError("game_id must be a non-empty string")
         if not isinstance(item["player_id"], str) or not item["player_id"]:

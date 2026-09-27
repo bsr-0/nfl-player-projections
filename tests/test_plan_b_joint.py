@@ -54,6 +54,42 @@ def test_future_labels_cannot_change_prior_fold_predictions():
     assert report["status"] == "complete"
 
 
+def test_unseen_slot_falls_back_to_same_position_rank1_not_a_silent_zero_vector():
+    """Uncapping (2026-09-25) means a rare, deep-bench slot like WR3 can
+    legitimately appear at prediction time without ever appearing in a
+    shorter training window. Before the fix, an unseen slot silently got an
+    all-zero one-hot row -- i.e. whichever slot is the lexicographically-first
+    reference category. In this panel's vocabulary (sorted: RB1, TE1, WR1),
+    that reference category is RB1, the WRONG position entirely for a WR row
+    -- exactly the bug: the pre-fix behavior would have made an unseen WR3
+    row predict identically to an RB1 row, not a WR1 row. The fix must fall
+    back to the row's own position's rank-1 slot (WR1) instead, and count it."""
+    panel = _panel()  # training only ever has RB1/WR1/TE1 -- no WR3 ever
+    model = JointOtherShareModel("targets").fit(panel[panel.season < 2023])
+    test = panel[panel.season == 2023].copy()
+    unseen_row = test[(test.team == "T0") & (test.position == "WR")].iloc[[0]].copy()
+    unseen_row["player_id"] = "unseen_wr3"
+    unseen_row["slot"] = "WR3"  # never present in any training row
+    combined = pd.concat([test, unseen_row], ignore_index=True)
+
+    predicted, _, _ = model.predict(combined)
+    assert model.prediction_diagnostics_["fallback_slot_rows"] == 1
+
+    wr1_idx = combined.index[(combined.team == "T0") & (combined.slot == "WR1")
+                              & (combined.week == unseen_row.week.iloc[0])
+                              & (combined.season == unseen_row.season.iloc[0])][0]
+    rb1_idx = combined.index[(combined.team == "T0") & (combined.slot == "RB1")
+                              & (combined.week == unseen_row.week.iloc[0])
+                              & (combined.season == unseen_row.season.iloc[0])][0]
+    fallback_idx = combined.index[combined.player_id == "unseen_wr3"][0]
+    # Same team-week, same numeric features as the WR1 row it was copied from
+    # -- an unseen WR3 falling back to WR1's fitted coefficients must predict
+    # identically to an actual WR1 row with the same features, NOT identically
+    # to RB1 (which is what the pre-fix all-zero-vector bug would have done).
+    assert predicted[fallback_idx] == pytest.approx(predicted[wr1_idx])
+    assert predicted[fallback_idx] != pytest.approx(predicted[rb1_idx])
+
+
 def test_zero_total_week_is_excluded_from_fit_without_dropping_test_rows():
     panel = _panel()
     mask = (panel.season == 2018) & (panel.week == 1)

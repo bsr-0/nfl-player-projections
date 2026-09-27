@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from src.evaluation.plan_b_joint_mae_backtester import ARMS, KEYS, run_backtest
-from src.models.team_allocation.features import VOLUME_COLS
+from src.models.team_hierarchical.features import PLAN_B_TARGETS
 
 
 def sha256(path: Path) -> str:
@@ -28,28 +28,43 @@ def sha256(path: Path) -> str:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--target", required=True, choices=VOLUME_COLS)
+    ap.add_argument("--target", required=True, choices=PLAN_B_TARGETS)
     ap.add_argument("--preflight-dir", required=True, type=Path)
     ap.add_argument("--test-seasons", nargs="+", type=int, required=True)
     ap.add_argument("--prior-run-predictions", type=Path,
                     help="For 2023-2025 confirmation, require exact old-run row/label/baseline equality")
+    ap.add_argument("--first-confirmation-run", action="store_true",
+                    help="Explicit opt-out of --prior-run-predictions for a population that has never "
+                         "been confirmed against 2023+ before (e.g. after uncapping the roster-slot "
+                         "population, or for a target with no prior confirmation at all) -- there is no "
+                         "honest prior run to compare against. Requires the preflight's own coverage.json "
+                         "to show excluded_rows == 0 (population-complete) as a substitute provenance "
+                         "check, recorded in the manifest so this is auditable rather than a silently "
+                         "skipped guard. Mutually exclusive with --prior-run-predictions.")
     ap.add_argument("--output-dir", required=True, type=Path)
     ap.add_argument("--epsilon", type=float, default=0.001)
     ap.add_argument("--penalty", type=float, default=0.00001)
     ap.add_argument("--smooth-width", type=float, default=0.002)
+    ap.add_argument("--other-weight", type=float, default=1.0,
+                    help="Weight on the omitted-player bucket's mean absolute error relative to "
+                         "the mean player-row error (1.0 = original equal weighting, 0.0 = "
+                         "unconstrained row-MAE-only, see joint_other_mae.py module docstring)")
     ap.add_argument("--n-bootstrap", type=int, default=2000)
     args = ap.parse_args(argv)
     if args.test_seasons != sorted(set(args.test_seasons)):
         ap.error("test seasons must be unique and increasing")
-    if not args.prior_run_predictions and any(s >= 2023 for s in args.test_seasons):
-        ap.error("2023+ confirmation requires --prior-run-predictions for matched-row verification")
+    if args.prior_run_predictions and args.first_confirmation_run:
+        ap.error("--prior-run-predictions and --first-confirmation-run are mutually exclusive")
+    if not (args.prior_run_predictions or args.first_confirmation_run) and any(s >= 2023 for s in args.test_seasons):
+        ap.error("2023+ confirmation requires --prior-run-predictions (matched-row verification) "
+                 "or an explicit --first-confirmation-run (population-completeness verification)")
     output = args.output_dir.resolve()
     if output.exists():
         ap.error(f"output exists: {output}")
     output.mkdir(parents=True)
     manifest = {"target": args.target, "test_seasons": args.test_seasons,
                 "epsilon": args.epsilon, "penalty": args.penalty,
-                "smooth_width": args.smooth_width,
+                "smooth_width": args.smooth_width, "other_weight": args.other_weight,
                 "n_bootstrap": args.n_bootstrap,
                 "code_sha256": {name: sha256(ROOT / name) for name in (
                     "src/models/team_hierarchical/joint_other.py",
@@ -73,9 +88,20 @@ def main(argv=None):
                             float_precision="round_trip")
         if len(panel) != preflight_manifest["joined_input"]["rows"]:
             raise ValueError("frozen panel row count differs from its preflight manifest")
+        if args.first_confirmation_run:
+            coverage = json.loads((preflight / "coverage.json").read_text())
+            if coverage.get("excluded_rows") != 0:
+                raise ValueError(
+                    "--first-confirmation-run requires a population-complete preflight "
+                    f"(coverage.json excluded_rows == 0), got {coverage.get('excluded_rows')!r}")
+            manifest["first_confirmation_run"] = {
+                "coverage_sha256": sha256(preflight / "coverage.json"),
+                "eligible_rows": coverage.get("eligible_rows"),
+                "excluded_rows": coverage.get("excluded_rows")}
         rows, report = run_backtest(panel, args.target, args.test_seasons,
                                     epsilon=args.epsilon, penalty=args.penalty,
                                     smooth_width=args.smooth_width,
+                                    other_weight=args.other_weight,
                                     n_bootstrap=args.n_bootstrap)
         if args.prior_run_predictions:
             old_path = args.prior_run_predictions.resolve()

@@ -1,0 +1,24 @@
+{
+  "created_at": "2026-09-27T00:29:15.900417+00:00",
+  "git_head": "b7fe452739eabe3414fe04b8f966a1325b2f8519",
+  "note": "Baseline is the working tree including preexisting uncommitted edits, not HEAD alone.",
+  "files": {
+    "src/models/game_simulation.py": "43d81cea9f5d83d5b39cc7c91aa4ff660831300cb324f50fc72508083b1c4db7",
+    "src/models/player_correlation.py": "40bf494bc840b2a3bdf51a30cbc8a0b33e7f01d72d509f6b68eb1aa75b34428c",
+    "src/models/usage_allocation.py": "1f49bb192b2ebe0a79b6d92869bfb16414fc8618be25e7fef1a4732fc98c9c2c",
+    "src/models/simulation_adapter.py": "0737d1de1cc3733f6057d6e694d6dd71e39f243219bbc852aa63df0247b71eaa",
+    "src/models/simulation_evaluation.py": "083fd3aa97d764183c393270e1288db43961ec48b4072ad663de7a0966bcf4dd",
+    "scripts/generate_simulation_data.py": "46d098dd303be7d9288777fdd8b36f4fb730eaa4ceb762acfd4fe7b3821e6277"
+  },
+  "archive_commit": "f0d99b3847df824346abd0600416a06c1fb0cf96",
+  "archive_commit_time": "2026-09-19T08:19:13-05:00",
+  "inputs": {
+    "archived_game_predictions_2026_wk2.json": "931878e85f89c4aba0c8b3b967220f5e66e6d1037b241413b59f16efb5b8fb9f",
+    "archived_weekly_2026_wk2.json": "d3ed549b48962115c0bb990492c832356812af3d24b2ff335c3f3ca491f7a43a",
+    "archived_weekly_meta.json": "8f9d3b6a4a28b91c4e2555be04ce10a8156e6d8e4574a16528f8335d6c32a1f3",
+    "observed_2026_through_week2.csv": "ff52a8fbbbe068f1d4e7c36f4797bed80c1b62d277321192b47778cbb23213ac",
+    "rb_history_through_2025.csv": "60d33872ec21bb105f92b6df8b0cae295d8d86204468f3fd695c9ee8bffbb473",
+    "schedule.csv": "677ffb1f1e02419ec18fa96c6a7a86eaa48887a7f386c2631c273aedf1ea8237",
+    "observed_2026_full_scoring.csv": "9a86ae4008ebf2798a37b32bb0d7123c309898a289f4a7221f07af869121603c"
+  }
+}

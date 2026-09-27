@@ -1,0 +1,54 @@
+{
+  "actual_column": "actual_ppr",
+  "folds": [
+    {
+      "selection_through_season": null,
+      "test_season": 2023,
+      "trained_through_season": 2022
+    },
+    {
+      "selection_through_season": 2023,
+      "test_season": 2024,
+      "trained_through_season": 2023
+    },
+    {
+      "selection_through_season": 2024,
+      "test_season": 2025,
+      "trained_through_season": 2024
+    }
+  ],
+  "key_semantics": "target_game",
+  "label": "plan_a_zero_extra_components",
+  "prediction_column": "predicted_ppr",
+  "prediction_extension": {
+    "fumbles_lost": 0,
+    "two_point_conversions": 0
+  },
+  "provenance": {
+    "db_mtime_ns": 1790384971918234579,
+    "db_size": 757059584,
+    "full_truth_sha256": "b29ee26f59ef84b9594195e5e839dea66510f6a352d6546accc2ce14b5107e46",
+    "read_only_db": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/nfl_data.db",
+    "source_plan_a_manifest": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/ppr_head_to_head_20260924/inputs/plan_a.manifest.json",
+    "source_plan_a_manifest_sha256": "80a9bcf1c0a0c5681f334c420616175d962b254230ffadf13683e88b5927c862",
+    "source_plan_a_rows_sha256": "6cd0ad14aca0f4c82ae5ae6aff4b665ff6070e25d18f096466408192655cda69",
+    "source_raw_truth": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/ppr_head_to_head_20260924/inputs/raw_truth.csv",
+    "source_raw_truth_sha256": "4698ea6280c4b98eb549fecfd31e5388fe6f93a9fd57d5871c76d966e7348007"
+  },
+  "rows_file": "plan_a_full_predictions.csv",
+  "rows_sha256": "33f4a9612afe91d5f49bd69c45314219ac3588993d81c9f962f0ec6dee80cd82",
+  "schema_version": 1,
+  "scoring_definition": "raw_ten_component_full_ppr_plan_a_zero_extra_forecast",
+  "scoring_weights": {
+    "fumbles_lost": -2,
+    "interceptions": -2,
+    "passing_tds": 4,
+    "passing_yards": 0.04,
+    "receiving_tds": 6,
+    "receiving_yards": 0.1,
+    "receptions": 1,
+    "rushing_tds": 6,
+    "rushing_yards": 0.1,
+    "two_point_conversions": 2
+  }
+}

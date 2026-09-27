@@ -13,6 +13,7 @@ from src.models.oof_capture import (
     ACTUAL_COLUMN,
     OOFLeakageError,
     add_experience_segments,
+    add_game_context,
     build_panel,
     capture_fold_rows,
     segment_report,
@@ -176,3 +177,19 @@ def test_panel_round_trips_through_parquet(tmp_path):
                                            train_seasons=[2023], test_season=2024)])
     path = write_panel(panel, tmp_path / "oof.parquet")
     pd.testing.assert_frame_equal(pd.read_parquet(path), panel)
+
+
+def test_game_context_uses_exact_scheduled_home_away_pair(tmp_path):
+    import sqlite3
+    db_path = tmp_path / "schedule.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE schedule (season INTEGER, week INTEGER, home_team TEXT, away_team TEXT, game_id TEXT)")
+    conn.execute("INSERT INTO schedule VALUES (2024, 1, 'H', 'A', 'game-id')")
+    conn.commit()
+    conn.close()
+    panel = build_panel([capture_fold_rows(
+        _fold_frame(2024, n=2, players=["h", "a"]).assign(team=["H", "A"], opponent=["A", "H"], week=[1, 1]),
+        train_seasons=[2023], test_season=2024)])
+    context = add_game_context(panel, db_path=db_path)
+    assert set(context["game_id"]) == {"game-id"}
+    assert set(context["home_team"]) == {"H"} and set(context["away_team"]) == {"A"}

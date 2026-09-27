@@ -13,9 +13,59 @@ result concerns the first-cut player random-intercept model, not PPR or the
 proposed full joint roster model.
 This update supersedes the historical instruction below to stop Plan B
 evaluator work. A later grouped share prototype with an omitted-player bucket
-also failed the 2020–2022 development gate on all four share targets; see the
-joint allocation development update in the linked Plan B document. The full
-joint roster architecture and PPR comparison remain unimplemented.
+also failed the 2020–2022 development gate on all four share targets under
+equal weighting between its player-row and omitted-bucket loss terms; see the
+joint allocation development update in the linked Plan B document.
+
+**Update (2026-09-25, later): a weighted variant of that same prototype beats
+rolling-3 on the real 2023–2025 confirmation seasons on all four share
+targets**, the first such result in the whole Plan B investigation — see the
+"Joint allocation weighted development and confirmation update" section of
+[the Plan B document](PLAN_B_FUTURE_RUN.md) for the full methodology (a
+tunable `other_weight` replacing the fixed equal weighting, selected via a
+nested dev-only train/check split before the one real confirmation run) and
+its caveats (a tolerance value not fully independent of the season used to
+check it, a per-target hyperparameter search, and one target's confirmation
+result the nested check itself flagged as questionable). This remains a
+capped-roster share-MAE result on the same softmax-with-omitted-bucket
+architecture, not a PPR result — it does not by itself promote Plan B to
+serving, and the full joint roster architecture and PPR comparison remain
+unimplemented.
+
+**Update (2026-09-25, still later): the roster-slot cap is now removed
+entirely, and the same weighted joint architecture, extended to two more
+targets (`receptions`, `passing_yards`), beats rolling-3 on all six targets
+on the real 2023–2025 confirmation, on the full (uncapped) population** — see
+the "Uncapped-population confirmation and two new targets" section of
+[the Plan B document](PLAN_B_FUTURE_RUN.md). Two real defects were found and
+fixed while preparing for this: a silent unseen-slot fallback bug in
+`joint_other.py` (made materially worse by uncapping) and a missing
+`include_full_ppr=True` flag that would have hard-failed the feature audit
+for the two new targets. The row-MAE/mass-calibration trade-off that drove
+the weighted-variant work essentially disappeared once the population was
+uncapped (little omitted mass left to trade off), so one shared
+`other_weight=0.1` was used for all six targets rather than a per-target
+optimum. `targets` and `rushing_attempts` did not cleanly pass the nested
+selection-then-check discipline at any calibrated weight, yet both
+replicated on the real confirmation anyway — flagged explicitly, not
+resolved. Still a share-MAE result, not PPR; the next step is wiring this
+allocation into Plan A's existing arm-agnostic full-PPR selector.
+
+**Update (2026-09-25, final this pass): wired into Plan A's real full-PPR
+selector as a new candidate arm, this further reduces full-PPR MAE from
+2.36984 to 2.34608** (paired bootstrap 95% CI [−0.15977, −0.12922],
+significant) on the same 40,559-row real holdout Plan A's own guarded
+validation used — the first time Plan B has been evaluated at the actual
+fantasy-points level. Required zero changes to already-verified Plan A code;
+a new arm-adapter module reshapes Plan B's predictions into Plan A's schema
+and validates population/label agreement before merging. The selector chose
+Plan B's arm for 3 of its 4 covered targets (`rushing_yards`,
+`receiving_yards`, `passing_yards`); `receptions` still preferred Plan A's
+existing arm. See the "Wired into Plan A's full-PPR selector" section of
+[the Plan B document](PLAN_B_FUTURE_RUN.md) for full methodology,
+independent verification steps, and caveats (all uncapped-confirmation
+caveats carry forward unchanged). No serving integration or artifact
+promotion follows from this result.
 
 ## Motivation
 
@@ -650,9 +700,90 @@ building anything from the Plan B section.
       meant to explain). Verified end-to-end against a real synthetic DB.
       Built ahead of the decision gate, deliberately, as groundwork prep --
       not a decision to proceed with Plan B as the chosen path.
-- [ ] Walk-forward backtester for the mixed-effects model (not started --
-      it's fit/predict-tested, not yet accuracy-evaluated the honest way
-      every other model in this repo is)
-- [ ] Slot-to-player_id evaluation re-mapping, and the set/graph-net
-      architecture (not started; still correctly gated on Plan A's
-      real-data result per the decision gate)
+- [x] Walk-forward backtester for the mixed-effects model:
+      `src/evaluation/team_hierarchical_backtester.py` (this checklist item
+      previously said "not started" -- stale; corrected while making an
+      unrelated update to this doc, found by checking the top-of-document
+      Plan B update against this checklist rather than trusting either one
+      unverified). Predictions are keyed by `player_id` throughout (the
+      mixed-effects model's group key), so no slot-to-player_id remapping
+      was needed for this architecture -- see next item. Run against real
+      data (2026-09-25): mixed effects scored worse than rolling-3 and fixed
+      ridge on all four targets; see
+      [the Plan B document](PLAN_B_FUTURE_RUN.md) and
+      `data/experiments/plan_b_run_20260925/`.
+- [x] Joint softmax allocation with an explicit omitted-player bucket,
+      weighted variant: `src/models/team_hierarchical/joint_other.py`,
+      `joint_other_mae.py`. Predictions are also keyed by `player_id`, same
+      as above -- still no slot-to-player_id remapping needed. A tunable
+      `other_weight` (added 2026-09-25) trades off row-level accuracy
+      against omitted-bucket mass calibration; a value selected via a nested
+      dev-only train/check split beat rolling-3 with a paired 95% CI
+      excluding zero, on all four targets, on the real 2023-2025
+      confirmation seasons -- the first such result in the whole Plan B
+      investigation. See the "Joint allocation weighted development and
+      confirmation update" section of
+      [the Plan B document](PLAN_B_FUTURE_RUN.md) for full methodology and
+      caveats (a tolerance value not fully independent of the season used to
+      check it, a per-target hyperparameter search, one target's
+      confirmation result the nested check itself had flagged as
+      questionable). Still a capped-roster share-MAE result; not PPR, and
+      not by itself a decision to promote Plan B to serving.
+- [x] Roster-slot cap removed entirely (2026-09-25):
+      `scripts/build_team_week_roster_slots.py`'s `MAX_SLOTS_PER_POSITION`
+      (previously excluding ~38% of otherwise-eligible rows) is gone --
+      every rostered player at a position gets a slot, no ceiling (real data
+      now has slots up to e.g. `WR23`). Rebuilding the real snapshot
+      confirmed zero rows excluded for any of the original 4 targets.
+      `audit_slot_coverage` reworked to derive its per-position max from the
+      panel itself rather than the removed constant. Two real defects found
+      and fixed while preparing for this (not deferred): a silent
+      unseen-slot fallback bug in `joint_other.py::_prepare()` (an unseen
+      slot silently scored as whichever slot is lexicographically first
+      overall, regardless of position -- fixed to fall back to the row's
+      own position's rank-1 slot, mirroring the mixed-effects model's
+      existing pattern, now counted), and a missing `include_full_ppr=True`
+      in `feature_columns()` that would have hard-failed the feature audit
+      for any full-PPR target.
+- [x] Joint architecture extended to `receptions`/`passing_yards`
+      (2026-09-25) -- both continuous, non-sparse shares, architecturally
+      identical in shape to the original 4; the 4 sparse zero-inflated
+      TD/INT targets remain explicitly out of scope. Combined with the
+      uncapped population above, a fresh dev-only `other_weight` sweep
+      found the row-MAE/mass-calibration trade-off had essentially
+      disappeared (little omitted mass left to trade off once ~38% of the
+      population is no longer excluded), so one shared `other_weight=0.1`
+      was used for all six targets. **The real 2023-2025 confirmation beat
+      rolling-3 with a paired 95% CI excluding zero on all six targets**,
+      including the two confirmed for the first time ever. See the
+      "Uncapped-population confirmation and two new targets" section of
+      [the Plan B document](PLAN_B_FUTURE_RUN.md) for the full result table
+      and caveats -- notably, `targets`/`rushing_attempts` did not cleanly
+      pass the nested selection-then-check discipline at any calibrated
+      weight, yet both replicated on the real confirmation anyway, flagged
+      explicitly rather than resolved. Still a share-MAE result, not PPR.
+- [x] Wired the confirmed uncapped allocation into Plan A's existing
+      arm-agnostic full-PPR selector (2026-09-25): new
+      `src/evaluation/plan_b_arm_adapter.py` (fold numbers derived by
+      instantiating `SeasonAwareTimeSeriesSplit` with Plan A's real config,
+      never hand-derived; validates population/label agreement before
+      merging) and `scripts/build_full_ppr_allocations_with_plan_b.py`
+      (writes a merged 8-target allocation directory, zero changes to
+      `joint_ppr_selector.py`/`ppr_truth.py`/`full_ppr_allocation_backtester.py`).
+      **Full-PPR MAE improved from 2.36984 to 2.34608** (paired bootstrap
+      95% CI [-0.15977, -0.12922], significant) on the same 40,559-row real
+      holdout. Selected for 3 of its 4 covered targets (`rushing_yards`,
+      `receiving_yards`, `passing_yards`); `receptions` still preferred Plan
+      A's existing arm. Independently recomputed pooled MAE from the saved
+      row-level CSV and a fresh truth hash both matched the reported
+      numbers exactly. See
+      `data/experiments/full_ppr_with_plan_b_20260925/README.md` for full
+      verification steps and caveats. No serving integration or artifact
+      promotion follows from this result.
+- [ ] The permutation-invariant set/graph-net architecture (not started;
+      still correctly gated on Plan A's real-data result per the decision
+      gate -- the joint-softmax result above is a different, already-scoped
+      architecture, not this one). If a future architecture predicts
+      per-slot rather than per-player_id, evaluation would then need a
+      slot-to-player_id re-mapping step, which neither built architecture
+      above has needed so far.

@@ -1,5 +1,10 @@
 # Plan A and served-model comparison
 
+This document describes the earlier **eight-component** comparison contract.
+For the new ten-component full-PPR scoring bridge, held-out 2025 served-fold
+export, and matched cohort evaluation, see
+[FULL_PPR_2025_MATCHED_COMPARISON.md](FULL_PPR_2025_MATCHED_COMPARISON.md).
+
 The comparison uses one raw eight-component PPR label and the same target-game
 population for both predictions. Its output is retrospective research evidence;
 passing this comparison alone does not promote an artifact.

@@ -23,7 +23,7 @@ import statsmodels
 
 from config.settings import DB_PATH
 from src.evaluation.team_hierarchical_backtester import ARMS, KEYS, run_backtest, validate_panel
-from src.models.team_allocation.features import VOLUME_COLS
+from src.models.team_hierarchical.features import PLAN_B_TARGETS
 from src.models.team_hierarchical.features import load_slot_share_rows
 
 
@@ -39,7 +39,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=DB_PATH)
     parser.add_argument("--slots-csv", type=Path)
-    parser.add_argument("--target", required=True, choices=VOLUME_COLS)
+    parser.add_argument("--target", required=True, choices=PLAN_B_TARGETS)
     parser.add_argument("--seasons", nargs=2, type=int, default=[2013, 2025], metavar=("FIRST", "LAST"))
     parser.add_argument("--test-seasons", nargs="+", type=int, default=[2023, 2024, 2025])
     parser.add_argument("--output-dir", required=True, type=Path, help="New directory; existing paths are rejected")

@@ -1,10 +1,13 @@
 """Checked Plan B join and feature contract.
 
 Join share labels and lagged features to roster slots on exact
-(player_id, season, week, team) keys. The slot caps omit some otherwise
-eligible rows; return_coverage exposes those exclusions explicitly. A share
-still refers to the full team total, even when the represented roster is a
-subset. Accuracy comparisons must use identical represented rows.
+(player_id, season, week, team) keys. Roster slots are uncapped (2026-09-25;
+every rostered player at a position gets a slot, no ceiling), so this join
+should now be population-complete; return_coverage still exposes any
+exclusion explicitly (e.g. a genuine population mismatch between the share
+and slot source tables) rather than assuming there is none. A share still
+refers to the full team total, even when the represented roster is a subset.
+Accuracy comparisons must use identical represented rows.
 """
 from __future__ import annotations
 
@@ -20,6 +23,16 @@ from src.models.team_allocation.features import feature_columns as allocation_fe
 from src.utils.leakage import audit_feature_availability, is_leakage_feature
 
 SLOTS_TABLE_NAME = "team_week_roster_slots"
+# Plan B's joint-softmax architecture (src/models/team_hierarchical/joint_other.py)
+# covers the original 4 Plan A volume targets plus two of Plan A's full-PPR
+# component targets: receptions (QB-excluded) and passing_yards (QB-only) --
+# both continuous, non-sparse shares, architecturally identical in shape to
+# the original 4. The 4 sparse zero-inflated TD/INT targets remain out of
+# scope -- see docs/PLAN_B_FUTURE_RUN.md. Single source of truth: every Plan B
+# target-validity check imports this rather than keeping its own copy of the
+# allowed-target list (the "parallel implementations that must remain
+# consistent" drift risk CLAUDE.md calls out).
+PLAN_B_TARGETS = VOLUME_COLS + ["receptions", "passing_yards"]
 # NOTE: "slot" is deliberately NOT in ID_COLS -- it's the key fixed-effect
 # feature for the mixed-effects model (src/models/team_hierarchical/models.py),
 # not an identifier. team_week_id is reserved for roster-level audits;
@@ -85,8 +98,8 @@ def load_slot_share_rows(
 
 def join_slot_share_rows(shares: pd.DataFrame, slots: pd.DataFrame, target: str) -> tuple[pd.DataFrame, dict]:
     """Join exact team/player-week keys and audit every unrepresented row."""
-    if target not in VOLUME_COLS:
-        raise ValueError(f"Plan B currently supports volume targets {VOLUME_COLS}, got {target!r}")
+    if target not in PLAN_B_TARGETS:
+        raise ValueError(f"Plan B currently supports targets {PLAN_B_TARGETS}, got {target!r}")
     key = ["player_id", "season", "week", "team"]
     slot_cols = key + ["slot", "slot_rank", "depth_chart_rank", "snap_share_s2d"]
     for name, frame, required in (("shares", shares, key + ["position"]), ("slots", slots, slot_cols)):
@@ -151,7 +164,8 @@ def feature_columns(df: pd.DataFrame) -> list:
     # Share the complete raw-stat exclusion contract, including same-week
     # opportunity counts added to the panel after Plan B's first cut.
     try:
-        feature_cols = allocation_feature_columns(df.drop(columns=["team_week_id"], errors="ignore"))
+        feature_cols = allocation_feature_columns(
+            df.drop(columns=["team_week_id"], errors="ignore"), include_full_ppr=True)
     except ValueError as exc:
         raise ValueError(f"Unclassified team-hierarchical feature columns: {exc}") from exc
     forbidden = [c for c in feature_cols if is_leakage_feature(c)]

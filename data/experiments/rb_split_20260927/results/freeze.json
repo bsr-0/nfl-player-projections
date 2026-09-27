@@ -1,0 +1,24 @@
+{
+  "archive_kind": "actual_git_archived_served_forecast; simulators retrospectively reconstructed",
+  "baseline_manifest_sha256": "f3789126a0fde5273c93ec61edb6a8f43df2308f45aa6d8358e90b7a672a7fd4",
+  "code_sha256": {
+    "scripts/evaluate_rb_split.py": "f3baa1f3fee7093cca27a185633ad5f4ed4cadaaa0e79f7696ae0e585d4dea02",
+    "scripts/generate_simulation_data.py": "46d098dd303be7d9288777fdd8b36f4fb730eaa4ceb762acfd4fe7b3821e6277",
+    "src/evaluation/rb_split_evaluation.py": "bed32bbe8b9189b1cbe6ffb1aca8fa8cab59d7ad7a884aa2a42a971a7b5becdd",
+    "src/models/game_simulation.py": "d3a2b5c4882acbd4120c424a185340e510863b6837cf94e6a57ff8aa95b5f30e",
+    "src/models/player_correlation.py": "40bf494bc840b2a3bdf51a30cbc8a0b33e7f01d72d509f6b68eb1aa75b34428c",
+    "src/models/rb_ppr_split.py": "d3f18361df1de3cf3da3b2a10d36f0a866abff5c01771963cad0df76a2a0b38c",
+    "src/models/simulation_adapter.py": "0737d1de1cc3733f6057d6e694d6dd71e39f243219bbc852aa63df0247b71eaa",
+    "src/models/usage_allocation.py": "1f49bb192b2ebe0a79b6d92869bfb16414fc8618be25e7fef1a4732fc98c9c2c"
+  },
+  "cohort_sha256": "363bbb81939ddc6a8d48a0ad6c9b4688011815f9fff8e182e03c2d0ec3a4759c",
+  "config_sha256": "623e56979b9e91018e888458ec552a2f663ade425592614761483de7a8b37c50",
+  "confirmation_status": "BLOCKED: future 2026 weeks 4-18 outcomes and weekly archives unavailable",
+  "model_sha256": "576da2f6e632f50827c396b07819899f4043a0660762485a93ae294ea3004823",
+  "protocol_sha256": "ec24ad5ef7625be9d09c7f59c4844c19ad7e9957a0c19f19fbe8fa274f10e7fe",
+  "runtime": {
+    "numpy": "1.26.4",
+    "pandas": "2.1.4",
+    "python": "3.11.15 (main, Mar 29 2026, 15:50:35) [Clang 15.0.0 (clang-1500.3.9.4)]"
+  }
+}

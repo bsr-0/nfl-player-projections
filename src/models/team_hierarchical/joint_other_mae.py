@@ -3,6 +3,17 @@
 The grouped softmax and explicit unrepresented-player bucket are inherited
 from the likelihood model. Only the training objective changes. In particular,
 the bucket is a conservation constraint, not an additional scored player row.
+
+`other_weight` scales the omitted-player bucket's contribution to the loss
+relative to the mean player-row error (both terms are already means, over
+rows and over team-weeks respectively, so equal weight is not automatically
+the right trade-off): `other_weight=1.0` reproduces the original equal
+weighting, `other_weight=0.0` optimizes player-row MAE only (undoing mass
+calibration), and intermediate values trade off row-level accuracy against
+represented-mass calibration. See docs/PLAN_B_FUTURE_RUN.md for the dev
+result this parameter was added to address: equal weighting fixed mass
+calibration but erased the row-level MAE gain the unconstrained objective
+had over rolling-3.
 """
 from __future__ import annotations
 
@@ -16,11 +27,14 @@ from src.models.team_hierarchical.joint_other import JointOtherShareModel
 class JointOtherMAEModel(JointOtherShareModel):
     def __init__(self, target: str, *, epsilon: float = 0.001,
                  penalty: float = 0.00001, smooth_width: float = 0.002,
-                 maxiter: int = 300):
+                 other_weight: float = 1.0, maxiter: int = 300):
         super().__init__(target, epsilon=epsilon, penalty=penalty, maxiter=maxiter)
         if not (np.isfinite(smooth_width) and smooth_width > 0):
             raise ValueError("smooth_width must be finite and positive")
+        if not (np.isfinite(other_weight) and other_weight >= 0):
+            raise ValueError("other_weight must be finite and nonnegative")
         self.smooth_width = smooth_width
+        self.other_weight = other_weight
 
     def _objective(self, prepared, y: np.ndarray, other_y: np.ndarray,
                    coef: np.ndarray):
@@ -35,12 +49,13 @@ class JointOtherMAEModel(JointOtherShareModel):
         other_smooth = np.sqrt(other_residual * other_residual
                                + self.smooth_width * self.smooth_width)
         # The omitted-player bucket is an actual team share. Its mean absolute
-        # error receives the same weight as mean player error so fitting cannot
-        # improve sparse rows by dumping represented volume into that bucket.
+        # error is scaled by other_weight relative to mean player error, so
+        # fitting can be tuned between row-level accuracy and mass
+        # calibration instead of always trading one fully for the other.
         loss = float((smooth - self.smooth_width).mean()
-                     + (other_smooth - self.smooth_width).mean())
+                     + self.other_weight * (other_smooth - self.smooth_width).mean())
         derivative = residual / smooth / n_rows
-        other_derivative = other_residual / other_smooth / n_groups
+        other_derivative = self.other_weight * other_residual / other_smooth / n_groups
         group_derivative = np.bincount(group, weights=derivative * player_p,
                                        minlength=n_groups) + other_derivative * other_p
         utility_player = player_p * (derivative - group_derivative[group])
@@ -77,7 +92,8 @@ class JointOtherMAEModel(JointOtherShareModel):
             "zero_total_rows_excluded_from_fit": int(len(frame) - len(active)),
             "n_parameters": n_params, "epsilon": self.epsilon,
             "penalty": self.penalty, "smooth_width": self.smooth_width,
-            "objective_definition": "mean_player_plus_mean_other_smooth_absolute_share_error",
+            "other_weight": self.other_weight,
+            "objective_definition": "mean_player_plus_other_weight_times_mean_other_smooth_absolute_share_error",
         }
         if not result.success or not np.isfinite(result.x).all():
             raise RuntimeError(f"joint MAE allocation did not converge: {self.fit_diagnostics_}")

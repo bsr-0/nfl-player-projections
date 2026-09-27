@@ -1,0 +1,30 @@
+{
+  "code_sha256": {
+    "scripts/evaluate_plan_b_joint_mae.py": "d074e01da6022aa5cd99266c21e182d6a9ea1728f9c107feb0a9c00eedd153cd",
+    "src/evaluation/plan_b_joint_mae_backtester.py": "fc38817626b089803b4cf7035b89e38ce72195804b90ce17e487d426ab723e07",
+    "src/evaluation/team_hierarchical_backtester.py": "667fe93051a866d249505831f470b982026058b8291b4a3f176aef8a0bb162a0",
+    "src/models/team_hierarchical/features.py": "6cf08bc33f72a82b1c9f4cf6dae7918ebd56bfdba6cdddbb1f84be6ad81a54e9",
+    "src/models/team_hierarchical/joint_other.py": "0419ee1fbaa0ece211232e32e38248f932855fcbc94de968dd2d0fbe7caa2658",
+    "src/models/team_hierarchical/joint_other_mae.py": "efe3f314c893a2a9a4e84e62b290eeb8f544d36706251d5373ec1799bfa7ef53"
+  },
+  "epsilon": 0.001,
+  "first_confirmation_run": {
+    "coverage_sha256": "43c305264b682110add943245a777a384d3931ba3fc116e678a4bceaaa59fdf6",
+    "eligible_rows": 163358,
+    "excluded_rows": 0
+  },
+  "input_panel": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_b_uncapped_preflight_20260925/rushing_attempts/input_panel.csv",
+  "input_panel_sha256": "6747b910d61a66b455b3412410496bbe2fc48153fe8750f7d94a422358a988ed",
+  "n_bootstrap": 2000,
+  "other_weight": 0.1,
+  "penalty": 1e-05,
+  "predictions_sha256": "48b63b5d07c58856e982a98d10e57adec08ccdede5d312d4ae7f1dcb2ce6ccb6",
+  "preflight_manifest_sha256": "49a187c4e6901e1c5f585dab5ba7486e34cd9bf9c3ff314b6c14493180ff05c6",
+  "smooth_width": 0.002,
+  "target": "rushing_attempts",
+  "test_seasons": [
+    2023,
+    2024,
+    2025
+  ]
+}

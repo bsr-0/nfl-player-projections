@@ -1,0 +1,146 @@
+{
+  "coverage": {
+    "by_season": {
+      "2013": {
+        "eligible": 8223,
+        "excluded": 0,
+        "represented": 8223
+      },
+      "2014": {
+        "eligible": 8103,
+        "excluded": 0,
+        "represented": 8103
+      },
+      "2015": {
+        "eligible": 8141,
+        "excluded": 0,
+        "represented": 8141
+      },
+      "2016": {
+        "eligible": 10063,
+        "excluded": 0,
+        "represented": 10063
+      },
+      "2017": {
+        "eligible": 15900,
+        "excluded": 0,
+        "represented": 15900
+      },
+      "2018": {
+        "eligible": 16108,
+        "excluded": 0,
+        "represented": 16108
+      },
+      "2019": {
+        "eligible": 15701,
+        "excluded": 0,
+        "represented": 15701
+      },
+      "2020": {
+        "eligible": 13115,
+        "excluded": 0,
+        "represented": 13115
+      },
+      "2021": {
+        "eligible": 13907,
+        "excluded": 0,
+        "represented": 13907
+      },
+      "2022": {
+        "eligible": 13538,
+        "excluded": 0,
+        "represented": 13538
+      },
+      "2023": {
+        "eligible": 13404,
+        "excluded": 0,
+        "represented": 13404
+      },
+      "2024": {
+        "eligible": 13466,
+        "excluded": 0,
+        "represented": 13466
+      },
+      "2025": {
+        "eligible": 13689,
+        "excluded": 0,
+        "represented": 13689
+      }
+    },
+    "eligible_rows": 163358,
+    "excluded_rows": 0,
+    "represented_rows": 163358
+  },
+  "features": [
+    "slot",
+    "depth_chart_rank",
+    "roster_snap_share_s2d",
+    "is_cold_start",
+    "share_of_team_rushing_attempts_roll3",
+    "share_of_team_rushing_attempts_s2d",
+    "team_rushing_attempts_roll3",
+    "team_rushing_attempts_s2d"
+  ],
+  "folds": [
+    {
+      "n_test": 13404,
+      "n_train": 122799,
+      "test_season": 2023,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022
+      ]
+    },
+    {
+      "n_test": 13466,
+      "n_train": 136203,
+      "test_season": 2024,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ]
+    },
+    {
+      "n_test": 13689,
+      "n_train": 149669,
+      "test_season": 2025,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ]
+    }
+  ],
+  "metric": "player_week_share_mae",
+  "missing_feature_cells": 95508,
+  "n_panel": 163358,
+  "rolling3_null_to_zero_rows": 739,
+  "status": "ready_to_attempt_fit",
+  "target": "rushing_attempts"
+}

@@ -101,9 +101,19 @@ walk-forward-validation.md
 # Experiment outputs — regenerable from scripts/ and src/models/single_week_ppr/.
 # These are large (60MB+ of row-level prediction dumps) and churn on every run,
 # so they are kept on disk but out of the repo.
-data/experiments/*.csv
+# Recursive (**/*.csv, not *.csv): sweep/preflight/head-to-head runs write their
+# predictions.csv / input_panel.csv into per-arm subdirectories, and the
+# top-level-only glob let 2GB+ of those nested dumps slip past this rule and
+# get staged. The small report.json/README.md siblings are unaffected and stay
+# tracked.
+data/experiments/**/*.csv
 data/experiments/participation_system/
 data/experiments/*.weekskips.json
+# Same story for the raw served-fold snapshots: each full_ppr_head_to_head
+# preflight variant (served_2025_preflight, _v2, _v3, ...) re-dumps the same
+# raw_train/raw_test parquet input, ~8MB apiece and identical run to run.
+data/experiments/**/served_*/raw_train.parquet
+data/experiments/**/served_*/raw_test.parquet
 
 # EXCEPT the two Phase 4 row-level dumps: season_simulation.py reads them as
 # its residual donor pool (residual_csv_paths default), so they are INPUTS to
@@ -127,6 +137,12 @@ data/experiments/phase7_histnan_v3_20260827/joined_all.csv
 # Rollback aids for one session, not project history.
 /data/models_backup_*/
 /data/models_holdout_backup/
+# Same policy, different naming convention: pre-retrain snapshots dropped
+# under data/backups/ instead of data/. The *.joblib weights are already
+# caught by the blanket *.joblib rule above, but the ~30 small metadata
+# JSON/txt files copied alongside them are not — ignore the whole snapshot
+# dir so a `git add .` doesn't stage those stragglers.
+/data/backups/models_pre_retrain_*/
 
 # Play-by-play download cache, re-fetchable from nfl_data_py on demand.
 /data/raw/pbp_advanced_*.parquet

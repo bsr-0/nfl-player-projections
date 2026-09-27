@@ -1,0 +1,90 @@
+{
+  "arm_name": "joint_other_mae",
+  "fold_map": {
+    "2023": 0,
+    "2024": 1,
+    "2025": 2
+  },
+  "gap_seasons": 0,
+  "n_test_seasons": 3,
+  "plan_b_confirm_dir": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/plan_b_uncapped_joint_mae_confirm_20260925",
+  "plan_b_targets": [
+    "rushing_yards",
+    "receiving_yards",
+    "receptions",
+    "passing_yards"
+  ],
+  "seasons": [
+    2006,
+    2007,
+    2008,
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "sha256": {
+    "interceptions": {
+      "output": "d43857d926a492d30d578479b4c55d3f7163ecf5c13922a3b36244f7537a3359",
+      "plan_b_arm_attached": false,
+      "source": "d43857d926a492d30d578479b4c55d3f7163ecf5c13922a3b36244f7537a3359"
+    },
+    "passing_tds": {
+      "output": "7193aeb3eb4d838b9f9d5e895bd533ebd721d0421b17cbbf675cfd411daf8282",
+      "plan_b_arm_attached": false,
+      "source": "7193aeb3eb4d838b9f9d5e895bd533ebd721d0421b17cbbf675cfd411daf8282"
+    },
+    "passing_yards": {
+      "output": "e19fa5e4a2c93a09b29386ce2a38313f332bb251c201c28ccadd257f49a885fa",
+      "plan_b_arm_attached": true,
+      "plan_b_input_sha256": "83e3dd6d51798dfd06569dd5f0c461a4c62e62ecac2dfdac06ccfb000ee36b5c",
+      "plan_b_rows_attached": 5627,
+      "source": "faa9205ba5b7c5a25fe10b34c1289b50482cc7b9cb16405d7c59b4135147714f"
+    },
+    "receiving_tds": {
+      "output": "5785796c3ad179de51271afb9eada8072d8bf0ca789fc90f2357ee17001ab087",
+      "plan_b_arm_attached": false,
+      "source": "5785796c3ad179de51271afb9eada8072d8bf0ca789fc90f2357ee17001ab087"
+    },
+    "receiving_yards": {
+      "output": "884875fc89e3e530c59dca38fadde6314de1f69f68ab4a90f75dd9e8596139f1",
+      "plan_b_arm_attached": true,
+      "plan_b_input_sha256": "bfe8d0776701af7f73e9d75b359e30d3174aadc01678f0497b401ad2ea3a6d1d",
+      "plan_b_rows_attached": 34932,
+      "source": "4ef99b3cf7e86fccfddaab2560cc11ebd15d7d34a6722efce2bdf698505df4a4"
+    },
+    "receptions": {
+      "output": "abff33e3e0c1c0ed58b378353aa0df540e2c79a1a1f138be30b67ccbb504a3af",
+      "plan_b_arm_attached": true,
+      "plan_b_input_sha256": "532d0f5b10fa5dab5437c1eba8da5f68833e78c2b26ee9e0fd6cffd6abc54bad",
+      "plan_b_rows_attached": 34932,
+      "source": "15d9b3b77b570c7e2eaadcca5ae0e98628163bf92673e617ea3911b3e944abae"
+    },
+    "rushing_tds": {
+      "output": "61bebf0a2bd49d81dc6cdaa4bb0bbad078a1c00f3d719a38f11f43783e7c7f50",
+      "plan_b_arm_attached": false,
+      "source": "61bebf0a2bd49d81dc6cdaa4bb0bbad078a1c00f3d719a38f11f43783e7c7f50"
+    },
+    "rushing_yards": {
+      "output": "0baabeb56e034b8cd8e2cd428294fcf6b2d69d9034f59882a12fc8f1fcf187d2",
+      "plan_b_arm_attached": true,
+      "plan_b_input_sha256": "905b520ee48e52ea9a29e7380b220d847a80f5cbb01d826fdd8e88dc76f23e2f",
+      "plan_b_rows_attached": 40559,
+      "source": "cb74c66aeca01511dd28f445adf845082bfc4319eddedd6d16bb1ec537acdc5f"
+    }
+  },
+  "source_allocation_dir": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/full_ppr_safe_blend_event_mass_20260924"
+}

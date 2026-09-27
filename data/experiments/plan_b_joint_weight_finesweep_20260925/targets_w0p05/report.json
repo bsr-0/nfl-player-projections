@@ -1,0 +1,298 @@
+{
+  "by_actual_zero": {
+    "False": {
+      "joint_other_mae": {
+        "mae": 0.0581726615395633,
+        "n": 11266
+      },
+      "normalized_prior": {
+        "mae": 0.060640732963695675,
+        "n": 11266
+      },
+      "rolling3": {
+        "mae": 0.06092859610066621,
+        "n": 11266
+      }
+    },
+    "True": {
+      "joint_other_mae": {
+        "mae": 0.029040497961637483,
+        "n": 9508
+      },
+      "normalized_prior": {
+        "mae": 0.027646687621123166,
+        "n": 9508
+      },
+      "rolling3": {
+        "mae": 0.02731013104712884,
+        "n": 9508
+      }
+    }
+  },
+  "by_position": {
+    "RB": {
+      "joint_other_mae": {
+        "mae": 0.033164276147176874,
+        "n": 6392
+      },
+      "normalized_prior": {
+        "mae": 0.033754770448688166,
+        "n": 6392
+      },
+      "rolling3": {
+        "mae": 0.03359953118323234,
+        "n": 6392
+      }
+    },
+    "TE": {
+      "joint_other_mae": {
+        "mae": 0.04128818337037135,
+        "n": 4794
+      },
+      "normalized_prior": {
+        "mae": 0.04218086434101651,
+        "n": 4794
+      },
+      "rolling3": {
+        "mae": 0.04217324892255495,
+        "n": 4794
+      }
+    },
+    "WR": {
+      "joint_other_mae": {
+        "mae": 0.05439806584414417,
+        "n": 9588
+      },
+      "normalized_prior": {
+        "mae": 0.055075891438442486,
+        "n": 9588
+      },
+      "rolling3": {
+        "mae": 0.05518768575388578,
+        "n": 9588
+      }
+    }
+  },
+  "by_season": {
+    "2020": {
+      "joint_other_mae": {
+        "mae": 0.04441830261874407,
+        "n": 6656
+      },
+      "normalized_prior": {
+        "mae": 0.04492043469694534,
+        "n": 6656
+      },
+      "rolling3": {
+        "mae": 0.044926334532655376,
+        "n": 6656
+      }
+    },
+    "2021": {
+      "joint_other_mae": {
+        "mae": 0.04554538152356766,
+        "n": 7072
+      },
+      "normalized_prior": {
+        "mae": 0.04643805624570594,
+        "n": 7072
+      },
+      "rolling3": {
+        "mae": 0.04640272449272421,
+        "n": 7072
+      }
+    },
+    "2022": {
+      "joint_other_mae": {
+        "mae": 0.04452811512332361,
+        "n": 7046
+      },
+      "normalized_prior": {
+        "mae": 0.04522322684617284,
+        "n": 7046
+      },
+      "rolling3": {
+        "mae": 0.045259230684687284,
+        "n": 7046
+      }
+    }
+  },
+  "comparisons": {
+    "joint_other_mae_minus_normalized_prior": {
+      "blocks_by_season": {
+        "2020": 17,
+        "2021": 18,
+        "2022": 18
+      },
+      "ci_high": -0.00041888537113352986,
+      "ci_low": -0.0010001094015258387,
+      "method": "paired_calendar_week_blocks_stratified_by_season",
+      "n_bootstrap": 2000,
+      "point_estimate": -0.0007005364372131148,
+      "seed": 42,
+      "significant_improvement": true,
+      "status": "ok"
+    },
+    "joint_other_mae_minus_rolling3": {
+      "blocks_by_season": {
+        "2020": 17,
+        "2021": 18,
+        "2022": 18
+      },
+      "ci_high": -0.0003926812582412977,
+      "ci_low": -0.0010433086516471366,
+      "method": "paired_calendar_week_blocks_stratified_by_season",
+      "n_bootstrap": 2000,
+      "point_estimate": -0.000702610481478644,
+      "seed": 42,
+      "significant_improvement": true,
+      "status": "ok"
+    }
+  },
+  "epsilon": 0.001,
+  "features": [
+    "slot",
+    "depth_chart_rank",
+    "roster_snap_share_s2d",
+    "is_cold_start",
+    "share_of_team_targets_roll3",
+    "share_of_team_targets_s2d",
+    "team_targets_roll3",
+    "team_targets_s2d"
+  ],
+  "folds": [
+    {
+      "first_week_rolling3_null_to_zero_rows": 31,
+      "fit": {
+        "converged": true,
+        "epsilon": 0.001,
+        "iterations": 47,
+        "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+        "n_parameters": 20,
+        "n_player_rows": 45525,
+        "n_team_weeks": 3584,
+        "objective": 0.04473184543731645,
+        "objective_definition": "mean_player_plus_other_weight_times_mean_other_smooth_absolute_share_error",
+        "other_weight": 0.05,
+        "penalty": 1e-05,
+        "smooth_width": 0.002,
+        "zero_total_rows_excluded_from_fit": 0
+      },
+      "n_team_weeks": 512,
+      "n_test": 6656,
+      "n_train": 45525,
+      "test_season": 2020,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019
+      ]
+    },
+    {
+      "first_week_rolling3_null_to_zero_rows": 34,
+      "fit": {
+        "converged": true,
+        "epsilon": 0.001,
+        "iterations": 31,
+        "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+        "n_parameters": 20,
+        "n_player_rows": 52181,
+        "n_team_weeks": 4096,
+        "objective": 0.04478859415253418,
+        "objective_definition": "mean_player_plus_other_weight_times_mean_other_smooth_absolute_share_error",
+        "other_weight": 0.05,
+        "penalty": 1e-05,
+        "smooth_width": 0.002,
+        "zero_total_rows_excluded_from_fit": 0
+      },
+      "n_team_weeks": 544,
+      "n_test": 7072,
+      "n_train": 52181,
+      "test_season": 2021,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020
+      ]
+    },
+    {
+      "first_week_rolling3_null_to_zero_rows": 29,
+      "fit": {
+        "converged": true,
+        "epsilon": 0.001,
+        "iterations": 31,
+        "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+        "n_parameters": 20,
+        "n_player_rows": 59253,
+        "n_team_weeks": 4640,
+        "objective": 0.044962958129760915,
+        "objective_definition": "mean_player_plus_other_weight_times_mean_other_smooth_absolute_share_error",
+        "other_weight": 0.05,
+        "penalty": 1e-05,
+        "smooth_width": 0.002,
+        "zero_total_rows_excluded_from_fit": 0
+      },
+      "n_team_weeks": 542,
+      "n_test": 7046,
+      "n_train": 59253,
+      "test_season": 2022,
+      "train_seasons": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021
+      ]
+    }
+  ],
+  "limitations": [
+    "Capped roster share evaluation; no full-population or PPR result.",
+    "2023-2025 seasons were inspected previously; any later run is iterative confirmation.",
+    "This model does not estimate team volume or served fantasy points."
+  ],
+  "metric": "player_week_share_mae",
+  "missing_feature_cells": 28834,
+  "model": "joint_softmax_smooth_player_mae_with_other_bucket",
+  "n_panel": 87510,
+  "other_weight": 0.05,
+  "penalty": 1e-05,
+  "pooled": {
+    "joint_other_mae": {
+      "mae": 0.04483923459728358,
+      "n": 20774
+    },
+    "normalized_prior": {
+      "mae": 0.0455397710344967,
+      "n": 20774
+    },
+    "rolling3": {
+      "mae": 0.04554184507876223,
+      "n": 20774
+    }
+  },
+  "predictions_sha256": "e34c54c3ac4d4a8ef7976d33b89917e2fa80ad33906abef4e7748e2db2507e26",
+  "represented_team_mass": {
+    "actual_mean": 0.9335515251356794,
+    "candidate_mass_mae": 0.05253964161718668,
+    "candidate_mean": 0.9456898165602338,
+    "other_mean": 0.05431018343976617
+  },
+  "rolling3_null_to_zero_rows": 94,
+  "saved_row_mae_verified": true,
+  "smooth_width": 0.002,
+  "status": "complete",
+  "target": "targets"
+}

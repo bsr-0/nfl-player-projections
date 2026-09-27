@@ -57,7 +57,8 @@ from src.utils.models_dir import redirect_models_dir
 from src.utils.model_rollback import available_rollbacks, snapshot_models
 from src.utils.atomic_io import atomic_write_json
 from src.models.oof_capture import (
-    OOF_PANEL_FILENAME, OOFLeakageError, add_career_experience_segments,
+    OOF_PANEL_FILENAME, OOFLeakageError, ZERO_FLOOR, add_career_experience_segments,
+    add_game_context,
     build_panel, capture_fold_rows, fold_coverage, segment_report,
     write_panel, write_run_panel,
 )
@@ -778,6 +779,7 @@ def _run_one_fold(
     n_trials: int,
     oof_collector: list = None,
     oof_coverage_collector: list = None,
+    oof_strict: bool = False,
 ):
     """
     Run one fold: prepare features, train models, run backtest.
@@ -808,6 +810,7 @@ def _run_one_fold(
         converters = {}
 
     qb_target = _load_qb_target_choice()
+    skipped_positions = []
     for position in positions:
         if position not in trainer.trained_models:
             continue
@@ -815,6 +818,7 @@ def _run_one_fold(
         pos_mask = test_data["position"] == position
         pos_test = test_data.loc[pos_mask]
         if len(pos_test) < 5:
+            skipped_positions.append(position)
             continue
         base = multi_model.models.get(1) or list(multi_model.models.values())[0]
         medians = getattr(base, "feature_medians", {})
@@ -857,10 +861,14 @@ def _run_one_fold(
             # see src/models/oof_capture.py's module docstring, item 4.
             if oof_coverage_collector is not None:
                 oof_coverage_collector.append(fold_coverage(
-                    test_data, captured, test_season=actual_test_season))
+                    test_data, captured, test_season=actual_test_season,
+                    skipped_positions=skipped_positions))
         except OOFLeakageError:
             raise
         except (KeyError, ValueError) as e:
+            if oof_strict:
+                raise RuntimeError(
+                    f"strict OOF capture failed for fold {actual_test_season}: {e}") from e
             logger.warning("OOF capture skipped for fold %s: %s", actual_test_season, e)
 
     results = _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season,
@@ -1093,11 +1101,18 @@ def train_models(positions: list = None,
                     _, res = _run_one_fold(td, td_test, tr_ss, ts, positions,
                                            tune_hyperparameters, n_trials,
                                            oof_collector=oof_folds,
-                                           oof_coverage_collector=oof_coverage)
+                                           oof_coverage_collector=oof_coverage,
+                                           oof_strict=True)
                     if res:
                         wf_metrics.append(res.get("by_position", {}))
                         wf_seasons.append(ts)
                 except Exception as e:
+                    # Canonical OOF runs are fail-closed: a capture or fold
+                    # failure must not produce a partial panel that looks
+                    # complete. Legacy callers without OOF collection retain
+                    # the historical warning-and-continue behavior.
+                    if oof_folds is not None:
+                        raise
                     print(f"  Walk-forward fold {ts} failed: {e}")
         if skipped_folds:
             print(f"\n  {len(skipped_folds)} fold(s) excluded from BOTH metrics and the "
@@ -1140,10 +1155,69 @@ def train_models(positions: list = None,
                     # the QB "cold-start" cell was 2023 opening-day starters,
                     # not new players -- see oof_capture.py module docstring).
                     panel = add_career_experience_segments(panel)
+                    # Schedule orientation is pregame context required to
+                    # fit reusable home/away role residuals. This is strict:
+                    # a partial game mapping would distort same-game vectors.
+                    panel = add_game_context(panel)
 
                     coverage = pd.concat(oof_coverage, ignore_index=True) if oof_coverage else None
+                    fold_lineage = []
+                    for season in sorted(panel["season"].unique()):
+                        fold_rows = panel.loc[panel["season"].eq(season)]
+                        train_seasons = sorted({int(s) for raw in fold_rows["train_seasons"].dropna().unique()
+                                                for s in str(raw).split(",") if s})
+                        fold_lineage.append({"test_season": int(season),
+                                             "train_seasons": train_seasons})
                     written = write_run_panel(
-                        panel, DATA_DIR / "experiments", coverage=coverage, label=oof_label)
+                        panel, DATA_DIR / "experiments", coverage=coverage, label=oof_label,
+                        metadata={
+                            "folds": fold_lineage,
+                            "target_semantics": "served one-week fantasy-point prediction versus actual target row",
+                            "game_context_source": "canonical schedule exact season/week/team/opponent match",
+                            "model_target_configuration": dict(MODEL_CONFIG.get("position_target_type", {})),
+                            "training_configuration": {
+                                "tune_hyperparameters": bool(tune_hyperparameters),
+                                "n_optuna_trials": int(n_trials),
+                                "cv_gap_seasons": int(MODEL_CONFIG.get("cv_gap_seasons", 0)),
+                                "feature_version": FEATURE_VERSION,
+                            },
+                        })
+                    segment_path = Path(written["run_dir"]) / "segment_report.csv"
+                    segment_report(
+                        panel, by=("season",), cluster="player_id"
+                    ).to_csv(segment_path, index=False)
+                    total_segment_path = Path(written["run_dir"]) / "total_segment_report.csv"
+                    panel_for_segments = panel.copy()
+                    panel_for_segments["all_rows"] = "all"
+                    segment_report(
+                        panel_for_segments, by=("all_rows",), cluster="player_id"
+                    ).to_csv(total_segment_path, index=False)
+                    position_segment_path = Path(written["run_dir"]) / "position_segment_report.csv"
+                    segment_report(
+                        panel, by=("position",), cluster="player_id"
+                    ).to_csv(position_segment_path, index=False)
+                    experience_segment_path = Path(written["run_dir"]) / "experience_segment_report.csv"
+                    segment_report(
+                        panel, by=("position", "is_cold_start", "week_bucket"),
+                        cluster="player_id"
+                    ).to_csv(experience_segment_path, index=False)
+                    position_season_segment_path = Path(written["run_dir"]) / "position_season_segment_report.csv"
+                    segment_report(
+                        panel, by=("position", "season"), cluster="player_id"
+                    ).to_csv(position_season_segment_path, index=False)
+                    activity_segment_path = Path(written["run_dir"]) / "actual_activity_segment_report.csv"
+                    panel_for_segments["actual_activity"] = np.where(
+                        panel_for_segments["actual_points"] > ZERO_FLOOR,
+                        "nonzero_actual", "near_zero_actual")
+                    segment_report(
+                        panel_for_segments, by=("actual_activity",), cluster="player_id"
+                    ).to_csv(activity_segment_path, index=False)
+                    if "is_cold_start_career" in panel.columns and panel["is_cold_start_career"].notna().any():
+                        career_segment_path = Path(written["run_dir"]) / "career_segment_report.csv"
+                        segment_report(
+                            panel, by=("position", "is_cold_start_career"),
+                            cluster="player_id"
+                        ).to_csv(career_segment_path, index=False)
                     print(f"OOF panel written: {written['panel_path']} "
                           f"({len(panel):,} rows, {panel['player_id'].nunique():,} players, "
                           f"label={oof_label!r})")
@@ -1177,7 +1251,7 @@ def train_models(positions: list = None,
                 except OOFLeakageError:
                     raise
                 except (OSError, ValueError) as e:
-                    logger.warning("OOF panel write failed: %s", e)
+                    raise RuntimeError(f"canonical OOF panel write failed: {e}") from e
 
             print("\n" + "=" * 60)
             print("Walk-Forward Validation Summary (mean +/- std)")

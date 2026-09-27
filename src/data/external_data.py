@@ -207,7 +207,8 @@ class InjuryDataLoader:
         df['is_injured'] = (df['injury_score'] < 1.0).astype(int)
         
         # Get relevant columns
-        cols = ['gsis_id', 'season', 'week', 'injury_status', 'injury_score', 'is_injured']
+        cols = ['gsis_id', 'season', 'week', 'date_modified',
+                'injury_status', 'injury_score', 'is_injured']
         available_cols = [c for c in cols if c in df.columns]
         
         if 'gsis_id' in df.columns:
@@ -218,6 +219,25 @@ class InjuryDataLoader:
             result['player_id'] = result['canonical_player_id'].where(result['canonical_player_id'] != '', result['player_id'])
             result['injury_resolution_status'] = result['resolution_status']
             result['injury_unresolved_reason'] = result['resolution_reason']
+            # A player can have several pre-kickoff reports in one game week.
+            # The feature join requires one status per player-week; use the
+            # latest report that survived the kickoff leakage check above.
+            key = ['player_id', 'season', 'week']
+            if 'date_modified' in result.columns:
+                result['_report_time'] = pd.to_datetime(result['date_modified'], utc=True, errors='coerce')
+                result = result.sort_values('_report_time', kind='stable', na_position='first')
+            else:
+                result['_report_time'] = pd.NaT
+            latest = result.groupby(key, dropna=False)['_report_time'].transform('max')
+            latest_tie = result['_report_time'].eq(latest) | (
+                result['_report_time'].isna() & latest.isna())
+            tied = result[result.duplicated(key, keep=False) & latest_tie]
+            if not tied.empty and tied.groupby(key, dropna=False)['injury_score'].nunique().gt(1).any():
+                raise ValueError('conflicting injury statuses share the latest report time')
+            result = result.drop_duplicates(key, keep='last').drop(
+                columns=['_report_time', 'date_modified'], errors='ignore')
+            if result.duplicated(key).any():
+                raise ValueError('injury status remains nonunique by player-week')
         else:
             result = pd.DataFrame()
         
@@ -899,7 +919,7 @@ class ExternalDataIntegrator:
                     result = result.merge(
                         injury_status[['player_id', 'season', 'week', 'injury_score', 'is_injured']],
                         on=['player_id', 'season', 'week'],
-                        how='left'
+                        how='left', validate='many_to_one'
                     )
                     # Fallback merge by normalized name when player IDs differ across sources.
                     if (
@@ -955,6 +975,10 @@ class ExternalDataIntegrator:
             else:
                 result['injury_score'] = 1.0
                 result['is_injured'] = 0
+        except ValueError:
+            # Duplicate or contradictory source identities are data-integrity
+            # failures, not an unavailable optional feed.
+            raise
         except Exception as e:
             print(f"  Error adding injuries: {e}")
             result['injury_score'] = 1.0
@@ -1006,6 +1030,8 @@ class ExternalDataIntegrator:
         
         result['entity_unresolved'] = (result.get('resolution_status', 'resolved') != 'resolved').astype(int) if 'resolution_status' in result.columns else 0
         result['entity_unresolved_reason'] = result.get('resolution_reason', '') if 'resolution_reason' in result.columns else ''
+        if len(result) != len(df):
+            raise ValueError(f'external feature joins changed player-row count: {len(df)} -> {len(result)}')
         added = [c for c in new_cols if c in result.columns]
         print(f"\n✅ Added {len(added)} external features: {added}")
 

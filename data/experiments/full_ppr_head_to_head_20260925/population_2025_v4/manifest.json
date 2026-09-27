@@ -1,0 +1,22 @@
+{
+  "eligible_production_target_rows": 6093,
+  "excluded_file": "excluded_production_keys.csv",
+  "excluded_reasons": {
+    "postseason_outside_plan_a": 251,
+    "team_or_position_mismatch": 16
+  },
+  "excluded_sha256": "9adf3e12f2e6f8672d471065cd0d98e5aea83699b8504aca0d54dfb40a91adb5",
+  "matched_rows": 5826,
+  "plan_a_manifest": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/full_ppr_head_to_head_20260925/inputs/plan_a_full.manifest.json",
+  "plan_a_manifest_sha256": "70c3b234a821299cef271ea1792c4eebc80ac67da6fdeb29e49de521984500b7",
+  "plan_a_rows_sha256": "33f4a9612afe91d5f49bd69c45314219ac3588993d81c9f962f0ec6dee80cd82",
+  "plan_a_season_rows": 13689,
+  "population_file": "population_keys.csv",
+  "population_sha256": "9d740bf89a3960ff98baffbe0ff14d2e9b36fafa93492bf58a286117b43c39e2",
+  "preflight_manifest": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/full_ppr_head_to_head_20260925/served_2025_preflight_v6/manifest.json",
+  "preflight_manifest_sha256": "855e64cf0b5eef75a67cf9d86e6aaca528e495bd5127bd747fdcfbcc0eff970c",
+  "schema_version": 1,
+  "status": "prefit_frozen",
+  "target_map_sha256": "aa8e28beb59e73b302fbdd90c4c35b0ff4aca71aef586098264ba5b70a534605",
+  "test_season": 2025
+}

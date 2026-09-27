@@ -1,0 +1,51 @@
+{
+  "inputs": {
+    "mapping": {
+      "file": "target_map.csv",
+      "sha256": "aa8e28beb59e73b302fbdd90c4c35b0ff4aca71aef586098264ba5b70a534605"
+    },
+    "test": {
+      "file": "raw_test.parquet",
+      "sha256": "224c1de56cd57a429ffd84683998e5643e48e0c3fe0bf8605062cbdfca5a70d8"
+    },
+    "train": {
+      "file": "raw_train.parquet",
+      "sha256": "5e853ac3fdf58bf51e81bb82baf4590fc4927b859b73f16f3ea1570f5b032106"
+    }
+  },
+  "rows": {
+    "next_game_origins": 6093,
+    "test": 6680,
+    "train": 107242
+  },
+  "source_code_sha256": {
+    "scripts/export_served_fold_full_ppr.py": "549c00f29bd3bf2146fbbaf0ce827db14a369a19421bd775e06679ae921cfa48",
+    "src/evaluation/full_ppr_head_to_head.py": "1d973c589e9b314bba7c56123b62f28abdd4dc4e08bcd9d1f956163a95aa9547",
+    "src/models/data_loading.py": "b4f137a87587bd2cc84e37f245938e95aa47474a3162c064b7e1b7999350afe7",
+    "src/models/feature_preparation.py": "5bdce77ef1dd5833593b3711b5ada499bcf4e2ba4fca53983262aa9d23caf8b3",
+    "src/models/train.py": "8bce18e617b522688072a9e000e9412f6fc427d291ef800432e2de036edd98e6"
+  },
+  "status": "prepared",
+  "test_season": 2025,
+  "train_seasons": [
+    2006,
+    2007,
+    2008,
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ]
+}
