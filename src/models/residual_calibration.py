@@ -72,8 +72,12 @@ class EmpiricalResidualCalibration:
             raise ValueError("selected residual pool is invalid")
         # Centering is deliberate: this calibrates uncertainty without
         # replacing the served point forecast with an in-sample residual bias.
-        centered = pool - pool.mean()
-        return rng.choice(centered, size=n_draws, replace=True)
+        # Pools store oof_capture's residual (predicted - actual); negate so
+        # draws are actual-minus-prediction deviations and callers can use
+        # predicted + draw. Adding raw residuals mirrors the error shape:
+        # right-skewed boom games become a heavy lower tail.
+        deviations = pool.mean() - pool
+        return rng.choice(deviations, size=n_draws, replace=True)
 
     def to_dict(self) -> dict:
         return {

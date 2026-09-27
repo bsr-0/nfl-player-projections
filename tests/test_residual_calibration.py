@@ -38,6 +38,23 @@ def test_calibration_centers_empirical_draws_on_production_prediction():
     assert artifact.diagnostics["actual_activity_is_diagnostic_only"] is True
 
 
+def test_draws_are_actual_minus_prediction_deviations_not_mirrored_residuals():
+    # Right-skewed outcomes around a fixed prediction: mostly small misses,
+    # occasional boom games. predicted + draw must reproduce that shape.
+    actuals = np.array([8.0] * 90 + [30.0] * 10)
+    panel = pd.DataFrame({
+        "position": "WR", "predicted_points": 10.0, "actual_points": actuals,
+        "residual": 10.0 - actuals, "is_cold_start": False,
+    })
+    artifact = fit_empirical_residual_calibration(panel, min_stratum_rows=2)
+    simulated = 10.0 + independent_residual_matrix(
+        panel.iloc[:1], artifact, n_draws=20_000, seed=11)[:, 0]
+    expected = 10.0 + (actuals - actuals.mean())
+    assert simulated.max() == pytest.approx(expected.max())
+    assert simulated.min() == pytest.approx(expected.min())
+    assert np.quantile(simulated, .95) > np.quantile(simulated, .50) + 10.0
+
+
 def test_role_rank_dependence_preserves_each_empirical_marginal():
     residuals = np.array([[-2., -1.], [-1., -2.], [1., 2.], [2., 1.]])
     model = fit_sparse_role_residual_correlation(

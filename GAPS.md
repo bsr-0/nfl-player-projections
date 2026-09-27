@@ -15218,3 +15218,24 @@ cell that looked real in isolation.
 old per-cell view, with an unmissable warning about what that number means
 (a per-cell rate, not a table-wide one) rather than silently reverting to
 the two-day-old behavior.
+
+## Calibrated simulation draws were mirrored residuals (fixed 2026-09-27)
+
+`oof_capture.py` defines `residual = predicted_points - actual_points`, but
+`EmpiricalResidualCalibration.draw_residuals` returned centered residuals and
+every caller (`scripts/evaluate_calibrated_simulation.py`) built draws as
+`predicted + residual`. That is the mirror image of the true outcome
+distribution: right-skewed boom games became a heavy *lower* tail and the
+upside was clipped. Every CRPS/coverage/energy number that script produced
+for `calibrated_independent` and `calibrated_role_correlation` was scored on
+the wrong shape. (Correlation *signs* were unaffected -- negating every
+column preserves covariance -- but joint scores still were, via the
+marginals.) `season_simulation.py` is not affected: its donor pools use
+`actual - prediction`.
+
+**Fixed** at the source: `draw_residuals` now returns `mean - residual`
+(actual-minus-prediction deviations), so `predicted + draw` is correct for
+every caller. No reported results depended on the old output. Regression
+test pins orientation on a skewed fixture and was verified failing before the
+fix (`tests/test_residual_calibration.py`). Any run directory produced by
+`evaluate_calibrated_simulation.py` before this date must be regenerated.
