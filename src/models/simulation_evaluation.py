@@ -46,15 +46,39 @@ def variogram_score(samples: np.ndarray, observation: np.ndarray, p: float = .5)
     upper = np.triu_indices(samples.shape[1], k=1)
     return float(np.mean((observed[upper] - expected[upper]) ** 2))
 
+# Served predictions below this many points are treated as this many when
+# scaling, so near-zero projections do not blow up the scaled score.
+VARIOGRAM_SCALE_FLOOR = 1.0
+
+def scaled_variogram_score(samples: np.ndarray, observation: np.ndarray, scale: np.ndarray,
+                           p: float = .5) -> float:
+    """Variogram score after dividing each dimension by a fixed scale.
+
+    Raw fantasy-point variograms are dominated by the highest-variance pairs,
+    which dilutes the dependence signal (measured on a known-dependence
+    synthetic panel: z = -4.5 raw vs -6.7 scaled for the true model against
+    independent draws). The scale must NOT come from the forecast being scored
+    or propriety is lost; callers pass the served point prediction, which is
+    identical for every simulation mode compared.
+    """
+    scale = np.maximum(np.asarray(scale, dtype=float), VARIOGRAM_SCALE_FLOOR)
+    if scale.ndim != 1 or not np.isfinite(scale).all():
+        raise ValueError("scale must be a finite vector")
+    return variogram_score(np.asarray(samples, dtype=float) / scale,
+                           np.asarray(observation, dtype=float) / scale, p=p)
+
 def empirical_crps(samples: np.ndarray, observation: float) -> float:
     """Univariate ensemble CRPS, used for player-marginal evaluation."""
-    values = _thin_draws(np.asarray(samples, dtype=float).reshape(-1, 1)).reshape(-1)
+    values = np.asarray(samples, dtype=float).reshape(-1)
     if len(values) < 2 or not np.isfinite(values).all() or not np.isfinite(observation):
         raise ValueError("need at least two finite draws and a finite observation")
     # The direct pairwise matrix is O(n²) per player and makes a 1,000-draw
     # production panel impractical.  For sorted samples, the upper-triangle
     # sum of pairwise absolute differences is sum((2*i-n+1) * x[i]), giving
-    # exactly the same ensemble CRPS in O(n log n).
+    # exactly the same ensemble CRPS in O(n log n).  No thinning: this
+    # estimator is biased upward by E|X-X'|/(2n), so thinning to a fixed n
+    # penalises wide distributions more than narrow ones and would tilt any
+    # comparison between marginal families.
     ordered = np.sort(values)
     n = len(ordered)
     upper_pair_sum = np.dot(2 * np.arange(n) - n + 1, ordered)
@@ -88,9 +112,16 @@ def marginal_calibration(summary: pd.DataFrame, actuals: pd.DataFrame) -> dict:
     }
 
 def evaluate_joint_player_draws(player_draws: pd.DataFrame,
-                                actuals: pd.DataFrame) -> dict:
-    """Score each game as a joint player outcome, then average games equally."""
+                                actuals: pd.DataFrame, *, scale_column: str | None = None) -> dict:
+    """Score each game as a joint player outcome, then average games equally.
+
+    With ``scale_column`` (a per-player column of ``player_draws`` fixed across
+    draws, e.g. the served prediction) each game also gets
+    ``variogram_score_p05_scaled``.
+    """
     required_draws = {"game_id", "draw", "player_id", "fantasy_points"}
+    if scale_column is not None:
+        required_draws.add(scale_column)
     required_actuals = {"game_id", "player_id", "fantasy_points"}
     missing = (required_draws - set(player_draws)) | (required_actuals - set(actuals))
     if missing:
@@ -108,11 +139,18 @@ def evaluate_joint_player_draws(player_draws: pd.DataFrame,
             raise ValueError(f"game {game_id} has incomplete player draw matrix")
         observation = actual_game.loc[players, "fantasy_points"].to_numpy(float)
         samples = matrix.to_numpy(float)
-        scores.append({
+        entry = {
             "game_id": game_id, "dimensions": len(players),
             "energy_score": energy_score(samples, observation),
             "variogram_score_p05": variogram_score(samples, observation, p=.5),
-        })
+        }
+        if scale_column is not None:
+            scale = game_draws.groupby("player_id")[scale_column].agg(["min", "max"]).reindex(players)
+            if not np.allclose(scale["min"], scale["max"]):
+                raise ValueError(f"game {game_id} has a {scale_column} that varies across draws")
+            entry["variogram_score_p05_scaled"] = scaled_variogram_score(
+                samples, observation, scale["min"].to_numpy(float), p=.5)
+        scores.append(entry)
         for index, actual in enumerate(observation):
             values = samples[:, index]
             marginal_scores.append(empirical_crps(values, actual))

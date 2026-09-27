@@ -1,8 +1,9 @@
 # Game Simulation and Player Correlation Plan
 
-Status: Phase 1 (interfaces, deterministic core) built and bug-fixed; Phase 2
-(OOF residual panel + real correlation fitting) scoped 2026-09-23, not
-started. See "Phase 2 scoping" below for what that actually requires.
+Status (2026-09-27): OOF capture, calibrated marginals, factor-copula
+dependence and the rolling backtest driver are built and verified on
+synthetic panels; the real-panel run is pending (needs local data). See
+"Calibrated simulation v2" at the end of this file and in GAPS.md.
 Branch: feature/game-simulation-correlation
 
 ## Objective
@@ -324,3 +325,14 @@ they're recorded here to check once work item 2 actually fits real data:
    upstream data-quality bugs, consistent with `game_inputs_from_predictions`'s
    own existing duplicate check a few lines above it. Tested
    (`tests/test_simulation_adapter.py`), verified failing before the fix.
+
+### Calibrated simulation v2 (2026-09-27)
+
+Work items 2 and 3 above are now built, beyond the originally scoped
+"shared Gaussian residual": prediction-analog marginals
+(`PredictionAnalogCalibration`), a game/team/script factor copula keyed by
+canonical role (`FactorCopulaModel`, with a two-parameter team-factor
+baseline), and a one-command rolling-origin backtest
+(`scripts/evaluate_calibrated_simulation.py`, verified by
+`scripts/verify_calibrated_simulation.py`). Design, synthetic evidence,
+the command and caveats: GAPS.md, "Calibrated simulation v2".
