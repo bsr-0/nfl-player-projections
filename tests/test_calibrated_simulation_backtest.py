@@ -3,7 +3,6 @@ import pandas as pd
 import pytest
 
 from scripts.evaluate_calibrated_simulation import (
-    DEFAULT_CANDIDATE,
     INDEPENDENT,
     LEGACY_INDEPENDENT,
     MODES,
@@ -11,14 +10,17 @@ from scripts.evaluate_calibrated_simulation import (
     ROLE_FACTOR,
     TEAM_FACTOR,
     LEGACY_ROLE,
-    Candidate,
-    _sum_groups,
     _write_run,
-    candidate_grid,
-    fit_candidate,
     minimum_bootstrap_for_holm,
     run,
+)
+from src.models.calibrated_simulation import (
+    DEFAULT_CANDIDATE,
+    Candidate,
+    candidate_grid,
+    fit_candidate,
     select_candidate,
+    sum_groups,
     support_metrics,
 )
 from scripts.verify_calibrated_simulation import verify as verify_run
@@ -160,7 +162,7 @@ def test_stack_is_quarterback_plus_two_highest_projected_pass_catchers():
         "position": ["QB", "WR", "WR", "TE", "RB", "QB", "WR"],
         "predicted_points": [20., 15., 8., 9., 14., 18., 12.],
     })
-    groups = {(kind, side): members.tolist() for kind, side, members in _sum_groups(rows)}
+    groups = {(kind, side): members.tolist() for kind, side, members in sum_groups(rows)}
     assert groups[("stack", "home")] == [0, 1, 3]
     assert ("stack", "away") not in groups  # only one pass catcher
     assert groups[("team_total", "home")] == [0, 1, 2, 3, 4]

@@ -1,10 +1,11 @@
 # Game Simulation and Player Correlation Plan
 
-Status (2026-09-27): OOF capture, calibrated marginals, factor-copula
-dependence and the rolling backtest driver are built and verified on
-synthetic panels; the real-panel run is pending (needs local data). See
-"Calibrated simulation v2" at the end of this file and in GAPS.md.
-Branch: feature/game-simulation-correlation
+Status (2026-09-27): the game-script simulator (workstream 1 and the data
+contracts below) was deleted and replaced in production by the calibrated
+copula -- see GAPS.md, "Game-script simulator replaced by the calibrated
+copula". Sections below that mention `game_simulation.py`,
+`simulation_adapter.py`, `GameScriptInput` or `simulation_readiness.py` are
+the historical record of that prototype, not current code.
 
 ## Objective
 Extend weekly PPR projections from independent player estimates to coherent game-level outcomes while preserving existing models and leakage-safe validation.

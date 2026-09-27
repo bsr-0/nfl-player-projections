@@ -162,35 +162,9 @@ def evaluate_joint_player_draws(player_draws: pd.DataFrame,
         "games_scored": int(len(frame)),
         "mean_energy_score": float(frame["energy_score"].mean()),
         "mean_variogram_score_p05": float(frame["variogram_score_p05"].mean()),
+        **({"mean_variogram_score_p05_scaled": float(frame["variogram_score_p05_scaled"].mean())}
+           if "variogram_score_p05_scaled" in frame else {}),
         "mean_marginal_crps": float(np.mean(marginal_scores)),
         "mean_pit": float(np.mean(pit_values)),
         "by_game": frame.to_dict(orient="records"),
-    }
-
-def game_draw_calibration(game_draws: pd.DataFrame,
-                          actuals: pd.DataFrame) -> dict:
-    """Evaluate simulated win/total/margin against realized game outcomes."""
-    required_draws = {"game_id", "draw", "home_won", "simulated_total", "simulated_margin"}
-    required_actuals = {"game_id", "home_score", "away_score"}
-    missing = (required_draws - set(game_draws)) | (required_actuals - set(actuals))
-    if missing:
-        raise ValueError(f"missing game-calibration columns: {sorted(missing)}")
-    summaries = (game_draws.groupby("game_id").agg(
-        home_win_prob=("home_won", "mean"),
-        total_mean=("simulated_total", "mean"),
-        margin_mean=("simulated_margin", "mean"),
-    ).reset_index())
-    actual = actuals.copy()
-    actual["home_won_actual"] = (actual["home_score"] > actual["away_score"]).astype(float)
-    actual["total_actual"] = actual["home_score"] + actual["away_score"]
-    actual["margin_actual"] = actual["home_score"] - actual["away_score"]
-    frame = summaries.merge(actual[["game_id", "home_won_actual", "total_actual", "margin_actual"]],
-                            on="game_id", how="left")
-    if frame[["home_won_actual", "total_actual", "margin_actual"]].isna().any().any():
-        raise ValueError("game calibration has simulated games without actual results")
-    return {
-        "n": int(len(frame)),
-        "home_win_brier": float(np.mean((frame["home_win_prob"] - frame["home_won_actual"]) ** 2)),
-        "total_mae": float(np.mean(np.abs(frame["total_mean"] - frame["total_actual"]))),
-        "margin_mae": float(np.mean(np.abs(frame["margin_mean"] - frame["margin_actual"]))),
     }

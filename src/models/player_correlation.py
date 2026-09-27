@@ -1,8 +1,9 @@
-"""Residual-correlation primitives for player simulations.
+"""Residual-dependence models for player simulations.
 
-Player-keyed models are useful only for a fixed, already-aligned lineup.
-Role-keyed models are the production-oriented interface because the actual
-players change every game; examples are home_WR1 and away_RB1.
+Everything is keyed by game role (home_WR1, away_RB2, ...), never player id:
+the actual players change every game. ``FactorCopulaModel`` is the served
+dependence; ``RoleResidualCorrelationModel`` survives only as the backtest's
+legacy comparison arm.
 """
 from dataclasses import dataclass
 import re
@@ -31,18 +32,6 @@ def _sample_scaled(covariance: np.ndarray, marginal_sds: np.ndarray,
         np.zeros(len(scales)), scaled_covariance, size=n_draws, check_valid="raise")
 
 @dataclass
-class ResidualCorrelationModel:
-    """Fixed-player correlation model; do not use across changing lineups."""
-    player_keys: tuple[str, ...]
-    means: np.ndarray
-    covariance: np.ndarray
-    shrinkage: float
-
-    def sample_scaled_residuals(self, marginal_sds: np.ndarray,
-                                n_draws: int, seed: int = 42) -> np.ndarray:
-        return _sample_scaled(self.covariance, marginal_sds, n_draws, seed)
-
-@dataclass
 class RoleResidualCorrelationModel:
     """Role-keyed residual correlation model reusable across player lineups."""
     role_keys: tuple[str, ...]
@@ -67,32 +56,6 @@ def _nearest_psd(matrix, floor=1e-8):
     matrix = (matrix + matrix.T) / 2.0
     values, vectors = np.linalg.eigh(matrix)
     return (vectors * np.maximum(values, floor)) @ vectors.T
-
-def _fit(rows: np.ndarray, keys: list[str], shrinkage: float):
-    residuals = np.asarray(rows, dtype=float)
-    if residuals.ndim != 2 or residuals.shape[1] != len(keys):
-        raise ValueError("rows must be games by correlation keys")
-    if residuals.shape[0] < 2 or not np.isfinite(residuals).all():
-        raise ValueError("need at least two finite games")
-    if len(set(keys)) != len(keys):
-        raise ValueError("correlation keys must be unique")
-    if not 0 <= shrinkage <= 1:
-        raise ValueError("shrinkage must be in [0, 1]")
-    covariance = np.cov(residuals, rowvar=False, ddof=1)
-    diagonal = np.diag(np.diag(covariance))
-    return residuals.mean(axis=0), _nearest_psd(
-        (1 - shrinkage) * covariance + shrinkage * diagonal)
-
-def fit_residual_correlation(rows: np.ndarray, player_keys: list[str],
-                             shrinkage: float = 0.25) -> ResidualCorrelationModel:
-    means, covariance = _fit(rows, player_keys, shrinkage)
-    return ResidualCorrelationModel(tuple(player_keys), means, covariance, shrinkage)
-
-def fit_role_residual_correlation(rows: np.ndarray, role_keys: list[str],
-                                  shrinkage: float = 0.25) -> RoleResidualCorrelationModel:
-    means, covariance = _fit(rows, role_keys, shrinkage)
-    return RoleResidualCorrelationModel(tuple(role_keys), means, covariance, shrinkage)
-
 
 def fit_sparse_role_residual_correlation(rows: np.ndarray, role_keys: list[str],
                                          shrinkage: float = 0.25,

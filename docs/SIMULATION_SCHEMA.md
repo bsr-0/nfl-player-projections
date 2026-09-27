@@ -1,84 +1,54 @@
-# Game Simulation Output Schema and Production Gates
+# Simulation Output Schema (game-sim-v2)
 
-## Artifact split
+## What produces it
 
-The system writes two intentionally different artifacts.
+`scripts/generate_simulation_data.py` serves the calibrated copula
+(`src/models/calibrated_simulation.py`): each player's draws are the served
+prediction plus a calibrated marginal deviation, reordered into game-level
+dependence by the role-factor copula. It is exactly the backtest's
+`calibrated_role_factor` arm. Artifacts come from
+`scripts/fit_simulation_artifacts.py` (verified OOF panel → `data/models/simulation/<run_id>/`,
+pointed to by `latest.json`); without them the command fails instead of
+falling back. Weeks at or before the artifacts' fitted-through week are
+refused, because their own outcomes shaped the calibration.
+
+v2 replaces v1, whose score/plays/pass-attempt draws came from the deleted
+game-script simulator.
+
+## Artifacts
 
 | Artifact | Schema | Location | Purpose |
 |---|---|---|---|
-| Site summary | game-sim-site-v1 | docs/data/simulation_{season}_wk{week}.json | Compact UI/decision summary |
-| Research payload | game-sim-v1 | Local only | Full raw Monte Carlo draws |
-| Research tables | game-sim-v1 | data/simulations/{season}/*.parquet | Efficient analysis and calibration |
+| Site summary | game-sim-site-v2 | docs/data/simulation_{season}_wk{week}.json | Compact summaries |
+| Research tables | game-sim-v2 | data/simulations/{season}/*_{games,players,player_draws}.parquet | Local analysis; scoring with `scripts/evaluate_simulation.py` |
 
-Raw draw rows are never written to docs/data. A 1,000-draw slate can contain
-hundreds of thousands of player rows and is not appropriate for GitHub Pages.
+Raw draws never go to docs/data.
 
-## Raw schema: game-sim-v1
+## Site payload
 
-The full payload contains metadata, game_draws, player_draws, and
-player_summary. It is validated before publication: game/player references,
-draw IDs, summary values, and schema identity must agree exactly.
+- `schema_version`, `source_schema_version`, `seed`, `draws_per_player`,
+  `game_count`, `game_ids`.
+- `model_config`: `simulation_status="calibrated_copula"`, the selected
+  marginal candidate and why, `dependence="role_factor"` and its fit status,
+  `dependence_evidence` (the attached backtest's primaries and gate, or a note
+  that none was attached), artifact run id / fitted-through week / source
+  panel SHA-256, the served game fields used, `scope_caveat`, and the player
+  row accounting (offered, excluded by reason, simulated, outcome columns dropped).
+- `player_summary` (one row per player-game): `served_prediction`, `mean`,
+  `median`, `p10`, `p25`, `p75`, `p90`, `std`, `max`, `draw_count`.
+- `game_summary` (one row per game): `served_home_win_prob`, `served_margin`,
+  `served_total` (the game models' predictions passed through, **not
+  simulated**; null when absent) and `fantasy_sums`: home/away team fantasy
+  totals, QB+2 stacks (with `player_ids`) and the game fantasy total, each
+  with mean/p10/p50/p90.
 
-### game_draws
+Summaries are recomputed from the draws on every validation, so they cannot
+disagree with them.
 
-Required fields: game_id, draw, home_score, away_score, home_plays,
-away_plays, home_pass_attempts, away_pass_attempts.
+## Scope and status
 
-Current simulator also emits:
-
-- home_won
-- simulated_margin
-- simulated_total
-
-Each draw conserves score: home_score + away_score = simulated_total.
-The winner is sampled from home_win_prob; signed margin magnitude is calibrated
-to preserve the supplied expected margin before score clipping.
-
-### player_draws
-
-Required fields: game_id, draw, player_id, team, position, active,
-fantasy_points.
-
-### player_summary
-
-One row per player/game:
-
-- mean, median, p10, p25, p75, p90, standard deviation
-- probability of zero points and participation probability
-- maximum simulated point total
-
-## Site schema: game-sim-site-v1
-
-The site payload contains metadata, game_summary, and player_summary only.
-
-game_summary includes simulated home-win probability plus total and home-margin
-mean/p10/p50/p90. player_summary is copied from the validated raw payload.
-
-## Current quality status
-
-The generated command is explicitly labeled:
-
-- simulation_status: exploratory_volume_only
-- correlation_mode: independent_residuals
-- usage_mode: team_volume_only
-
-It is not a production DFS or lineup-optimization simulation yet.
-
-## Required production gates
-
-1. Availability: connect the participation model so draw-level active status
-   is a calibrated probability, not the current 1.0 fallback.
-2. Usage allocation: provide causal target, carry, and red-zone share priors
-   for each player, then conserve team pass attempts/targets/rushes per draw.
-   Point-projection means alone cannot identify a player usage distribution.
-3. Correlation fitting: train role-based out-of-fold residual correlation
-   artifacts at a stable game-role granularity. Do not fit covariance on a
-   fixed list of player IDs and apply it to another slate.
-4. Calibration: use held-out seasons to calibrate total/margin dispersion,
-   team pace/pass-rate response, player quantiles, and teammate correlation.
-5. Evaluation: require improvements in joint forecast score/correlation
-   calibration without unacceptable per-player MAE degradation before exposing
-   the output as a decision tool.
-
-Until all five gates pass, the site artifact is informational engineering
-output only, not a recommendation.
+- Draws are conditional on the player appearing; availability is not modelled.
+- On real OOF rows (GAPS.md, 2026-09-27) the calibrated marginal was a
+  significant CRPS improvement over the legacy pools; the copula's joint gain
+  was not significant although its correlations matched held-out ones. The
+  site output is informational, not a lineup or DFS recommendation.

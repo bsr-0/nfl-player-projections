@@ -15364,3 +15364,48 @@ NOT part of this backtest and is not calibrated. In a probe (home favored by
 correlated -0.11 with the team's own score, because simulated scores feed
 player points only through a leading-team pass-rate cut. It is not a usable
 model as written.
+
+## Game-script simulator replaced by the calibrated copula (2026-09-27)
+
+The production simulation (`scripts/generate_simulation_data.py` →
+`docs/data/simulation_*.json`, step 8 of `refresh_site_data.py`) now serves the
+calibrated copula instead of `game_simulation.simulate_players`, which the
+real-data probe above found unusable (mean drift from the served projection,
+zero-clipping, QB negatively correlated with his own team's score).
+
+- **One implementation.** `src/models/calibrated_simulation.py` holds the
+  selection, marginal, dependence and per-game draw code; the backtest,
+  `scripts/fit_simulation_artifacts.py` and the generator all call it.
+  `test_served_draws_equal_backtest_role_factor_draws` pins that served draws
+  are bit-identical to the backtest's `calibrated_role_factor` arm.
+- **Artifacts.** Fitted on a verified OOF panel keyed to the target game, with
+  the backtest's own selection rule at the week after the panel's last; saved
+  with hashes and provenance under `data/models/simulation/<run_id>/`
+  (gitignored, regenerable), `latest.json` pointing at the current run. An
+  optional verified backtest on the same panel is recorded as the dependence
+  evidence. Loading fails closed on any mismatch.
+- **Serving.** Outcome columns (`actual_points`) are dropped before anything is
+  built; opponent/schedule disagreement is an error; excluded players are
+  counted by reason in the payload; serve-time `is_cold_start` = not seen in
+  the fitting panel. Weeks at or before the artifacts' fitted-through week are
+  refused (their outcomes shaped the calibration).
+- **Schema game-sim-v2** replaces v1: no simulated scores; game-model
+  predictions passed through as `served_*`; team/stack/game fantasy sums from
+  the player draws. Dependence is on and labelled unproven (decision:
+  role-factor on; joint gain not yet significant on real data).
+- **Deleted:** `game_simulation.py`, `usage_allocation.py`,
+  `simulation_adapter.py`, `simulation_readiness.py`, the player-keyed
+  correlation model, `simulation_evaluation.game_draw_calibration`, and the
+  never-run RB-split experiment's code (`evaluate_rb_split.py`,
+  `rb_ppr_split.py`, `rb_split_evaluation.py`; its folder stays as a record,
+  marked superseded). The RB-split script had also been unrunnable since
+  `player_correlation.py`/`simulation_evaluation.py` changed, because it
+  hard-required their pinned hashes.
+
+**Blocker, not worked around:** no production OOF panel exists yet, so no
+serving artifacts can be fitted and step 8 fails (softly) until a walk-forward
+run writes one. Then:
+
+    python scripts/evaluate_calibrated_simulation.py --oof-run-dir <run> --output-dir <bt> --confirm-season 2025
+    python scripts/fit_simulation_artifacts.py --oof-run-dir <run> --backtest-run-dir <bt>
+    python scripts/generate_simulation_data.py --season 2026

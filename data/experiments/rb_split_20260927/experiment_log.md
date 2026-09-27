@@ -17,3 +17,14 @@
 - Before any scoring, clarified the optional-share invariant: adding an RB to an
   explicit target pool requires WR/TE to share that draw. Legacy/no-share paths
   remain bitwise unchanged; this does not alter archived replay inputs or cohorts.
+
+## Superseded, never run (2026-09-27)
+
+Retired before any replay was scored. The hypothesis modified the game-script
+simulator (`game_simulation.simulate_players`), which was deleted when the
+production simulation was replaced by the calibrated copula
+(`src/models/calibrated_simulation.py`; GAPS.md, "Game-script simulator replaced
+by the calibrated copula"). `scripts/evaluate_rb_split.py`,
+`src/models/rb_ppr_split.py` and `src/evaluation/rb_split_evaluation.py` were
+removed with it. This folder (protocol, pinned baseline, frozen inputs) is kept
+as the record; no result from it exists or should be cited.

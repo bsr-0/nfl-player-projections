@@ -32,7 +32,6 @@ import hashlib
 import json
 from pathlib import Path
 import sys
-from typing import Iterable
 import uuid
 
 import numpy as np
@@ -42,6 +41,27 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.verify_oof_panel import verify  # noqa: E402
+from src.models.calibrated_simulation import (  # noqa: E402
+    ANALOG_K,
+    COVERAGE_80_LOWER,
+    COVERAGE_80_UPPER,
+    DEFAULT_CANDIDATE,
+    LEGACY_MIN_STRATUM_ROWS,
+    SELECTION_BOOTSTRAP,
+    Candidate,
+    apply_dependence,
+    attach_roles,
+    candidate_grid,
+    derived_seed as _seed,
+    evidence_for_week,
+    game_seed,
+    normal_score_pairs,
+    select_candidate,
+    sha256_file as _sha256,
+    sum_groups,
+    validate_panel,
+    week_ids as _week_ids,
+)
 from src.models.oof_capture import ZERO_FLOOR, cluster_bootstrap_distribution, target_game_panel  # noqa: E402
 from src.models.player_correlation import (  # noqa: E402
     fit_factor_copula,
@@ -49,13 +69,8 @@ from src.models.player_correlation import (  # noqa: E402
     pooled_pair_correlations,
 )
 from src.models.residual_calibration import (  # noqa: E402
-    ANALOG_FAMILIES,
-    fit_empirical_residual_calibration,
-    fit_prediction_analog_calibration,
     independent_residual_matrix,
-    induce_role_rank_dependence,
     normal_scores,
-    role_keys_from_panel_game,
     save_calibration,
 )
 from src.models.simulation_evaluation import (  # noqa: E402
@@ -67,17 +82,10 @@ from src.models.simulation_evaluation import (  # noqa: E402
 from src.utils.multiple_comparisons import bootstrap_two_sided_p_value, holm_bonferroni  # noqa: E402
 
 
-LEGACY_MIN_STRATUM_ROWS = (25, 50, 100)
-ANALOG_K = (100, 250, 500)
-DEFAULT_MIN_STRATUM_ROWS = 50
-COVERAGE_80_LOWER = 0.75
-COVERAGE_80_UPPER = 0.85
 IDENTITY_COLUMNS = ("season", "week", "game_id", "player_id")
 DRAW_METADATA_COLUMNS = ("team", "position", "predicted_points", "is_cold_start")
 N_BOOTSTRAP = 1_000
-SELECTION_BOOTSTRAP = 200
 ALPHA = 0.05
-STACK_PASS_CATCHERS = 2
 
 PRODUCTION = "production_marginal"
 LEGACY_INDEPENDENT = "calibrated_independent_legacy"
@@ -111,171 +119,8 @@ PANEL_SCOPE_CAVEAT = (
 # Small helpers
 # ---------------------------------------------------------------------------
 
-def _seed(seed: int, value: str) -> int:
-    digest = hashlib.blake2b(value.encode(), digest_size=8).digest()
-    return (int(seed) + int.from_bytes(digest, "little")) % (2**63 - 1)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _week_ids(frame: pd.DataFrame) -> np.ndarray:
-    return frame["season"].astype(int).to_numpy() * 100 + frame["week"].astype(int).to_numpy()
-
-
 def _week_cluster(frame: pd.DataFrame) -> pd.Series:
     return frame["season"].astype(int).astype(str) + "-" + frame["week"].astype(int).map("{:02d}".format)
-
-
-def _validate_panel(panel: pd.DataFrame) -> None:
-    required = {
-        "player_id", "season", "week", "game_id", "team", "position",
-        "predicted_points", "actual_points", "residual", "is_cold_start",
-        "home_team", "away_team",
-    }
-    if missing := required - set(panel.columns):
-        raise ValueError(f"verified OOF panel lacks simulation columns: {sorted(missing)}")
-    if panel.duplicated(["player_id", "season", "week"]).any():
-        raise ValueError("OOF panel has duplicate player-week rows")
-    for column in ("season", "week", "predicted_points", "actual_points", "residual"):
-        values = pd.to_numeric(panel[column], errors="coerce")
-        if values.isna().any() or not np.isfinite(values.to_numpy(dtype=float)).all():
-            raise ValueError(f"OOF panel has null or nonfinite {column}")
-    weeks = panel["week"].astype(int)
-    if ((weeks < 1) | (weeks > 99)).any():
-        raise ValueError("OOF panel weeks must lie in 1..99")
-    if not np.allclose(panel["residual"].to_numpy(float),
-                       panel["predicted_points"].to_numpy(float) - panel["actual_points"].to_numpy(float),
-                       atol=1e-12, rtol=0):
-        raise ValueError("OOF residuals are not predicted_points - actual_points")
-    per_game = panel.groupby("game_id")[["season", "week"]].nunique()
-    if (per_game > 1).any().any():
-        raise ValueError("a game_id spans more than one season-week")
-
-
-def _attach_roles(panel: pd.DataFrame) -> pd.Series:
-    """Role keys from prediction-time fields only, computed once per game."""
-    roles = pd.Series(index=panel.index, dtype=object)
-    for _, game in panel.groupby("game_id", sort=True):
-        roles.loc[game.index] = role_keys_from_panel_game(game)
-    return roles
-
-
-# ---------------------------------------------------------------------------
-# Marginal candidates and causal selection
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class Candidate:
-    family: str  # "legacy" (stratified pools) or an analog family
-    size: int    # min_stratum_rows for legacy, k for analog
-
-    @property
-    def id(self) -> str:
-        return f"{self.family}:{self.size}"
-
-
-DEFAULT_CANDIDATE = Candidate("legacy", DEFAULT_MIN_STRATUM_ROWS)
-
-
-def candidate_grid(legacy_sizes: Iterable[int] = LEGACY_MIN_STRATUM_ROWS,
-                   analog_k: Iterable[int] = ANALOG_K) -> tuple[Candidate, ...]:
-    legacy = sorted({int(value) for value in legacy_sizes})
-    analog = sorted({int(value) for value in analog_k})
-    if any(value < 2 for value in legacy + analog):
-        raise ValueError("candidate sizes must be integers >= 2")
-    if DEFAULT_MIN_STRATUM_ROWS not in legacy:
-        raise ValueError(f"legacy candidates must include the default {DEFAULT_MIN_STRATUM_ROWS}")
-    return tuple([Candidate("legacy", value) for value in legacy]
-                 + [Candidate(family, value) for family in ANALOG_FAMILIES for value in analog])
-
-
-def fit_candidate(candidate: Candidate, history: pd.DataFrame):
-    if candidate.family == "legacy":
-        return fit_empirical_residual_calibration(history, min_stratum_rows=candidate.size)
-    return fit_prediction_analog_calibration(history, family=candidate.family, k=candidate.size)
-
-
-def support_metrics(calibration, rows: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    """Exact CRPS and 80% coverage of each row's full support (no sampling).
-
-    Equal to ``empirical_crps(predicted + support, actual)``: CRPS is shift
-    invariant in its spread term, so only the sorted deviations are needed.
-    """
-    crps = np.empty(len(rows))
-    covered = np.empty(len(rows))
-    for index, row in enumerate(rows.itertuples(index=False)):
-        support = calibration.sorted_support_deviations(
-            position=row.position, predicted_points=float(row.predicted_points),
-            is_cold_start=bool(row.is_cold_start))
-        observed = float(row.actual_points) - float(row.predicted_points)
-        n = len(support)
-        crps[index] = (np.abs(support - observed).mean()
-                       - np.dot(2 * np.arange(n) - n + 1, support) / (n * n))
-        low, high = np.quantile(support, [.10, .90])
-        covered[index] = float(low <= observed <= high)
-    return crps, covered
-
-
-def select_candidate(evidence: pd.DataFrame, *, target_week_id: int,
-                     candidates: tuple[Candidate, ...], n_boot: int = SELECTION_BOOTSTRAP,
-                     seed: int = 0) -> dict:
-    """Choose a marginal family using only weeks strictly before the target.
-
-    Among candidates whose rolling 80% coverage sits in the gate band, take
-    the lowest CRPS -- but leave the legacy default only when the paired,
-    week-clustered bootstrap CI of (best - default) lies wholly below zero.
-    """
-    ids = [candidate.id for candidate in candidates]
-    if DEFAULT_CANDIDATE.id not in ids:
-        raise ValueError("candidate set must include the default")
-    prior = evidence.loc[(evidence["week_id"] < target_week_id) & evidence["candidate"].isin(ids)]
-    base = {"target_week_id": int(target_week_id), "evidence_weeks": int(prior["week_id"].nunique()),
-            "evidence_rows": int((prior["candidate"] == DEFAULT_CANDIDATE.id).sum())}
-    if prior.empty:
-        return {**base, "candidate": DEFAULT_CANDIDATE.id, "reason": "no_prior_evidence", "summary": []}
-    wide = prior.pivot_table(index=["week_id", "player_id"], columns="candidate",
-                             values=["crps", "coverage_80"], aggfunc="first")
-    if wide.isna().any().any():
-        raise ValueError("candidate evidence does not cover identical rows")
-    summary = []
-    for position, candidate_id in enumerate(ids):
-        coverage = float(wide[("coverage_80", candidate_id)].mean())
-        summary.append({"candidate": candidate_id, "order": position,
-                        "crps": float(wide[("crps", candidate_id)].mean()), "coverage_80": coverage,
-                        "in_band": bool(COVERAGE_80_LOWER <= coverage <= COVERAGE_80_UPPER)})
-    by_id = {entry["candidate"]: entry for entry in summary}
-    in_band = [entry for entry in summary if entry["in_band"]]
-    default = by_id[DEFAULT_CANDIDATE.id]
-    if not default["in_band"]:
-        if in_band:
-            chosen = min(in_band, key=lambda e: (e["crps"], e["order"]))
-            return {**base, "candidate": chosen["candidate"], "reason": "default_outside_coverage_band",
-                    "summary": summary}
-        chosen = min(summary, key=lambda e: (abs(e["coverage_80"] - .8), e["crps"], e["order"]))
-        return {**base, "candidate": chosen["candidate"], "reason": "no_candidate_in_coverage_band",
-                "summary": summary}
-    best = min(in_band, key=lambda e: (e["crps"], e["order"]))
-    if best["candidate"] == DEFAULT_CANDIDATE.id:
-        return {**base, "candidate": DEFAULT_CANDIDATE.id, "reason": "default_is_best", "summary": summary}
-    delta = (wide[("crps", best["candidate"])] - wide[("crps", DEFAULT_CANDIDATE.id)]).to_numpy(float)
-    clusters = wide.index.get_level_values("week_id").to_numpy()
-    draws = cluster_bootstrap_distribution(delta, clusters, statistic=np.mean, n_boot=n_boot,
-                                           seed=_seed(seed, f"select:{target_week_id}:{','.join(ids)}"))
-    if not len(draws):
-        return {**base, "candidate": DEFAULT_CANDIDATE.id, "reason": "insufficient_evidence_weeks",
-                "summary": summary}
-    high = float(np.percentile(draws, 97.5))
-    if high < 0:
-        return {**base, "candidate": best["candidate"], "reason": "significant_improvement_over_default",
-                "delta_ci_high": high, "summary": summary}
-    return {**base, "candidate": DEFAULT_CANDIDATE.id, "reason": "improvement_not_significant",
-            "best_rejected": best["candidate"], "delta_ci_high": high, "summary": summary}
 
 
 # ---------------------------------------------------------------------------
@@ -296,18 +141,6 @@ def _fit_role_model(history: pd.DataFrame):
             if role in row:
                 matrix[i, j] = row[role]
     return fit_sparse_role_residual_correlation(matrix, role_keys, shrinkage=.25, min_pair_rows=2)
-
-
-def _dependent(independent: np.ndarray, roles: tuple[str, ...], model, seed: int) -> np.ndarray:
-    output = independent.copy()
-    if model is None:
-        return output
-    available = [i for i, role in enumerate(roles) if model.covers(role)]
-    if len(available) >= 2:
-        output[:, available] = induce_role_rank_dependence(
-            independent[:, available], role_keys=tuple(roles[i] for i in available),
-            correlation_model=model, seed=seed)
-    return output
 
 
 # ---------------------------------------------------------------------------
@@ -380,35 +213,11 @@ def _joint_game_row(game_rows: pd.DataFrame, matrix: np.ndarray) -> dict:
                 samples, observation, rows["predicted_points"].to_numpy(float), p=.5)}
 
 
-def _sum_groups(rows: pd.DataFrame) -> list[tuple[str, str, np.ndarray]]:
-    """(kind, side, member indices) for stack, team_total and game_total.
-
-    stack = the team's highest-projected QB plus its two highest-projected
-    WR/TE (the standard QB+2 stack); ties break on player_id.
-    """
-    groups = []
-    ranked = rows.assign(_order=np.arange(len(rows))).sort_values(
-        ["predicted_points", "player_id"], ascending=[False, True], kind="mergesort")
-    for side, team in (("home", rows["home_team"].iloc[0]), ("away", rows["away_team"].iloc[0])):
-        on_team = ranked[ranked["team"] == team]
-        if on_team.empty:
-            continue
-        groups.append(("team_total", side, np.sort(on_team["_order"].to_numpy())))
-        quarterbacks = on_team[on_team["position"].astype(str).str.upper() == "QB"]
-        catchers = on_team[on_team["position"].astype(str).str.upper().isin(["WR", "TE"])]
-        if len(quarterbacks) and len(catchers) >= STACK_PASS_CATCHERS:
-            members = np.concatenate([quarterbacks["_order"].to_numpy()[:1],
-                                      catchers["_order"].to_numpy()[:STACK_PASS_CATCHERS]])
-            groups.append(("stack", side, np.sort(members)))
-    groups.append(("game_total", "both", np.arange(len(rows))))
-    return groups
-
-
 def _sum_rows(game_rows: pd.DataFrame, matrix: np.ndarray) -> list[dict]:
     rows, samples = _game_view(game_rows, matrix)
     actual = rows["actual_points"].to_numpy(float)
     output = []
-    for kind, side, members in _sum_groups(rows):
+    for kind, side, members in sum_groups(rows):
         totals = samples[:, members].sum(axis=1)
         truth = float(actual[members].sum())
         output.append({
@@ -633,10 +442,10 @@ def run(panel: pd.DataFrame, *, draws: int, seed: int,
                          f"{len(PRIMARY_COMPARISONS)} primaries; use >= {minimum_bootstrap_for_holm()}")
     candidates = candidates or candidate_grid()
     legacy_candidates = tuple(c for c in candidates if c.family == "legacy")
-    _validate_panel(panel)
+    validate_panel(panel)
     panel, phase = _phase(panel.reset_index(drop=True), confirm_season, run_confirmation)
     panel = panel.reset_index(drop=True)
-    panel["role_key"] = _attach_roles(panel)
+    panel["role_key"] = attach_roles(panel)
     week_ids = _week_ids(panel)
     first_season = int(panel["season"].min())
     eligible = sorted({int(w) for w in week_ids[panel["season"].astype(int).to_numpy() > first_season]})
@@ -651,14 +460,7 @@ def run(panel: pd.DataFrame, *, draws: int, seed: int,
     for target in eligible:
         history = panel.loc[week_ids < target]
         current = panel.loc[week_ids == target]
-        fits = {candidate.id: fit_candidate(candidate, history) for candidate in candidates}
-        week_evidence = []
-        for candidate in candidates:
-            crps, covered = support_metrics(fits[candidate.id], current)
-            week_evidence.append(pd.DataFrame({
-                "candidate": candidate.id, "week_id": target, "season": current["season"].to_numpy(),
-                "week": current["week"].to_numpy(), "player_id": current["player_id"].to_numpy(),
-                "crps": crps, "coverage_80": covered}))
+        fits, week_evidence = evidence_for_week(history, current, candidates, target)
         if target in scored_weeks:
             prior = pd.concat(evidence_parts, ignore_index=True) if evidence_parts else pd.DataFrame(
                 columns=["candidate", "week_id", "player_id", "crps", "coverage_80"])
@@ -667,24 +469,25 @@ def run(panel: pd.DataFrame, *, draws: int, seed: int,
             legacy = select_candidate(prior, target_week_id=target, candidates=legacy_candidates,
                                       n_boot=selection_bootstrap, seed=seed)
             calibration, legacy_calibration = fits[full["candidate"]], fits[legacy["candidate"]]
-            pairs = pooled_pair_correlations(normal_scores(history, calibration),
-                                             history["role_key"].tolist(), history["game_id"].to_numpy())
+            pairs = normal_score_pairs(history, calibration)
             models = {TEAM_FACTOR: fit_factor_copula(pairs, structure="team"),
                       ROLE_FACTOR: fit_factor_copula(pairs, structure="role"),
                       LEGACY_ROLE: _fit_role_model(history)}
             week_parts = []
             for game_id, game in current.groupby("game_id", sort=True):
-                game_seed = _seed(seed, f"game:{game_id}")
+                base_seed = game_seed(seed, game_id)
                 predicted = game["predicted_points"].to_numpy(float)
-                independent = independent_residual_matrix(game, calibration, n_draws=draws, seed=game_seed)
+                independent = independent_residual_matrix(game, calibration, n_draws=draws, seed=base_seed)
                 roles = tuple(game["role_key"])
                 matrix_parts[PRODUCTION].append(np.broadcast_to(predicted, (draws, len(game))).copy())
                 matrix_parts[LEGACY_INDEPENDENT].append(predicted + independent_residual_matrix(
-                    game, legacy_calibration, n_draws=draws, seed=game_seed))
+                    game, legacy_calibration, n_draws=draws, seed=base_seed))
                 matrix_parts[INDEPENDENT].append(predicted + independent)
                 for mode in (TEAM_FACTOR, ROLE_FACTOR, LEGACY_ROLE):
-                    matrix_parts[mode].append(predicted + _dependent(
-                        independent, roles, models[mode], game_seed + 1))
+                    # Must stay the exact sequence calibrated_simulation.simulate_game
+                    # serves (pinned by test_served_draws_equal_backtest_role_factor_draws).
+                    matrix_parts[mode].append(predicted + apply_dependence(
+                        independent, roles, models[mode], base_seed + 1))
                 week_parts.append(game.assign(normal_score=normal_scores(game, calibration)))
             scored_parts.extend(week_parts)
             week_rows = pd.concat(week_parts)
@@ -701,7 +504,7 @@ def run(panel: pd.DataFrame, *, draws: int, seed: int,
                                "factor_status": {m: models[m].diagnostics.get("status") for m in FACTOR_MODES}})
             calibrations[season] = {"week": week, "full": calibration, "legacy": legacy_calibration}
             factor_models.setdefault(season, {})[week] = {m: models[m].to_dict() for m in FACTOR_MODES}
-        evidence_parts.append(pd.concat(week_evidence, ignore_index=True))
+        evidence_parts.append(week_evidence)
 
     scored = pd.concat(scored_parts, ignore_index=True)
     matrices = {mode: np.concatenate(parts, axis=1) for mode, parts in matrix_parts.items()}
