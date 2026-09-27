@@ -1173,7 +1173,7 @@ def train_models(positions: list = None,
                         metadata={
                             "folds": fold_lineage,
                             "target_semantics": "served one-week fantasy-point prediction versus actual target row",
-                            "game_context_source": "canonical schedule exact season/week/team/opponent match",
+                            "game_context_source": "canonical schedule exact season/target_week/target_team/target_opponent match (next observed row)",
                             "model_target_configuration": dict(MODEL_CONFIG.get("position_target_type", {})),
                             "training_configuration": {
                                 "tune_hyperparameters": bool(tune_hyperparameters),

@@ -42,7 +42,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.verify_oof_panel import verify  # noqa: E402
-from src.models.oof_capture import ZERO_FLOOR, cluster_bootstrap_distribution  # noqa: E402
+from src.models.oof_capture import ZERO_FLOOR, cluster_bootstrap_distribution, target_game_panel  # noqa: E402
 from src.models.player_correlation import (  # noqa: E402
     fit_factor_copula,
     fit_sparse_role_residual_correlation,
@@ -928,7 +928,8 @@ def main() -> int:
     candidates = candidate_grid(args.legacy_min_stratum_rows, args.analog_k)
     config = run_config(args, candidates)
     verification = verify(args.oof_run_dir)
-    panel = pd.read_parquet(args.oof_run_dir / "panel.parquet")
+    # Simulate the game each actual came from, not the forecast origin row.
+    panel = target_game_panel(pd.read_parquet(args.oof_run_dir / "panel.parquet"))
     result = run(panel, draws=args.draws, seed=args.seed, candidates=candidates,
                  n_bootstrap=args.n_bootstrap, confirm_season=args.confirm_season,
                  run_confirmation=args.run_confirmation)

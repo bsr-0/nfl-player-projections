@@ -107,6 +107,48 @@ class OOFLeakageError(RuntimeError):
     """A fold's captured rows are not out-of-fold."""
 
 
+# The game whose outcome `actual_points` holds. target_1w
+# (feature_preparation._create_horizon_targets) is the player's NEXT observed
+# row within the season, so a row's own week/team/opponent identify the
+# forecast origin, not the scored game. Anything grouping residuals into games
+# (the correlation layer) must use these instead.
+TARGET_GAME_COLUMNS = ("target_week", "target_team", "target_opponent")
+
+
+def next_game_identity(frame: pd.DataFrame) -> pd.DataFrame:
+    """Week/team/opponent of each row's next observed game in the same season.
+
+    Mirrors _create_horizon_targets' shift(-1) within (player_id, season), so
+    it names exactly the game target_1w was taken from. When the frame holds
+    target_1w and fantasy_points, the mapping is checked against them: a row
+    removed between target construction and capture would otherwise shift
+    every later row onto the wrong game silently.
+    """
+    if frame.duplicated(["player_id", "season", "week"]).any():
+        raise ValueError("fold frame has duplicate player-season-week rows")
+    ordered = frame.sort_values(["player_id", "season", "week"], kind="mergesort")
+    group = ordered.groupby(["player_id", "season"], sort=False)
+    def _next(column: str) -> pd.Series:
+        # None, not NaN, for "no next game": what a parquet round trip returns.
+        values = group[column].shift(-1).astype(object)
+        return values.where(values.notna(), None)
+
+    out = pd.DataFrame({
+        "target_week": group["week"].shift(-1).astype("Int64"),
+        "target_team": _next("team"),
+        "target_opponent": _next("opponent"),
+    }, index=ordered.index)
+    if {"target_1w", "fantasy_points"} <= set(frame.columns):
+        stated = pd.to_numeric(ordered["target_1w"], errors="coerce")
+        derived = pd.to_numeric(group["fantasy_points"].shift(-1), errors="coerce")
+        has = stated.notna()
+        if (derived[has].isna().any()
+                or not np.allclose(derived[has], stated[has], atol=1e-4, rtol=0)):
+            raise ValueError("next observed row does not reproduce target_1w; "
+                             "the fold frame lost or reordered rows after targets were built")
+    return out.reindex(frame.index)
+
+
 def capture_fold_rows(
     test_data: pd.DataFrame,
     *,
@@ -137,8 +179,11 @@ def capture_fold_rows(
         if column not in test_data.columns:
             raise ValueError(f"test_data is missing {column!r}")
 
-    rows = test_data.loc[:, [*IDENTITY_COLUMNS, PREDICTION_COLUMN, ACTUAL_COLUMN]].copy()
+    frame = test_data.reset_index(drop=True)
+    target_game = next_game_identity(frame)
+    rows = frame.loc[:, [*IDENTITY_COLUMNS, PREDICTION_COLUMN, ACTUAL_COLUMN]].copy()
     rows = rows.rename(columns={ACTUAL_COLUMN: "actual_points"})
+    rows = pd.concat([rows, target_game], axis=1)
 
     # A row the model could not score is not evidence about the model. Drop
     # it here rather than letting a NaN-filled zero masquerade as a
@@ -186,13 +231,20 @@ def fold_coverage(
     coverage["test_season"] = int(test_season)
     coverage["n_dropped"] = coverage["n_offered"] - coverage["n_captured"]
     skipped = set(str(p) for p in (skipped_positions or ()))
-    coverage["n_intentionally_skipped"] = np.where(
-        coverage["position"].astype(str).isin(skipped), coverage["n_offered"], 0)
+    is_skipped = coverage["position"].astype(str).isin(skipped)
+    coverage["n_intentionally_skipped"] = np.where(is_skipped, coverage["n_offered"], 0)
+    # A player's last observed game of the season has no next game, so no
+    # target_1w: an expected drop, not a missing prediction.
+    frame = test_data.reset_index(drop=True)
+    no_target = frame.loc[next_game_identity(frame)["target_week"].isna()]
+    no_target_counts = no_target.groupby("position").size()
+    coverage["n_no_target_game"] = np.where(
+        is_skipped, 0,
+        coverage["position"].map(no_target_counts).fillna(0).astype(int))
     coverage["n_missing_prediction_or_actual"] = (
-        coverage["n_dropped"] - coverage["n_intentionally_skipped"]
-    ).clip(lower=0)
+        coverage["n_dropped"] - coverage["n_intentionally_skipped"] - coverage["n_no_target_game"])
     return coverage[["test_season", "position", "n_offered", "n_captured",
-                     "n_dropped", "n_intentionally_skipped",
+                     "n_dropped", "n_intentionally_skipped", "n_no_target_game",
                      "n_missing_prediction_or_actual"]]
 
 
@@ -283,18 +335,21 @@ def add_career_experience_segments(
 
 
 def add_game_context(panel: pd.DataFrame, *, db_path=None) -> pd.DataFrame:
-    """Attach the scheduled game and home/away orientation to OOF rows.
+    """Attach the TARGET game and its home/away orientation to OOF rows.
 
     A role correlation is portable only when its role keys have a stable game
-    side. The player panel already carries team/opponent, but not which team
-    was home. Resolve that from the canonical schedule by exact season/week
-    and team pair; this is static schedule context, never an outcome field.
+    side. Resolve that from the canonical schedule by exact season, target
+    week and target team pair (see TARGET_GAME_COLUMNS: the row's own
+    week/team/opponent are the forecast origin, not the game actual_points
+    came from); this is static schedule context, never an outcome field.
     """
     out = panel.copy()
-    required = {"season", "week", "team", "opponent"}
+    required = {"season", *TARGET_GAME_COLUMNS}
     missing = required - set(out.columns)
     if missing:
         raise ValueError(f"cannot attach game context; panel lacks {sorted(missing)}")
+    if out[list(TARGET_GAME_COLUMNS)].isna().any().any():
+        raise ValueError("OOF rows lack a next observed target game")
     if out.empty:
         out["game_id"] = pd.Series(dtype="object")
         out["home_team"] = pd.Series(dtype="object")
@@ -323,16 +378,43 @@ def add_game_context(panel: pd.DataFrame, *, db_path=None) -> pd.DataFrame:
         schedule["week"].astype(int).astype(str) + "_" +
         schedule["home_team"].astype(str) + "_" + schedule["away_team"].astype(str))
     home = schedule.copy()
-    home["team"], home["opponent"] = home["home_team"], home["away_team"]
+    home["target_team"], home["target_opponent"] = home["home_team"], home["away_team"]
     away = schedule.copy()
-    away["team"], away["opponent"] = away["away_team"], away["home_team"]
-    oriented = pd.concat([home, away], ignore_index=True)
+    away["target_team"], away["target_opponent"] = away["away_team"], away["home_team"]
+    oriented = pd.concat([home, away], ignore_index=True).rename(columns={"week": "target_week"})
+    oriented["target_week"] = oriented["target_week"].astype("Int64")
+    out["target_week"] = out["target_week"].astype("Int64")
+    keys = ["season", *TARGET_GAME_COLUMNS]
     out = out.merge(
-        oriented[["season", "week", "team", "opponent", "game_id", "home_team", "away_team"]],
-        on=["season", "week", "team", "opponent"], how="left", validate="many_to_one")
+        oriented[[*keys, "game_id", "home_team", "away_team"]],
+        on=keys, how="left", validate="many_to_one")
     if out[["game_id", "home_team", "away_team"]].isna().any().any():
-        sample = out.loc[out["game_id"].isna(), ["season", "week", "team", "opponent"]].head(5)
+        sample = out.loc[out["game_id"].isna(), keys].head(5)
         raise ValueError(f"OOF rows lack a scheduled game: {sample.to_dict('records')}")
+    return out
+
+
+def target_game_panel(panel: pd.DataFrame) -> pd.DataFrame:
+    """Re-key a game-context panel from forecast origin to its target game.
+
+    week/team/opponent become the game actual_points came from; the origin
+    keys are kept as origin_*. Game-level consumers (same-game residual
+    vectors, rolling refits by week) must use this view: grouping by origin
+    pairs a player with teammates' and opponents' residuals from other games.
+    """
+    required = {*TARGET_GAME_COLUMNS, "game_id", "home_team", "away_team"}
+    if missing := required - set(panel.columns):
+        raise ValueError(f"panel lacks target-game columns {sorted(missing)}; "
+                         "it predates target-game capture and cannot be simulated")
+    if panel[list(required)].isna().any().any():
+        raise ValueError("panel has rows without a target game")
+    out = panel.rename(columns={"week": "origin_week", "team": "origin_team",
+                                "opponent": "origin_opponent"})
+    out["week"] = out.pop("target_week").astype(int)
+    out["team"] = out.pop("target_team")
+    out["opponent"] = out.pop("target_opponent")
+    if (out["week"] <= out["origin_week"].astype(int)).any():
+        raise ValueError("target week must follow its forecast origin")
     return out
 
 

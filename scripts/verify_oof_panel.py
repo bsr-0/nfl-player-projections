@@ -79,15 +79,21 @@ def verify(run_dir: Path) -> dict:
     if int(manifest.get("n_players", -1)) != panel["player_id"].nunique():
         _fail("manifest player count does not match panel")
     if manifest.get("game_context_source"):
-        context_columns = {"game_id", "home_team", "away_team"}
+        # Game context describes the TARGET game (the next observed row whose
+        # outcome actual_points holds), not the forecast-origin row.
+        context_columns = {"game_id", "home_team", "away_team",
+                           "target_week", "target_team", "target_opponent"}
         if not context_columns <= set(panel.columns):
-            _fail("manifest declares game context but panel lacks game context columns")
+            _fail("manifest declares game context but panel lacks target-game context columns")
         if panel[list(context_columns)].isna().any().any():
             _fail("panel game context contains nulls")
-        valid_side = ((panel["team"] == panel["home_team"]) & (panel["opponent"] == panel["away_team"])) | (
-            (panel["team"] == panel["away_team"]) & (panel["opponent"] == panel["home_team"]))
+        team, opponent = panel["target_team"], panel["target_opponent"]
+        valid_side = ((team == panel["home_team"]) & (opponent == panel["away_team"])) | (
+            (team == panel["away_team"]) & (opponent == panel["home_team"]))
         if not valid_side.all():
-            _fail("panel game context does not match player team/opponent")
+            _fail("panel game context does not match player target team/opponent")
+        if not (panel["target_week"].astype(int) > panel["week"].astype(int)).all():
+            _fail("panel target week does not follow its forecast origin")
 
     keys = ["player_id", "season", "week"]
     if panel.duplicated(keys).any():
@@ -125,7 +131,8 @@ def verify(run_dir: Path) -> dict:
         _fail("coverage.json is required for a verified run")
     coverage = pd.DataFrame(json.loads(coverage_path.read_text()))
     coverage_required = {"test_season", "position", "n_offered", "n_captured", "n_dropped",
-                         "n_intentionally_skipped", "n_missing_prediction_or_actual"}
+                         "n_intentionally_skipped", "n_no_target_game",
+                         "n_missing_prediction_or_actual"}
     if not coverage_required <= set(coverage.columns):
         _fail(f"coverage missing required columns: {sorted(coverage_required - set(coverage.columns))}")
     if (coverage["n_dropped"] != coverage["n_offered"] - coverage["n_captured"]).any():
