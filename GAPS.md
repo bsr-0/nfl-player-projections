@@ -15333,3 +15333,34 @@ season-final row (no next game, so no target) as an unexplained drop, and
 ever have verified, and the simulation CLI (which verifies first) could never
 have run. These rows are now counted as `n_no_target_game`; the clip that
 hid negative (inconsistent) counts is removed.
+
+### First real-data check of the calibrated simulation (2026-09-27)
+
+No production OOF panel exists yet, so the backtest was run as research on
+Plan A's validated OOF rows (`full_ppr_raw_truth_20260924/ppr_oof_rows.csv`,
+already keyed to the target game), with the nflverse schedule. Rows were
+kept when the pregame prediction was >= 1 point (16,945 rows). 2024-2025 were
+scored (544 games, 11,626 player-games) with 1,000 draws. This was a
+development run with no withheld season. Scratch script, not committed.
+
+- Marginals: analog vs legacy CRPS -0.131 (95% CI -0.141..-0.118,
+  Holm-significant); 80% coverage 0.843 vs 0.816; draws below the
+  position's observed minimum 6.4% vs 14.5%. The analog marginal is a real
+  improvement over the pooled legacy marginal.
+- Dependence: fitted role correlations track held-out ones (QB1-WR1 0.20
+  vs 0.20, QB1-TE1 0.17 vs 0.11), and stack 80% coverage goes from 0.77
+  (independent) to 0.82 (role factor). But no primary joint comparison is
+  close to significant: variogram -0.0005 (CI -0.0015..0.0005); stack CRPS
+  -0.0002 (CI -0.027..0.026). The team factor collapses to near-independence
+  (pooled same-team correlation about 0.01), so its baseline is weak.
+- Not tested: Plan A predictions are not the served model. Rerun on the
+  production panel once a walk-forward run writes one.
+
+The game-script simulator (`game_simulation.simulate_players`, the path
+`generate_simulation_data.py` writes to `docs/data/simulation_*.json`) is
+NOT part of this backtest and is not calibrated. In a probe (home favored by
+9, 20k draws), means drifted from the served projection (QB 18.0 -> 17.3;
+3-point WR 3.0 -> 3.4 from clipping Gaussian noise at zero), and QB points
+correlated -0.11 with the team's own score, because simulated scores feed
+player points only through a leading-team pass-rate cut. It is not a usable
+model as written.
