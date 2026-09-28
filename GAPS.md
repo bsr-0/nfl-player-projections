@@ -15358,3 +15358,53 @@ season-final row (no next game, so no target) as an unexplained drop, and
 ever have verified, and the simulation CLI (which verifies first) could never
 have run. These rows are now counted as `n_no_target_game`; the clip that
 hid negative (inconsistent) counts is removed.
+
+## Two more end-of-run OOF crashes, and a smoke run to find the next one in minutes (2026-09-28)
+
+Every walk-forward OOF failure so far has come after 15-20 hours of tuning,
+at the steps between the last fold and a verified panel. Two more were
+waiting behind the ones already fixed:
+
+- **The target-game check (77e6c99, cherry-picked above) failed every real
+  fold.** It required `target_1w == next row's fantasy_points`, but
+  `_prepare_training_data` winsorizes test `target_1w` to per-position
+  training quantiles and leaves `fantasy_points` alone, so any clipped row
+  (a boom game, or a negative score) raised "does not reproduce target_1w".
+  Reproduced with the real `_create_horizon_targets` plus the pipeline's
+  clip. That branch had never run capture on real data ("No production OOF
+  panel exists yet"). The check now compares `target_1w` with
+  `clip(next fantasy_points)` inside each position's observed `target_1w`
+  range, which reproduces the winsorization without knowing its bounds. It
+  still catches a lost row whenever the shifted value lands inside that
+  range; a shift that lands exactly on a range edge is indistinguishable
+  from a clip, which only tiny frames can produce.
+- **Target games recorded as a team playing itself** (`team == opponent`,
+  a few rows per season per the 2026-09-28 local investigation) match no
+  schedule entry, so `add_game_context` rejected the whole panel. Such rows
+  are now excluded at capture and counted as `n_invalid_target_game` in
+  coverage; the verifier requires the column and now also checks that the
+  drop categories add up to `n_dropped`, so inflating an "explained"
+  category cannot hide a lost row. The rows remain in training. Their root
+  cause is NOT established: this repo rewrites `team`/`opponent` itself
+  (`nfl_data_loader.py` via `team_norm`/`opponent_norm`; the play-by-play
+  path derives opponent from `defteam`), so "upstream nflverse defect" is
+  unverified. Check the `source` column of those rows before fixing them.
+
+Open methodology question, not changed here: the panel's `actual_points` is
+the winsorized `target_1w`, not the raw outcome, so boom-game residuals are
+truncated at the training 99th percentile. That matches the aggregate
+walk-forward metrics, but understates residual tails for the simulation
+layer.
+
+`scripts/smoke_test_oof.py` runs the same walk-forward (same folds,
+positions, data gates, feature pipeline, capture, panel assembly) with
+Optuna off, then runs the panel verifier; exit 0 means a verified panel.
+Models train in a temporary MODELS_DIR, and all outputs go to
+`data/experiments/oof_smoke/<stamp>/` (gitignored) via the new
+`train_models(oof_output_dir=...)`, so it cannot touch served artifacts, the
+real `oof_panels/`, the "latest" pointer or `walk_forward_fold_metrics.json`.
+It still reads and may refresh the database, so do not run it beside a real
+training job. `tests/test_smoke_test_oof.py` drives it through the real
+`train_models` walk-forward with training, data loading and the database
+stubbed; it fails if the numpy-bool fix, the season-final accounting or
+either isolation measure is reverted.

@@ -131,7 +131,7 @@ def verify(run_dir: Path) -> dict:
         _fail("coverage.json is required for a verified run")
     coverage = pd.DataFrame(json.loads(coverage_path.read_text()))
     coverage_required = {"test_season", "position", "n_offered", "n_captured", "n_dropped",
-                         "n_intentionally_skipped", "n_no_target_game",
+                         "n_intentionally_skipped", "n_no_target_game", "n_invalid_target_game",
                          "n_missing_prediction_or_actual"}
     if not coverage_required <= set(coverage.columns):
         _fail(f"coverage missing required columns: {sorted(coverage_required - set(coverage.columns))}")
@@ -141,6 +141,10 @@ def verify(run_dir: Path) -> dict:
         _fail("coverage has negative unexplained drop counts")
     if coverage["n_missing_prediction_or_actual"].sum() != 0:
         _fail("coverage contains unexplained missing prediction/actual rows")
+    explained = (coverage["n_intentionally_skipped"] + coverage["n_no_target_game"]
+                 + coverage["n_invalid_target_game"])
+    if (coverage["n_missing_prediction_or_actual"] != coverage["n_dropped"] - explained).any():
+        _fail("coverage drop categories do not add up to the dropped count")
     actual_counts = panel.groupby(["season", "position"]).size().rename("actual").reset_index()
     captured_counts = coverage.rename(columns={"test_season": "season", "n_captured": "actual"})
     joined = actual_counts.merge(captured_counts[["season", "position", "actual"]], on=["season", "position"], how="outer", suffixes=("_panel", "_coverage")).fillna(0)

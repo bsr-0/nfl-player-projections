@@ -142,11 +142,26 @@ def next_game_identity(frame: pd.DataFrame) -> pd.DataFrame:
         stated = pd.to_numeric(ordered["target_1w"], errors="coerce")
         derived = pd.to_numeric(group["fantasy_points"].shift(-1), errors="coerce")
         has = stated.notna()
-        if (derived[has].isna().any()
-                or not np.allclose(derived[has], stated[has], atol=1e-4, rtol=0)):
+        if derived[has].isna().any():
+            raise ValueError("next observed row does not reproduce target_1w; "
+                             "the fold frame lost or reordered rows after targets were built")
+        # By capture time _prepare_training_data has winsorized target_1w to
+        # per-position training quantiles; fantasy_points is untouched. Within
+        # a position the clip bounds are then target_1w's own min/max, so a
+        # correct mapping reproduces target_1w as clip(next fantasy_points).
+        # Comparing unclipped values failed every real fold (GAPS.md 2026-09-28).
+        position = ordered.loc[has, "position"] if "position" in ordered.columns else None
+        bounds = stated[has].groupby(position, dropna=False) if position is not None else None
+        lo = bounds.transform("min") if bounds is not None else stated[has].min()
+        hi = bounds.transform("max") if bounds is not None else stated[has].max()
+        if not np.allclose(derived[has].clip(lo, hi), stated[has], atol=1e-4, rtol=0):
             raise ValueError("next observed row does not reproduce target_1w; "
                              "the fold frame lost or reordered rows after targets were built")
     return out.reindex(frame.index)
+
+
+def _invalid_target_game(rows: pd.DataFrame) -> pd.Series:
+    return rows["target_team"].notna() & (rows["target_team"] == rows["target_opponent"])
 
 
 def capture_fold_rows(
@@ -196,6 +211,19 @@ def capture_fold_rows(
         logger.info("fold %s: dropped %d/%d rows lacking a prediction or actual",
                     test_season, dropped, before)
 
+    # A target game recorded as a team playing itself matches no schedule
+    # entry, so add_game_context would reject the whole panel; which side is
+    # wrong is unknowable here. Excluded and counted (fold_coverage's
+    # n_invalid_target_game), never silently. The rows stay in training --
+    # see GAPS.md 2026-09-28 for the unresolved upstream cause.
+    invalid = _invalid_target_game(rows)
+    if invalid.any():
+        logger.warning("fold %s: excluded %d row(s) whose target game pairs a team "
+                       "with itself: %s", test_season, int(invalid.sum()),
+                       rows.loc[invalid, ["player_id", "target_week", "target_team"]]
+                       .head(5).to_dict("records"))
+        rows = rows[~invalid]
+
     rows["train_seasons"] = ",".join(str(int(s)) for s in sorted(train_seasons))
     rows["n_train_seasons"] = len(set(int(s) for s in train_seasons))
     rows["residual"] = rows[PREDICTION_COLUMN] - rows["actual_points"]
@@ -236,16 +264,24 @@ def fold_coverage(
     # A player's last observed game of the season has no next game, so no
     # target_1w: an expected drop, not a missing prediction.
     frame = test_data.reset_index(drop=True)
-    no_target = frame.loc[next_game_identity(frame)["target_week"].isna()]
+    target = next_game_identity(frame)
+    no_target = frame.loc[target["target_week"].isna()]
     no_target_counts = no_target.groupby("position").size()
     coverage["n_no_target_game"] = np.where(
         is_skipped, 0,
         coverage["position"].map(no_target_counts).fillna(0).astype(int))
+    # Mirrors capture_fold_rows: counted only among rows it would otherwise keep.
+    scored = frame[PREDICTION_COLUMN].notna() & frame[ACTUAL_COLUMN].notna()
+    invalid_counts = frame.loc[scored & _invalid_target_game(target)].groupby("position").size()
+    coverage["n_invalid_target_game"] = np.where(
+        is_skipped, 0,
+        coverage["position"].map(invalid_counts).fillna(0).astype(int))
     coverage["n_missing_prediction_or_actual"] = (
-        coverage["n_dropped"] - coverage["n_intentionally_skipped"] - coverage["n_no_target_game"])
+        coverage["n_dropped"] - coverage["n_intentionally_skipped"]
+        - coverage["n_no_target_game"] - coverage["n_invalid_target_game"])
     return coverage[["test_season", "position", "n_offered", "n_captured",
                      "n_dropped", "n_intentionally_skipped", "n_no_target_game",
-                     "n_missing_prediction_or_actual"]]
+                     "n_invalid_target_game", "n_missing_prediction_or_actual"]]
 
 
 def add_experience_segments(panel: pd.DataFrame) -> pd.DataFrame:
@@ -522,6 +558,8 @@ def write_run_panel(
             "n_captured": int(coverage["n_captured"].sum()),
             "n_dropped": int(coverage["n_dropped"].sum()),
             "n_intentionally_skipped": int(coverage.get("n_intentionally_skipped", pd.Series(dtype=int)).sum()),
+            "n_no_target_game": int(coverage.get("n_no_target_game", pd.Series(dtype=int)).sum()),
+            "n_invalid_target_game": int(coverage.get("n_invalid_target_game", pd.Series(dtype=int)).sum()),
             "n_missing_prediction_or_actual": int(coverage.get("n_missing_prediction_or_actual", pd.Series(dtype=int)).sum()),
         }
     if metadata:

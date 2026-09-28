@@ -114,6 +114,8 @@ data/experiments/*.weekskips.json
 # raw_train/raw_test parquet input, ~8MB apiece and identical run to run.
 data/experiments/**/served_*/raw_train.parquet
 data/experiments/**/served_*/raw_test.parquet
+# scripts/smoke_test_oof.py output: untuned models, a pipeline check only.
+data/experiments/oof_smoke/
 
 # EXCEPT the two Phase 4 row-level dumps: season_simulation.py reads them as
 # its residual donor pool (residual_csv_paths default), so they are INPUTS to

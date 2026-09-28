@@ -16,6 +16,7 @@ from src.models.oof_capture import (
     add_game_context,
     build_panel,
     capture_fold_rows,
+    fold_coverage,
     segment_report,
     write_panel,
 )
@@ -234,7 +235,17 @@ def test_capture_names_the_next_observed_game_not_the_origin():
 
 
 def test_capture_refuses_a_frame_that_no_longer_reproduces_target_1w():
-    frame = _season_frame()
+    # Player r widens the WR target_1w range. The check allows for
+    # winsorized targets (target_1w == clip(next fantasy_points) within each
+    # position's observed range), so a lost row is caught when the shifted
+    # value lands inside that range -- in _season_frame alone, 11 vs a stated
+    # 7 at the range's top is indistinguishable from a clip at 7.
+    wide = pd.DataFrame({"player_id": "r", "season": 2024, "week": [1, 2, 3], "team": "D",
+                         "opponent": ["H", "I", "J"], "position": "WR", "predicted_points": 5.0,
+                         "fantasy_points": [1.0, 20.0, 2.0]})
+    wide["target_1w"] = wide["fantasy_points"].shift(-1)
+    wide[ACTUAL_COLUMN] = wide["target_1w"]
+    frame = pd.concat([_season_frame(), wide], ignore_index=True)
     frame = frame.drop(index=1)  # a row lost after targets were built
     with pytest.raises(ValueError, match="does not reproduce target_1w"):
         capture_fold_rows(frame, train_seasons=[2023], test_season=2024)
@@ -250,3 +261,40 @@ def test_target_game_panel_rekeys_and_refuses_origin_only_panels():
     rekeyed = target_game_panel(with_context).set_index(["player_id", "origin_week"])
     assert rekeyed.loc[("p", 2), "week"] == 5 and rekeyed.loc[("p", 2), "team"] == "C"
     assert rekeyed.loc[("p", 2), "origin_team"] == "B"
+
+
+def test_capture_accepts_targets_winsorized_like_prepare_training_data():
+    """_prepare_training_data clips test target_1w to per-position training
+    quantiles and leaves fantasy_points alone; comparing them unclipped
+    failed every real fold."""
+    from src.models.feature_preparation import _create_horizon_targets
+
+    rng = np.random.default_rng(0)
+    frame = _create_horizon_targets(pd.DataFrame(
+        [{"player_id": f"p{i}", "season": 2024, "week": w, "team": "A", "opponent": "B",
+          "position": "WR" if i % 2 else "RB", "predicted_points": 10.0,
+          "fantasy_points": float(rng.gamma(2, 5)) - (3.0 if w == 2 else 0.0)}
+         for i in range(40) for w in range(1, 6)]), n_weeks=[1])
+    for position, (lo, hi) in {"WR": (0.0, 25.0), "RB": (-0.5, 18.0)}.items():
+        mask = frame["position"] == position
+        frame.loc[mask, "target_1w"] = frame.loc[mask, "target_1w"].clip(lo, hi)
+    frame[ACTUAL_COLUMN] = frame["target_1w"]
+    assert (frame["target_1w"] != frame.groupby("player_id")["fantasy_points"].shift(-1)).any()
+
+    rows = capture_fold_rows(frame, train_seasons=[2023], test_season=2024)
+    assert len(rows) == 160  # every row with a next game
+
+
+def test_self_paired_target_game_is_excluded_and_counted():
+    """A target game recorded as a team playing itself matches no schedule
+    entry, so add_game_context would reject the whole panel."""
+    frame = _season_frame()
+    frame.loc[2, "opponent"] = frame.loc[2, "team"]  # p's week-5 game: C vs C
+    rows = capture_fold_rows(frame, train_seasons=[2023], test_season=2024)
+    assert not ((rows["player_id"] == "p") & (rows["week"] == 2)).any()
+    assert len(rows) == 2
+
+    coverage = fold_coverage(frame, rows, test_season=2024).iloc[0]
+    assert coverage["n_invalid_target_game"] == 1
+    assert coverage["n_no_target_game"] == 2
+    assert coverage["n_missing_prediction_or_actual"] == 0

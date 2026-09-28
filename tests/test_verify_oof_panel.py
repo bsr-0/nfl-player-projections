@@ -90,6 +90,18 @@ def test_verifier_rejects_unexplained_coverage_loss(tmp_path):
         verify(run_dir)
 
 
+def test_verifier_rejects_a_drop_hidden_in_an_explained_category(tmp_path):
+    """n_missing is derived by subtraction; inflating an 'expected' category
+    must not make a lost row look explained."""
+    run_dir = _write_complete_run(tmp_path)
+    coverage_path = run_dir / "coverage.json"
+    coverage = json.loads(coverage_path.read_text())
+    coverage[0]["n_invalid_target_game"] += 1
+    coverage_path.write_text(json.dumps(coverage))
+    with pytest.raises(ValueError, match="do not add up"):
+        verify(run_dir)
+
+
 def test_verifier_requires_game_context_of_the_target_game(tmp_path):
     """actual_points is the next observed game's outcome; context attached to
     the forecast-origin game pairs residuals from different games."""

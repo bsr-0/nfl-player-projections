@@ -1241,8 +1241,12 @@ def train_models(positions: list = None,
                     if coverage is not None:
                         total_dropped = int(coverage["n_dropped"].sum())
                         if total_dropped:
-                            print(f"  {total_dropped} row(s) offered but not captured "
-                                  f"(no prediction/actual) -- see {written['coverage_path']}")
+                            print(f"  {total_dropped} row(s) offered but not captured: "
+                                  f"{int(coverage['n_intentionally_skipped'].sum())} skipped position, "
+                                  f"{int(coverage['n_no_target_game'].sum())} season-final (no next game), "
+                                  f"{int(coverage['n_invalid_target_game'].sum())} team-vs-itself target game, "
+                                  f"{int(coverage['n_missing_prediction_or_actual'].sum())} unexplained "
+                                  f"-- see {written['coverage_path']}")
 
                     # week_bucket alongside is_cold_start: is_cold_start is
                     # confounded with early-season weeks (measured: 65% of
