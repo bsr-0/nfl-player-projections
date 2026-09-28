@@ -924,16 +924,33 @@ class UtilizationScoreCalculator:
             return pd.Series(50.0, index=series.index)
         return series.rank(pct=True, na_option="bottom") * 100
 
-    _BOUNDS_DEFAULT_PATH = Path(__file__).parent.parent.parent / "data" / "utilization_percentile_bounds.json"
+    @staticmethod
+    def _bounds_path() -> Path:
+        """The canonical bounds artifact: the file training applies to its
+        held-out data and serving must normalize with.
+
+        Resolved at call time from config.settings.MODELS_DIR, so
+        redirect_models_dir sandboxes it. This used to be a fixed
+        data/utilization_percentile_bounds.json, which redirection could not
+        reach: every walk-forward fold overwrote the file serving auto-loads
+        (predict.py builds UtilizationScoreCalculator without bounds), leaving
+        serving normalized with a validation fold's bounds while the models
+        were trained with production's (GAPS.md 2026-09-28).
+        """
+        import config.settings as settings
+        return Path(settings.MODELS_DIR) / "utilization_percentile_bounds.json"
 
     def fit_percentile_bounds(self, train_df: pd.DataFrame, position: str, component_columns: list,
-                               persist: bool = True, metadata: Optional[Dict] = None) -> None:
+                               persist: bool = False, metadata: Optional[Dict] = None) -> None:
         """
         Fit min/max (or 1st/99th percentile) per component on train data for consistent apply at serve.
         Store in self.position_percentiles keyed by (position, col).
-        
-        When persist=True (default), auto-saves bounds to disk so that the
-        prediction pipeline can load them without retraining.
+
+        persist=True writes the in-memory bounds to the canonical
+        MODELS_DIR file. Off by default: the training pipeline saves the
+        finished set itself (feature_preparation._fit_utilization_bounds), and
+        a per-position implicit write is what let every validation fold
+        overwrite the serving bounds.
         """
         pos_df = train_df[train_df["position"] == position]
         if pos_df.empty:
@@ -962,12 +979,13 @@ class UtilizationScoreCalculator:
             self.position_percentiles[(position, col)] = (float(lo), float(hi))
         
         if persist:
-            save_percentile_bounds(self.position_percentiles, self._BOUNDS_DEFAULT_PATH, metadata=metadata)
+            save_percentile_bounds(self.position_percentiles, self._bounds_path(), metadata=metadata)
 
     def _ensure_bounds_loaded(self) -> None:
         """Auto-load persisted percentile bounds if none are in memory."""
-        if not self.position_percentiles and self._BOUNDS_DEFAULT_PATH.exists():
-            self.position_percentiles = load_percentile_bounds(self._BOUNDS_DEFAULT_PATH)
+        bounds_path = self._bounds_path()
+        if not self.position_percentiles and bounds_path.exists():
+            self.position_percentiles = load_percentile_bounds(bounds_path)
             # Warn about zero-width bounds so issues are visible in logs
             for (pos, col), (lo, hi) in self.position_percentiles.items():
                 if lo == hi:

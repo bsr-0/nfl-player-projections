@@ -21,7 +21,19 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import src.utils.database as database_module
 from src.data.external_data import DefenseRankingsLoader
+
+
+@pytest.fixture(autouse=True)
+def _no_real_database(tmp_path, monkeypatch):
+    """DefenseRankingsLoader builds a DatabaseManager(), whose default path
+    creates an empty data/nfl_data.db when none exists. That empty file then
+    defeats every `skipif(not DB_PATH.exists())` guard in later runs and turns
+    real-DB integration tests into false failures (tests/conftest.py, audit
+    #19). These tests need no real data, as the module docstring says."""
+    monkeypatch.setattr(database_module, "DB_PATH", tmp_path / "nfl_data.db")
+
 
 MATCHUP_COLS = ['opp_defense_rank', 'opp_matchup_score',
                 'opp_pts_allowed', 'defense_data_available']

@@ -52,7 +52,7 @@ from src.features.utilization_weight_optimizer import fit_utilization_weights, U
 from src.features.dimensionality_reduction import PositionDimensionalityReducer
 from src.models.ensemble import ModelTrainer
 from src.models.robust_validation import RobustTimeSeriesCV
-from src.evaluation.backtester import ModelBacktester
+from src.evaluation.backtester import ModelBacktester, assess_artifact_trust
 from src.utils.models_dir import assert_safe_models_dir_write, redirect_models_dir
 from src.utils.model_rollback import available_rollbacks, snapshot_models
 from src.utils.atomic_io import atomic_write_json
@@ -319,10 +319,19 @@ def _report_test_metrics(trainer, test_data: pd.DataFrame, train_data: pd.DataFr
 
 def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                                  train_seasons: list, actual_test_season: int,
-                                 train_data: pd.DataFrame = None):
+                                 train_data: pd.DataFrame = None,
+                                 publish: bool = True):
     """
     Run full backtest using the trained ensemble on held-out test data.
-    Saves backtest results and app-compatible advanced_model_results.json.
+
+    publish=True (the production path) saves the backtest artifact and the
+    app-compatible advanced_model_results.json, and removes stale secondary
+    result files. Walk-forward folds must pass publish=False: their models
+    are throwaway, but the artifacts they wrote were labelled
+    model_source=production_ensemble / "authoritative", so the results page
+    picked a 2026-09-26 fold backtest as the served model's 2025 accuracy and
+    advanced_model_results.json showed test_season 2023 (GAPS.md 2026-09-28).
+    A non-publishing run still stamps the same `trust` verdict on `results`.
     """
     if test_data.empty or len(test_data) < 10:
         return
@@ -662,6 +671,9 @@ def _run_backtest_after_training(trainer, test_data: pd.DataFrame,
                 logger.warning("Simple model comparison for %s failed: %s", position, e)
         results["simple_model_comparison"] = simple_comparison
 
+    if not publish:
+        results["trust"] = assess_artifact_trust(results)
+        return results
     backtester.save_results(results)
 
     # Write app-compatible results (all rubric metrics per position)
@@ -877,7 +889,7 @@ def _run_one_fold(
             logger.warning("OOF capture skipped for fold %s: %s", actual_test_season, e)
 
     results = _run_backtest_after_training(trainer, test_data, train_seasons, actual_test_season,
-                                               train_data=train_data)
+                                               train_data=train_data, publish=False)
     return trainer, results
 
 

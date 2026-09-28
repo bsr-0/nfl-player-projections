@@ -15263,9 +15263,12 @@ model, rewrote artifacts all four positions are served through:
 - `utilization_weights.json`: `fit_utilization_weights` starts from defaults
   and skips positions with <200 rows, so RB/WR/TE silently reverted to
   default weights.
-- `utilization_percentile_bounds.json`: `fit_percentile_bounds` returns
-  without storing anything for a position with no rows, so RB/WR/TE bounds
-  were dropped.
+- `utilization_percentile_bounds.json`: `fit_percentile_bounds` stores
+  nothing for a position with no rows, but the calculator first auto-loads
+  persisted bounds (`_ensure_bounds_loaded`), so RB/WR/TE kept whatever the
+  last writer of that file had -- values fit on a different training window,
+  saved back under the QB-only run's `train_seasons`. (Corrected later the
+  same day; this first said "dropped". See the next-but-one entry.)
 
 RB/WR/TE model files were untouched, which is why "RB/WR/TE untouched,
 confirmed" looked true. Regenerating the scaler over all positions (the
@@ -15408,3 +15411,98 @@ training job. `tests/test_smoke_test_oof.py` drives it through the real
 `train_models` walk-forward with training, data loading and the database
 stubbed; it fails if the numpy-bool fix, the season-final accounting or
 either isolation measure is reverted.
+
+## Walk-forward folds overwrote the published results and the serving bounds (2026-09-28)
+
+Found while checking whether `redirect_models_dir` really isolates a
+validation run (my smoke-run claim). It does not: three things a fold writes
+sit outside `MODELS_DIR`, and `abb7d2e` committed all three in their
+fold-written state.
+
+1. **`data/advanced_model_results.json`** -- stamped "authoritative ... single
+   source of truth", read by `app_data.py` -- held `test_season: 2023`,
+   `train_seasons` through 2022, timestamp 2026-09-26T18:56:26: a fold, not
+   the served model. `_run_backtest_after_training` (called by every fold)
+   writes it whenever the backtest passes the trust check, and also deletes
+   the "stale" secondary result files in `data/`.
+2. **`data/backtest_results/backtest_<season>_<date>.json`** -- folds saved
+   these labelled `model_source: production_ensemble`, trusted.
+   `scripts/generate_results_page.latest_served_ensemble_backtest_2025` takes
+   the newest such file, so the results page currently publishes
+   `backtest_2025_20260926.json` (a walk-forward fold) as the served
+   ensemble's 2025 backtest. RMSE is 5.98 for it and for the 2026-09-24 one,
+   so the numbers barely move, but the provenance is wrong. Fold files also
+   feed the drift check in the same function: `prev_files[-2]` of
+   `sorted(glob("backtest_*.json"))` -- the second-newest file by NAME, across
+   all seasons, picked before the current run saves its own -- so with fold
+   artifacts on disk a production run can be compared with a fold. Gating
+   stops new ones appearing; the selection itself (second-newest rather than
+   newest, mixing seasons) is unchanged and deserves its own look, since
+   `model_drift` is published in `advanced_model_results.json`.
+3. **`data/utilization_percentile_bounds.json`** -- `UtilizationScoreCalculator`
+   hard-coded this path (`_BOUNDS_DEFAULT_PATH`) for both `fit_percentile_bounds`
+   (persist defaulted True, one write per position) and the auto-load.
+   Serving builds the calculator with no bounds (`predict.py:91`) and normalizes
+   via `calculate_all_scores` (`predict.py:1049`), so it used THIS file; the
+   training pipeline applies `data/models/utilization_percentile_bounds.json`.
+   The two are supposed to be the same fit. At `abb7d2e` they were not: the
+   serving copy came from a fold (train seasons through 2023), the models-dir
+   copy from production (through 2025), and 7 of 22 component bounds differed.
+   How much that moved served predictions was not measured. This is the same
+   shape as the 2026-09-24 MODELS_DIR incident: `single_week_ppr` was given a
+   git-restore guard for it (`_PROTECTED_PATHS`), the main walk-forward never was.
+
+Correction to the QB-only entry above: because of that auto-load, a QB-only run
+did not drop RB/WR/TE bounds, it kept the stray file's RB/WR/TE values (from
+whichever fold wrote it last) and re-saved them under its own `train_seasons`.
+
+Fixes:
+
+- `_run_backtest_after_training(publish=...)`: `_run_one_fold` passes
+  `publish=False`, which skips the artifact save, the app-results write and
+  the stale-file deletion, and still stamps the same `trust` verdict on the
+  returned results. Production keeps `publish=True`.
+- `UtilizationScoreCalculator._bounds_path()` resolves
+  `config.settings.MODELS_DIR` at call time, so the write, the auto-load and
+  the training pipeline all use `data/models/utilization_percentile_bounds.json`,
+  and redirection sandboxes it. `fit_percentile_bounds` no longer persists
+  unless asked (`persist=False`); the pipeline saves once, after all positions.
+- `feature_preparation._fit_utilization_bounds` clears bounds auto-loaded from a
+  previous run before fitting, so the persisted file holds only what this
+  training window produced (a component with <10 values now falls back to
+  rank-normalization, not a stale bound). A full four-position retrain never
+  hits that; a subset run would have.
+- `data/utilization_percentile_bounds.json` is deleted: nothing reads or
+  writes it any more. `data/advanced_model_results.json` is restored to
+  `ed41f75` (2026-09-17T12:00:30, test 2025, train through 2024), the last
+  version written before any fold artifact; `6fafe76`'s copy (2026-09-24
+  07:09:47) is timestamped at the end of the walk-forward window that
+  overwrote the served models that morning, so it was not used.
+- `scripts/smoke_test_oof.py` now hashes the served model/preprocessing files,
+  `advanced_model_results.json`, `utilization_percentile_bounds.json` and
+  `data/backtest_results/*.json` before and after, and fails if any changed
+  (or appeared/disappeared), so the next hard-coded path fails the smoke
+  instead of shipping.
+
+Not changed, needs an owner decision: the committed fold backtests
+(`backtest_2023/2024/2025_20260926.json`, and possibly the 2026-09-24 pair)
+are labelled `production_ensemble`. Rename or delete them so the results page
+cannot select one as the served model's result.
+
+On a machine that ran the OOF attempts: the working-tree copies of the two
+files above and any `backtest_*_202609{26,27,28}.json` are fold artifacts from
+those attempts. Discard them before merging (`git checkout -- <file>`; delete
+the untracked backtests). Until this change is deployed, that machine's serving
+still reads the stray bounds file. Its `data/models` bounds and scaler are
+also suspect after the QB-only run; the full four-position retrain rewrites
+both.
+
+Test-suite side effect found on the way: fifteen tests (seven files) build a
+real `DatabaseManager()`, which creates an empty `data/nfl_data.db` when none
+exists. `skipif(not DB_PATH.exists())` guards run at collection, so the second
+run in a fresh checkout stopped skipping and reported five real-DB tests as
+failures (9 failed instead of 4) -- which is how this session first misread
+its own results. `tests/conftest.py` now deletes a database the session itself
+created if it holds no rows (never one that pre-existed or has data), and two
+consecutive runs give identical results. `test_external_data_idempotency.py`
+also stopped using the real database, as its docstring already claimed.

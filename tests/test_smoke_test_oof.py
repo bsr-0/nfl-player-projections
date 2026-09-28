@@ -68,7 +68,8 @@ class _Trainer:
     training_metrics = {}
 
 
-def _backtest(trainer, test_data, train_seasons, season, train_data=None):
+def _backtest(trainer, test_data, train_seasons, season, train_data=None, publish=True):
+    assert publish is False, "a walk-forward fold must never publish its backtest"
     # The real metric function, so the fold-metrics write sees real types.
     scored = test_data.dropna(subset=["actual_for_backtest"])
     return {"by_position": {
@@ -140,3 +141,67 @@ def test_smoke_refuses_to_reuse_an_output_directory(tmp_path):
     (tmp_path / "smoke").mkdir()
     with pytest.raises(FileExistsError):
         smoke_test_oof.run_smoke(tmp_path / "smoke")
+
+
+# --------------------------------------------------------------------------
+# isolation is verified at runtime, not assumed
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def protected_sandbox(stubbed, monkeypatch, tmp_path):
+    """Point the tripwire at a tmp data dir + models dir holding one of each
+    protected kind, and let the test decide what the 'run' writes."""
+    data = tmp_path / "data"
+    models = data / "models"
+    (data / "backtest_results").mkdir(parents=True)
+    models.mkdir()
+    (models / "model_qb_1w.joblib").write_bytes(b"served-weights")
+    (models / "feature_scaler_bounded.joblib").write_bytes(b"served-scaler")
+    (data / "advanced_model_results.json").write_text('{"test_season": 2025}')
+    (data / "utilization_percentile_bounds.json").write_text("{}")
+    (data / "backtest_results" / "backtest_2025_20260917.json").write_text("{}")
+    monkeypatch.setattr(smoke_test_oof, "DATA_DIR", data)
+    monkeypatch.setattr(settings, "PRODUCTION_MODELS_DIR", models)
+    return data
+
+
+def _run_writing(monkeypatch, write):
+    real = train_module.train_models
+
+    def _train(**kwargs):
+        write()
+        return real(**kwargs)
+
+    monkeypatch.setattr(train_module, "train_models", _train)
+
+
+@pytest.mark.parametrize("relative, content", [
+    ("advanced_model_results.json", '{"test_season": 2023}'),
+    ("utilization_percentile_bounds.json", '{"QB|x": [0, 1]}'),
+    ("backtest_results/backtest_2025_20260926.json", "{}"),          # a NEW published file
+    ("models/feature_scaler_bounded.joblib", b"fold-scaler"),
+    ("models/model_qb_1w.joblib", b"fold-weights"),
+])
+def test_smoke_fails_when_the_run_modifies_a_protected_file(
+        protected_sandbox, monkeypatch, tmp_path, relative, content):
+    target = protected_sandbox / relative
+    writer = target.write_bytes if isinstance(content, bytes) else target.write_text
+    _run_writing(monkeypatch, lambda: writer(content))
+
+    with pytest.raises(RuntimeError, match="modified 1 protected file"):
+        smoke_test_oof.run_smoke(tmp_path / "smoke", skip_cache_check=True, skip_quality_gate=True)
+
+
+def test_smoke_fails_when_the_run_deletes_a_protected_file(protected_sandbox, monkeypatch, tmp_path):
+    _run_writing(monkeypatch, (protected_sandbox / "advanced_model_results.json").unlink)
+    with pytest.raises(RuntimeError, match="modified 1 protected file"):
+        smoke_test_oof.run_smoke(tmp_path / "smoke", skip_cache_check=True, skip_quality_gate=True)
+
+
+def test_smoke_passes_when_only_unprotected_files_change(protected_sandbox, monkeypatch, tmp_path):
+    """Gate reports and caches are legitimately rewritten by data refresh."""
+    _run_writing(monkeypatch, lambda: (protected_sandbox / "models" / "data_quality_gate_report.json"
+                                       ).write_text("{}"))
+    verification = smoke_test_oof.run_smoke(tmp_path / "smoke", skip_cache_check=True,
+                                            skip_quality_gate=True)
+    assert verification["status"] == "verified"

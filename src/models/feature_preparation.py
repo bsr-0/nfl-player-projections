@@ -441,6 +441,26 @@ def apply_bounded_scaler_artifact(df: pd.DataFrame, artifact: Dict[str, Any]) ->
     return df
 
 
+def _fit_utilization_bounds(util_calc, train_data: pd.DataFrame, bounds_path: Path,
+                            metadata: Dict[str, Any]) -> None:
+    """Fit percentile bounds on `train_data` alone and persist them to `bounds_path`.
+
+    The calculator auto-loads persisted bounds the first time it normalizes
+    (calculate_all_scores runs just before this), seeding its in-memory dict
+    with a PREVIOUS run's bounds. Any (position, component) not re-fit here --
+    a position with no rows, a component with under 10 values -- would then
+    be written back under this run's `train_seasons` metadata, a file claiming
+    a training window it was not fit on. Drop the seeded values first, so the
+    file holds exactly what this window produced and a missing key falls back
+    to rank-normalization instead of a stale bound.
+    """
+    util_calc.position_percentiles = {}
+    for pos in POSITIONS:
+        util_calc.fit_percentile_bounds(
+            train_data, pos, UTIL_COMPONENTS.get(pos, []), metadata=metadata)
+    save_percentile_bounds(util_calc.position_percentiles, bounds_path, metadata=metadata)
+
+
 def _prepare_training_data(
     train_data: pd.DataFrame,
     test_data: pd.DataFrame,
@@ -577,12 +597,8 @@ def _prepare_training_data(
         "created_at": datetime.now().isoformat(),
     }
     train_data = util_calc.calculate_all_scores(train_data, team_df)
-    for pos in POSITIONS:
-        util_calc.fit_percentile_bounds(
-            train_data, pos, UTIL_COMPONENTS.get(pos, []), metadata=bounds_meta
-        )
     bounds_path = MODELS_DIR / "utilization_percentile_bounds.json"
-    save_percentile_bounds(util_calc.position_percentiles, bounds_path, metadata=bounds_meta)
+    _fit_utilization_bounds(util_calc, train_data, bounds_path, bounds_meta)
     train_data = util_calc.calculate_all_scores(train_data, team_df)
     loaded_bounds, loaded_meta = load_percentile_bounds(bounds_path, return_meta=True)
     if not validate_percentile_bounds_meta(loaded_meta, train_seasons_list):

@@ -77,6 +77,12 @@ def _served_artifacts(models_dir: Path) -> List[Path]:
     return _covered(models_dir)
 
 
+def covered_artifacts(models_dir: Path) -> List[Path]:
+    """Every file in `models_dir` that serving or monitoring reads from a
+    trained model set (the snapshot/restore coverage)."""
+    return _covered(Path(models_dir))
+
+
 def is_legacy_snapshot(snapshot: Path) -> bool:
     return not (Path(snapshot) / MANIFEST_NAME).is_file()
 
