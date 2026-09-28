@@ -15484,10 +15484,11 @@ Fixes:
   (or appeared/disappeared), so the next hard-coded path fails the smoke
   instead of shipping.
 
-Not changed, needs an owner decision: the committed fold backtests
-(`backtest_2023/2024/2025_20260926.json`, and possibly the 2026-09-24 pair)
-are labelled `production_ensemble`. Rename or delete them so the results page
-cannot select one as the served model's result.
+Deleted: the walk-forward fold backtests `backtest_{2023,2024,2025}_20260926.json`
+(labelled `production_ensemble`; the results page was selecting the 2025 one).
+Not verified either way: `backtest_{2024,2025}_20260924.json` may also be
+fold output from that morning's walk-forward arms; the results page now picks
+the 2025 one.
 
 On a machine that ran the OOF attempts: the working-tree copies of the two
 files above and any `backtest_*_202609{26,27,28}.json` are fold artifacts from
