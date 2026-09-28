@@ -15324,3 +15324,37 @@ Found while tracing these:
 Note: `scripts/export_served_fold_full_ppr.py` hashes training source files
 against its frozen preflight, so any preflight frozen before this change
 must be re-prepared.
+
+## OOF panel grouped residuals by the wrong game (2026-09-27, from 77e6c99)
+
+Cherry-picked from `claude/inspiring-maxwell-8j9gho` (commit 77e6c99), whose
+remaining commits rewrite the simulator and are not part of this change. The
+simulation CLI edit was re-applied to main's version of
+`scripts/evaluate_calibrated_simulation.py` (read the panel through
+`target_game_panel`).
+
+`actual_points` in the walk-forward OOF panel is `target_1w`, the player's
+NEXT observed game in the season (`_create_horizon_targets`), but
+`add_game_context` attached `game_id`/home/away from the row's own
+(forecast-origin) week/team/opponent. Every same-game residual vector the
+correlation layer fits and scores therefore mixed outcomes from different
+games: opponents were paired with the origin week's opponent, not the one
+actually faced (biasing the game and script factors toward zero); players
+returning from a gap, traded players and bye weeks landed in the wrong game;
+and the rolling backtest's "week W" held week W+1 (or later) outcomes.
+`docs/PPR_HEAD_TO_HEAD.md` had flagged the origin keying; the simulation
+path never picked it up. No real panel with game context had been built yet,
+so no reported number is affected.
+
+Fix: `capture_fold_rows` records `target_week/target_team/target_opponent`
+from the next observed row (checked against `target_1w`, fail-loud if the
+frame lost rows after targets were built); `add_game_context` matches the
+schedule on those; `verify_oof_panel.py` checks context against them; the
+simulation CLI re-keys the panel with `target_game_panel` before running.
+
+Second defect found on the way: `fold_coverage` counted every player's
+season-final row (no next game, so no target) as an unexplained drop, and
+`verify_oof_panel.py` rejects any unexplained drop -- so no real run could
+ever have verified, and the simulation CLI (which verifies first) could never
+have run. These rows are now counted as `n_no_target_game`; the clip that
+hid negative (inconsistent) counts is removed.

@@ -187,9 +187,66 @@ def test_game_context_uses_exact_scheduled_home_away_pair(tmp_path):
     conn.execute("INSERT INTO schedule VALUES (2024, 1, 'H', 'A', 'game-id')")
     conn.commit()
     conn.close()
-    panel = build_panel([capture_fold_rows(
-        _fold_frame(2024, n=2, players=["h", "a"]).assign(team=["H", "A"], opponent=["A", "H"], week=[1, 1]),
-        train_seasons=[2023], test_season=2024)])
+    # Origin week 1 (vs X), target week 2 (the scheduled H-A game).
+    frame = pd.DataFrame({
+        "player_id": ["h", "h", "a", "a"], "season": 2024, "week": [1, 2, 1, 2],
+        "team": ["H", "H", "A", "A"], "opponent": ["X", "A", "Y", "H"],
+        "position": "WR", "predicted_points": 10.0, ACTUAL_COLUMN: [8.0, np.nan, 9.0, np.nan],
+    })
+    panel = build_panel([capture_fold_rows(frame, train_seasons=[2023], test_season=2024)])
+    conn = sqlite3.connect(db_path)
+    conn.execute("INSERT INTO schedule VALUES (2024, 2, 'H', 'A', 'game-2')")
+    conn.commit()
+    conn.close()
     context = add_game_context(panel, db_path=db_path)
-    assert set(context["game_id"]) == {"game-id"}
+    assert set(context["game_id"]) == {"game-2"}
     assert set(context["home_team"]) == {"H"} and set(context["away_team"]) == {"A"}
+
+
+# --------------------------------------------------------------------------
+# Target-game identity (actual_points is the NEXT observed game's outcome)
+# --------------------------------------------------------------------------
+
+def _season_frame():
+    """Player p: weeks 1, 2, 5 (gap), traded B->C after week 2."""
+    fantasy = [3.0, 7.0, 11.0, 4.0, 6.0]
+    frame = pd.DataFrame({
+        "player_id": ["p", "p", "p", "q", "q"], "season": 2024,
+        "week": [1, 2, 5, 1, 2], "team": ["B", "B", "C", "D", "D"],
+        "opponent": ["E", "F", "G", "H", "I"], "position": "WR",
+        "predicted_points": 5.0, "fantasy_points": fantasy,
+    })
+    frame["target_1w"] = frame.groupby(["player_id", "season"])["fantasy_points"].shift(-1)
+    frame[ACTUAL_COLUMN] = frame["target_1w"]
+    return frame
+
+
+def test_capture_names_the_next_observed_game_not_the_origin():
+    rows = capture_fold_rows(_season_frame().sample(frac=1, random_state=3),
+                             train_seasons=[2023], test_season=2024)
+    got = rows.set_index(["player_id", "week"]).sort_index()
+    assert got.loc[("p", 2), "target_week"] == 5          # gap, not week + 1
+    assert got.loc[("p", 2), "target_team"] == "C"        # post-trade team
+    assert got.loc[("p", 2), "target_opponent"] == "G"
+    assert got.loc[("p", 2), "actual_points"] == 11.0     # week-5 outcome
+    assert got.loc[("q", 1), "target_opponent"] == "I"
+    assert len(rows) == 3                                  # last games have no target
+
+
+def test_capture_refuses_a_frame_that_no_longer_reproduces_target_1w():
+    frame = _season_frame()
+    frame = frame.drop(index=1)  # a row lost after targets were built
+    with pytest.raises(ValueError, match="does not reproduce target_1w"):
+        capture_fold_rows(frame, train_seasons=[2023], test_season=2024)
+
+
+def test_target_game_panel_rekeys_and_refuses_origin_only_panels():
+    from src.models.oof_capture import target_game_panel
+    panel = build_panel([capture_fold_rows(_season_frame(), train_seasons=[2023], test_season=2024)])
+    with pytest.raises(ValueError, match="predates target-game capture"):
+        target_game_panel(panel)
+    with_context = panel.assign(game_id="g", home_team=panel["target_team"],
+                                away_team=panel["target_opponent"])
+    rekeyed = target_game_panel(with_context).set_index(["player_id", "origin_week"])
+    assert rekeyed.loc[("p", 2), "week"] == 5 and rekeyed.loc[("p", 2), "team"] == "C"
+    assert rekeyed.loc[("p", 2), "origin_team"] == "B"

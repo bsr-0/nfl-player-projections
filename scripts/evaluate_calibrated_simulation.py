@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.verify_oof_panel import verify  # noqa: E402
-from src.models.oof_capture import ZERO_FLOOR, cluster_bootstrap_distribution  # noqa: E402
+from src.models.oof_capture import ZERO_FLOOR, cluster_bootstrap_distribution, target_game_panel  # noqa: E402
 from src.models.player_correlation import fit_sparse_role_residual_correlation  # noqa: E402
 from src.models.residual_calibration import (  # noqa: E402
     EmpiricalResidualCalibration,
@@ -487,7 +487,8 @@ def main() -> int:
     if args.draws < 2 or args.n_bootstrap < 100:
         parser.error("--draws must be >= 2 and --n-bootstrap must be >= 100")
     verification = verify(args.oof_run_dir)
-    panel = pd.read_parquet(args.oof_run_dir / "panel.parquet")
+    # Simulate the game each actual came from, not the forecast origin row.
+    panel = target_game_panel(pd.read_parquet(args.oof_run_dir / "panel.parquet"))
     report, draws_frame, actuals, marginal, joint_by_game = run(
         panel, draws=args.draws, seed=args.seed, n_bootstrap=args.n_bootstrap, return_details=True)
     _write_run(args.output_dir, report=report, draws=draws_frame, actuals=actuals,

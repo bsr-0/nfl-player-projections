@@ -27,7 +27,12 @@ class _StubMultiModel:
 
 
 def _test_frame(season=2024, n=24):
-    return pd.DataFrame({
+    """n players, each with one forecast origin and a season-final game.
+
+    target_1w is built the way _create_horizon_targets builds it (next row's
+    fantasy points within player-season), so the final game has none.
+    """
+    origin = pd.DataFrame({
         "player_id": [f"p{i}" for i in range(n)],
         "season": season,
         "week": [1 + i % 4 for i in range(n)],
@@ -35,8 +40,11 @@ def _test_frame(season=2024, n=24):
         "opponent": ["B", "A"] * (n // 2),
         "position": [["QB", "RB", "WR", "TE"][i % 4] for i in range(n)],
         "fantasy_points": np.linspace(8, 16, n),
-        "target_1w": np.linspace(8, 16, n),
     })
+    final = origin.assign(week=origin["week"] + 10, fantasy_points=origin["fantasy_points"] + 1)
+    frame = pd.concat([origin, final], ignore_index=True)
+    frame["target_1w"] = frame.groupby(["player_id", "season"])["fantasy_points"].shift(-1)
+    return frame
 
 
 @pytest.fixture
@@ -68,6 +76,8 @@ def test_fold_runner_populates_the_collector(stubbed):
     assert {"player_id", "season", "week", "predicted_points",
             "actual_points", "residual"} <= set(rows.columns)
     assert (rows["season"] == 2024).all()
+    # actual_points is the season-final game's outcome, keyed as such.
+    assert (rows["target_week"] == rows["week"] + 10).all()
 
 
 def test_fold_runner_works_unchanged_without_a_collector(stubbed):
@@ -86,8 +96,9 @@ def test_positions_below_the_minimum_test_size_are_absent_not_zeroed(stubbed):
     """
     collector = []
     thin = _test_frame(2024, n=24)
-    thin = thin[thin["position"] != "TE"].copy()          # WR/RB/QB keep 6 each
-    thin = pd.concat([thin, _test_frame(2024, n=24).query("position == 'TE'").head(2)],
+    thin = thin[thin["position"] != "TE"].copy()          # WR/RB/QB keep 12 rows each
+    te = _test_frame(2024, n=24).query("position == 'TE'")
+    thin = pd.concat([thin, te[te["player_id"].isin(["p3"])]],   # 2 TE rows
                      ignore_index=True)
     train_module._run_one_fold(
         _test_frame(2023), thin, [2022, 2023], 2024,
