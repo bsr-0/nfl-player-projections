@@ -92,18 +92,33 @@ def _step_procedure(p_values: Sequence[Optional[float]], alpha: float, *, mode: 
 
 
 def bootstrap_two_sided_p_value(draws: np.ndarray) -> float:
-    """A p-value from bootstrap draws of a statistic, consistent with a CI
-    built from the SAME draws (see `cluster_bootstrap_distribution`).
+    """A p-value from bootstrap draws of a statistic (see
+    `cluster_bootstrap_distribution`).
 
     p = 2 * min(P(draw <= 0), P(draw >= 0)), i.e. how much of the bootstrap
     distribution's mass is on the opposite side of zero from where it's
     centred -- doubled for a two-sided test. A (add-one) continuity
     correction avoids ever reporting exactly p=0 from a finite number of
     draws, which would overstate confidence past what n_boot draws can
-    actually resolve.
+    actually resolve. The floor is therefore 2/(n+1) (every draw on one
+    side), which caps what any multiple-comparison correction can reject.
+
+    A percentile CI from the same draws agrees with `p <= alpha` except
+    within a draw or two of the boundary (the add-one correction and
+    percentile interpolation differ there), so a verdict must come from one
+    of them, not both.
+
+    Raises ValueError on non-finite draws: NaN satisfies neither `<= 0` nor
+    `>= 0`, so it would drop out of both tail counts and drive p toward its
+    floor -- all-NaN draws would otherwise come back "significant".
     """
     if draws.size == 0:
         return float("nan")
+    n_bad = int(np.count_nonzero(~np.isfinite(draws)))
+    if n_bad:
+        raise ValueError(
+            f"{n_bad} of {draws.size} bootstrap draws are non-finite; the "
+            "bootstrapped values contain NaN/inf, so no p-value exists")
     n = draws.size
     p_low = (np.sum(draws <= 0) + 1) / (n + 1)
     p_high = (np.sum(draws >= 0) + 1) / (n + 1)

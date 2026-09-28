@@ -149,8 +149,10 @@ def test_p_value_is_never_exactly_zero():
 
 
 def test_p_value_coherent_with_a_95_percent_ci_from_the_same_draws():
-    """The whole point of deriving both from one set of draws: p < 0.05
-    should agree with the 95% CI excluding zero, for the same data."""
+    """Away from the boundary, p < 0.05 agrees with the 95% CI from the same
+    draws excluding zero. Within a draw or two of it they can disagree (add-one
+    correction vs percentile interpolation), which is why compare_oof_panels
+    takes its verdicts from the p-value alone."""
     rng = np.random.default_rng(3)
     draws = rng.normal(2.0, 1.0, size=2000)  # clearly positive, not huge effect
     p = bootstrap_two_sided_p_value(draws)
@@ -161,3 +163,15 @@ def test_p_value_coherent_with_a_95_percent_ci_from_the_same_draws():
 
 def test_p_value_on_empty_draws_is_nan():
     assert np.isnan(bootstrap_two_sided_p_value(np.array([])))
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_p_value_refuses_non_finite_draws(bad):
+    """NaN fails both `<= 0` and `>= 0`, so all-NaN draws used to return the
+    floor p=2/(n+1) -- 'significant' from no data at all."""
+    with pytest.raises(ValueError, match="non-finite"):
+        bootstrap_two_sided_p_value(np.full(1000, bad))
+    mixed = np.random.default_rng(0).normal(0, 1, 1000)
+    mixed[::3] = bad
+    with pytest.raises(ValueError, match="non-finite"):
+        bootstrap_two_sided_p_value(mixed)

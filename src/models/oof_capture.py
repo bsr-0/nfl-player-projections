@@ -252,8 +252,11 @@ def add_career_experience_segments(
 
         db = DatabaseManager(db_path) if db_path else DatabaseManager()
         conn = sqlite3.connect(f"file:{db.db_path}?mode=ro", uri=True)
-        history = pd.read_sql(
-            f"SELECT player_id, season, week FROM {CAREER_LOOKBACK_TABLE}", conn)
+        try:
+            history = pd.read_sql(
+                f"SELECT player_id, season, week FROM {CAREER_LOOKBACK_TABLE}", conn)
+        finally:
+            conn.close()
     except Exception as e:  # noqa: BLE001 -- reporting augmentation, fail open
         logger.warning("career-relative cold-start unavailable (%s); "
                        "is_cold_start_career left as NaN", e)
@@ -478,10 +481,10 @@ def cluster_bootstrap_distribution(
     """The raw bootstrap draws behind `cluster_bootstrap_ci`.
 
     Exposed separately (rather than only returning percentiles) because a
-    bootstrap p-value derived from the SAME draws as the CI is internally
-    consistent by construction -- p < alpha and "the (1-alpha) CI excludes
-    zero" agree, which mixing this bootstrap with a separately-computed
-    t-test p-value would not guarantee. See
+    bootstrap p-value derived from the SAME draws as the CI agrees with it
+    up to Monte Carlo resolution at the boundary, which mixing this
+    bootstrap with a separately-computed t-test p-value would not
+    guarantee. See
     scripts/compare_oof_panels.py, which needs both for its
     multiple-comparison correction.
 

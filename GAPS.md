@@ -15218,3 +15218,36 @@ cell that looked real in isolation.
 old per-cell view, with an unmissable warning about what that number means
 (a per-cell rate, not a table-wide one) rather than silently reverting to
 the two-day-old behavior.
+
+## compare_oof_panels.py verdicts were inconsistent, and could be vacuous (2026-09-28)
+
+The entry above claimed `straddles_zero` and `p_value < alpha` "agree by
+construction". They do not, and the CLI's per-cell count relied on it.
+Four defects, each reproduced before fixing:
+
+1. **Boundary disagreement.** The CI is `np.percentile` (interpolated); the
+   p-value uses an add-one correction. Near the boundary they differ by a
+   draw or two: 1,530 of 20,000 simulated N(1.96, 1) draw sets gave opposite
+   verdicts. The one test "verifying" agreement used a single sample.
+2. **`--alpha` ignored by the per-cell count.** The CI was hardcoded at 95%
+   while the p-value/correction used `--alpha`. At `--alpha 0.10`, a cell
+   with p=0.078 printed "0/1 looked significant per-cell ... 1/1 remain
+   significant after Holm".
+3. **NaN looked significant.** A NaN draw counts toward neither tail, so
+   all-NaN draws returned the floor p=2/(n+1)=0.002, and the NaN CI read as
+   "excludes zero".
+4. **Holm could be structurally unable to reject.** The p-value floor is
+   2/(n_boot+1); Holm's first step needs p <= alpha/m. At the default
+   n_boot=1000 that is impossible for m > 25 cells: 30 cells of -5 +/- 1
+   effects gave 0/30 significant, and the CLI told the reader to treat them
+   as noise. `test_pure_noise_family...` (20 cells, n_boot=500) passed
+   vacuously for the same reason.
+
+Fix: both verdicts now come from `p_value` at `alpha`
+(`significant_uncorrected` is new; `straddles_zero` is descriptive only);
+the CI level follows `alpha`; `bootstrap_two_sided_p_value` raises on
+non-finite draws; `segment_comparison` raises (naming the n_boot needed)
+when no cell could be declared significant, and rejects alpha outside
+(0, 1) and n_boot < 1. Also closed the sqlite connection
+`add_career_experience_segments` leaked. Default runs (16 cells, n_boot
+1000, alpha 0.05) produce the same CI and p-values as before.

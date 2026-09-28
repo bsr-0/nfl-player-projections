@@ -43,9 +43,11 @@ def test_pure_noise_family_yields_fewer_significant_cells_after_correction():
         for i in range(20)
     ], ignore_index=True)
 
-    report = cmp.segment_comparison(cells, by=("position",), n_boot=500,
+    # n_boot=1000, not 500: at 500 the p-value floor 2/501 exceeds Holm's
+    # alpha/20, so nothing could ever be rejected and this passed vacuously.
+    report = cmp.segment_comparison(cells, by=("position",), n_boot=1000,
                                     correction="holm", seed=0)
-    n_uncorrected = int((report["straddles_zero"] == False).sum())
+    n_uncorrected = int(report["significant_uncorrected"].astype(bool).sum())
     n_corrected = int(report["significant_corrected"].sum())
     assert n_corrected <= n_uncorrected
     # Holm at alpha=0.05 across 20 pure-noise cells should reject very few,
@@ -170,3 +172,92 @@ def test_cli_correction_none_warns_about_per_cell_rate(tmp_path, capsys):
     cmp.main()
     out = capsys.readouterr().out
     assert "applies to EACH cell individually" in out
+
+
+def _borderline_cell():
+    """One cell whose bootstrap p-value lands in (0.05, 0.10]: significant at
+    alpha=0.10 but not 0.05, which is where a verdict computed at a fixed 95%
+    level diverges from one computed at --alpha."""
+    rng = np.random.default_rng(3)
+    return pd.DataFrame({
+        "player_id": [f"p{i}" for i in range(60)],
+        "position": "QB",
+        "paired_delta": rng.normal(-0.23, 1.0, 60),
+    })
+
+
+def test_per_cell_verdict_and_ci_follow_alpha_not_a_fixed_95_percent():
+    report = cmp.segment_comparison(_borderline_cell(), by=("position",), n_boot=2000,
+                                    correction="holm", alpha=0.10, seed=0)
+    row = report.iloc[0]
+    assert 0.05 < row["p_value"] <= 0.10, "fixture no longer exercises the borderline case"
+    assert row["significant_uncorrected"] == True
+    assert row["significant_corrected"] == True  # one cell: Holm == uncorrected
+    # The CI is the 90% interval now, so it excludes zero like the p-value says.
+    assert row["straddles_zero"] == False
+    assert row["ci_hi"] < 0
+
+
+def test_cli_never_reports_fewer_per_cell_than_corrected_significant_cells(tmp_path, capsys):
+    """Regression: with --alpha 0.10 the per-cell count came from the fixed
+    95% CI, printing '0/1 looked significant per-cell ... 1/1 remain
+    significant after Holm'."""
+    cell = _borderline_cell()
+    base = cell[["player_id", "position"]].assign(season=2024, week=1, actual_points=10.0)
+    baseline = base.assign(residual=5.0, predicted_points=15.0)
+    # |5 + d| - |5| == d here (5 + d > 0), so paired_delta reproduces the cell.
+    variant = base.assign(residual=5.0 + cell["paired_delta"],
+                          predicted_points=15.0 + cell["paired_delta"])
+    assert (variant["residual"] > 0).all()
+    base_path, var_path = tmp_path / "base.parquet", tmp_path / "var.parquet"
+    add_experience_segments(baseline).to_parquet(base_path)
+    add_experience_segments(variant).to_parquet(var_path)
+
+    sys.argv = ["compare_oof_panels.py", "--baseline", str(base_path),
+                "--variant", str(var_path), "--by", "position",
+                "--n-boot", "2000", "--alpha", "0.10"]
+    assert cmp.main() == 0
+    out = capsys.readouterr().out
+    assert "1/1 testable cell(s) looked significant per-cell at alpha=0.1" in out
+    assert "1/1 remain significant" in out
+    assert "90% CI" in out
+
+
+def test_refuses_when_n_boot_cannot_resolve_any_rejection():
+    """30 cells, each an unmistakable effect. At n_boot=1000 the p-value
+    floor 2/1001 is above Holm's alpha/30, so an all-False column would have
+    been reported as 'no effect'. It must refuse instead, and the n_boot it
+    suggests must actually work."""
+    cells = pd.concat([_cell(f"c{k:02d}", n=40, delta_mean=-5.0, delta_sd=1.0, seed=k)
+                       for k in range(30)], ignore_index=True)
+    with pytest.raises(ValueError, match=r"n_boot >= 1200"):
+        cmp.segment_comparison(cells, by=("position",), n_boot=1000, correction="holm")
+
+    report = cmp.segment_comparison(cells, by=("position",), n_boot=1200, correction="holm")
+    assert report["significant_corrected"].all()
+
+
+def test_refuses_when_n_boot_is_below_the_per_cell_floor():
+    cells = _cell("QB", n=40, delta_mean=-5.0, delta_sd=1.0, seed=0)
+    for correction in ("bh", "none"):
+        with pytest.raises(ValueError, match="cannot resolve significance"):
+            cmp.segment_comparison(cells, by=("position",), n_boot=20, correction=correction)
+
+
+def test_rejects_alpha_outside_unit_interval():
+    cells = _cell("QB", n=40, delta_mean=0.0, delta_sd=1.0, seed=0)
+    for alpha in (0.0, 1.0, -0.1):
+        with pytest.raises(ValueError, match="alpha must be in"):
+            cmp.segment_comparison(cells, by=("position",), n_boot=200, alpha=alpha)
+    with pytest.raises(ValueError, match="n_boot must be"):
+        cmp.segment_comparison(cells, by=("position",), n_boot=0)
+
+
+def test_nan_paired_delta_fails_loudly_instead_of_looking_significant():
+    """A NaN delta made every draw that sampled its cluster NaN; NaN counts
+    toward neither tail, so p fell toward its floor and the NaN CI read as
+    'excludes zero'."""
+    cells = _cell("QB", n=40, delta_mean=0.0, delta_sd=1.0, seed=0)
+    cells.loc[0, "paired_delta"] = np.nan
+    with pytest.raises(ValueError, match="non-finite"):
+        cmp.segment_comparison(cells, by=("position",), n_boot=500)

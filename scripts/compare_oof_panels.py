@@ -30,6 +30,7 @@ see `significant_corrected` in the output and src/utils/multiple_comparisons.py.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -102,14 +103,27 @@ def segment_comparison(paired: pd.DataFrame, *, by, cluster="player_id", n_boot=
                        correction="holm", alpha=0.05):
     """One row per segment cell, with a p-value and correction-aware verdict.
 
-    The p-value comes from the SAME bootstrap draws as the CI (`ci_lo`/
-    `ci_hi`), not a separately-computed test -- so `straddles_zero` (per-cell,
-    uncorrected) and `p_value < alpha` agree by construction. `correction`
-    ('holm', 'bh', or 'none') is then applied ACROSS all cells in this table
-    to get `significant_corrected`, which is the number that should actually
-    drive a decision -- `straddles_zero`/`p_value` alone repeat the
-    multiple-comparisons mistake this function exists to prevent.
+    `p_value` comes from the same bootstrap draws as the (1 - alpha)
+    percentile CI (`ci_lo`/`ci_hi`). Both verdicts are computed from
+    `p_value` at `alpha`: `significant_uncorrected` per cell, and
+    `significant_corrected` after `correction` ('holm', 'bh', or 'none') is
+    applied ACROSS all cells in this table -- the latter is what should
+    drive a decision. `straddles_zero` only describes the CI; within a draw
+    or two of the boundary it can disagree with `p_value`, so it is not a
+    verdict.
+
+    Raises ValueError when n_boot is too small for ANY cell to be declared
+    significant: a bootstrap p-value cannot go below 2/(n_boot+1), and Holm's
+    first step needs p <= alpha/m. An all-False column produced that way
+    would read as "no effect" when it means "not resolvable at this n_boot".
     """
+    if not 0 < alpha < 1:
+        raise ValueError(f"alpha must be in (0, 1), got {alpha}")
+    if n_boot < 1:
+        # Zero draws would mark every cell untestable, indistinguishable
+        # from cells with too few clusters.
+        raise ValueError(f"n_boot must be >= 1, got {n_boot}")
+    lo_pct, hi_pct = 100 * alpha / 2, 100 * (1 - alpha / 2)
     rows = []
     for key, group in paired.groupby(list(by), dropna=False):
         key = key if isinstance(key, tuple) else (key,)
@@ -122,14 +136,27 @@ def segment_comparison(paired: pd.DataFrame, *, by, cluster="player_id", n_boot=
         if draws.size == 0:
             entry["ci_lo"], entry["ci_hi"], entry["p_value"] = float("nan"), float("nan"), float("nan")
             entry["straddles_zero"] = None
+            entry["significant_uncorrected"] = None
         else:
-            lo, hi = float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))
+            lo, hi = float(np.percentile(draws, lo_pct)), float(np.percentile(draws, hi_pct))
             entry["ci_lo"], entry["ci_hi"] = lo, hi
             entry["p_value"] = bootstrap_two_sided_p_value(draws)
             entry["straddles_zero"] = bool(lo <= 0 <= hi)
+            # `<=`, matching the inequality holm_bonferroni/benjamini_hochberg use.
+            entry["significant_uncorrected"] = bool(entry["p_value"] <= alpha)
         rows.append(entry)
 
     report = pd.DataFrame(rows).sort_values(list(by)).reset_index(drop=True)
+
+    n_testable = int(report["p_value"].notna().sum())
+    loosest = alpha / n_testable if correction == "holm" else alpha
+    if n_testable and 2.0 / (n_boot + 1) > loosest:
+        raise ValueError(
+            f"n_boot={n_boot} cannot resolve significance: bootstrap p-values bottom "
+            f"out at 2/(n_boot+1)={2.0 / (n_boot + 1):.4g}, above the loosest "
+            f"'{correction}' threshold ({loosest:.4g}) across {n_testable} testable "
+            f"cell(s), so no cell could ever be significant. Use n_boot >= "
+            f"{math.ceil(2.0 / loosest)}.")
 
     correction_fn = CORRECTIONS[correction]
     if correction_fn is None:
@@ -192,14 +219,13 @@ def main() -> int:
                                 correction=args.correction, alpha=args.alpha)
 
     print(f"\nPaired per-row |error| delta ({args.variant_label} - {args.baseline_label}; "
-          f"negative = variant more accurate), clustered by {args.cluster}:\n")
+          f"negative = variant more accurate), {100 * (1 - args.alpha):g}% CI clustered by "
+          f"{args.cluster}:\n")
     print(report.to_string(index=False))
 
     testable = report["p_value"].notna()
-    # `straddles_zero` is an object-dtype column (None for untestable cells),
-    # and Python bool is an int subclass -- `~True` is -2, not False. Force a
-    # real bool dtype before negating, or this silently sums garbage.
-    n_uncorrected = int((report.loc[testable, "straddles_zero"].astype(bool) == False).sum())
+    # Object-dtype column (None for untestable cells): cast before summing.
+    n_uncorrected = int(report.loc[testable, "significant_uncorrected"].astype(bool).sum())
     if args.correction == "none":
         print(f"\n{n_uncorrected}/{int(testable.sum())} testable cell(s) look significant at "
               f"alpha={args.alpha} PER CELL. --correction is 'none': that rate applies to EACH "
@@ -218,11 +244,11 @@ def main() -> int:
                   "NOT survive correction for testing multiple cells at once -- treat those as "
                   "noise, not findings, regardless of how large mean_paired_delta looks.")
 
-    print("\nRead 'significant_corrected', not 'straddles_zero' alone, before acting on any "
-          "cell: straddles_zero is per-cell and does not account for how many cells were "
-          "tested. A cell with straddles_zero=False but significant_corrected=False looked "
-          "real in isolation but is not distinguishable from noise once you account for "
-          "testing this many segments at once.")
+    print("\nRead 'significant_corrected', not 'significant_uncorrected' or 'straddles_zero', "
+          "before acting on any cell: those are per-cell and do not account for how many "
+          "cells were tested. A cell with significant_uncorrected=True but "
+          "significant_corrected=False looked real in isolation but is not distinguishable "
+          "from noise once you account for testing this many segments at once.")
     return 0
 
 
