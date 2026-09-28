@@ -358,6 +358,25 @@ _GIT_COMMIT_UNSET = object()
 _git_commit_cache = _GIT_COMMIT_UNSET
 
 
+def _isotonic_holdout_check(pred_fit: np.ndarray, y_fit: np.ndarray,
+                            pred_eval: np.ndarray, y_eval: np.ndarray) -> Tuple[bool, float, float]:
+    """Does an isotonic calibrator fitted on (pred_fit, y_fit) lower RMSE on
+    the separate (pred_eval, y_eval) rows? Returns (improves, rmse_raw, rmse_cal).
+
+    The gate this replaces fitted the calibrator on every out-of-fold row and
+    scored it on those same rows -- where isotonic regression, the
+    least-squares monotone fit, can only match or beat the uncalibrated
+    prediction -- then compared that with a different model's held-out RMSE
+    plus a 1% allowance. The calibrator was never tested out of sample, and a
+    step function it cannot reject costs ranking resolution for nothing.
+    """
+    from sklearn.isotonic import IsotonicRegression
+    iso = IsotonicRegression(out_of_bounds="clip").fit(pred_fit, y_fit)
+    rmse_raw = float(np.sqrt(mean_squared_error(y_eval, pred_eval)))
+    rmse_cal = float(np.sqrt(mean_squared_error(y_eval, iso.predict(pred_eval))))
+    return rmse_cal < rmse_raw, rmse_raw, rmse_cal
+
+
 def _git_commit() -> Optional[str]:
     """Short HEAD sha, or None outside a git checkout. Resolved once."""
     global _git_commit_cache
@@ -669,20 +688,31 @@ class PositionModel:
                     print(f"  Target smearing factor: {tt_fit.smearing:.4f} "
                           f"(corrects log1p retransformation bias)")
 
-            # Isotonic calibration: correct systematic biases in OOF predictions
-            try:
-                from sklearn.isotonic import IsotonicRegression
-                self.calibrator = IsotonicRegression(out_of_bounds='clip')
-                self.calibrator.fit(oof_ensemble, oof_y)
-                cal_pred = self.calibrator.predict(oof_ensemble)
-                cal_rmse = float(np.sqrt(mean_squared_error(oof_y, cal_pred)))
-                if cal_rmse < self._oof_metrics["rmse"] * 1.01:
-                    print(f"  Isotonic calibration: RMSE {self._oof_metrics['rmse']:.3f} -> {cal_rmse:.3f}")
-                else:
+            # Isotonic calibration: correct systematic biases in OOF predictions,
+            # but only if it earns its place out of sample -- fitted on the
+            # first 70% of OOF rows (the eval meta-learner's predictions),
+            # scored against the uncalibrated prediction on the last 30%.
+            # Without that split it cannot be validated, so it stays off.
+            self.calibrator = None
+            if len(eval_indices) >= 10:
+                try:
+                    from sklearn.isotonic import IsotonicRegression
+                    improves, rmse_raw, rmse_cal = _isotonic_holdout_check(
+                        _eval_meta.predict(oof_preds[train_indices]),
+                        y_train_inner[train_indices],
+                        oof_ensemble_eval, oof_y_eval)
+                    if improves:
+                        self.calibrator = IsotonicRegression(out_of_bounds='clip')
+                        self.calibrator.fit(oof_ensemble, oof_y)
+                        print(f"  Isotonic calibration: held-out RMSE {rmse_raw:.3f} -> {rmse_cal:.3f}")
+                    else:
+                        print(f"  Isotonic calibration: held-out RMSE {rmse_raw:.3f} -> "
+                              f"{rmse_cal:.3f}, no improvement, disabled")
+                except Exception as e:
                     self.calibrator = None
-                    print(f"  Isotonic calibration: no improvement, disabled")
-            except Exception:
-                self.calibrator = None
+                    print(f"  Isotonic calibration: failed ({type(e).__name__}: {e}), disabled")
+            else:
+                print("  Isotonic calibration: no held-out OOF split to validate it, disabled")
         else:
             self._oof_metrics = None
             self.calibrator = None

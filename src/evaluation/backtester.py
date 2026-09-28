@@ -1280,12 +1280,17 @@ class ModelBacktester:
                 "_PARTIAL" if results.get("partial_season") else "")
             filename = f"backtest_{results['season']}_{datetime.now().strftime('%Y%m%d')}{suffix}.json"
         
-        # Convert numpy types and int64 keys to native Python types
+        # Convert numpy types and int64 keys to native Python types. np.bool_
+        # is not a bool subclass: without its own branch it fell through to
+        # json.dump(default=str) and was written as the STRING "False" --
+        # truthy to every reader, e.g. success_criteria.model_has_real_edge.
         def convert_keys(obj):
             if isinstance(obj, dict):
                 return {str(k): convert_keys(v) for k, v in obj.items()}
             elif isinstance(obj, list):
                 return [convert_keys(item) for item in obj]
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
             elif isinstance(obj, (np.integer, np.int64)):
                 return int(obj)
             elif isinstance(obj, (np.floating, np.float64)):
@@ -1714,6 +1719,34 @@ def run_backtest(test_season: int = None, weeks: Optional[List[int]] = None) -> 
         print("No persisted models found; nothing to evaluate.")
         return {}, ""
 
+    # The assert above checks the split THIS run would train on, not the
+    # models it loads. With production models (trained through the latest
+    # completed season) in MODELS_DIR, a walk-forward of that season scores
+    # them in-sample while printing "(unseen)" -- and the artifact is then
+    # trusted and published as held-out accuracy. run_multi_season_backtest
+    # did this for every earlier season. Refuse unless the models' own
+    # metadata proves the season was held out.
+    model_metadata = None
+    metadata_path = MODELS_DIR / "model_metadata.json"
+    try:
+        with open(metadata_path, encoding="utf-8") as f:
+            model_metadata = json.load(f)
+    except (OSError, ValueError):
+        pass
+    trained_on = (model_metadata or {}).get("train_seasons")
+    if not isinstance(trained_on, list) or not trained_on:
+        print(f"REFUSING: {metadata_path} does not say which seasons the persisted "
+              f"models were trained on, so {actual_test_season} cannot be shown to be "
+              "held out. Nothing scored.")
+        return {}, ""
+    if actual_test_season in {int(s) for s in trained_on}:
+        print(f"REFUSING: the persisted models were trained on {actual_test_season} "
+              f"(train_seasons {min(trained_on)}-{max(trained_on)}); scoring them on it "
+              "is in-sample, not a holdout. Retrain with "
+              f"`python -m src.models.train --test-season {actual_test_season}` first. "
+              "Nothing scored.")
+        return {}, ""
+
     ci_cols = ["prediction_ci80_lower", "prediction_ci80_upper",
                "prediction_ci95_lower", "prediction_ci95_upper"]
     preds = []
@@ -1765,13 +1798,7 @@ def run_backtest(test_season: int = None, weeks: Optional[List[int]] = None) -> 
         pos: len(getattr(mw.models.get(1) or next(iter(mw.models.values()), None), "feature_names", []))
         for pos, mw in position_models.items() if mw is not None and getattr(mw, "models", None)
     }
-    try:
-        metadata_path = MODELS_DIR / "model_metadata.json"
-        if metadata_path.exists():
-            with open(metadata_path, encoding="utf-8") as f:
-                results["model_metadata"] = json.load(f)
-    except Exception:
-        pass
+    results["model_metadata"] = model_metadata
 
     # Baselines are built from the FULL history frame (prior season included,
     # NaN predictions where a week was not walked) and evaluated only on scored
@@ -1863,7 +1890,9 @@ def run_backtest(test_season: int = None, weeks: Optional[List[int]] = None) -> 
 def run_multi_season_backtest(n_seasons: int = 3) -> Dict:
     """
     Run backtest on the last N test seasons and report mean ± std of metrics.
-    Uses the same persisted production ensemble for each season (no retraining).
+    Uses the same persisted ensemble for each season (no retraining), so
+    run_backtest refuses -- and this skips -- every season those models were
+    trained on; for a real multi-season holdout use run_loyo_backtest.
     """
     from src.utils.data_manager import DataManager
     
