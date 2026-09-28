@@ -108,3 +108,25 @@ def test_leakage_in_a_fold_aborts_rather_than_recording_it(stubbed):
             _test_frame(2024), _test_frame(2024), [2023, 2024], 2024,
             ["QB"], False, None, oof_collector=[],
         )
+
+
+def test_fold_runner_forwards_context_like_production(monkeypatch):
+    """train_models' production path passes pre-window seasons as
+    context_data; a fold that drops them trains a different pipeline."""
+    seen = {}
+
+    class _Trainer:
+        trained_models = {}
+        training_metrics = {}
+
+    def _prepare(train_data, test_data, positions, *a, **k):
+        seen.update(k)
+        return train_data, test_data, _Trainer()
+
+    monkeypatch.setattr(train_module, "_prepare_training_data", _prepare)
+    monkeypatch.setattr(train_module, "_run_backtest_after_training", lambda *a, **k: {})
+    monkeypatch.setattr(train_module, "_load_qb_target_choice", lambda: "fp")
+    context = _test_frame(2021)
+    train_module._run_one_fold(_test_frame(2023), _test_frame(2024), [2022, 2023], 2024,
+                               ["QB"], False, None, context_data=context)
+    assert seen["context_data"] is context

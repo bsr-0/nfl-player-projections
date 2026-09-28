@@ -53,7 +53,7 @@ from src.features.dimensionality_reduction import PositionDimensionalityReducer
 from src.models.ensemble import ModelTrainer
 from src.models.robust_validation import RobustTimeSeriesCV
 from src.evaluation.backtester import ModelBacktester
-from src.utils.models_dir import redirect_models_dir
+from src.utils.models_dir import assert_safe_models_dir_write, redirect_models_dir
 from src.utils.model_rollback import available_rollbacks, snapshot_models
 from src.utils.atomic_io import atomic_write_json
 from src.models.oof_capture import (
@@ -780,14 +780,19 @@ def _run_one_fold(
     oof_collector: list = None,
     oof_coverage_collector: list = None,
     oof_strict: bool = False,
+    context_data: pd.DataFrame = None,
 ):
     """
     Run one fold: prepare features, train models, run backtest.
     Uses MODELS_DIR from config (patch for walk-forward). Returns (trainer, backtest_results).
+
+    `context_data` (seasons before the training window) must be passed the
+    way train_models' production path passes it, or the fold's lookback
+    features start cold where production's do not.
     """
     train_data, test_data, trainer = _prepare_training_data(
         train_data, test_data, positions, tune_hyperparameters, n_trials,
-        fast=False,
+        fast=False, context_data=context_data,
     )
 
     # Backtest prediction loop
@@ -888,7 +893,8 @@ def train_models(positions: list = None,
                  skip_quality_gate: bool = False,
                  loyo_backtest: bool = False,
                  loyo_seasons: list = None,
-                 oof_label: str = "default"):
+                 oof_label: str = "default",
+                 oof_output_dir: Path = None):
     """
     Main training function with automatic train/test split.
 
@@ -907,6 +913,10 @@ def train_models(positions: list = None,
             Set this to something identifying, e.g. "pre-vegas-fix", when
             running two deliberate walk-forward variants to compare -- the
             default label makes both runs indistinguishable on disk.
+        oof_output_dir: Where walk-forward writes its per-fold metrics, OOF
+            panel runs and "latest" pointer (default data/experiments). A
+            smoke run passes its own directory so it cannot overwrite the
+            real pointer/metrics or prune real panel runs.
     """
     # Apply fast-mode overrides before reading any config values
     if fast:
@@ -915,6 +925,11 @@ def train_models(positions: list = None,
             MODEL_CONFIG[key] = val
 
     positions = positions or POSITIONS
+    if not walk_forward and not loyo_backtest:
+        # Before data loading and, above all, before snapshot_models(): a
+        # refused run must not evict a good rollback snapshot on its way out.
+        assert_safe_models_dir_write(MODELS_DIR, positions, fit_models=True,
+                                     production_run=True)
     n_trials = n_trials or MODEL_CONFIG["n_optuna_trials"]
     if strict_requirements is None:
         strict_requirements = bool(MODEL_CONFIG.get("strict_requirements_default", False))
@@ -1071,19 +1086,18 @@ def train_models(positions: list = None,
         test_seasons_wf = all_seasons[-4:] if len(all_seasons) >= 4 else all_seasons[-2:]
         import tempfile
         from pathlib import Path
-        import config.settings as settings
-        old_models_dir = settings.MODELS_DIR
         wf_metrics = []
         wf_seasons = []
         oof_folds = []
         oof_coverage = []
         skipped_folds = []
         for ts in test_seasons_wf:
-            td, td_test, tr_ss, _ = load_training_data(
+            td, td_test, tr_ss, _, td_context = load_training_data(
                 positions,
                 test_season=ts,
                 optimize_training_years=False,
                 strict_requirements=strict_requirements,
+                return_context=True,
             )
             if len(td_test) < 20:
                 # This fold contributes NOTHING to the OOF panel either --
@@ -1102,7 +1116,8 @@ def train_models(positions: list = None,
                                            tune_hyperparameters, n_trials,
                                            oof_collector=oof_folds,
                                            oof_coverage_collector=oof_coverage,
-                                           oof_strict=True)
+                                           oof_strict=True,
+                                           context_data=td_context)
                     if res:
                         wf_metrics.append(res.get("by_position", {}))
                         wf_seasons.append(ts)
@@ -1127,7 +1142,8 @@ def train_models(positions: list = None,
             # was scraping the log -- which rounds to 2dp and therefore cannot
             # resolve effects below ~0.005 MAE. See
             # scripts/compare_walkforward_runs.py.
-            fold_metrics_path = DATA_DIR / "experiments" / "walk_forward_fold_metrics.json"
+            experiments_dir = Path(oof_output_dir) if oof_output_dir else DATA_DIR / "experiments"
+            fold_metrics_path = experiments_dir / "walk_forward_fold_metrics.json"
             try:
                 atomic_write_json({
                     "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1169,7 +1185,7 @@ def train_models(positions: list = None,
                         fold_lineage.append({"test_season": int(season),
                                              "train_seasons": train_seasons})
                     written = write_run_panel(
-                        panel, DATA_DIR / "experiments", coverage=coverage, label=oof_label,
+                        panel, experiments_dir, coverage=coverage, label=oof_label,
                         metadata={
                             "folds": fold_lineage,
                             "target_semantics": "served one-week fantasy-point prediction versus actual target row",
@@ -1262,7 +1278,11 @@ def train_models(positions: list = None,
                 if rmses:
                     print(f"  {pos}: RMSE {np.mean(rmses):.2f} +/- {np.std(rmses):.2f}  MAE {np.mean(maes):.2f} +/- {np.std(maes):.2f}")
             return None, train_data, test_data, actual_test_season
-        settings.MODELS_DIR = old_models_dir
+        # Used to fall through to the production path below, so a validation
+        # run with no usable folds became a production retrain of `positions`.
+        raise RuntimeError(
+            f"walk-forward produced no fold metrics (skipped: {skipped_folds}); "
+            "nothing was validated")
 
     # LOYO walk-forward backtest: train fresh per season, test on each in range
     if loyo_backtest:
@@ -1298,7 +1318,7 @@ def train_models(positions: list = None,
     print("\n[2/5] Preparing features, engineering, and training...")
     train_data, test_data, trainer = _prepare_training_data(
         train_data, test_data, positions, tune_hyperparameters, n_trials,
-        fast=fast, context_data=context_data,
+        fast=fast, context_data=context_data, production_run=True,
     )
 
     # Data quality checks (train_models-only, not needed in walk-forward folds)

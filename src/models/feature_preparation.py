@@ -450,6 +450,7 @@ def _prepare_training_data(
     fast: bool = False,
     context_data: pd.DataFrame = None,
     fit_models: bool = True,
+    production_run: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, "ModelTrainer"]:
     """Shared preprocessing pipeline used by both train_models() and _run_one_fold().
 
@@ -487,8 +488,16 @@ def _prepare_training_data(
     this repo (single_week_ppr/evaluate.py, train.py's walk-forward loop,
     backtester.py's LOYO loop) already wraps its call in redirect_models_dir
     for this reason -- do the same for any new one.
+
+    That is now enforced: against the production MODELS_DIR this raises
+    unless `production_run=True` (train_models' production path only) with
+    fit_models=True and every position -- see assert_safe_models_dir_write.
     """
     from config.settings import MODELS_DIR
+    from src.utils.models_dir import assert_safe_models_dir_write
+
+    assert_safe_models_dir_write(MODELS_DIR, positions, fit_models=fit_models,
+                                 production_run=production_run)
 
     # Conference FIRST, on the raw frame -- same rationale as prepare_features
     # (which this path does NOT go through): add_utilization_scores fills

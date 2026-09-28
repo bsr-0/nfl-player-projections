@@ -681,7 +681,10 @@ class ModelBacktester:
         # MAE-to-RMSE ratio (requirement: MAE should be 20-25% lower than RMSE)
         mae_rmse_ratio = round(mae / rmse, 3) if rmse > 0 else None
         # Target: ratio ~0.75-0.80 means MAE is 20-25% lower than RMSE
-        mae_rmse_healthy = mae_rmse_ratio is not None and 0.70 <= mae_rmse_ratio <= 0.85
+        # bool(): the comparison yields numpy.bool_, which json refuses -- it
+        # crashed the walk-forward fold-metrics write after every fold had
+        # trained, before the OOF panel was written (GAPS.md 2026-09-28).
+        mae_rmse_healthy = bool(mae_rmse_ratio is not None and 0.70 <= mae_rmse_ratio <= 0.85)
 
         return {
             "rmse": round(rmse, 2),

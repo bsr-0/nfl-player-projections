@@ -29,7 +29,7 @@ from __future__ import annotations
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, List, Tuple
+from typing import Iterable, Iterator, List, Tuple
 
 import config.settings as settings
 
@@ -48,6 +48,53 @@ def _bound_modules() -> List[object]:
         if isinstance(getattr(module, "MODELS_DIR", None), Path):
             found.append(module)
     return found
+
+
+class ProductionArtifactWriteError(RuntimeError):
+    """A run that is not a full production retrain would rewrite data/models."""
+
+
+def is_production_models_dir(path: Path | str) -> bool:
+    return Path(path).resolve() == Path(settings.PRODUCTION_MODELS_DIR).resolve()
+
+
+def assert_safe_models_dir_write(
+    models_dir: Path | str,
+    positions: Iterable[str],
+    *,
+    fit_models: bool,
+    production_run: bool,
+) -> None:
+    """Refuse to write the served artifacts unless this run replaces all of them.
+
+    The bounded scaler is one MinMaxScaler fit jointly on every training row,
+    and utilization weights / percentile bounds are per position but share
+    one file each -- so a run over a subset of positions rewrites what the
+    positions it did NOT retrain are served with (a QB-only run left RB/WR/TE
+    on a QB-fit scaler, default utilization weights and no percentile bounds;
+    GAPS.md 2026-09-28). A fit_models=False run is worse: it rewrites the
+    preprocessing and trains nothing to match it. Anything other than a full
+    production retrain must run inside redirect_models_dir.
+    """
+    if not is_production_models_dir(models_dir):
+        return
+    if not production_run:
+        raise ProductionArtifactWriteError(
+            f"refusing to write {models_dir}: only a full production retrain "
+            "(train_models without --walk-forward/--loyo) may replace the served "
+            "artifacts. Wrap this call in redirect_models_dir(<temp dir>).")
+    if not fit_models:
+        raise ProductionArtifactWriteError(
+            "refusing a fit_models=False production run: it would rewrite the "
+            "served scaler/utilization artifacts without retraining the models "
+            "that depend on them.")
+    missing = sorted(set(settings.POSITIONS) - set(positions))
+    if missing:
+        raise ProductionArtifactWriteError(
+            f"refusing a production retrain without {missing}: the bounded scaler "
+            "and utilization weights/bounds are shared across positions, so a "
+            "subset run desyncs the positions it skips. Retrain all of "
+            f"{list(settings.POSITIONS)}, or experiment with --walk-forward.")
 
 
 @contextmanager

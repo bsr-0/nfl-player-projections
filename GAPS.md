@@ -15251,3 +15251,76 @@ when no cell could be declared significant, and rejects alpha outside
 (0, 1) and n_boot < 1. Also closed the sqlite connection
 `add_career_experience_segments` leaked. Default runs (16 cells, n_boot
 1000, alpha 0.05) produce the same CI and p-values as before.
+
+## A QB-only "restore" desynced RB/WR/TE; rollback could not have undone it (2026-09-28)
+
+A `python -m src.models.train --positions QB` run, meant to restore the QB
+model, rewrote artifacts all four positions are served through:
+
+- `feature_scaler_bounded.joblib` is ONE MinMaxScaler fit jointly on every
+  training row (`feature_preparation._apply_bounded_scaling`). QB-only rows
+  gave a 99-column QB fit in place of the 125-column all-position fit.
+- `utilization_weights.json`: `fit_utilization_weights` starts from defaults
+  and skips positions with <200 rows, so RB/WR/TE silently reverted to
+  default weights.
+- `utilization_percentile_bounds.json`: `fit_percentile_bounds` returns
+  without storing anything for a position with no rows, so RB/WR/TE bounds
+  were dropped.
+
+RB/WR/TE model files were untouched, which is why "RB/WR/TE untouched,
+confirmed" looked true. Regenerating the scaler over all positions (the
+proposed repair) would not fix it: the new QB model was trained on the
+QB-only fit, so there is no single scaler that is right for both it and the
+2026-09-25 RB/WR/TE models. Only a full four-position retrain (or restoring
+a complete copy of `data/models/` from before the QB-only run) is
+consistent.
+
+Rollback could not help either: snapshots held `model_*_1w`, `multiweek_*`,
+`model_metadata.json` and `feature_version.txt` only, so restoring one served
+old weights through whatever preprocessing the later run left behind.
+
+Fixes:
+
+- `assert_safe_models_dir_write` (`src/utils/models_dir.py`): against the
+  production models dir (`config.settings.PRODUCTION_MODELS_DIR`, which
+  `redirect_models_dir` does not rebind), `_prepare_training_data` now
+  refuses anything but `production_run=True` + `fit_models=True` + all four
+  positions. `train_models` checks the same before loading data or taking a
+  rollback snapshot, so a refused run cannot evict a good snapshot.
+- Rollback snapshots now also hold the scaler, utilization weights/bounds,
+  `snap_imputation.json`, `qb_target_choice.json`, `util_to_fp_*.joblib` and
+  `label_baseline*.json`, plus a manifest. Restore makes the covered set
+  exactly the snapshot's (it deletes covered files the snapshot lacked).
+  Pre-manifest snapshots are LEGACY: not counted by `available_rollbacks`
+  (so `rollback_available` stays honest), refused by restore unless
+  `--allow-legacy`. Every snapshot on disk today is legacy.
+
+Found while tracing these:
+
+- **`python -m src.evaluation.ablation` overwrote production.** It called
+  `_prepare_training_data` unsandboxed with `fit_models=True`, then trained
+  four variants whose `ModelTrainer` saves into MODELS_DIR, so production
+  was left serving the last variant, trained WITHOUT rank and utilization
+  features. It now runs inside `redirect_models_dir` with
+  `fit_models=False`, and still writes `data/models/ablation_results.json`.
+- **Walk-forward could fall through into a production retrain.** With no
+  fold metrics (every fold skipped), `train_models(walk_forward=True)` did
+  not return; it continued to the snapshot and a real retrain of
+  `positions`. It now raises.
+- **Walk-forward crashed after every fold had trained.**
+  `ModelBacktester._calculate_metrics` returned `mae_rmse_healthy` as
+  `numpy.bool_`; the per-fold metrics write (`atomic_write_json`) raised
+  TypeError, which train.py does not catch there, so the run died before
+  writing the OOF panel. Reproduced on main; now a Python bool, with a test
+  that the metric dict survives the strict writer.
+- **Folds trained a different pipeline from production.** `_run_one_fold`
+  never passed `context_data` (pre-window seasons), which the production
+  path does. Harmless only while the training window starts at the
+  database's first season; folds now pass it.
+- `tests/test_external_feature_integrity_failure.py` called
+  `_prepare_training_data` against the live models dir; it now uses a
+  sandbox (and the guard would refuse it otherwise).
+
+Note: `scripts/export_served_fold_full_ppr.py` hashes training source files
+against its frozen preflight, so any preflight frozen before this change
+must be re-prepared.

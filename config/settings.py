@@ -12,6 +12,10 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 MODELS_DIR = DATA_DIR / "models"
+# The served artifacts' home. Deliberately a separate name: redirect_models_dir
+# rebinds every `MODELS_DIR` to a sandbox, and this must keep saying where
+# production actually is while it does (src/utils/models_dir.py).
+PRODUCTION_MODELS_DIR = MODELS_DIR
 
 # ESPN fantasy-league ("pool") data: the user's own roster, lineup and
 # matchups. NOT NFL data, and the published site is NFL projections only.

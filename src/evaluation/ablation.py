@@ -204,7 +204,36 @@ def run_ablation_study(
 
     Returns a dict with keys: "full", "no_rank", "no_util", "no_rank_no_util",
     each containing per-position metrics + a "summary" with deltas.
+
+    Runs inside redirect_models_dir. Every ModelTrainer below saves what it
+    trains into MODELS_DIR, so without the sandbox this replaced the served
+    models five times over -- ending on the no_rank_no_util variant.
     """
+    import tempfile
+    from src.utils.models_dir import redirect_models_dir
+
+    # Resolved before the redirect, which would point it at the sandbox.
+    out_path = MODELS_DIR / "ablation_results.json"
+    with tempfile.TemporaryDirectory() as tmp, redirect_models_dir(tmp):
+        results = _run_ablation_study(positions, fast, test_season)
+    try:
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2, default=str)
+        print(f"\n  Saved ablation results: {out_path}")
+    except Exception as e:
+        print(f"  Ablation results save failed: {e}")
+
+    # Print summary report
+    print("\n" + format_ablation_report(results, positions or POSITIONS))
+
+    return results
+
+
+def _run_ablation_study(
+    positions: Optional[List[str]],
+    fast: bool,
+    test_season: Optional[int],
+) -> Dict[str, Any]:
     from src.models.data_loading import load_training_data
     from src.models.feature_preparation import _prepare_training_data
 
@@ -226,9 +255,11 @@ def run_ablation_study(
     )
 
     print("\n[2/5] Preparing features (shared pipeline)...")
+    # fit_models=False: only the prepared frames are used; the variants below
+    # train their own models.
     train_data, test_data, _ = _prepare_training_data(
         train_data, test_data, positions,
-        tune_hyperparameters=False, n_trials=n_trials, fast=fast,
+        tune_hyperparameters=False, n_trials=n_trials, fast=fast, fit_models=False,
     )
 
     # Identify columns to ablate
@@ -278,19 +309,6 @@ def run_ablation_study(
     print("\n[5/5] Computing ablation deltas...")
     summary = _compute_ablation_summary(results, positions)
     results["summary"] = summary
-
-    # Save results
-    out_path = MODELS_DIR / "ablation_results.json"
-    try:
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2, default=str)
-        print(f"\n  Saved ablation results: {out_path}")
-    except Exception as e:
-        print(f"  Ablation results save failed: {e}")
-
-    # Print summary report
-    print("\n" + format_ablation_report(results, positions))
-
     return results
 
 
