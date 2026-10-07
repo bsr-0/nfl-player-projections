@@ -52,10 +52,61 @@ OUT_DIR = Path("docs/data")
 BACKTEST_DIR = Path("data/backtest_results")
 
 
-def measured_accuracy() -> dict | None:
-    """Per-position accuracy read from the latest TRUSTED, full-season
-    serving-path backtest -- the artifact that scores the model this page
-    actually serves, week by week, against what those players really did.
+def latest_serving_backtest() -> tuple[str, dict] | None:
+    """(file name, artifact) of the newest TRUSTED, full-season serving-path
+    walk-forward: latest test season first, then the latest RUN of it by
+    the `backtest_date` the artifact records. Both published accuracy
+    blocks read this one artifact, so they can never describe two runs.
+
+    Not the last file name. save_results names files
+    backtest_<season>_<YYYYMMDD>[suffix].json, so same-day runs share a
+    stem and a hand-labelled copy sorts after the plain name ('_' > '.').
+    That is how the page published backtest_2025_20260917_v5prod.json --
+    the 07:47 run, before the pace blend shipped -- over
+    backtest_2025_20260917.json, the 12:00 run of the blended code the page
+    serves: QB/RB/WR bias +0.9/+0.6/+0.5 instead of -0.6/-0.2/-0.0, and
+    "loses to a blended heuristic" when the served model beats it. An
+    artifact whose season or run time cannot be read is skipped, never
+    guessed into an order.
+    """
+    best = None
+    for path in BACKTEST_DIR.glob("backtest_*_*.json"):
+        if "UNTRUSTED" in path.name or "PARTIAL" in path.name:
+            continue
+        try:
+            raw = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if raw.get("backtest_path") != "serving_path_as_of_walk_forward":
+            continue
+        if raw.get("trust", {}).get("trusted", True) is False or raw.get("partial_season"):
+            continue
+        try:
+            season = int(raw["season"])
+            run_at = datetime.fromisoformat(str(raw["backtest_date"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if run_at.tzinfo is not None:   # backtest_date is naive local time
+            run_at = run_at.astimezone().replace(tzinfo=None)
+        key = (season, run_at, path.name)
+        if best is None or key > best[0]:
+            best = (key, path.name, raw)
+    return None if best is None else (best[1], best[2])
+
+
+def _flag(value):
+    """A success-criteria boolean as a real boolean (None if unknown).
+    Artifacts saved before save_results converted numpy bools hold the
+    strings "True"/"False", and "False" is truthy to any JS reader."""
+    if value is None or isinstance(value, bool):
+        return value
+    return {"True": True, "False": False}.get(value)
+
+
+def measured_accuracy(latest: tuple[str, dict] | None) -> dict | None:
+    """Per-position accuracy from `latest_serving_backtest()` -- the artifact
+    that scores the model this page actually serves, week by week, against
+    what those players really did.
 
     This used to be a hardcoded dict (QB 7.09 / RB 4.43 / WR 4.03 / TE 3.00,
     with a -1.2 to -1.6 point "runs low" bias) copied from a three-week spot
@@ -67,41 +118,37 @@ def measured_accuracy() -> dict | None:
     trusted artifact exists, so the page can say nothing rather than assert
     a stale number.
     """
-    for path in sorted(BACKTEST_DIR.glob("backtest_*_*.json"), reverse=True):
-        if "UNTRUSTED" in path.name or "PARTIAL" in path.name:
+    if latest is None:
+        return None
+    name, raw = latest
+    out = {}
+    for pos, m in (raw.get("by_position") or {}).items():
+        if m.get("mae") is None or m.get("avg_predicted") is None or m.get("avg_actual") is None:
             continue
-        try:
-            raw = json.loads(path.read_text())
-        except (OSError, ValueError):
-            continue
-        if raw.get("backtest_path") != "serving_path_as_of_walk_forward":
-            continue
-        if raw.get("trust", {}).get("trusted", True) is False or raw.get("partial_season"):
-            continue
-        by_pos = raw.get("by_position") or {}
-        out = {}
-        for pos, m in by_pos.items():
-            if m.get("mae") is None or m.get("avg_predicted") is None or m.get("avg_actual") is None:
-                continue
-            out[pos] = {
-                "mae": round(float(m["mae"]), 2),
-                "bias": round(float(m["avg_predicted"]) - float(m["avg_actual"]), 2),
-            }
-        if out:
-            out["_source"] = {
-                "file": path.name,
-                "season": raw.get("season"),
-                "weeks": len(raw.get("weeks_evaluated") or []),
-                "model_type": raw.get("model_type"),
-                "feature_version": raw.get("feature_version"),
-            }
-            return out
-    return None
+        out[pos] = {
+            "mae": round(float(m["mae"]), 2),
+            "bias": round(float(m["avg_predicted"]) - float(m["avg_actual"]), 2),
+        }
+    if not out:
+        return None
+    out["_source"] = {
+        "file": name,
+        "season": raw.get("season"),
+        "weeks": len(raw.get("weeks_evaluated") or []),
+        "model_type": raw.get("model_type"),
+        "feature_version": raw.get("feature_version"),
+        # When the walk-forward ran and when the models it scored were
+        # trained: a served model retrained after this date is NOT what
+        # these numbers measured.
+        "backtest_date": raw.get("backtest_date"),
+        "models_trained_at": (raw.get("model_metadata") or {}).get("training_date"),
+    }
+    return out
 
 
-def baseline_standing() -> dict | None:
+def baseline_standing(latest: tuple[str, dict] | None) -> dict | None:
     """How the served model actually compares to the naive baselines, from
-    the same trusted artifact.
+    the same trusted artifact as measured_accuracy.
 
     The fix order's instruction was "until it wins, keep serving Step 8 and
     SAY SO" -- this is the say-so, published rather than left in a JSON file
@@ -110,35 +157,26 @@ def baseline_standing() -> dict | None:
     which is not the same as being decisively better, and the page should
     not imply otherwise.
     """
-    for path in sorted(BACKTEST_DIR.glob("backtest_*_*.json"), reverse=True):
-        if "UNTRUSTED" in path.name or "PARTIAL" in path.name:
-            continue
-        try:
-            raw = json.loads(path.read_text())
-        except (OSError, ValueError):
-            continue
-        if raw.get("backtest_path") != "serving_path_as_of_walk_forward":
-            continue
-        if raw.get("trust", {}).get("trusted", True) is False or raw.get("partial_season"):
-            continue
-        strong = raw.get("strong_baseline_comparison") or {}
-        if not strong:
-            continue
-        criteria = raw.get("success_criteria") or {}
-        return {
-            "season": raw.get("season"),
-            "rmse_improvement_pct": {
-                k: v.get("rmse_improvement_pct") for k, v in strong.items()
-                if isinstance(v, dict)
-            },
-            "beats_every_baseline": all(
-                (v.get("rmse_improvement_pct") or 0) > 0 for v in strong.values()
-                if isinstance(v, dict)
-            ),
-            "beat_all_baselines_by_20_pct": criteria.get("beat_all_baselines_by_20_pct"),
-            "model_has_real_edge": criteria.get("model_has_real_edge"),
-        }
-    return None
+    if latest is None:
+        return None
+    _, raw = latest
+    strong = raw.get("strong_baseline_comparison") or {}
+    if not strong:
+        return None
+    criteria = raw.get("success_criteria") or {}
+    return {
+        "season": raw.get("season"),
+        "rmse_improvement_pct": {
+            k: v.get("rmse_improvement_pct") for k, v in strong.items()
+            if isinstance(v, dict)
+        },
+        "beats_every_baseline": all(
+            (v.get("rmse_improvement_pct") or 0) > 0 for v in strong.values()
+            if isinstance(v, dict)
+        ),
+        "beat_all_baselines_by_20_pct": _flag(criteria.get("beat_all_baselines_by_20_pct")),
+        "model_has_real_edge": _flag(criteria.get("model_has_real_edge")),
+    }
 
 KEEP = ["player_id", "name", "position", "team", "opponent", "home_away",
         "predicted_points", "prediction_ci80_lower", "prediction_ci80_upper",
@@ -287,6 +325,7 @@ def main() -> int:
         print("nothing written")
         return 1
 
+    latest = latest_serving_backtest()
     meta = {
         "season": int(season),
         "mode": mode,
@@ -298,8 +337,8 @@ def main() -> int:
         "has_intervals": True,
         "pace_blend_kappa": PACE_BLEND_KAPPA,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "measured": measured_accuracy(),
-        "baseline_standing": baseline_standing(),
+        "measured": measured_accuracy(latest),
+        "baseline_standing": baseline_standing(latest),
         "model": ("weekly ensemble (1w horizon), log1p+smearing calibration, "
                   "shrunk toward the Step 8 season pace by games played "
                   f"(w = g / (g + {PACE_BLEND_KAPPA:g}))"),

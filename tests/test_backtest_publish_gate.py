@@ -58,6 +58,19 @@ def test_save_results_stamps_verdict_and_renames_untrusted(tmp_path):
     assert saved["trust"]["trusted"] is False and saved["trust"]["reasons"]
 
 
+def test_save_results_writes_numpy_bools_as_booleans(tmp_path):
+    """np.bool_ is not a bool: it used to reach json.dump(default=str) and be
+    saved as the string "False", which every reader treats as true."""
+    import numpy as np
+    bt = ModelBacktester()
+    bt.results_dir = tmp_path
+    r = _results()
+    r["success_criteria"] = {"model_has_real_edge": np.bool_(False),
+                             "mape_lt_25": np.float64(60.0) < 25.0}
+    saved = json.loads(bt.save_results(r).read_text())
+    assert saved["success_criteria"] == {"model_has_real_edge": False, "mape_lt_25": False}
+
+
 @pytest.fixture
 def results_page(tmp_path, monkeypatch):
     import scripts.generate_results_page as g

@@ -67,42 +67,44 @@
   "generated_at": "2026-09-26T21:40:54+00:00",
   "measured": {
     "QB": {
-      "mae": 6.8,
-      "bias": 0.94
+      "mae": 6.68,
+      "bias": -0.6
     },
     "TE": {
-      "mae": 3.08,
-      "bias": -0.43
+      "mae": 3.07,
+      "bias": -0.54
     },
     "RB": {
-      "mae": 4.75,
-      "bias": 0.56
+      "mae": 4.57,
+      "bias": -0.23
     },
     "WR": {
-      "mae": 4.28,
-      "bias": 0.52
+      "mae": 4.16,
+      "bias": -0.01
     },
     "_source": {
-      "file": "backtest_2025_20260917_v5prod.json",
+      "file": "backtest_2025_20260917.json",
       "season": 2025,
       "weeks": 18,
       "model_type": "per_position_stacked_ensemble",
-      "feature_version": "36"
+      "feature_version": "36",
+      "backtest_date": "2026-09-17T12:00:30.753709",
+      "models_trained_at": "2026-09-17T03:32:56.033952"
     }
   },
   "baseline_standing": {
     "season": 2025,
     "rmse_improvement_pct": {
-      "trailing_3g_avg": 6.79,
-      "trailing_5g_avg": 3.07,
-      "season_avg": 2.74,
-      "prior_season_rank": 8.5,
-      "blended_heuristic": -0.42,
-      "vegas_implied": 4.44
+      "trailing_3g_avg": 7.99,
+      "trailing_5g_avg": 4.31,
+      "season_avg": 3.5,
+      "prior_season_rank": 9.67,
+      "blended_heuristic": 0.86,
+      "vegas_implied": 5.67
     },
-    "beats_every_baseline": false,
+    "beats_every_baseline": true,
     "beat_all_baselines_by_20_pct": false,
-    "model_has_real_edge": "True"
+    "model_has_real_edge": true
   },
   "model": "weekly ensemble (1w horizon), log1p+smearing calibration, shrunk toward the Step 8 season pace by games played (w = g / (g + 3))"
 }

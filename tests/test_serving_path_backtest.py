@@ -22,12 +22,19 @@ PLAYERS = [(f"P{i:02d}", ["WR", "RB", "QB", "TE"][i % 4]) for i in range(40)]
 WEEKS = [1, 2, 3]
 
 
+def _write_model_metadata(models_dir, train_seasons):
+    (models_dir / "model_metadata.json").write_text(json.dumps(
+        {"train_seasons": train_seasons, "training_date": "2026-09-17T03:32:56"}))
+
+
 @pytest.fixture
 def private_db(tmp_path, monkeypatch):
     path = tmp_path / "test.db"
     monkeypatch.setattr(db_mod, "DB_PATH", path)          # DatabaseManager() default
     monkeypatch.setattr(bt, "DATA_DIR", tmp_path)          # artifacts + app payload + charts
-    monkeypatch.setattr(bt, "MODELS_DIR", tmp_path)        # no model_metadata.json here
+    monkeypatch.setattr(bt, "MODELS_DIR", tmp_path)        # the "persisted models" live here
+    # Models held out from 2025, as a real holdout retrain records them.
+    _write_model_metadata(tmp_path, list(range(2018, 2025)))
     db = DatabaseManager(db_path=path)
     for pid, pos in PLAYERS:
         db.insert_player({"player_id": pid, "name": f"Player {pid}", "position": pos})
@@ -116,3 +123,29 @@ def test_weeks_argument_limits_the_walk(private_db, fake_serving):
     assert results["partial_season"] is True
     artifacts = list((private_db.db_path.parent / "backtest_results").glob("backtest_2025_*.json"))
     assert len(artifacts) == 1 and artifacts[0].name.endswith("_PARTIAL.json")
+
+
+def test_refuses_models_trained_on_the_scored_season(private_db, fake_serving, capsys):
+    """The split assert covers the split, not the loaded models: production
+    models trained through 2025 would score 2025 in-sample while the run
+    printed "(unseen)" and saved a trusted, publishable artifact."""
+    _write_model_metadata(private_db.db_path.parent, list(range(2018, 2026)))
+    results, report = bt.run_backtest(test_season=2025)
+
+    assert results == {} and report == ""
+    assert _FakePredictor.calls == []                       # refused before walking
+    assert "in-sample" in capsys.readouterr().out
+    assert not list((private_db.db_path.parent / "backtest_results").glob("backtest_*.json"))
+
+
+def test_refuses_models_of_unknown_training_seasons(private_db, fake_serving, capsys):
+    (private_db.db_path.parent / "model_metadata.json").unlink()
+    results, _ = bt.run_backtest(test_season=2025)
+
+    assert results == {} and _FakePredictor.calls == []
+    assert "cannot be shown to be held out" in capsys.readouterr().out
+
+
+def test_artifact_records_the_scored_models_metadata(private_db, fake_serving):
+    results, _ = bt.run_backtest(test_season=2025)
+    assert results["model_metadata"]["train_seasons"] == list(range(2018, 2025))
