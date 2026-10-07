@@ -80,24 +80,29 @@ A model is promotable only if it improves multivariate calibration and proper
 joint scores without materially degrading player marginals. A better simulated
 correlation that worsens predictive distributions is not an improvement.
 
-## Implemented in this branch
+## Implemented (updated 2026-09-27)
 
-- total/margin/win-probability draw contract with conserved scores;
-- optional participation and share inputs;
-- team opportunity share allocator with invariant checks;
-- role-based residual-correlation artifact interface;
-- strict output schemas and compact site summaries;
-- empirical CRPS, energy score, variogram score, coverage, game calibration,
-  and strict actual-outcome coverage evaluator;
-- production readiness guard and an OOF evaluation CLI.
+The game-script prototype this audit reviewed (score/volume draws, share
+allocator, readiness guard) was deleted after a real-data probe showed its
+means drifted from the served projection and its dependence had the wrong
+sign. Serving now uses the calibrated copula (`src/models/calibrated_simulation.py`):
 
-## Not implemented because it requires historical DB access
+- calibrated marginals from OOF residuals (prediction-analog donors or the
+  stratified legacy pools, selected causally week by week);
+- role-keyed dependence from a game / team-volume / game-script factor
+  copula fitted on normal scores;
+- rolling-origin backtest with pre-registered, Holm-corrected primaries,
+  a confirmation-season holdout and a re-verifiable run directory;
+- fitted serving artifacts with provenance and hashes; game-sim-v2 schema
+  (player draws and fantasy sums; game-model predictions passed through, not
+  simulated).
 
-- all causal labels/features and OOF artifact construction;
-- possession/drive and stat-line models;
-- artifact serialization/loading into production simulation;
-- calibration fitting and promotion decision;
-- DFS/lineup evaluation and UI decision exposure.
+## Still not implemented
+
+- possession/drive, usage and stat-line models (the audit's layers 1-2, 4-5);
+- availability: draws are conditional on the player appearing;
+- conditioning of dependence on game context (total, spread);
+- DFS/lineup decision evaluation and UI exposure.
 
 ## Statistical references
 

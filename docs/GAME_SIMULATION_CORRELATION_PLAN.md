@@ -1,9 +1,11 @@
 # Game Simulation and Player Correlation Plan
 
-Status: Phase 1 (interfaces, deterministic core) built and bug-fixed; Phase 2
-(OOF residual panel + real correlation fitting) scoped 2026-09-23, not
-started. See "Phase 2 scoping" below for what that actually requires.
-Branch: feature/game-simulation-correlation
+Status (2026-09-27): the game-script simulator (workstream 1 and the data
+contracts below) was deleted and replaced in production by the calibrated
+copula -- see GAPS.md, "Game-script simulator replaced by the calibrated
+copula". Sections below that mention `game_simulation.py`,
+`simulation_adapter.py`, `GameScriptInput` or `simulation_readiness.py` are
+the historical record of that prototype, not current code.
 
 ## Objective
 Extend weekly PPR projections from independent player estimates to coherent game-level outcomes while preserving existing models and leakage-safe validation.
@@ -324,3 +326,14 @@ they're recorded here to check once work item 2 actually fits real data:
    upstream data-quality bugs, consistent with `game_inputs_from_predictions`'s
    own existing duplicate check a few lines above it. Tested
    (`tests/test_simulation_adapter.py`), verified failing before the fix.
+
+### Calibrated simulation v2 (2026-09-27)
+
+Work items 2 and 3 above are now built, beyond the originally scoped
+"shared Gaussian residual": prediction-analog marginals
+(`PredictionAnalogCalibration`), a game/team/script factor copula keyed by
+canonical role (`FactorCopulaModel`, with a two-parameter team-factor
+baseline), and a one-command rolling-origin backtest
+(`scripts/evaluate_calibrated_simulation.py`, verified by
+`scripts/verify_calibrated_simulation.py`). Design, synthetic evidence,
+the command and caveats: GAPS.md, "Calibrated simulation v2".

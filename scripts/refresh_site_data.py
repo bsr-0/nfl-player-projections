@@ -25,9 +25,10 @@ Chains, in order:
        first) -- failing this step should not block the player-projection
        refresh.
     8. scripts/generate_simulation_data.py -- joins the two serving JSON
-       outputs and writes versioned game/player simulation summaries to
-       docs/data/simulation_*.json. It is also independently skippable and
-       can write analysis Parquet with --write-parquet.
+       outputs and writes calibrated-copula player simulation summaries
+       (game-sim-site-v2) to docs/data/simulation_*.json. Needs artifacts
+       from scripts/fit_simulation_artifacts.py and fails (softly, here)
+       without them. Independently skippable; --write-parquet keeps raw draws.
 
 Does NOT commit or push anything. Review `git status`/`git diff` on
 docs/data and data/players_*.json yourself before committing.

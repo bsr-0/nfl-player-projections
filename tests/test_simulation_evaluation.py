@@ -3,8 +3,7 @@ import pandas as pd
 import pytest
 
 from src.models.simulation_evaluation import (
-    energy_score, evaluate_joint_player_draws, game_draw_calibration,
-    marginal_calibration, variogram_score,
+    energy_score, evaluate_joint_player_draws, marginal_calibration, variogram_score,
 )
 
 def test_energy_score_prefers_accurate_draws():
@@ -60,11 +59,20 @@ def test_evaluator_rejects_missing_simulated_player_actual():
     with pytest.raises(ValueError, match="lacks actual outcomes"):
         evaluate_joint_player_draws(draws, actuals)
 
-def test_game_draw_calibration():
-    draws = pd.DataFrame([
-        {"game_id": "g", "draw": 0, "home_won": True, "simulated_total": 45., "simulated_margin": 3.},
-        {"game_id": "g", "draw": 1, "home_won": True, "simulated_total": 47., "simulated_margin": 5.},
-    ])
-    actuals = pd.DataFrame([{"game_id": "g", "home_score": 27., "away_score": 20.}])
-    result = game_draw_calibration(draws, actuals)
-    assert result["n"] == 1 and result["total_mae"] == pytest.approx(1.)
+
+
+def test_empirical_crps_matches_bruteforce_on_every_draw():
+    from src.models.simulation_evaluation import empirical_crps
+    values = np.random.default_rng(5).gamma(2.0, 4.0, size=1000)
+    brute = (np.abs(values - 7.0).mean()
+             - .5 * np.abs(values[:, None] - values[None, :]).mean())
+    # Thinning to a subset would not reproduce the all-draw estimator.
+    assert empirical_crps(values, 7.0) == pytest.approx(brute, rel=1e-12)
+
+
+def test_empirical_crps_known_values():
+    from src.models.simulation_evaluation import empirical_crps
+    assert empirical_crps(np.array([0.0, 1.0]), 0.0) == pytest.approx(0.25)
+    draws = np.random.default_rng(1).standard_normal(200_000)
+    # Closed form for N(0, 1) at its mean: 2*phi(0) - 1/sqrt(pi).
+    assert empirical_crps(draws, 0.0) == pytest.approx(2 * 0.3989422804 - 0.5641895835, abs=3e-3)

@@ -15219,6 +15219,93 @@ old per-cell view, with an unmissable warning about what that number means
 (a per-cell rate, not a table-wide one) rather than silently reverting to
 the two-day-old behavior.
 
+## Calibrated simulation draws were mirrored residuals (fixed 2026-09-27)
+
+`oof_capture.py` defines `residual = predicted_points - actual_points`, but
+`EmpiricalResidualCalibration.draw_residuals` returned centered residuals and
+every caller (`scripts/evaluate_calibrated_simulation.py`) built draws as
+`predicted + residual`. That is the mirror image of the true outcome
+distribution: right-skewed boom games became a heavy *lower* tail and the
+upside was clipped. Every CRPS/coverage/energy number that script produced
+for `calibrated_independent` and `calibrated_role_correlation` was scored on
+the wrong shape. (Correlation *signs* were unaffected -- negating every
+column preserves covariance -- but joint scores still were, via the
+marginals.) `season_simulation.py` is not affected: its donor pools use
+`actual - prediction`.
+
+**Fixed** at the source: `draw_residuals` now returns `mean - residual`
+(actual-minus-prediction deviations), so `predicted + draw` is correct for
+every caller. No reported results depended on the old output. Regression
+test pins orientation on a skewed fixture and was verified failing before the
+fix (`tests/test_residual_calibration.py`). Any run directory produced by
+`evaluate_calibrated_simulation.py` before this date must be regenerated.
+
+## Calibrated simulation v2: analog marginals, factor copula, rolling backtest (2026-09-27)
+
+Built in a cloud session without data; everything below is verified on
+synthetic panels with known truth, **not yet on the real OOF panel**. The
+real run is one command (below).
+
+**Two defects fixed on the way (both would have biased the comparison):**
+1. `simulation_evaluation.empirical_crps` thinned every ensemble to 250
+   draws, a leftover from its old O(n^2) form. The ensemble CRPS estimator is
+   biased upward by E|X-X'|/(2n), so a fixed small n penalises wide
+   distributions more than narrow ones -- a tilt in exactly the
+   marginal-family comparison this work runs. Now uses every draw (the
+   O(n log n) form makes that cheap). No CRPS test existed; two added.
+2. With 200 bootstrap resamples the smallest attainable p-value, 2/(n+1) =
+   0.00995, sits above Holm's first threshold for 7 primaries (0.05/7 =
+   0.0071): nothing could ever be declared significant, whatever the effect.
+   `run()` and the CLI now refuse n_bootstrap < 280.
+
+**What was built** (`src/models/residual_calibration.py`,
+`src/models/player_correlation.py`, `scripts/evaluate_calibrated_simulation.py`):
+- *Marginals*: `PredictionAnalogCalibration` -- donors are the k same-position
+  OOF rows with the nearest served prediction; families `residual` and
+  `outcome` (donor actuals shifted once to the served mean, which keeps zero
+  mass and the lower bound). On a heteroscedastic synthetic panel the pooled
+  legacy covers 99% of low projections and 57% of high ones at nominal 80%;
+  the analog covers 81-84% at both ends, and 10%+ of legacy draws for a
+  1-point player are impossible (< -1 point) vs < 1% for `outcome`.
+- *Dependence*: `FactorCopulaModel` -- game factor, per-team volume factor and
+  an antisymmetric game-script factor, on the Gaussian-copula (normal-score)
+  scale the simulator samples on. PSD by construction (no projection step).
+  `structure="team"` = two pooled moments (item 3 baseline);
+  `structure="role"` = per-canonical-role loadings shrunk toward it. Fitted on
+  a known DGP it recovers every implied correlation within 0.06, including
+  the negative same-team RB1-WR1 the script factor exists for.
+- *Backtest*: weekly rolling refit on all rows before the target week;
+  marginal family re-selected weekly from strictly earlier evidence and moved
+  off the legacy default only on a significant week-clustered improvement;
+  six modes with common random numbers; primaries pre-registered in
+  `PRIMARY_COMPARISONS` (analog vs legacy CRPS; team/role factor vs
+  independent and role vs team on scaled variogram + QB+2 stack-sum CRPS),
+  week-block bootstrap, Holm; `--confirm-season` withholds the latest season,
+  `--run-confirmation` scores it once. The primary joint metric is a variogram
+  score on prediction-scaled points: on a known-dependence panel it detects
+  the true model at z = -6.7 vs -4.5 raw, -4.6 stack CRPS, -2.7 energy (energy
+  is secondary for that reason). The scale is the served prediction,
+  identical across modes, so the score stays proper.
+- Null/power checks (`tests/test_calibrated_simulation_backtest.py`): with no
+  injected dependence the factor gates fail; with it they pass and the role
+  structure beats the team factor; changing a week's outcomes changes no draw
+  or selection for that week.
+
+**Run locally** (development first; confirmation once, after design is frozen):
+
+    python scripts/evaluate_calibrated_simulation.py \
+      --oof-run-dir data/experiments/oof_panels/<run_id> \
+      --output-dir data/experiments/calibrated_sim_<date> --confirm-season 2025
+    # later, no further tuning:  ... --confirm-season 2025 --run-confirmation
+
+It verifies the OOF panel, runs, writes, re-verifies the run from its saved
+draws, and prints `summary.md`. Use `--draws 500` if memory is tight.
+
+**Open caveats**: scored rows are player-games present in the panel, so
+results are conditional on the player appearing (pregame inactives are not
+in it). The legacy `calibrated_role_correlation` arm is kept unchanged
+(min_pair_rows=2) as a comparison only. Point MAE cannot move by design.
+
 ## compare_oof_panels.py verdicts were inconsistent, and could be vacuous (2026-09-28)
 
 The entry above claimed `straddles_zero` and `p_value < alpha` "agree by
@@ -15507,3 +15594,78 @@ its own results. `tests/conftest.py` now deletes a database the session itself
 created if it holds no rows (never one that pre-existed or has data), and two
 consecutive runs give identical results. `test_external_data_idempotency.py`
 also stopped using the real database, as its docstring already claimed.
+### First real-data check of the calibrated simulation (2026-09-27)
+
+No production OOF panel exists yet, so the backtest was run as research on
+Plan A's validated OOF rows (`full_ppr_raw_truth_20260924/ppr_oof_rows.csv`,
+already keyed to the target game), with the nflverse schedule. Rows were
+kept when the pregame prediction was >= 1 point (16,945 rows). 2024-2025 were
+scored (544 games, 11,626 player-games) with 1,000 draws. This was a
+development run with no withheld season. Scratch script, not committed.
+
+- Marginals: analog vs legacy CRPS -0.131 (95% CI -0.141..-0.118,
+  Holm-significant); 80% coverage 0.843 vs 0.816; draws below the
+  position's observed minimum 6.4% vs 14.5%. The analog marginal is a real
+  improvement over the pooled legacy marginal.
+- Dependence: fitted role correlations track held-out ones (QB1-WR1 0.20
+  vs 0.20, QB1-TE1 0.17 vs 0.11), and stack 80% coverage goes from 0.77
+  (independent) to 0.82 (role factor). But no primary joint comparison is
+  close to significant: variogram -0.0005 (CI -0.0015..0.0005); stack CRPS
+  -0.0002 (CI -0.027..0.026). The team factor collapses to near-independence
+  (pooled same-team correlation about 0.01), so its baseline is weak.
+- Not tested: Plan A predictions are not the served model. Rerun on the
+  production panel once a walk-forward run writes one.
+
+The game-script simulator (`game_simulation.simulate_players`, the path
+`generate_simulation_data.py` writes to `docs/data/simulation_*.json`) is
+NOT part of this backtest and is not calibrated. In a probe (home favored by
+9, 20k draws), means drifted from the served projection (QB 18.0 -> 17.3;
+3-point WR 3.0 -> 3.4 from clipping Gaussian noise at zero), and QB points
+correlated -0.11 with the team's own score, because simulated scores feed
+player points only through a leading-team pass-rate cut. It is not a usable
+model as written.
+
+## Game-script simulator replaced by the calibrated copula (2026-09-27)
+
+The production simulation (`scripts/generate_simulation_data.py` →
+`docs/data/simulation_*.json`, step 8 of `refresh_site_data.py`) now serves the
+calibrated copula instead of `game_simulation.simulate_players`, which the
+real-data probe above found unusable (mean drift from the served projection,
+zero-clipping, QB negatively correlated with his own team's score).
+
+- **One implementation.** `src/models/calibrated_simulation.py` holds the
+  selection, marginal, dependence and per-game draw code; the backtest,
+  `scripts/fit_simulation_artifacts.py` and the generator all call it.
+  `test_served_draws_equal_backtest_role_factor_draws` pins that served draws
+  are bit-identical to the backtest's `calibrated_role_factor` arm.
+- **Artifacts.** Fitted on a verified OOF panel keyed to the target game, with
+  the backtest's own selection rule at the week after the panel's last; saved
+  with hashes and provenance under `data/models/simulation/<run_id>/`
+  (gitignored, regenerable), `latest.json` pointing at the current run. An
+  optional verified backtest on the same panel is recorded as the dependence
+  evidence. Loading fails closed on any mismatch.
+- **Serving.** Outcome columns (`actual_points`) are dropped before anything is
+  built; opponent/schedule disagreement is an error; excluded players are
+  counted by reason in the payload; serve-time `is_cold_start` = not seen in
+  the fitting panel. Weeks at or before the artifacts' fitted-through week are
+  refused (their outcomes shaped the calibration).
+- **Schema game-sim-v2** replaces v1: no simulated scores; game-model
+  predictions passed through as `served_*`; team/stack/game fantasy sums from
+  the player draws. Dependence is on and labelled unproven (decision:
+  role-factor on; joint gain not yet significant on real data).
+- **Deleted:** `game_simulation.py`, `usage_allocation.py`,
+  `simulation_adapter.py`, `simulation_readiness.py`, the player-keyed
+  correlation model, `simulation_evaluation.game_draw_calibration`, and the
+  never-run RB-split experiment's code (`evaluate_rb_split.py`,
+  `rb_ppr_split.py`, `rb_split_evaluation.py`; its folder stays as a record,
+  marked superseded). The RB-split script had also been unrunnable since
+  `player_correlation.py`/`simulation_evaluation.py` changed, because it
+  hard-required their pinned hashes.
+
+**Blocker, not worked around:** no production OOF panel exists yet, so no
+serving artifacts can be fitted and step 8 fails (softly) until a walk-forward
+run writes one. Then:
+
+    python scripts/evaluate_calibrated_simulation.py --oof-run-dir <run> --output-dir <bt> --confirm-season 2025
+    python scripts/fit_simulation_artifacts.py --oof-run-dir <run> --backtest-run-dir <bt>
+    python scripts/generate_simulation_data.py --season 2026

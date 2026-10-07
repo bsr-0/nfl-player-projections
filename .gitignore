@@ -182,3 +182,6 @@ data/espn_*.json
 # Model rollback snapshots: ~500MB each, weights plus the bookkeeping that
 # describes them. Local safety net for a destructive retrain, never shared.
 data/models/rollback/
+# Calibrated-simulation serving artifacts: regenerable with
+# scripts/fit_simulation_artifacts.py from a verified OOF panel.
+/data/models/simulation/
