@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-26T23:57:00.058835+00:00",
+  "generated_at": "2026-10-08T01:35:27.616617+00:00",
   "status": "pass",
   "checks": {
     "completeness": {
@@ -29,7 +29,7 @@
   },
   "latest_observed": {
     "season": 2026,
-    "week": 3,
-    "rows": 123996
+    "week": 4,
+    "rows": 124694
   }
 }
