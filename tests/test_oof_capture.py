@@ -235,11 +235,8 @@ def test_capture_names_the_next_observed_game_not_the_origin():
 
 
 def test_capture_refuses_a_frame_that_no_longer_reproduces_target_1w():
-    # Player r widens the WR target_1w range. The check allows for
-    # winsorized targets (target_1w == clip(next fantasy_points) within each
-    # position's observed range), so a lost row is caught when the shifted
-    # value lands inside that range -- in _season_frame alone, 11 vs a stated
-    # 7 at the range's top is indistinguishable from a clip at 7.
+    # Player r widens the WR range; kept from when the check tolerated
+    # clipping. The check is exact now, so the lost row fails either way.
     wide = pd.DataFrame({"player_id": "r", "season": 2024, "week": [1, 2, 3], "team": "D",
                          "opponent": ["H", "I", "J"], "position": "WR", "predicted_points": 5.0,
                          "fantasy_points": [1.0, 20.0, 2.0]})
@@ -263,26 +260,32 @@ def test_target_game_panel_rekeys_and_refuses_origin_only_panels():
     assert rekeyed.loc[("p", 2), "origin_team"] == "B"
 
 
-def test_capture_accepts_targets_winsorized_like_prepare_training_data():
-    """_prepare_training_data clips test target_1w to per-position training
-    quantiles and leaves fantasy_points alone; comparing them unclipped
-    failed every real fold."""
+def test_capture_refuses_a_clipped_target_1w():
+    """_prepare_training_data no longer clips test targets (2026-10-07); a
+    capped target_1w no longer equals the next game's points and must fail
+    rather than be accepted as winsorization."""
     from src.models.feature_preparation import _create_horizon_targets
 
-    rng = np.random.default_rng(0)
     frame = _create_horizon_targets(pd.DataFrame(
         [{"player_id": f"p{i}", "season": 2024, "week": w, "team": "A", "opponent": "B",
-          "position": "WR" if i % 2 else "RB", "predicted_points": 10.0,
-          "fantasy_points": float(rng.gamma(2, 5)) - (3.0 if w == 2 else 0.0)}
-         for i in range(40) for w in range(1, 6)]), n_weeks=[1])
-    for position, (lo, hi) in {"WR": (0.0, 25.0), "RB": (-0.5, 18.0)}.items():
-        mask = frame["position"] == position
-        frame.loc[mask, "target_1w"] = frame.loc[mask, "target_1w"].clip(lo, hi)
+          "position": "WR", "predicted_points": 10.0, "fantasy_points": float(i + w)}
+         for i in range(5) for w in range(1, 4)]), n_weeks=[1])
     frame[ACTUAL_COLUMN] = frame["target_1w"]
-    assert (frame["target_1w"] != frame.groupby("player_id")["fantasy_points"].shift(-1)).any()
+    assert len(capture_fold_rows(frame, train_seasons=[2023], test_season=2024)) == 10
+    frame["target_1w"] = frame["target_1w"].clip(upper=5.0)
+    frame[ACTUAL_COLUMN] = frame["target_1w"]
+    with pytest.raises(ValueError, match="does not reproduce target_1w"):
+        capture_fold_rows(frame, train_seasons=[2023], test_season=2024)
 
-    rows = capture_fold_rows(frame, train_seasons=[2023], test_season=2024)
-    assert len(rows) == 160  # every row with a next game
+
+def test_prepare_training_data_leaves_test_targets_raw():
+    """Guard the source of the 2026-10-07 failure: training targets are
+    winsorized, test targets are not."""
+    import inspect
+    from src.models import feature_preparation
+    source = inspect.getsource(feature_preparation._prepare_training_data)
+    assert "test_data.loc[test_mask, col]" not in source
+    assert ".clip(lo, hi)" in source  # training winsorization still present
 
 
 def test_self_paired_target_game_is_excluded_and_counted():

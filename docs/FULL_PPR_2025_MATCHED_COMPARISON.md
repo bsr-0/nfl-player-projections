@@ -52,9 +52,23 @@ adjustment. A negative delta favors the served architecture.
 
 ## Reproduce
 
-The generated experiment is under
-`data/experiments/full_ppr_head_to_head_20260925/`. Run these in order with new
-output directories if repeating:
+The 2026-09-25 attempt is under `data/experiments/full_ppr_head_to_head_20260925/`.
+The current run is under `data/experiments/full_ppr_head_to_head_20260930/`
+(preflight/population v4, fold v5). Earlier 09-30 folds stopped on
+winsorized test targets (GAPS.md 2026-10-07). Before any long fit, run the
+~4-minute smoke check:
+
+```sh
+python scripts/smoke_served_fold.py \
+  --preflight-dir <a prepared preflight> \
+  --output-dir data/experiments/smoke_served_fold/<stamp>
+```
+
+If `run` fails after training, fix the check and re-run
+`export_served_fold_full_ppr.py finalize --input-dir <preflight> --output-dir <fold>`;
+the fit's capture, coverage and model hashes are persisted before validation.
+
+Run these in order with new output directories if repeating:
 
 ```sh
 python scripts/prepare_full_ppr_head_to_head.py \

@@ -112,3 +112,62 @@ def test_bad_production_export_fails(mutation):
         mapping.loc[1, "target_week"] = 2
     with pytest.raises(ValueError):
         checked_production_fold(capture, mapping)
+
+
+def test_capture_carrying_its_own_target_columns_merges_and_is_cross_checked():
+    rows = []
+    for week in (1, 3, 6):
+        row = {"player_id": "p", "season": 2025, "week": week, "team": "A",
+               "position": "WR", "fantasy_points": float(week)}
+        row.update({name: 0 for name in FULL_COMPONENTS})
+        row["receptions"] = week
+        rows.append(row)
+    mapping = origin_to_target_map(pd.DataFrame(rows))
+    capture = pd.DataFrame({"player_id": ["p", "p"], "season": [2025, 2025],
+                            "week": [1, 3], "team": ["A", "A"], "position": ["WR", "WR"],
+                            "predicted_points": [3.0, 5.0], "actual_points": [3.0, 6.0],
+                            "train_seasons": ["2024"] * 2,
+                            "target_week": [3, 6], "target_team": ["A", "A"]})
+    export = checked_production_fold(capture, mapping)
+    assert list(export.week) == [3, 6]
+    capture.loc[0, "target_week"] = 4
+    with pytest.raises(ValueError, match="disagrees"):
+        checked_production_fold(capture, mapping)
+
+
+def _winsor_fixture():
+    rows = []
+    for week in (1, 2, 3, 4):
+        row = {"player_id": "p", "season": 2025, "week": week, "team": "A",
+               "position": "WR", "fantasy_points": float(week * 10)}
+        row.update({name: 0 for name in FULL_COMPONENTS})
+        row["receptions"] = week * 10
+        rows.append(row)
+    mapping = origin_to_target_map(pd.DataFrame(rows))
+    capture = pd.DataFrame({"player_id": ["p"] * 3, "season": [2025] * 3,
+                            "week": [1, 2, 3], "team": ["A"] * 3, "position": ["WR"] * 3,
+                            "predicted_points": [1.0, 2.0, 3.0],
+                            "actual_points": [20.0, 30.0, 40.0],
+                            "train_seasons": ["2024"] * 3})
+    return mapping, capture
+
+
+def test_clipped_capture_is_rejected():
+    """Test targets are raw; a capped actual means the capture is not the label."""
+    mapping, capture = _winsor_fixture()
+    capture.loc[2, "actual_points"] = 35.0  # raw 40 capped at a training quantile
+    with pytest.raises(ValueError, match="does not match"):
+        checked_production_fold(capture, mapping)
+
+
+def test_exact_capture_is_scored_on_raw_label():
+    mapping, capture = _winsor_fixture()
+    export = checked_production_fold(capture, mapping)
+    assert list(export.actual_ppr) == [20.0, 30.0, 40.0]
+
+
+def test_non_clip_mismatch_still_fails():
+    mapping, capture = _winsor_fixture()
+    capture.loc[1, "actual_points"] = 25.0
+    with pytest.raises(ValueError, match="does not match"):
+        checked_production_fold(capture, mapping)
