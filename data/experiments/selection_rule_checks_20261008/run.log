@@ -1,0 +1,373 @@
+rows=5826 weeks=17 players=563 | sd week=0.006 game=0.338 player=0.499 resid=2.824
+
+1. synthetic coverage (nominal 0.95)
+  week_sd x1 mu=0.00: player 2s=0.921 ub=0.941 lb=0.932 | week 2s=0.873 | twoway 2s=0.987
+  week_sd x1 mu=0.10: player 2s=0.943 ub=0.929 lb=0.944 | week 2s=0.870 | twoway 2s=0.991
+  week_sd x1 mu=0.20: player 2s=0.932 ub=0.939 lb=0.936 | week 2s=0.872 | twoway 2s=1.000
+  week_sd x2 mu=0.00: player 2s=0.951 ub=0.954 lb=0.943 | week 2s=0.906 | twoway 2s=0.996
+  week_sd x2 mu=0.10: player 2s=0.928 ub=0.928 lb=0.949 | week 2s=0.873 | twoway 2s=0.991
+  week_sd x2 mu=0.20: player 2s=0.932 ub=0.949 lb=0.932 | week 2s=0.878 | twoway 2s=0.996
+  week_sd x4 mu=0.00: player 2s=0.928 ub=0.936 lb=0.938 | week 2s=0.869 | twoway 2s=1.000
+  week_sd x4 mu=0.10: player 2s=0.939 ub=0.942 lb=0.949 | week 2s=0.882 | twoway 2s=0.991
+  week_sd x4 mu=0.20: player 2s=0.937 ub=0.946 lb=0.942 | week 2s=0.884 | twoway 2s=1.000
+
+== null: 2025 matched set  (R=200, B=1000)
+   block rate: [any LB fail]=0.18  [>=2 LB fails]=0.03  [>=3 LB fails]=0.01  [any LB or fixed backstop]=0.97  [any scaled backstop]=0.00  [>=2 LB or any scaled backstop]=0.03  [>=3 LB or any scaled backstop]=0.01
+   #LB-failing cells distribution: [164, 30, 4, 2]
+   RMSE                         point=-0.004 sd=0.054 lb_fail=0.00 fixed_bs=0.02 scaled_bs=0.00
+   MAE QB                       point=-0.017 sd=0.228 lb_fail=0.01 fixed_bs=0.31 scaled_bs=0.00
+   MAE RB                       point=+0.011 sd=0.096 lb_fail=0.01 fixed_bs=0.18 scaled_bs=0.00
+   MAE WR                       point=-0.004 sd=0.066 lb_fail=0.01 fixed_bs=0.05 scaled_bs=0.00
+   MAE TE                       point=-0.008 sd=0.057 lb_fail=0.00 fixed_bs=0.03 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=-0.001 sd=0.146 lb_fail=0.01 fixed_bs=0.26 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=-0.008 sd=0.107 lb_fail=0.01 fixed_bs=0.14 scaled_bs=0.00
+   MAE tier_served 1-12         point=-0.007 sd=0.166 lb_fail=0.00 fixed_bs=0.28 scaled_bs=0.00
+   MAE tier_served 13-36        point=-0.004 sd=0.112 lb_fail=0.01 fixed_bs=0.18 scaled_bs=0.00
+   |bias| overall               point=-0.003 sd=0.108 lb_fail=0.04 fixed_bs=0.17 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=+0.028 sd=0.319 lb_fail=0.00 fixed_bs=0.43 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=-0.005 sd=0.226 lb_fail=0.03 fixed_bs=0.35 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=+0.003 sd=0.098 lb_fail=0.04 fixed_bs=0.15 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.009 sd=0.134 lb_fail=0.00 fixed_bs=0.45 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.006 sd=0.220 lb_fail=0.02 fixed_bs=0.34 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.001 sd=0.065 lb_fail=0.01 fixed_bs=0.06 scaled_bs=0.00
+   Spearman                     point=-0.001 sd=0.011 lb_fail=0.04 fixed_bs=0.00 scaled_bs=0.00
+
+== null: 8-week forward window, weeks 6-13  (R=100, B=1000)
+   block rate: [any LB fail]=0.09  [>=2 LB fails]=0.03  [>=3 LB fails]=0.00  [any LB or fixed backstop]=0.98  [any scaled backstop]=0.00  [>=2 LB or any scaled backstop]=0.03  [>=3 LB or any scaled backstop]=0.00
+   #LB-failing cells distribution: [91, 6, 3]
+   RMSE                         point=-0.006 sd=0.091 lb_fail=0.00 fixed_bs=0.12 scaled_bs=0.00
+   MAE QB                       point=-0.031 sd=0.339 lb_fail=0.01 fixed_bs=0.32 scaled_bs=0.00
+   MAE RB                       point=-0.033 sd=0.135 lb_fail=0.00 fixed_bs=0.16 scaled_bs=0.00
+   MAE WR                       point=+0.010 sd=0.092 lb_fail=0.02 fixed_bs=0.18 scaled_bs=0.00
+   MAE TE                       point=+0.007 sd=0.092 lb_fail=0.01 fixed_bs=0.15 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=-0.002 sd=0.179 lb_fail=0.00 fixed_bs=0.27 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=-0.047 sd=0.162 lb_fail=0.00 fixed_bs=0.13 scaled_bs=0.00
+   MAE tier_served 1-12         point=-0.017 sd=0.276 lb_fail=0.00 fixed_bs=0.37 scaled_bs=0.00
+   MAE tier_served 13-36        point=-0.024 sd=0.141 lb_fail=0.00 fixed_bs=0.18 scaled_bs=0.00
+   |bias| overall               point=+0.005 sd=0.109 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=+0.007 sd=0.405 lb_fail=0.00 fixed_bs=0.41 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.047 sd=0.228 lb_fail=0.00 fixed_bs=0.47 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.013 sd=0.114 lb_fail=0.01 fixed_bs=0.15 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.001 sd=0.018 lb_fail=0.00 fixed_bs=0.00 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.074 sd=0.246 lb_fail=0.00 fixed_bs=0.49 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.021 sd=0.077 lb_fail=0.00 fixed_bs=0.06 scaled_bs=0.00
+   Spearman                     point=-0.000 sd=0.017 lb_fail=0.07 fixed_bs=0.00 scaled_bs=0.00
+
+== null: 2025 matched set (fresh draws)  (R=200, B=1000)
+   block rate: [any LB fail]=0.17  [>=2 LB fails]=0.01  [>=3 LB fails]=0.00  [any LB or fixed backstop]=0.96  [any scaled backstop]=0.01  [>=2 LB or any scaled backstop]=0.02  [>=3 LB or any scaled backstop]=0.01
+   #LB-failing cells distribution: [167, 30, 3]
+   RMSE                         point=+0.001 sd=0.047 lb_fail=0.00 fixed_bs=0.01 scaled_bs=0.00
+   MAE QB                       point=+0.013 sd=0.241 lb_fail=0.01 fixed_bs=0.38 scaled_bs=0.00
+   MAE RB                       point=+0.010 sd=0.092 lb_fail=0.01 fixed_bs=0.16 scaled_bs=0.00
+   MAE WR                       point=+0.003 sd=0.064 lb_fail=0.01 fixed_bs=0.06 scaled_bs=0.00
+   MAE TE                       point=+0.004 sd=0.057 lb_fail=0.01 fixed_bs=0.03 scaled_bs=0.01
+   MAE tier_roll3 1-12          point=+0.024 sd=0.141 lb_fail=0.01 fixed_bs=0.30 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=-0.003 sd=0.089 lb_fail=0.00 fixed_bs=0.14 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.035 sd=0.159 lb_fail=0.00 fixed_bs=0.34 scaled_bs=0.00
+   MAE tier_served 13-36        point=-0.004 sd=0.091 lb_fail=0.00 fixed_bs=0.12 scaled_bs=0.00
+   |bias| overall               point=-0.019 sd=0.090 lb_fail=0.01 fixed_bs=0.10 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=+0.044 sd=0.304 lb_fail=0.00 fixed_bs=0.43 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=-0.013 sd=0.183 lb_fail=0.01 fixed_bs=0.28 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.016 sd=0.091 lb_fail=0.01 fixed_bs=0.10 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.018 sd=0.131 lb_fail=0.00 fixed_bs=0.47 scaled_bs=0.00
+   |bias| tier_served 13-36     point=-0.019 sd=0.189 lb_fail=0.01 fixed_bs=0.28 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.006 sd=0.070 lb_fail=0.02 fixed_bs=0.05 scaled_bs=0.01
+   Spearman                     point=+0.001 sd=0.011 lb_fail=0.10 fixed_bs=0.00 scaled_bs=0.00
+
+== null: 8-week forward window, weeks 6-13 (fresh draws)  (R=100, B=1000)
+   block rate: [any LB fail]=0.10  [>=2 LB fails]=0.01  [>=3 LB fails]=0.01  [any LB or fixed backstop]=0.94  [any scaled backstop]=0.02  [>=2 LB or any scaled backstop]=0.02  [>=3 LB or any scaled backstop]=0.02
+   #LB-failing cells distribution: [90, 9, 0, 1]
+   RMSE                         point=-0.011 sd=0.083 lb_fail=0.00 fixed_bs=0.07 scaled_bs=0.00
+   MAE QB                       point=-0.020 sd=0.309 lb_fail=0.00 fixed_bs=0.33 scaled_bs=0.00
+   MAE RB                       point=+0.015 sd=0.136 lb_fail=0.00 fixed_bs=0.29 scaled_bs=0.00
+   MAE WR                       point=-0.010 sd=0.099 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.00
+   MAE TE                       point=-0.006 sd=0.096 lb_fail=0.01 fixed_bs=0.15 scaled_bs=0.01
+   MAE tier_roll3 1-12          point=+0.008 sd=0.203 lb_fail=0.01 fixed_bs=0.34 scaled_bs=0.01
+   MAE tier_roll3 13-36         point=-0.026 sd=0.132 lb_fail=0.00 fixed_bs=0.19 scaled_bs=0.00
+   MAE tier_served 1-12         point=-0.033 sd=0.286 lb_fail=0.01 fixed_bs=0.32 scaled_bs=0.00
+   MAE tier_served 13-36        point=-0.003 sd=0.152 lb_fail=0.00 fixed_bs=0.19 scaled_bs=0.00
+   |bias| overall               point=-0.012 sd=0.121 lb_fail=0.00 fixed_bs=0.16 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=+0.021 sd=0.350 lb_fail=0.00 fixed_bs=0.36 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=-0.028 sd=0.226 lb_fail=0.00 fixed_bs=0.30 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.001 sd=0.123 lb_fail=0.03 fixed_bs=0.20 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.001 sd=0.017 lb_fail=0.00 fixed_bs=0.00 scaled_bs=0.00
+   |bias| tier_served 13-36     point=-0.015 sd=0.247 lb_fail=0.00 fixed_bs=0.31 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.006 sd=0.074 lb_fail=0.00 fixed_bs=0.08 scaled_bs=0.00
+   Spearman                     point=+0.001 sd=0.015 lb_fail=0.06 fixed_bs=0.00 scaled_bs=0.00
+
+== null: 8-week forward window, weeks 9-16  (R=100, B=1000)
+   block rate: [any LB fail]=0.10  [>=2 LB fails]=0.02  [>=3 LB fails]=0.00  [any LB or fixed backstop]=0.96  [any scaled backstop]=0.47  [>=2 LB or any scaled backstop]=0.48  [>=3 LB or any scaled backstop]=0.47
+   #LB-failing cells distribution: [90, 8, 2]
+   RMSE                         point=+0.006 sd=0.088 lb_fail=0.01 fixed_bs=0.12 scaled_bs=0.00
+   MAE QB                       point=+0.005 sd=0.260 lb_fail=0.00 fixed_bs=0.33 scaled_bs=0.00
+   MAE RB                       point=+0.001 sd=0.154 lb_fail=0.01 fixed_bs=0.25 scaled_bs=0.00
+   MAE WR                       point=+0.017 sd=0.078 lb_fail=0.00 fixed_bs=0.12 scaled_bs=0.00
+   MAE TE                       point=-0.013 sd=0.099 lb_fail=0.03 fixed_bs=0.11 scaled_bs=0.01
+   MAE tier_roll3 1-12          point=-0.012 sd=0.261 lb_fail=0.01 fixed_bs=0.37 scaled_bs=0.01
+   MAE tier_roll3 13-36         point=+0.000 sd=0.151 lb_fail=0.01 fixed_bs=0.29 scaled_bs=0.00
+   MAE tier_served 1-12         point=-0.015 sd=0.270 lb_fail=0.02 fixed_bs=0.29 scaled_bs=0.00
+   MAE tier_served 13-36        point=+0.008 sd=0.159 lb_fail=0.01 fixed_bs=0.31 scaled_bs=0.00
+   |bias| overall               point=+0.001 sd=0.125 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.01
+   |bias| tier_roll3 1-12       point=+0.045 sd=0.357 lb_fail=0.00 fixed_bs=0.45 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.013 sd=0.258 lb_fail=0.00 fixed_bs=0.33 scaled_bs=0.01
+   |bias| tier_roll3 37+        point=+0.007 sd=0.118 lb_fail=0.01 fixed_bs=0.21 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.018 sd=0.192 lb_fail=0.00 fixed_bs=0.47 scaled_bs=0.47
+   |bias| tier_served 13-36     point=-0.003 sd=0.233 lb_fail=0.00 fixed_bs=0.32 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.014 sd=0.090 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.00
+   Spearman                     point=-0.000 sd=0.013 lb_fail=0.01 fixed_bs=0.00 scaled_bs=0.00
+
+== regression: random 25% of players, full-size noise  (R=100, B=1000)
+   block rate: [any LB fail]=0.99  [>=2 LB fails]=0.97  [>=3 LB fails]=0.92  [any LB or fixed backstop]=1.00  [any scaled backstop]=0.99  [>=2 LB or any scaled backstop]=0.99  [>=3 LB or any scaled backstop]=0.99
+   #LB-failing cells distribution: [1, 2, 5, 15, 38, 26, 5, 7, 0, 1]
+   RMSE                         point=+0.240 sd=0.060 lb_fail=0.91 fixed_bs=0.98 scaled_bs=0.91
+   MAE QB                       point=+0.155 sd=0.242 lb_fail=0.05 fixed_bs=0.57 scaled_bs=0.02
+   MAE RB                       point=+0.234 sd=0.105 lb_fail=0.30 fixed_bs=0.93 scaled_bs=0.28
+   MAE WR                       point=+0.247 sd=0.075 lb_fail=0.77 fixed_bs=0.98 scaled_bs=0.73
+   MAE TE                       point=+0.336 sd=0.082 lb_fail=0.93 fixed_bs=1.00 scaled_bs=0.98
+   MAE tier_roll3 1-12          point=+0.161 sd=0.152 lb_fail=0.03 fixed_bs=0.66 scaled_bs=0.02
+   MAE tier_roll3 13-36         point=+0.151 sd=0.111 lb_fail=0.12 fixed_bs=0.71 scaled_bs=0.08
+   MAE tier_served 1-12         point=+0.181 sd=0.167 lb_fail=0.04 fixed_bs=0.69 scaled_bs=0.04
+   MAE tier_served 13-36        point=+0.148 sd=0.121 lb_fail=0.12 fixed_bs=0.62 scaled_bs=0.06
+   |bias| overall               point=+0.008 sd=0.104 lb_fail=0.03 fixed_bs=0.20 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.006 sd=0.335 lb_fail=0.00 fixed_bs=0.39 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.027 sd=0.206 lb_fail=0.04 fixed_bs=0.38 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.000 sd=0.103 lb_fail=0.02 fixed_bs=0.14 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.000 sd=0.142 lb_fail=0.00 fixed_bs=0.32 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.032 sd=0.204 lb_fail=0.00 fixed_bs=0.40 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.008 sd=0.081 lb_fail=0.03 fixed_bs=0.09 scaled_bs=0.01
+   Spearman                     point=+0.036 sd=0.013 lb_fail=0.88 fixed_bs=0.02 scaled_bs=0.02
+
+== regression, forward weeks 6-13: random 25% of players, full-size noise  (R=50, B=1000)
+   block rate: [any LB fail]=0.88  [>=2 LB fails]=0.74  [>=3 LB fails]=0.38  [any LB or fixed backstop]=1.00  [any scaled backstop]=0.88  [>=2 LB or any scaled backstop]=0.90  [>=3 LB or any scaled backstop]=0.88
+   #LB-failing cells distribution: [6, 7, 18, 5, 11, 1, 2]
+   RMSE                         point=+0.248 sd=0.105 lb_fail=0.38 fixed_bs=0.90 scaled_bs=0.34
+   MAE QB                       point=+0.129 sd=0.398 lb_fail=0.02 fixed_bs=0.52 scaled_bs=0.00
+   MAE RB                       point=+0.215 sd=0.148 lb_fail=0.08 fixed_bs=0.76 scaled_bs=0.08
+   MAE WR                       point=+0.258 sd=0.113 lb_fail=0.38 fixed_bs=0.92 scaled_bs=0.42
+   MAE TE                       point=+0.340 sd=0.125 lb_fail=0.64 fixed_bs=0.98 scaled_bs=0.68
+   MAE tier_roll3 1-12          point=+0.170 sd=0.218 lb_fail=0.02 fixed_bs=0.64 scaled_bs=0.06
+   MAE tier_roll3 13-36         point=+0.173 sd=0.143 lb_fail=0.04 fixed_bs=0.72 scaled_bs=0.02
+   MAE tier_served 1-12         point=+0.152 sd=0.260 lb_fail=0.04 fixed_bs=0.58 scaled_bs=0.04
+   MAE tier_served 13-36        point=+0.165 sd=0.167 lb_fail=0.08 fixed_bs=0.64 scaled_bs=0.10
+   |bias| overall               point=+0.035 sd=0.132 lb_fail=0.02 fixed_bs=0.28 scaled_bs=0.02
+   |bias| tier_roll3 1-12       point=-0.014 sd=0.430 lb_fail=0.00 fixed_bs=0.38 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.074 sd=0.217 lb_fail=0.00 fixed_bs=0.48 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=+0.020 sd=0.119 lb_fail=0.04 fixed_bs=0.22 scaled_bs=0.02
+   |bias| tier_served 1-12      point=+0.004 sd=0.078 lb_fail=0.00 fixed_bs=0.14 scaled_bs=0.14
+   |bias| tier_served 13-36     point=+0.022 sd=0.263 lb_fail=0.00 fixed_bs=0.42 scaled_bs=0.00
+   |bias| tier_served 37+       point=+0.040 sd=0.104 lb_fail=0.02 fixed_bs=0.26 scaled_bs=0.02
+   Spearman                     point=+0.033 sd=0.017 lb_fail=0.62 fixed_bs=0.04 scaled_bs=0.04
+
+== regression: all QB rows, full-size noise  (R=100, B=1000)
+   block rate: [any LB fail]=0.68  [>=2 LB fails]=0.40  [>=3 LB fails]=0.27  [any LB or fixed backstop]=1.00  [any scaled backstop]=0.54  [>=2 LB or any scaled backstop]=0.58  [>=3 LB or any scaled backstop]=0.56
+   #LB-failing cells distribution: [32, 28, 13, 10, 11, 6]
+   RMSE                         point=+0.101 sd=0.058 lb_fail=0.15 fixed_bs=0.52 scaled_bs=0.15
+   MAE QB                       point=+0.695 sd=0.233 lb_fail=0.60 fixed_bs=1.00 scaled_bs=0.49
+   MAE RB                       point=-0.002 sd=0.091 lb_fail=0.00 fixed_bs=0.14 scaled_bs=0.00
+   MAE WR                       point=-0.006 sd=0.061 lb_fail=0.02 fixed_bs=0.04 scaled_bs=0.00
+   MAE TE                       point=+0.005 sd=0.059 lb_fail=0.01 fixed_bs=0.02 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=+0.159 sd=0.151 lb_fail=0.05 fixed_bs=0.63 scaled_bs=0.03
+   MAE tier_roll3 13-36         point=+0.169 sd=0.106 lb_fail=0.13 fixed_bs=0.78 scaled_bs=0.07
+   MAE tier_served 1-12         point=+0.155 sd=0.154 lb_fail=0.00 fixed_bs=0.67 scaled_bs=0.01
+   MAE tier_served 13-36        point=+0.171 sd=0.110 lb_fail=0.17 fixed_bs=0.74 scaled_bs=0.10
+   |bias| overall               point=+0.005 sd=0.104 lb_fail=0.05 fixed_bs=0.15 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.030 sd=0.298 lb_fail=0.00 fixed_bs=0.33 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.011 sd=0.185 lb_fail=0.00 fixed_bs=0.30 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.003 sd=0.099 lb_fail=0.03 fixed_bs=0.14 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.013 sd=0.128 lb_fail=0.00 fixed_bs=0.29 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.025 sd=0.182 lb_fail=0.01 fixed_bs=0.33 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.005 sd=0.073 lb_fail=0.03 fixed_bs=0.10 scaled_bs=0.01
+   Spearman                     point=+0.013 sd=0.013 lb_fail=0.33 fixed_bs=0.00 scaled_bs=0.00
+
+== regression, forward weeks 6-13: all QB rows, full-size noise  (R=50, B=1000)
+   block rate: [any LB fail]=0.44  [>=2 LB fails]=0.18  [>=3 LB fails]=0.06  [any LB or fixed backstop]=1.00  [any scaled backstop]=0.38  [>=2 LB or any scaled backstop]=0.44  [>=3 LB or any scaled backstop]=0.40
+   #LB-failing cells distribution: [28, 13, 6, 1, 0, 2]
+   RMSE                         point=+0.107 sd=0.106 lb_fail=0.08 fixed_bs=0.50 scaled_bs=0.06
+   MAE QB                       point=+0.644 sd=0.355 lb_fail=0.28 fixed_bs=0.94 scaled_bs=0.18
+   MAE RB                       point=-0.009 sd=0.125 lb_fail=0.00 fixed_bs=0.20 scaled_bs=0.00
+   MAE WR                       point=-0.004 sd=0.115 lb_fail=0.00 fixed_bs=0.16 scaled_bs=0.00
+   MAE TE                       point=+0.015 sd=0.091 lb_fail=0.00 fixed_bs=0.20 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=+0.124 sd=0.222 lb_fail=0.02 fixed_bs=0.60 scaled_bs=0.02
+   MAE tier_roll3 13-36         point=+0.175 sd=0.149 lb_fail=0.10 fixed_bs=0.70 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.101 sd=0.314 lb_fail=0.02 fixed_bs=0.50 scaled_bs=0.00
+   MAE tier_served 13-36        point=+0.183 sd=0.157 lb_fail=0.10 fixed_bs=0.68 scaled_bs=0.06
+   |bias| overall               point=+0.033 sd=0.122 lb_fail=0.00 fixed_bs=0.24 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.101 sd=0.396 lb_fail=0.00 fixed_bs=0.38 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.032 sd=0.225 lb_fail=0.00 fixed_bs=0.32 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=+0.016 sd=0.123 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.014 sd=0.095 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.22
+   |bias| tier_served 13-36     point=+0.042 sd=0.276 lb_fail=0.00 fixed_bs=0.44 scaled_bs=0.02
+   |bias| tier_served 37+       point=-0.002 sd=0.088 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.00
+   Spearman                     point=+0.014 sd=0.015 lb_fail=0.16 fixed_bs=0.00 scaled_bs=0.00
+
+== regression: all QB rows, half-size noise  (R=100, B=1000)
+   block rate: [any LB fail]=0.26  [>=2 LB fails]=0.09  [>=3 LB fails]=0.01  [any LB or fixed backstop]=0.98  [any scaled backstop]=0.02  [>=2 LB or any scaled backstop]=0.09  [>=3 LB or any scaled backstop]=0.03
+   #LB-failing cells distribution: [74, 17, 8, 1]
+   RMSE                         point=+0.021 sd=0.055 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.00
+   MAE QB                       point=+0.205 sd=0.225 lb_fail=0.04 fixed_bs=0.69 scaled_bs=0.02
+   MAE RB                       point=-0.002 sd=0.091 lb_fail=0.00 fixed_bs=0.14 scaled_bs=0.00
+   MAE WR                       point=-0.006 sd=0.061 lb_fail=0.02 fixed_bs=0.04 scaled_bs=0.00
+   MAE TE                       point=+0.005 sd=0.059 lb_fail=0.01 fixed_bs=0.02 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=+0.043 sd=0.151 lb_fail=0.00 fixed_bs=0.37 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=+0.051 sd=0.101 lb_fail=0.01 fixed_bs=0.32 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.038 sd=0.154 lb_fail=0.00 fixed_bs=0.31 scaled_bs=0.00
+   MAE tier_served 13-36        point=+0.054 sd=0.108 lb_fail=0.05 fixed_bs=0.33 scaled_bs=0.00
+   |bias| overall               point=+0.004 sd=0.103 lb_fail=0.05 fixed_bs=0.14 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.025 sd=0.294 lb_fail=0.00 fixed_bs=0.37 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.009 sd=0.185 lb_fail=0.01 fixed_bs=0.31 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.003 sd=0.099 lb_fail=0.03 fixed_bs=0.14 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.010 sd=0.126 lb_fail=0.00 fixed_bs=0.41 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.024 sd=0.181 lb_fail=0.01 fixed_bs=0.32 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.005 sd=0.073 lb_fail=0.03 fixed_bs=0.10 scaled_bs=0.00
+   Spearman                     point=+0.003 sd=0.012 lb_fail=0.10 fixed_bs=0.00 scaled_bs=0.00
+
+== regression, forward weeks 6-13: all QB rows, half-size noise  (R=50, B=1000)
+   block rate: [any LB fail]=0.06  [>=2 LB fails]=0.04  [>=3 LB fails]=0.00  [any LB or fixed backstop]=0.94  [any scaled backstop]=0.04  [>=2 LB or any scaled backstop]=0.04  [>=3 LB or any scaled backstop]=0.04
+   #LB-failing cells distribution: [47, 1, 2]
+   RMSE                         point=+0.028 sd=0.102 lb_fail=0.02 fixed_bs=0.28 scaled_bs=0.02
+   MAE QB                       point=+0.167 sd=0.333 lb_fail=0.00 fixed_bs=0.54 scaled_bs=0.00
+   MAE RB                       point=-0.009 sd=0.125 lb_fail=0.00 fixed_bs=0.20 scaled_bs=0.00
+   MAE WR                       point=-0.004 sd=0.115 lb_fail=0.00 fixed_bs=0.16 scaled_bs=0.00
+   MAE TE                       point=+0.015 sd=0.091 lb_fail=0.00 fixed_bs=0.20 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=+0.014 sd=0.214 lb_fail=0.02 fixed_bs=0.34 scaled_bs=0.02
+   MAE tier_roll3 13-36         point=+0.058 sd=0.148 lb_fail=0.00 fixed_bs=0.34 scaled_bs=0.00
+   MAE tier_served 1-12         point=-0.012 sd=0.313 lb_fail=0.00 fixed_bs=0.36 scaled_bs=0.00
+   MAE tier_served 13-36        point=+0.068 sd=0.150 lb_fail=0.00 fixed_bs=0.34 scaled_bs=0.00
+   |bias| overall               point=+0.031 sd=0.121 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.104 sd=0.378 lb_fail=0.00 fixed_bs=0.34 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.025 sd=0.225 lb_fail=0.00 fixed_bs=0.32 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=+0.016 sd=0.123 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.001 sd=0.051 lb_fail=0.00 fixed_bs=0.00 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.034 sd=0.274 lb_fail=0.00 fixed_bs=0.38 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.002 sd=0.089 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.00
+   Spearman                     point=+0.005 sd=0.014 lb_fail=0.06 fixed_bs=0.00 scaled_bs=0.00
+
+== regression: top-12 (rolling-3) rows, half-size noise  (R=100, B=1000)
+   block rate: [any LB fail]=0.24  [>=2 LB fails]=0.10  [>=3 LB fails]=0.02  [any LB or fixed backstop]=0.96  [any scaled backstop]=0.07  [>=2 LB or any scaled backstop]=0.14  [>=3 LB or any scaled backstop]=0.08
+   #LB-failing cells distribution: [76, 14, 8, 2]
+   RMSE                         point=+0.032 sd=0.053 lb_fail=0.00 fixed_bs=0.11 scaled_bs=0.00
+   MAE QB                       point=+0.048 sd=0.231 lb_fail=0.01 fixed_bs=0.40 scaled_bs=0.00
+   MAE RB                       point=+0.025 sd=0.095 lb_fail=0.01 fixed_bs=0.23 scaled_bs=0.00
+   MAE WR                       point=+0.008 sd=0.060 lb_fail=0.02 fixed_bs=0.06 scaled_bs=0.01
+   MAE TE                       point=+0.029 sd=0.059 lb_fail=0.02 fixed_bs=0.11 scaled_bs=0.02
+   MAE tier_roll3 1-12          point=+0.171 sd=0.151 lb_fail=0.06 fixed_bs=0.66 scaled_bs=0.05
+   MAE tier_roll3 13-36         point=-0.004 sd=0.099 lb_fail=0.00 fixed_bs=0.13 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.096 sd=0.155 lb_fail=0.00 fixed_bs=0.45 scaled_bs=0.01
+   MAE tier_served 13-36        point=+0.033 sd=0.108 lb_fail=0.01 fixed_bs=0.26 scaled_bs=0.00
+   |bias| overall               point=+0.004 sd=0.103 lb_fail=0.05 fixed_bs=0.13 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.030 sd=0.305 lb_fail=0.00 fixed_bs=0.36 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.008 sd=0.186 lb_fail=0.01 fixed_bs=0.32 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.004 sd=0.100 lb_fail=0.03 fixed_bs=0.14 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.012 sd=0.126 lb_fail=0.00 fixed_bs=0.29 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.025 sd=0.186 lb_fail=0.01 fixed_bs=0.30 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.004 sd=0.074 lb_fail=0.03 fixed_bs=0.10 scaled_bs=0.01
+   Spearman                     point=+0.002 sd=0.012 lb_fail=0.10 fixed_bs=0.00 scaled_bs=0.00
+
+== regression, forward weeks 6-13: top-12 (rolling-3) rows, half-size noise  (R=50, B=1000)
+   block rate: [any LB fail]=0.08  [>=2 LB fails]=0.04  [>=3 LB fails]=0.02  [any LB or fixed backstop]=0.96  [any scaled backstop]=0.16  [>=2 LB or any scaled backstop]=0.18  [>=3 LB or any scaled backstop]=0.16
+   #LB-failing cells distribution: [46, 2, 1, 1]
+   RMSE                         point=+0.038 sd=0.102 lb_fail=0.04 fixed_bs=0.32 scaled_bs=0.00
+   MAE QB                       point=+0.018 sd=0.337 lb_fail=0.00 fixed_bs=0.46 scaled_bs=0.00
+   MAE RB                       point=+0.016 sd=0.127 lb_fail=0.00 fixed_bs=0.26 scaled_bs=0.00
+   MAE WR                       point=+0.010 sd=0.114 lb_fail=0.00 fixed_bs=0.20 scaled_bs=0.00
+   MAE TE                       point=+0.044 sd=0.094 lb_fail=0.00 fixed_bs=0.30 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=+0.142 sd=0.218 lb_fail=0.02 fixed_bs=0.52 scaled_bs=0.04
+   MAE tier_roll3 13-36         point=+0.004 sd=0.149 lb_fail=0.00 fixed_bs=0.30 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.037 sd=0.309 lb_fail=0.00 fixed_bs=0.46 scaled_bs=0.00
+   MAE tier_served 13-36        point=+0.054 sd=0.152 lb_fail=0.00 fixed_bs=0.34 scaled_bs=0.00
+   |bias| overall               point=+0.029 sd=0.123 lb_fail=0.02 fixed_bs=0.22 scaled_bs=0.02
+   |bias| tier_roll3 1-12       point=-0.099 sd=0.391 lb_fail=0.00 fixed_bs=0.40 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.018 sd=0.228 lb_fail=0.00 fixed_bs=0.34 scaled_bs=0.02
+   |bias| tier_roll3 37+        point=+0.016 sd=0.123 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.015 sd=0.069 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.10
+   |bias| tier_served 13-36     point=+0.020 sd=0.282 lb_fail=0.00 fixed_bs=0.38 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.003 sd=0.089 lb_fail=0.00 fixed_bs=0.12 scaled_bs=0.00
+   Spearman                     point=+0.004 sd=0.013 lb_fail=0.06 fixed_bs=0.00 scaled_bs=0.00
+
+== regression: all rows, quarter-size noise  (R=100, B=1000)
+   block rate: [any LB fail]=0.64  [>=2 LB fails]=0.34  [>=3 LB fails]=0.10  [any LB or fixed backstop]=0.99  [any scaled backstop]=0.33  [>=2 LB or any scaled backstop]=0.46  [>=3 LB or any scaled backstop]=0.35
+   #LB-failing cells distribution: [36, 30, 24, 6, 4]
+   RMSE                         point=+0.059 sd=0.053 lb_fail=0.07 fixed_bs=0.20 scaled_bs=0.04
+   MAE QB                       point=+0.059 sd=0.226 lb_fail=0.02 fixed_bs=0.43 scaled_bs=0.00
+   MAE RB                       point=+0.076 sd=0.096 lb_fail=0.01 fixed_bs=0.43 scaled_bs=0.01
+   MAE WR                       point=+0.078 sd=0.062 lb_fail=0.06 fixed_bs=0.35 scaled_bs=0.02
+   MAE TE                       point=+0.137 sd=0.059 lb_fail=0.31 fixed_bs=0.77 scaled_bs=0.27
+   MAE tier_roll3 1-12          point=+0.048 sd=0.150 lb_fail=0.00 fixed_bs=0.37 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=+0.055 sd=0.104 lb_fail=0.02 fixed_bs=0.35 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.039 sd=0.151 lb_fail=0.00 fixed_bs=0.31 scaled_bs=0.00
+   MAE tier_served 13-36        point=+0.053 sd=0.110 lb_fail=0.05 fixed_bs=0.33 scaled_bs=0.00
+   |bias| overall               point=+0.003 sd=0.105 lb_fail=0.05 fixed_bs=0.14 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.025 sd=0.298 lb_fail=0.00 fixed_bs=0.40 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.006 sd=0.184 lb_fail=0.02 fixed_bs=0.29 scaled_bs=0.00
+   |bias| tier_roll3 37+        point=-0.003 sd=0.103 lb_fail=0.03 fixed_bs=0.15 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.012 sd=0.124 lb_fail=0.00 fixed_bs=0.36 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.020 sd=0.182 lb_fail=0.01 fixed_bs=0.31 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.004 sd=0.075 lb_fail=0.02 fixed_bs=0.10 scaled_bs=0.01
+   Spearman                     point=+0.015 sd=0.012 lb_fail=0.45 fixed_bs=0.00 scaled_bs=0.00
+
+== regression, forward weeks 6-13: all rows, quarter-size noise  (R=50, B=1000)
+   block rate: [any LB fail]=0.28  [>=2 LB fails]=0.10  [>=3 LB fails]=0.04  [any LB or fixed backstop]=1.00  [any scaled backstop]=0.22  [>=2 LB or any scaled backstop]=0.22  [>=3 LB or any scaled backstop]=0.22
+   #LB-failing cells distribution: [36, 9, 3, 1, 1]
+   RMSE                         point=+0.066 sd=0.102 lb_fail=0.04 fixed_bs=0.38 scaled_bs=0.02
+   MAE QB                       point=+0.031 sd=0.325 lb_fail=0.00 fixed_bs=0.44 scaled_bs=0.00
+   MAE RB                       point=+0.058 sd=0.132 lb_fail=0.00 fixed_bs=0.32 scaled_bs=0.00
+   MAE WR                       point=+0.082 sd=0.109 lb_fail=0.10 fixed_bs=0.44 scaled_bs=0.08
+   MAE TE                       point=+0.149 sd=0.093 lb_fail=0.12 fixed_bs=0.64 scaled_bs=0.10
+   MAE tier_roll3 1-12          point=+0.019 sd=0.209 lb_fail=0.02 fixed_bs=0.34 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=+0.060 sd=0.148 lb_fail=0.00 fixed_bs=0.36 scaled_bs=0.00
+   MAE tier_served 1-12         point=-0.009 sd=0.308 lb_fail=0.00 fixed_bs=0.36 scaled_bs=0.00
+   MAE tier_served 13-36        point=+0.066 sd=0.150 lb_fail=0.00 fixed_bs=0.36 scaled_bs=0.00
+   |bias| overall               point=+0.031 sd=0.122 lb_fail=0.00 fixed_bs=0.20 scaled_bs=0.00
+   |bias| tier_roll3 1-12       point=-0.102 sd=0.376 lb_fail=0.00 fixed_bs=0.34 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.019 sd=0.228 lb_fail=0.00 fixed_bs=0.32 scaled_bs=0.02
+   |bias| tier_roll3 37+        point=+0.019 sd=0.124 lb_fail=0.00 fixed_bs=0.28 scaled_bs=0.00
+   |bias| tier_served 1-12      point=+0.005 sd=0.045 lb_fail=0.00 fixed_bs=0.00 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.030 sd=0.278 lb_fail=0.00 fixed_bs=0.40 scaled_bs=0.00
+   |bias| tier_served 37+       point=-0.003 sd=0.091 lb_fail=0.00 fixed_bs=0.12 scaled_bs=0.00
+   Spearman                     point=+0.015 sd=0.014 lb_fail=0.16 fixed_bs=0.00 scaled_bs=0.00
+
+== regression: bias pushed 0.3 further from zero  (R=100, B=1000)
+   block rate: [any LB fail]=1.00  [>=2 LB fails]=0.97  [>=3 LB fails]=0.89  [any LB or fixed backstop]=1.00  [any scaled backstop]=0.95  [>=2 LB or any scaled backstop]=0.98  [>=3 LB or any scaled backstop]=0.96
+   #LB-failing cells distribution: [0, 3, 8, 48, 30, 11]
+   RMSE                         point=+0.029 sd=0.051 lb_fail=0.01 fixed_bs=0.08 scaled_bs=0.00
+   MAE QB                       point=+0.031 sd=0.184 lb_fail=0.00 fixed_bs=0.35 scaled_bs=0.00
+   MAE RB                       point=-0.020 sd=0.081 lb_fail=0.00 fixed_bs=0.06 scaled_bs=0.00
+   MAE WR                       point=-0.043 sd=0.059 lb_fail=0.00 fixed_bs=0.00 scaled_bs=0.00
+   MAE TE                       point=-0.028 sd=0.063 lb_fail=0.00 fixed_bs=0.03 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=-0.047 sd=0.146 lb_fail=0.00 fixed_bs=0.16 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=-0.001 sd=0.092 lb_fail=0.00 fixed_bs=0.15 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.010 sd=0.166 lb_fail=0.00 fixed_bs=0.35 scaled_bs=0.00
+   MAE tier_served 13-36        point=-0.013 sd=0.090 lb_fail=0.00 fixed_bs=0.13 scaled_bs=0.00
+   |bias| overall               point=+0.302 sd=0.094 lb_fail=0.91 fixed_bs=0.97 scaled_bs=0.41
+   |bias| tier_roll3 1-12       point=-0.310 sd=0.339 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.308 sd=0.194 lb_fail=0.28 fixed_bs=0.86 scaled_bs=0.01
+   |bias| tier_roll3 37+        point=+0.297 sd=0.084 lb_fail=0.93 fixed_bs=0.98 scaled_bs=0.48
+   |bias| tier_served 1-12      point=+0.085 sd=0.119 lb_fail=0.00 fixed_bs=0.71 scaled_bs=0.00
+   |bias| tier_served 13-36     point=+0.279 sd=0.186 lb_fail=0.21 fixed_bs=0.86 scaled_bs=0.01
+   |bias| tier_served 37+       point=+0.303 sd=0.061 lb_fail=1.00 fixed_bs=1.00 scaled_bs=0.95
+   Spearman                     point=-0.000 sd=0.010 lb_fail=0.04 fixed_bs=0.00 scaled_bs=0.00
+
+== regression, forward weeks 6-13: bias pushed 0.3 further from zero  (R=50, B=1000)
+   block rate: [any LB fail]=0.94  [>=2 LB fails]=0.84  [>=3 LB fails]=0.54  [any LB or fixed backstop]=1.00  [any scaled backstop]=0.96  [>=2 LB or any scaled backstop]=0.96  [>=3 LB or any scaled backstop]=0.96
+   #LB-failing cells distribution: [3, 5, 15, 26, 1]
+   RMSE                         point=+0.031 sd=0.091 lb_fail=0.04 fixed_bs=0.26 scaled_bs=0.00
+   MAE QB                       point=+0.056 sd=0.335 lb_fail=0.00 fixed_bs=0.44 scaled_bs=0.00
+   MAE RB                       point=-0.017 sd=0.114 lb_fail=0.00 fixed_bs=0.18 scaled_bs=0.00
+   MAE WR                       point=-0.040 sd=0.083 lb_fail=0.00 fixed_bs=0.02 scaled_bs=0.00
+   MAE TE                       point=-0.038 sd=0.100 lb_fail=0.00 fixed_bs=0.10 scaled_bs=0.00
+   MAE tier_roll3 1-12          point=-0.021 sd=0.200 lb_fail=0.00 fixed_bs=0.28 scaled_bs=0.00
+   MAE tier_roll3 13-36         point=-0.005 sd=0.150 lb_fail=0.00 fixed_bs=0.26 scaled_bs=0.00
+   MAE tier_served 1-12         point=+0.015 sd=0.274 lb_fail=0.00 fixed_bs=0.46 scaled_bs=0.00
+   MAE tier_served 13-36        point=-0.015 sd=0.143 lb_fail=0.00 fixed_bs=0.22 scaled_bs=0.00
+   |bias| overall               point=+0.312 sd=0.126 lb_fail=0.64 fixed_bs=0.98 scaled_bs=0.40
+   |bias| tier_roll3 1-12       point=-0.317 sd=0.383 lb_fail=0.00 fixed_bs=0.18 scaled_bs=0.00
+   |bias| tier_roll3 13-36      point=+0.304 sd=0.241 lb_fail=0.00 fixed_bs=0.82 scaled_bs=0.06
+   |bias| tier_roll3 37+        point=+0.314 sd=0.128 lb_fail=0.74 fixed_bs=0.96 scaled_bs=0.38
+   |bias| tier_served 1-12      point=+0.155 sd=0.193 lb_fail=0.00 fixed_bs=0.72 scaled_bs=0.72
+   |bias| tier_served 13-36     point=+0.307 sd=0.278 lb_fail=0.00 fixed_bs=0.72 scaled_bs=0.04
+   |bias| tier_served 37+       point=+0.302 sd=0.079 lb_fail=0.88 fixed_bs=1.00 scaled_bs=0.84
+   Spearman                     point=+0.004 sd=0.014 lb_fail=0.04 fixed_bs=0.00 scaled_bs=0.00
+
+G1 pooled MAE, two-way bootstrap: one-sided 95% half-width median=0.117
+
+wrote data/experiments/selection_rule_checks_20261008/report.json

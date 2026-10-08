@@ -290,3 +290,17 @@ def test_prepare_reads_database_without_changing_source(tmp_path, panel):
     with pytest.raises(ValueError, match="labels differ"):
         prepare(selector_dir, database, tmp_path / "invalid")
     assert not (tmp_path / "invalid").exists()
+
+
+def test_identical_key_sets_fail_loudly():
+    from src.evaluation.paired_ppr_comparison import assert_identical_key_sets
+    a = pd.DataFrame([["001", 2025, 1, "A", "QB"], ["002", 2025, 1, "A", "WR"]], columns=KEY)
+    assert_identical_key_sets({"served": a, "plan_a": a.iloc[::-1].copy()})
+    with pytest.raises(ValueError, match="plan_a vs served: 1 missing, 0 extra"):
+        assert_identical_key_sets({"served": a, "plan_a": a.iloc[:1]})
+    moved = a.copy()
+    moved.loc[1, "team"] = "B"
+    with pytest.raises(ValueError, match="1 missing, 1 extra"):
+        assert_identical_key_sets({"served": a, "plan_a": moved})
+    with pytest.raises(ValueError, match="duplicate"):
+        assert_identical_key_sets({"served": a, "plan_a": pd.concat([a, a.iloc[:1]])})

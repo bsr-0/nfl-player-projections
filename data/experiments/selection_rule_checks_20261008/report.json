@@ -1,0 +1,2590 @@
+{
+  "inputs": {
+    "paired_rows": "data/experiments/full_ppr_head_to_head_20260930/comparison_2025/paired_rows.csv",
+    "paired_rows_sha256": "803f7771fba80b7ab58c3d724c8f9f59e94de010fae115aeb6d9b85ed81cd439",
+    "rolling3": "data/experiments/full_ppr_raw_truth_20260924/ppr_oof_rows.csv",
+    "rolling3_sha256": "6cd0ad14aca0f4c82ae5ae6aff4b665ff6070e25d18f096466408192655cda69"
+  },
+  "script_sha256": "8e85a25f90e39b5276b75a019d5ef09afe67e46c3304a4115febf966a499d052",
+  "seed": 42,
+  "quick": false,
+  "backstop": {
+    "mae": 0.1,
+    "rmse": 0.1,
+    "bias": 0.1,
+    "spearman": 0.06
+  },
+  "variance_components": {
+    "week": 0.005939167169823216,
+    "game": 0.3377488141129519,
+    "player": 0.4994980181609317,
+    "resid": 2.82374736404819
+  },
+  "prediction_gap_sd": 3.5275272008401455,
+  "synthetic_coverage": [
+    {
+      "week_sd_multiplier": 1,
+      "week_sd": 0.005939167169823216,
+      "true_diff": 0.0,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9211111111111111,
+      "player_ub": 0.9411111111111111,
+      "player_lb": 0.9322222222222222,
+      "week_2s": 0.8733333333333333,
+      "twoway_2s": 0.9866666666666667
+    },
+    {
+      "week_sd_multiplier": 1,
+      "week_sd": 0.005939167169823216,
+      "true_diff": 0.1,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9433333333333334,
+      "player_ub": 0.9288888888888889,
+      "player_lb": 0.9444444444444444,
+      "week_2s": 0.87,
+      "twoway_2s": 0.9911111111111112
+    },
+    {
+      "week_sd_multiplier": 1,
+      "week_sd": 0.005939167169823216,
+      "true_diff": 0.2,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9322222222222222,
+      "player_ub": 0.9388888888888889,
+      "player_lb": 0.9355555555555556,
+      "week_2s": 0.8722222222222222,
+      "twoway_2s": 1.0
+    },
+    {
+      "week_sd_multiplier": 2,
+      "week_sd": 0.011878334339646432,
+      "true_diff": 0.0,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9511111111111111,
+      "player_ub": 0.9544444444444444,
+      "player_lb": 0.9433333333333334,
+      "week_2s": 0.9055555555555556,
+      "twoway_2s": 0.9955555555555555
+    },
+    {
+      "week_sd_multiplier": 2,
+      "week_sd": 0.011878334339646432,
+      "true_diff": 0.1,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9277777777777778,
+      "player_ub": 0.9277777777777778,
+      "player_lb": 0.9488888888888889,
+      "week_2s": 0.8733333333333333,
+      "twoway_2s": 0.9911111111111112
+    },
+    {
+      "week_sd_multiplier": 2,
+      "week_sd": 0.011878334339646432,
+      "true_diff": 0.2,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9322222222222222,
+      "player_ub": 0.9488888888888889,
+      "player_lb": 0.9322222222222222,
+      "week_2s": 0.8777777777777778,
+      "twoway_2s": 0.9955555555555555
+    },
+    {
+      "week_sd_multiplier": 4,
+      "week_sd": 0.023756668679292863,
+      "true_diff": 0.0,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9277777777777778,
+      "player_ub": 0.9355555555555556,
+      "player_lb": 0.9377777777777778,
+      "week_2s": 0.8688888888888889,
+      "twoway_2s": 1.0
+    },
+    {
+      "week_sd_multiplier": 4,
+      "week_sd": 0.023756668679292863,
+      "true_diff": 0.1,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9388888888888889,
+      "player_ub": 0.9422222222222222,
+      "player_lb": 0.9488888888888889,
+      "week_2s": 0.8822222222222222,
+      "twoway_2s": 0.9911111111111112
+    },
+    {
+      "week_sd_multiplier": 4,
+      "week_sd": 0.023756668679292863,
+      "true_diff": 0.2,
+      "reps": 900,
+      "twoway_reps": 225,
+      "player_2s": 0.9366666666666666,
+      "player_ub": 0.9455555555555556,
+      "player_lb": 0.9422222222222222,
+      "week_2s": 0.8844444444444445,
+      "twoway_2s": 1.0
+    }
+  ],
+  "scaled_backstop": {
+    "2025": {
+      "RMSE": 0.16135949947475597,
+      "MAE QB": 0.6831255972845618,
+      "MAE RB": 0.2882925129510262,
+      "MAE WR": 0.199015855186336,
+      "MAE TE": 0.17064441767302624,
+      "MAE tier_roll3 1-12": 0.438693133278994,
+      "MAE tier_roll3 13-36": 0.3223576572257915,
+      "MAE tier_served 1-12": 0.4971673337188543,
+      "MAE tier_served 13-36": 0.334633839333516,
+      "|bias| overall": 0.3230254893429809,
+      "|bias| tier_roll3 1-12": 0.9578623475820691,
+      "|bias| tier_roll3 13-36": 0.6791101307493206,
+      "|bias| tier_roll3 37+": 0.2936564296415937,
+      "|bias| tier_served 1-12": 0.4005816018452846,
+      "|bias| tier_served 13-36": 0.6604868054643018,
+      "|bias| tier_served 37+": 0.19451073754556075,
+      "Spearman": 0.06
+    },
+    "forward": {
+      "RMSE": 0.27265018963058646,
+      "MAE QB": 1.0161235206246593,
+      "MAE RB": 0.4056062961040212,
+      "MAE WR": 0.2763622318618777,
+      "MAE TE": 0.2774531761396538,
+      "MAE tier_roll3 1-12": 0.5362388132585789,
+      "MAE tier_roll3 13-36": 0.4861786920061855,
+      "MAE tier_served 1-12": 0.8282737522275867,
+      "MAE tier_served 13-36": 0.4239967928781967,
+      "|bias| overall": 0.3257126216833077,
+      "|bias| tier_roll3 1-12": 1.2146610184645639,
+      "|bias| tier_roll3 13-36": 0.6854979186150651,
+      "|bias| tier_roll3 37+": 0.3417169168861548,
+      "|bias| tier_served 1-12": 0.1,
+      "|bias| tier_served 13-36": 0.738095040882227,
+      "|bias| tier_served 37+": 0.23095840786240263,
+      "Spearman": 0.06
+    }
+  },
+  "g1_twoway_one_sided_halfwidth_median": 0.11651763144489773,
+  "null_pass1": [
+    {
+      "label": "null: 2025 matched set",
+      "R": 200,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.18,
+        ">=2 LB fails": 0.03,
+        ">=3 LB fails": 0.01,
+        "any LB or fixed backstop": 0.97,
+        "any scaled backstop": 0.0,
+        ">=2 LB or any scaled backstop": 0.03,
+        ">=3 LB or any scaled backstop": 0.01,
+        "n_lb_fail_distribution": [
+          164,
+          30,
+          4,
+          2
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.02,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.00377879905064237,
+          "sd_point": 0.05378649982491866
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.31,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.016561774970574906,
+          "sd_point": 0.22770853242818728
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.185,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.010585474030002201,
+          "sd_point": 0.09609750431700873
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.05,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.003697385275141716,
+          "sd_point": 0.06633861839544533
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.03,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.007798718105418526,
+          "sd_point": 0.05688147255767541
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.255,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.001020430490940225,
+          "sd_point": 0.14623104442633134
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.015,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.00789339423925382,
+          "sd_point": 0.10745255240859718
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.275,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.007410616595212335,
+          "sd_point": 0.16572244457295143
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.18,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.004268624415596814,
+          "sd_point": 0.111544613111172
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.035,
+          "backstop_fail_rate": 0.175,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0034150556290939342,
+          "sd_point": 0.10767516311432697
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.435,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.027650782745676086,
+          "sd_point": 0.319287449194023
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.35,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.004606908010797212,
+          "sd_point": 0.22637004358310686
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.035,
+          "backstop_fail_rate": 0.15,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0029481195007827242,
+          "sd_point": 0.09788547654719791
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.45,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.009076788294948035,
+          "sd_point": 0.13352720061509485
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.005753612691439324,
+          "sd_point": 0.2201622684881006
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.055,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0009403696974349474,
+          "sd_point": 0.06483691251518692
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.045,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.00055369007348321,
+          "sd_point": 0.01102785272561676
+        }
+      }
+    },
+    {
+      "label": "null: 8-week forward window, weeks 6-13",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.09,
+        ">=2 LB fails": 0.03,
+        ">=3 LB fails": 0.0,
+        "any LB or fixed backstop": 0.98,
+        "any scaled backstop": 0.0,
+        ">=2 LB or any scaled backstop": 0.03,
+        ">=3 LB or any scaled backstop": 0.0,
+        "n_lb_fail_distribution": [
+          91,
+          6,
+          3
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.12,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.005700418021530389,
+          "sd_point": 0.09088339654352882
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.03142870782385948,
+          "sd_point": 0.33870784020821976
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.16,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.03255467781954395,
+          "sd_point": 0.1352020987013404
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.18,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.010399979841254013,
+          "sd_point": 0.09212074395395924
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.15,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.007029967839944855,
+          "sd_point": 0.09248439204655128
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.27,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0020106765809393165,
+          "sd_point": 0.17874627108619298
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.13,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.04690580448162909,
+          "sd_point": 0.16205956400206184
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.37,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.016574730160993808,
+          "sd_point": 0.2760912507425289
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.18,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.023635229691829584,
+          "sd_point": 0.14133226429273224
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.00487635897540891,
+          "sd_point": 0.1085708738944359
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.41,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0069637745430053966,
+          "sd_point": 0.4048870061548546
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.47,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.047206663642072,
+          "sd_point": 0.2284993062050217
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.15,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.013281852415239723,
+          "sd_point": 0.1139056389620516
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0008748260342179698,
+          "sd_point": 0.017507815362354875
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.49,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0737585787848063,
+          "sd_point": 0.24603168029407566
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.06,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.02071425213639003,
+          "sd_point": 0.07698613595413421
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.07,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -2.9269865006444992e-05,
+          "sd_point": 0.016547042180642638
+        }
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "label": "null: 2025 matched set (fresh draws)",
+      "R": 200,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.165,
+        ">=2 LB fails": 0.015,
+        ">=3 LB fails": 0.0,
+        "any LB or fixed backstop": 0.965,
+        "any scaled backstop": 0.01,
+        ">=2 LB or any scaled backstop": 0.02,
+        ">=3 LB or any scaled backstop": 0.01,
+        "n_lb_fail_distribution": [
+          167,
+          30,
+          3
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.015,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0010623098131119946,
+          "sd_point": 0.04654779983910411
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.375,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.013275814188109566,
+          "sd_point": 0.24080712778146085
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.16,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.009554450138455824,
+          "sd_point": 0.09151109678706265
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.06,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.00317677996853013,
+          "sd_point": 0.06390446283350487
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.03,
+          "scaled_fail_rate": 0.005,
+          "mean_point": 0.004077536850058743,
+          "sd_point": 0.0565210354555391
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.3,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0243738843251256,
+          "sd_point": 0.14128100226324616
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0031184184533567107,
+          "sd_point": 0.0886164246951755
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.335,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.03505139837937499,
+          "sd_point": 0.15933136338385953
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.125,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0038535490213630476,
+          "sd_point": 0.09080928233745586
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.095,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.019230994059018312,
+          "sd_point": 0.09000831207320895
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.435,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.04448403572130011,
+          "sd_point": 0.3041622821701243
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.005,
+          "backstop_fail_rate": 0.275,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.013195685415046001,
+          "sd_point": 0.1825122554420412
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.095,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.016021511210198368,
+          "sd_point": 0.09082327930996435
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.475,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.017707117008287806,
+          "sd_point": 0.1310375503959577
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.015,
+          "backstop_fail_rate": 0.285,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.019152416567378636,
+          "sd_point": 0.18864353955963056
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.05,
+          "scaled_fail_rate": 0.005,
+          "mean_point": -0.0062847885141763815,
+          "sd_point": 0.06964859190015565
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.1,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0006466895217251267,
+          "sd_point": 0.010711291423028985
+        }
+      }
+    },
+    {
+      "label": "null: 8-week forward window, weeks 6-13 (fresh draws)",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.1,
+        ">=2 LB fails": 0.01,
+        ">=3 LB fails": 0.01,
+        "any LB or fixed backstop": 0.94,
+        "any scaled backstop": 0.02,
+        ">=2 LB or any scaled backstop": 0.02,
+        ">=3 LB or any scaled backstop": 0.02,
+        "n_lb_fail_distribution": [
+          90,
+          9,
+          0,
+          1
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.07,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.01085588027421113,
+          "sd_point": 0.08250473982189774
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.33,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.020097260501758005,
+          "sd_point": 0.3088116887302631
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.29,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.01484697623323365,
+          "sd_point": 0.13619650224899602
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0095209135251881,
+          "sd_point": 0.09876136209198436
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.15,
+          "scaled_fail_rate": 0.01,
+          "mean_point": -0.00613435098630296,
+          "sd_point": 0.09594374975849287
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.007655737934022136,
+          "sd_point": 0.20280159595121383
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.19,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.02587878603277506,
+          "sd_point": 0.13207718546206218
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.03305464529595774,
+          "sd_point": 0.28566896736804137
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.19,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0026680525067513863,
+          "sd_point": 0.1521175758664808
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.16,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.01180721494964291,
+          "sd_point": 0.12107458259379424
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.36,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.020971664383654054,
+          "sd_point": 0.34999219299415196
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.3,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.028074047963498522,
+          "sd_point": 0.2263051457113493
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0013300894731687646,
+          "sd_point": 0.12268707124086575
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0008195650034125774,
+          "sd_point": 0.017446004574367416
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.31,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.014727732021590856,
+          "sd_point": 0.24673989573802663
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.08,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.005785906071103028,
+          "sd_point": 0.07443674247647986
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.06,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0013660202493143338,
+          "sd_point": 0.015162360771641447
+        }
+      }
+    },
+    {
+      "label": "null: 8-week forward window, weeks 9-16",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.1,
+        ">=2 LB fails": 0.02,
+        ">=3 LB fails": 0.0,
+        "any LB or fixed backstop": 0.96,
+        "any scaled backstop": 0.47,
+        ">=2 LB or any scaled backstop": 0.48,
+        ">=3 LB or any scaled backstop": 0.47,
+        "n_lb_fail_distribution": [
+          90,
+          8,
+          2
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.12,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.005614724076353168,
+          "sd_point": 0.08797389185328922
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.33,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.004851136205052508,
+          "sd_point": 0.2602711938906464
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.25,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.001393554571554567,
+          "sd_point": 0.15412469024771142
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.12,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.016824601015655197,
+          "sd_point": 0.07780216239096593
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.11,
+          "scaled_fail_rate": 0.01,
+          "mean_point": -0.012748344501081133,
+          "sd_point": 0.09899463791889995
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.37,
+          "scaled_fail_rate": 0.01,
+          "mean_point": -0.012248521046779535,
+          "sd_point": 0.2611039740490585
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.29,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0001315500565829858,
+          "sd_point": 0.1512962005710441
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.29,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.015473504159967906,
+          "sd_point": 0.27022797244277635
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.31,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.00811891407504694,
+          "sd_point": 0.15913601765881255
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.0011092442421111212,
+          "sd_point": 0.12493021609741674
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.45,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.044930245147559826,
+          "sd_point": 0.3569037019035898
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.33,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.012758935859123237,
+          "sd_point": 0.2575141890744811
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.21,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.006608340687861865,
+          "sd_point": 0.11777824788459096
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.47,
+          "scaled_fail_rate": 0.47,
+          "mean_point": 0.01760372352710107,
+          "sd_point": 0.192404093456189
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0032147463059988917,
+          "sd_point": 0.23328116503460578
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.013620660158647735,
+          "sd_point": 0.09009712419534538
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0001702074772026586,
+          "sd_point": 0.013236133106909138
+        }
+      }
+    },
+    {
+      "label": "regression: random 25% of players, full-size noise",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.99,
+        ">=2 LB fails": 0.97,
+        ">=3 LB fails": 0.92,
+        "any LB or fixed backstop": 1.0,
+        "any scaled backstop": 0.99,
+        ">=2 LB or any scaled backstop": 0.99,
+        ">=3 LB or any scaled backstop": 0.99,
+        "n_lb_fail_distribution": [
+          1,
+          2,
+          5,
+          15,
+          38,
+          26,
+          5,
+          7,
+          0,
+          1
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.91,
+          "backstop_fail_rate": 0.98,
+          "scaled_fail_rate": 0.91,
+          "mean_point": 0.24036640590178557,
+          "sd_point": 0.05970224615633905
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.57,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.1549696473248246,
+          "sd_point": 0.2415763689821148
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.3,
+          "backstop_fail_rate": 0.93,
+          "scaled_fail_rate": 0.28,
+          "mean_point": 0.23411672207173712,
+          "sd_point": 0.10482571851868466
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.77,
+          "backstop_fail_rate": 0.98,
+          "scaled_fail_rate": 0.73,
+          "mean_point": 0.24666510865677183,
+          "sd_point": 0.07456463909282499
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.93,
+          "backstop_fail_rate": 1.0,
+          "scaled_fail_rate": 0.98,
+          "mean_point": 0.33591439090937136,
+          "sd_point": 0.0817641595556056
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.66,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.1607167179586369,
+          "sd_point": 0.1523806874919256
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.12,
+          "backstop_fail_rate": 0.71,
+          "scaled_fail_rate": 0.08,
+          "mean_point": 0.15123347442835888,
+          "sd_point": 0.1109843015759556
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.69,
+          "scaled_fail_rate": 0.04,
+          "mean_point": 0.18140285016526622,
+          "sd_point": 0.16699208863577
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.12,
+          "backstop_fail_rate": 0.62,
+          "scaled_fail_rate": 0.06,
+          "mean_point": 0.14814685755266446,
+          "sd_point": 0.12057168077605343
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.008136350433733492,
+          "sd_point": 0.10392368597041875
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.39,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.006215808721081209,
+          "sd_point": 0.3353759478592266
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.38,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.026873701012995143,
+          "sd_point": 0.20598656355402128
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.00021167585454494374,
+          "sd_point": 0.10314593748251077
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0003693510683894957,
+          "sd_point": 0.14215628803382438
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.4,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.03212457990499836,
+          "sd_point": 0.2036259280838697
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.09,
+          "scaled_fail_rate": 0.01,
+          "mean_point": -0.008227255468191025,
+          "sd_point": 0.08118147272123045
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.88,
+          "backstop_fail_rate": 0.02,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.03580302993053511,
+          "sd_point": 0.012731734436281084
+        }
+      }
+    },
+    {
+      "label": "regression, forward weeks 6-13: random 25% of players, full-size noise",
+      "R": 50,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.88,
+        ">=2 LB fails": 0.74,
+        ">=3 LB fails": 0.38,
+        "any LB or fixed backstop": 1.0,
+        "any scaled backstop": 0.88,
+        ">=2 LB or any scaled backstop": 0.9,
+        ">=3 LB or any scaled backstop": 0.88,
+        "n_lb_fail_distribution": [
+          6,
+          7,
+          18,
+          5,
+          11,
+          1,
+          2
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.38,
+          "backstop_fail_rate": 0.9,
+          "scaled_fail_rate": 0.34,
+          "mean_point": 0.24819512935124488,
+          "sd_point": 0.10460580633718712
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.52,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.12935500804434827,
+          "sd_point": 0.39828908994579904
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.08,
+          "backstop_fail_rate": 0.76,
+          "scaled_fail_rate": 0.08,
+          "mean_point": 0.2151897592688697,
+          "sd_point": 0.1478013499387251
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.38,
+          "backstop_fail_rate": 0.92,
+          "scaled_fail_rate": 0.42,
+          "mean_point": 0.257797896958347,
+          "sd_point": 0.11275398125077207
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.64,
+          "backstop_fail_rate": 0.98,
+          "scaled_fail_rate": 0.68,
+          "mean_point": 0.3396874292761982,
+          "sd_point": 0.12515034298960875
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.64,
+          "scaled_fail_rate": 0.06,
+          "mean_point": 0.17020278204083233,
+          "sd_point": 0.21823460365411768
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.72,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.17324226293954476,
+          "sd_point": 0.14252802524189445
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.58,
+          "scaled_fail_rate": 0.04,
+          "mean_point": 0.1518250698886343,
+          "sd_point": 0.2595686708461797
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.08,
+          "backstop_fail_rate": 0.64,
+          "scaled_fail_rate": 0.1,
+          "mean_point": 0.1652094697182935,
+          "sd_point": 0.16702763913428248
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.28,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.03490778931949592,
+          "sd_point": 0.13159671916717863
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.38,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.014415775961037014,
+          "sd_point": 0.43003874875451165
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.48,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.07433496736190986,
+          "sd_point": 0.21673029366652402
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.020409628564486294,
+          "sd_point": 0.11926984505882124
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.14,
+          "mean_point": 0.00436401965990726,
+          "sd_point": 0.07833860071921607
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.42,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.021500130288111496,
+          "sd_point": 0.2629923271435926
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.26,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.0400577063240731,
+          "sd_point": 0.1039741393202016
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.62,
+          "backstop_fail_rate": 0.04,
+          "scaled_fail_rate": 0.04,
+          "mean_point": 0.032977919569024516,
+          "sd_point": 0.016819559192904673
+        }
+      }
+    },
+    {
+      "label": "regression: all QB rows, full-size noise",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.68,
+        ">=2 LB fails": 0.4,
+        ">=3 LB fails": 0.27,
+        "any LB or fixed backstop": 1.0,
+        "any scaled backstop": 0.54,
+        ">=2 LB or any scaled backstop": 0.58,
+        ">=3 LB or any scaled backstop": 0.56,
+        "n_lb_fail_distribution": [
+          32,
+          28,
+          13,
+          10,
+          11,
+          6
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.15,
+          "backstop_fail_rate": 0.52,
+          "scaled_fail_rate": 0.15,
+          "mean_point": 0.10052747305965613,
+          "sd_point": 0.058146951388100256
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.6,
+          "backstop_fail_rate": 1.0,
+          "scaled_fail_rate": 0.49,
+          "mean_point": 0.6949902009343455,
+          "sd_point": 0.23252094250038777
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0018803456126609147,
+          "sd_point": 0.09109997801896885
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.04,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.00557435081246148,
+          "sd_point": 0.06133642304338005
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.02,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.005443267495727781,
+          "sd_point": 0.05883342125084747
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.63,
+          "scaled_fail_rate": 0.03,
+          "mean_point": 0.15868625819843837,
+          "sd_point": 0.15136118323926395
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.13,
+          "backstop_fail_rate": 0.78,
+          "scaled_fail_rate": 0.07,
+          "mean_point": 0.1694672294865724,
+          "sd_point": 0.1056469334384819
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.67,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.15492243520031462,
+          "sd_point": 0.15365311513718044
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.17,
+          "backstop_fail_rate": 0.74,
+          "scaled_fail_rate": 0.1,
+          "mean_point": 0.1711660460267005,
+          "sd_point": 0.11039607113738967
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.15,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0050676468037147305,
+          "sd_point": 0.10368579340450758
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.33,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.029550596835575343,
+          "sd_point": 0.2975117152108558
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.3,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.010578547446750946,
+          "sd_point": 0.18518036576310185
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0033849793864678458,
+          "sd_point": 0.0992842175811138
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.29,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.012539385308375294,
+          "sd_point": 0.12761567186886302
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.33,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.025300215074428877,
+          "sd_point": 0.18245701339155268
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.01,
+          "mean_point": -0.004689730143805084,
+          "sd_point": 0.07293644532831557
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.33,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.012632690181809498,
+          "sd_point": 0.012672934994185068
+        }
+      }
+    },
+    {
+      "label": "regression, forward weeks 6-13: all QB rows, full-size noise",
+      "R": 50,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.44,
+        ">=2 LB fails": 0.18,
+        ">=3 LB fails": 0.06,
+        "any LB or fixed backstop": 1.0,
+        "any scaled backstop": 0.38,
+        ">=2 LB or any scaled backstop": 0.44,
+        ">=3 LB or any scaled backstop": 0.4,
+        "n_lb_fail_distribution": [
+          28,
+          13,
+          6,
+          1,
+          0,
+          2
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.08,
+          "backstop_fail_rate": 0.5,
+          "scaled_fail_rate": 0.06,
+          "mean_point": 0.10730765062914065,
+          "sd_point": 0.1060673368931123
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.28,
+          "backstop_fail_rate": 0.94,
+          "scaled_fail_rate": 0.18,
+          "mean_point": 0.6444634844908034,
+          "sd_point": 0.3548167093089107
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.009132348546630326,
+          "sd_point": 0.12514486654408438
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.16,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0037956305913993244,
+          "sd_point": 0.11453677110573494
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.015221671029158985,
+          "sd_point": 0.09082201941340073
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.6,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.12367450944787993,
+          "sd_point": 0.22208306387135682
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.1,
+          "backstop_fail_rate": 0.7,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.1748396594234967,
+          "sd_point": 0.14912230521568606
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.5,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.10055501972615177,
+          "sd_point": 0.3142468733385455
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.1,
+          "backstop_fail_rate": 0.68,
+          "scaled_fail_rate": 0.06,
+          "mean_point": 0.18250367156102887,
+          "sd_point": 0.15748229979804898
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.24,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.033048971104509176,
+          "sd_point": 0.12216701459000792
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.38,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.1010988967839535,
+          "sd_point": 0.3960428170863522
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.031614989163667326,
+          "sd_point": 0.2253191916636586
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.01640353385570341,
+          "sd_point": 0.12325988861556363
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.22,
+          "mean_point": 0.014336768570257922,
+          "sd_point": 0.09487454138956146
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.44,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.04242151915552651,
+          "sd_point": 0.2757987479369266
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.002401589377237917,
+          "sd_point": 0.08823423135032465
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.16,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.014341674882523605,
+          "sd_point": 0.015490080302511419
+        }
+      }
+    },
+    {
+      "label": "regression: all QB rows, half-size noise",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.26,
+        ">=2 LB fails": 0.09,
+        ">=3 LB fails": 0.01,
+        "any LB or fixed backstop": 0.98,
+        "any scaled backstop": 0.02,
+        ">=2 LB or any scaled backstop": 0.09,
+        ">=3 LB or any scaled backstop": 0.03,
+        "n_lb_fail_distribution": [
+          74,
+          17,
+          8,
+          1
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.021323009325594784,
+          "sd_point": 0.05468308565559735
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.69,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.2048243091444808,
+          "sd_point": 0.2246935293182835
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0018803456126609147,
+          "sd_point": 0.09109997801896885
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.04,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.00557435081246148,
+          "sd_point": 0.06133642304338005
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.02,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.005443267495727781,
+          "sd_point": 0.05883342125084747
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.37,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.04272545644207825,
+          "sd_point": 0.1510225796884265
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.05098597658215927,
+          "sd_point": 0.10093164977785103
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.31,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.037744588785500556,
+          "sd_point": 0.15358476381159336
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.33,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.05416419941391495,
+          "sd_point": 0.10847156815537584
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.003948232868327745,
+          "sd_point": 0.1029394566483581
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.37,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.024501508138549014,
+          "sd_point": 0.2944258693835486
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.31,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.009311080801430598,
+          "sd_point": 0.1845652709546976
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0034938900804197055,
+          "sd_point": 0.0994114452208511
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.41,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.009989460831210424,
+          "sd_point": 0.12597065393762338
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.02428968683208656,
+          "sd_point": 0.18069682625153444
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.004514959252140239,
+          "sd_point": 0.07305562205044003
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.1,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.003451040381811626,
+          "sd_point": 0.012219111705754161
+        }
+      }
+    },
+    {
+      "label": "regression, forward weeks 6-13: all QB rows, half-size noise",
+      "R": 50,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.06,
+        ">=2 LB fails": 0.04,
+        ">=3 LB fails": 0.0,
+        "any LB or fixed backstop": 0.94,
+        "any scaled backstop": 0.04,
+        ">=2 LB or any scaled backstop": 0.04,
+        ">=3 LB or any scaled backstop": 0.04,
+        "n_lb_fail_distribution": [
+          47,
+          1,
+          2
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.28,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.02826134322286704,
+          "sd_point": 0.10220263977549511
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.54,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.16670192196071723,
+          "sd_point": 0.3325734602074032
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.009132348546630326,
+          "sd_point": 0.12514486654408438
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.16,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0037956305913993244,
+          "sd_point": 0.11453677110573494
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.015221671029158985,
+          "sd_point": 0.09082201941340073
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.01383573587694622,
+          "sd_point": 0.21428749843589837
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.057785155867118264,
+          "sd_point": 0.1480527091193447
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.36,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.011579869400664404,
+          "sd_point": 0.31345476016251583
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.06832304617709957,
+          "sd_point": 0.14997545891449596
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.031468764257694695,
+          "sd_point": 0.12071892199957944
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.10355381114824315,
+          "sd_point": 0.37818510963060914
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.025007960954232675,
+          "sd_point": 0.22477995567146364
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.016308848564363355,
+          "sd_point": 0.1231911704883966
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0013155388569514636,
+          "sd_point": 0.05125268737866199
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.38,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.03394270470873925,
+          "sd_point": 0.27355787425706274
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0022839831147287593,
+          "sd_point": 0.08876990726037347
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.06,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.004719017279695526,
+          "sd_point": 0.01431590916521397
+        }
+      }
+    },
+    {
+      "label": "regression: top-12 (rolling-3) rows, half-size noise",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.24,
+        ">=2 LB fails": 0.1,
+        ">=3 LB fails": 0.02,
+        "any LB or fixed backstop": 0.96,
+        "any scaled backstop": 0.07,
+        ">=2 LB or any scaled backstop": 0.14,
+        ">=3 LB or any scaled backstop": 0.08,
+        "n_lb_fail_distribution": [
+          76,
+          14,
+          8,
+          2
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.11,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.031653149418362406,
+          "sd_point": 0.053118139371627404
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.4,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.048206507120160544,
+          "sd_point": 0.23057859515939663
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.23,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.02517891868290144,
+          "sd_point": 0.0947750124742116
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.06,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.008492204407879494,
+          "sd_point": 0.06043256450523963
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.11,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.028848883869623185,
+          "sd_point": 0.05937736034165021
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.06,
+          "backstop_fail_rate": 0.66,
+          "scaled_fail_rate": 0.05,
+          "mean_point": 0.1713381672507314,
+          "sd_point": 0.15104618664351052
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.13,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.004193511828331652,
+          "sd_point": 0.09861979781539741
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.45,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.09602337853441771,
+          "sd_point": 0.15528150664513657
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.26,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.032563989307422006,
+          "sd_point": 0.108128032553218
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.13,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.004356910970880316,
+          "sd_point": 0.10334671421959846
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.36,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.030362547153576436,
+          "sd_point": 0.30491895933057506
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.00804361415611025,
+          "sd_point": 0.1857285836557557
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.003602800774371564,
+          "sd_point": 0.0995905638149297
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.29,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.012209258823777547,
+          "sd_point": 0.12598910736751232
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.3,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.024718439921105118,
+          "sd_point": 0.18578727773695541
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.01,
+          "mean_point": -0.0044865103665191995,
+          "sd_point": 0.07373085755394043
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.1,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0021430326366993703,
+          "sd_point": 0.01172382425036165
+        }
+      }
+    },
+    {
+      "label": "regression, forward weeks 6-13: top-12 (rolling-3) rows, half-size noise",
+      "R": 50,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.08,
+        ">=2 LB fails": 0.04,
+        ">=3 LB fails": 0.02,
+        "any LB or fixed backstop": 0.96,
+        "any scaled backstop": 0.16,
+        ">=2 LB or any scaled backstop": 0.18,
+        ">=3 LB or any scaled backstop": 0.16,
+        "n_lb_fail_distribution": [
+          46,
+          2,
+          1,
+          1
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0384440651004796,
+          "sd_point": 0.10241904810052639
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.46,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.018068861359517983,
+          "sd_point": 0.33721886774949644
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.26,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.016375099971272608,
+          "sd_point": 0.12714829155856816
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0097317713999081,
+          "sd_point": 0.11405732992839931
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.3,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.04364831402461852,
+          "sd_point": 0.09421535170075297
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.52,
+          "scaled_fail_rate": 0.04,
+          "mean_point": 0.14249033704086594,
+          "sd_point": 0.21753304177467123
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.3,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.004486545681649268,
+          "sd_point": 0.1493538103212783
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.46,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.03669744485669203,
+          "sd_point": 0.3085296646207419
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.05419332249320783,
+          "sd_point": 0.15189445200428894
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.02883735889772769,
+          "sd_point": 0.12270655501927202
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.4,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.09877626074235316,
+          "sd_point": 0.3907084921409118
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.018400932744798027,
+          "sd_point": 0.22772959729175749
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.016214163273023302,
+          "sd_point": 0.1231589926600857
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.1,
+          "mean_point": 0.015152261790777251,
+          "sd_point": 0.0691130455420215
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.38,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.020375734614854455,
+          "sd_point": 0.28246773964379945
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.12,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0025272198369188383,
+          "sd_point": 0.08887646007128404
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.06,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.003545751396138576,
+          "sd_point": 0.013277240996929262
+        }
+      }
+    },
+    {
+      "label": "regression: all rows, quarter-size noise",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.64,
+        ">=2 LB fails": 0.34,
+        ">=3 LB fails": 0.1,
+        "any LB or fixed backstop": 0.99,
+        "any scaled backstop": 0.33,
+        ">=2 LB or any scaled backstop": 0.46,
+        ">=3 LB or any scaled backstop": 0.35,
+        "n_lb_fail_distribution": [
+          36,
+          30,
+          24,
+          6,
+          4
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.07,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.04,
+          "mean_point": 0.05915109593015207,
+          "sd_point": 0.053265321678457565
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.43,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0590701804391949,
+          "sd_point": 0.2260941205872954
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.43,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.07609014902278065,
+          "sd_point": 0.09628431323930782
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.06,
+          "backstop_fail_rate": 0.35,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.07808339497814383,
+          "sd_point": 0.06238092157046829
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.31,
+          "backstop_fail_rate": 0.77,
+          "scaled_fail_rate": 0.27,
+          "mean_point": 0.13669584301749688,
+          "sd_point": 0.05936460011079614
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.37,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.04763232848830398,
+          "sd_point": 0.14978738014836585
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.35,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.054871754587783074,
+          "sd_point": 0.1039785463444615
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.31,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.039437049717446666,
+          "sd_point": 0.15119766486471742
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.33,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.05287836635124276,
+          "sd_point": 0.11001424511528367
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.05,
+          "backstop_fail_rate": 0.14,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.003233261224806441,
+          "sd_point": 0.10501590886979327
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.4,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.024907483297549576,
+          "sd_point": 0.29818443270633943
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.29,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.006187341171647523,
+          "sd_point": 0.18391153918368483
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.03,
+          "backstop_fail_rate": 0.15,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.003344966852129527,
+          "sd_point": 0.10309590437535864
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.36,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.011597542091369711,
+          "sd_point": 0.12417043984793999
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.31,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.020147192212243037,
+          "sd_point": 0.18200287910942078
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.01,
+          "mean_point": -0.003948407875021981,
+          "sd_point": 0.07548464108143371
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.45,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.014535695717897838,
+          "sd_point": 0.011923226462251675
+        }
+      }
+    },
+    {
+      "label": "regression, forward weeks 6-13: all rows, quarter-size noise",
+      "R": 50,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.28,
+        ">=2 LB fails": 0.1,
+        ">=3 LB fails": 0.04,
+        "any LB or fixed backstop": 1.0,
+        "any scaled backstop": 0.22,
+        ">=2 LB or any scaled backstop": 0.22,
+        ">=3 LB or any scaled backstop": 0.22,
+        "n_lb_fail_distribution": [
+          36,
+          9,
+          3,
+          1,
+          1
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.38,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.06579261958639059,
+          "sd_point": 0.10160605217974104
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.44,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.030630326975407428,
+          "sd_point": 0.3250940519634632
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.05780064662183288,
+          "sd_point": 0.1321578890159114
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.1,
+          "backstop_fail_rate": 0.44,
+          "scaled_fail_rate": 0.08,
+          "mean_point": 0.08242777735871937,
+          "sd_point": 0.1093501096888906
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.12,
+          "backstop_fail_rate": 0.64,
+          "scaled_fail_rate": 0.1,
+          "mean_point": 0.14912980054071628,
+          "sd_point": 0.09273802127491253
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.02,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.019113084189128306,
+          "sd_point": 0.20864644434984458
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.36,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.05951604098900314,
+          "sd_point": 0.14794502815159155
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.36,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.009188602733823941,
+          "sd_point": 0.30831064570627853
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.36,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.06638868080258088,
+          "sd_point": 0.15004075758268107
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.2,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.030722861817550254,
+          "sd_point": 0.12197291505750327
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.34,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.10239249312744293,
+          "sd_point": 0.37572935308208527
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.32,
+          "scaled_fail_rate": 0.02,
+          "mean_point": 0.018555657746912254,
+          "sd_point": 0.22780661346082104
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.28,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.018524035400401845,
+          "sd_point": 0.12414102787405103
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.005263778507736864,
+          "sd_point": 0.0452587979997295
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.4,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.03013800554335122,
+          "sd_point": 0.27834217919629684
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.12,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0026508466586123713,
+          "sd_point": 0.09063818641573067
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.16,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.015100867036492629,
+          "sd_point": 0.01366950666017711
+        }
+      }
+    },
+    {
+      "label": "regression: bias pushed 0.3 further from zero",
+      "R": 100,
+      "B": 1000,
+      "family": {
+        "any LB fail": 1.0,
+        ">=2 LB fails": 0.97,
+        ">=3 LB fails": 0.89,
+        "any LB or fixed backstop": 1.0,
+        "any scaled backstop": 0.95,
+        ">=2 LB or any scaled backstop": 0.98,
+        ">=3 LB or any scaled backstop": 0.96,
+        "n_lb_fail_distribution": [
+          0,
+          3,
+          8,
+          48,
+          30,
+          11
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.01,
+          "backstop_fail_rate": 0.08,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.029495727869355833,
+          "sd_point": 0.05134160914819169
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.35,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.03106509001204191,
+          "sd_point": 0.18385163178363237
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.06,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.019657329490602785,
+          "sd_point": 0.08069529435302952
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.04279916456589066,
+          "sd_point": 0.05898716697599788
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.03,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.028201664623211095,
+          "sd_point": 0.06256018358668497
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.16,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.047335821445595325,
+          "sd_point": 0.1460685077483647
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.15,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.0013577303194602622,
+          "sd_point": 0.09212631192457883
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.35,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.01045674426776735,
+          "sd_point": 0.16608189446632904
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.13,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.012804284252604294,
+          "sd_point": 0.08957100123181759
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.91,
+          "backstop_fail_rate": 0.97,
+          "scaled_fail_rate": 0.41,
+          "mean_point": 0.301923262359217,
+          "sd_point": 0.09422136311894715
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.3096472810469294,
+          "sd_point": 0.33896465653500374
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.28,
+          "backstop_fail_rate": 0.86,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.30780586979321023,
+          "sd_point": 0.19380014672016252
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.93,
+          "backstop_fail_rate": 0.98,
+          "scaled_fail_rate": 0.48,
+          "mean_point": 0.29673125036646575,
+          "sd_point": 0.08390276384062556
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.71,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.08532731235402827,
+          "sd_point": 0.11908833479606394
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.21,
+          "backstop_fail_rate": 0.86,
+          "scaled_fail_rate": 0.01,
+          "mean_point": 0.2788919330253965,
+          "sd_point": 0.18599850069714316
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 1.0,
+          "backstop_fail_rate": 1.0,
+          "scaled_fail_rate": 0.95,
+          "mean_point": 0.3028863775564161,
+          "sd_point": 0.061084772904358944
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.00019462936672111448,
+          "sd_point": 0.00972819735176284
+        }
+      }
+    },
+    {
+      "label": "regression, forward weeks 6-13: bias pushed 0.3 further from zero",
+      "R": 50,
+      "B": 1000,
+      "family": {
+        "any LB fail": 0.94,
+        ">=2 LB fails": 0.84,
+        ">=3 LB fails": 0.54,
+        "any LB or fixed backstop": 1.0,
+        "any scaled backstop": 0.96,
+        ">=2 LB or any scaled backstop": 0.96,
+        ">=3 LB or any scaled backstop": 0.96,
+        "n_lb_fail_distribution": [
+          3,
+          5,
+          15,
+          26,
+          1
+        ]
+      },
+      "cells": {
+        "RMSE": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.26,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.030511808025166332,
+          "sd_point": 0.09082077692606395
+        },
+        "MAE QB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.44,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.055882285005584856,
+          "sd_point": 0.3354233480037945
+        },
+        "MAE RB": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.18,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.017349875982891953,
+          "sd_point": 0.114412610474131
+        },
+        "MAE WR": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.02,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.04020312440819485,
+          "sd_point": 0.08326033038075047
+        },
+        "MAE TE": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.1,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.03789832391199872,
+          "sd_point": 0.09956402019451249
+        },
+        "MAE tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.28,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.021441781751819558,
+          "sd_point": 0.20033874250280795
+        },
+        "MAE tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.26,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.004527842732598273,
+          "sd_point": 0.15020151527706602
+        },
+        "MAE tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.46,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.015147155194561491,
+          "sd_point": 0.2736235429550416
+        },
+        "MAE tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.22,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.01471567110459666,
+          "sd_point": 0.14279057274317092
+        },
+        "|bias| overall": {
+          "lb_fail_rate": 0.64,
+          "backstop_fail_rate": 0.98,
+          "scaled_fail_rate": 0.4,
+          "mean_point": 0.31179862345739984,
+          "sd_point": 0.1257218461765626
+        },
+        "|bias| tier_roll3 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.18,
+          "scaled_fail_rate": 0.0,
+          "mean_point": -0.31742298071742225,
+          "sd_point": 0.3832730341536896
+        },
+        "|bias| tier_roll3 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.82,
+          "scaled_fail_rate": 0.06,
+          "mean_point": 0.3041092287265749,
+          "sd_point": 0.24080867636548947
+        },
+        "|bias| tier_roll3 37+": {
+          "lb_fail_rate": 0.74,
+          "backstop_fail_rate": 0.96,
+          "scaled_fail_rate": 0.38,
+          "mean_point": 0.314210823486943,
+          "sd_point": 0.12776954572771324
+        },
+        "|bias| tier_served 1-12": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.72,
+          "scaled_fail_rate": 0.72,
+          "mean_point": 0.15450938276748855,
+          "sd_point": 0.19253310648932898
+        },
+        "|bias| tier_served 13-36": {
+          "lb_fail_rate": 0.0,
+          "backstop_fail_rate": 0.72,
+          "scaled_fail_rate": 0.04,
+          "mean_point": 0.30671933791386224,
+          "sd_point": 0.2781689712014998
+        },
+        "|bias| tier_served 37+": {
+          "lb_fail_rate": 0.88,
+          "backstop_fail_rate": 1.0,
+          "scaled_fail_rate": 0.84,
+          "mean_point": 0.30211084386986914,
+          "sd_point": 0.07924618438497595
+        },
+        "Spearman": {
+          "lb_fail_rate": 0.04,
+          "backstop_fail_rate": 0.0,
+          "scaled_fail_rate": 0.0,
+          "mean_point": 0.0036574507917875743,
+          "sd_point": 0.014076190548793714
+        }
+      }
+    }
+  ]
+}
