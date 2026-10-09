@@ -67,7 +67,7 @@ SCRIPTS = [
     "scripts/run_forward_week.py", "scripts/build_prekickoff_population.py",
     "scripts/build_prekickoff_share_rows.py", "scripts/export_plan_a_prekickoff.py",
     "scripts/build_team_week_player_shares.py", "scripts/build_canonical_player_weeks.py",
-    "scripts/backfill_weekly_rosters.py", "src/predict.py",
+    "scripts/backfill_weekly_rosters.py", "src/predict.py", "src/utils/database.py",
     "src/models/team_allocation/joint_serving.py", "src/evaluation/team_reconstruction_candidates.py",
     "src/evaluation/selection_gates.py",
 ]
@@ -107,7 +107,8 @@ def freeze(plan_a: Path, rolling3: Path) -> dict:
         "frozen_at": now.isoformat(),
         "rule": RULE, "rule_sha256": file_sha256(ROOT / RULE),
         "rule_commits": {"original": "147bc1b80b6a52aafdcc3d33fa9ccc9da60db8ad",
-                         "amendment_1": "66df69530a17e2471a22e7a3e52ff77f820a22e3"},
+                         "amendment_1": "66df69530a17e2471a22e7a3e52ff77f820a22e3",
+                         "amendment_2": "7a4e9213da7fab5b018312f81a8ee0f1daa2b611"},
         "head_commit": _git("rev-parse", "HEAD"),
         "season": 2026, "start_week": int(start), "window_weeks": 8,
         "served": {"pace_blend_kappa": PACE_BLEND_KAPPA, "files_sha256": hashes(SERVED_FILES)},
