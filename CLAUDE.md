@@ -24,9 +24,9 @@
    Open .......... ties the live blend (+0.002); fails G1 and RMSE/bias guardrails
 
 5. PLAN A + PLAN B ARM
-   Status ........ DROPPED from selection (10-08); results invalid (same leak)
-   Metric ........ none valid; 2.346 used same-game team totals
-   Open .......... no serving path for the Plan B arm
+   Status ........ RESEARCH; not a candidate (dropped 10-08)
+   Metric ........ leak-free: MAE 2.403 (Plan A scale, -0.023 vs Plan A); gain is QB passing yards
+   Open .......... no serving path; a QB passing-yards-only path is the narrower option
 
 6. PLAN B  (shares only)
    Status ........ RESEARCH

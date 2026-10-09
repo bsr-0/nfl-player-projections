@@ -1,5 +1,10 @@
 # Plan B wired into Plan A's full-PPR selector — 2026-09-25
 
+> **Void (2026-10-08).** The team totals used here read the predicted game's
+> own team stats (GAPS.md 2026-10-08). The leak-free re-run is
+> `data/experiments/full_ppr_with_plan_b_no_sameweek_team_20261009/`:
+> 2.403 pooled, −0.023 vs corrected Plan A.
+
 **Plan B's confirmed uncapped joint-softmax allocation, added as a new
 candidate arm to Plan A's existing gated full-PPR selector, further reduces
 full-PPR MAE from 2.36984 to 2.34608** on the same 40,559-row, three-fold
