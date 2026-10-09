@@ -392,3 +392,59 @@ corrected Plan A prediction gap (sd 2.90):
 
 The weak spot stated above still holds: regressions confined to one position
 or tier are mostly missed (20–48% here).
+
+### Amendment 2 (2026-10-09), committed before any forward-window week was written
+
+No forward-window result exists, and none was viewed: the window directory
+holds only the 2026 week 5 dry run, no week directory, no log, and no hashed
+forecast. Nothing here was chosen after viewing a candidate's accuracy.
+
+**A2.1 Why the lineage is re-frozen.** After the 2026-10-09 freeze, three
+pinned files were edited to fix defects found in the live path
+(`GAPS.md`, 2026-10-09):
+- `src/predict.py` (with `src/utils/database.py`, which holds the new lookup):
+  each player is placed on the club of his latest roster snapshot; in a replay
+  only snapshots before the target week count. Before, a player who had moved
+  kept the club of his last game. In the 2025 week 6 replay 65 of 642 players
+  moved and 57 columns changed (team, opponent, home/away, opponent-strength
+  features); **no predicted point changed**. The frozen list's team
+  assignments change, hence Plan A's team grouping.
+- `scripts/build_team_week_player_shares.py`: scheduled, unscored, stat-less
+  team-weeks are left out of the share panel, and a scored game with no stats
+  raises.
+- `scripts/build_prekickoff_share_rows.py`: refuses to forecast a week whose
+  predecessor has no stats.
+The edits make the weekly runner report "lineage broken" (its hash check), so
+the lineage is re-frozen rather than the runner bypassed.
+
+**A2.2 Conditions, all met at the re-freeze.**
+1. No window week had been run or hashed (above).
+2. Everything that defines a model or a gate is unchanged: the served model
+   files, pace-blend kappa, the Plan A and rolling-3 artifacts (same sha256 as
+   in the superseded lineage), the rule text apart from this amendment, and
+   every gate, threshold, test and the window length (8 weeks).
+3. The start week is unchanged (6; its first game date follows the re-freeze).
+4. No feature, fill or model input changed. The audit's finding that five
+   model features take imputed fills from the whole training frame
+   (`GAPS.md`, 2026-10-09) is left as it is, so serving matches the model as
+   frozen.
+
+**A2.3 Procedure.**
+- The superseded lineage is kept as
+  `data/experiments/selection_forward_2026/lineage_superseded_20261009.json`
+  and the superseded dry run as `dry_run_superseded_20261009/`.
+- The new `lineage.json` records this amendment's commit and pins
+  `src/utils/database.py` as well, since the roster lookup behind the served
+  list now lives there.
+- A full dry run of A1.6 steps 1–3 on the new code must pass before the window
+  starts. Its incumbent and unblended-served forecasts are compared with the
+  superseded dry run's; they are expected to be identical.
+
+**A2.4 Effect on the 2025 evidence.** None is recomputed. The 2025 exports and
+gate results (hashes in A1.5–A1.7) were produced with the pre-amendment path
+and stand as recorded. The forward test applies the pass condition ("same sign
+as on 2025") against them unchanged.
+
+**A2.5 Limit.** This permits one re-freeze, before the first window week is
+written. From then on the original text governs: a change to any pinned file
+during the window voids it.
