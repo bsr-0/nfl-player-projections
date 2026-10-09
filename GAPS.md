@@ -15995,3 +15995,22 @@ What can be done without touching pinned code: items 1, 2 (needs a new loader
 for `weekly_pfr`) and 5 (database table only) are data refreshes. Whether to do
 them before week 6 is the rule owner's call: each changes what the live
 incumbent sees, in the direction of the training and replay inputs.
+
+**Item 1 fixed 2026-10-09 (data and loader; no pinned file changed, no re-freeze).**
+Cause: for the current season the weekly release is merged with the PBP frame,
+and `_standardize_weekly_columns` had already zero-filled the PBP-derived
+columns, so `_merge_advanced_pbp_features` (fill-if-missing) never replaced them.
+`recv_epa` was non-zero on 0.1% of 2026 rows against 80% in 2024/2025, and every
+new week would have been stored the same way. The merge now replaces a default 0
+or NULL with the PBP value and never overwrites a stored non-zero value
+(`tests/test_pbp_advanced_merge.py`). Check on 2025: the fixed loader leaves all
+5,980 matched rows unchanged. `scripts/repair_pbp_advanced_columns.py --seasons
+2026 --write` then updated 1,242 stored rows (8,737 cells, 17 columns) after a
+backup (`data/backups/nfl_data_pre_pbp_repair_20261009_175759.db`); a second pass
+finds nothing left to change. 2026 non-zero rates now match 2025 (recv_epa 1.00,
+recv_success_rate 0.77 vs 0.785, redzone_targets 0.357 vs 0.367). Live
+incumbent: 159 of 706 players move (mean 0.04 points, max 1.6, mean +0.03),
+identical to the estimate made on a scratch copy. The Plan A share-row leakage
+audit still passes (2025 weeks 6 and 14). Plan A's own 2026 history also reads
+`redzone_targets`, `neutral_*` and similar, so its live inputs move toward the
+2025 training data too. Items 2 and 5 of the entry above remain open.

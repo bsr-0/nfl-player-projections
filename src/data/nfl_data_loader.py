@@ -716,7 +716,16 @@ class NFLDataLoader:
             pbp_col = f"{col}_pbp"
             if pbp_col in merged.columns:
                 if col in merged.columns:
-                    merged[col] = merged[col].fillna(merged[pbp_col])
+                    # The weekly release carries none of these columns and
+                    # _standardize_weekly_columns zero-fills them before this
+                    # merge, so a 0 here is a default, not a measurement.
+                    # fillna() alone left every current-season row at 0 (2026
+                    # recv_epa non-zero on 0.1% of rows, 80% in 2024/2025) while
+                    # the PBP cache held the real values. A real stored value is
+                    # still never overwritten.
+                    existing = merged[col]
+                    take_pbp = merged[pbp_col].notna() & (existing.isna() | (existing == 0))
+                    merged[col] = existing.where(~take_pbp, merged[pbp_col])
                     merged = merged.drop(columns=[pbp_col])
                 else:
                     merged = merged.rename(columns={pbp_col: col})
