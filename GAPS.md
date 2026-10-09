@@ -15939,3 +15939,59 @@ of 661 players (mean 0.05, max 1.6 points). Still open: other live-vs-replay
 input differences (2026 play-by-play participation and personnel features are
 empty because nflverse has not published them; several roll3 features have
 higher zero rates in live than in the 2025 replay, not yet traced).
+
+## 2026-10-09 — The three open live-versus-replay items, investigated (nothing changed)
+
+Matched-week comparison of the model inputs: live (2026 week 5 target, 706
+players) against a 2025 week 5 replay. Veterans only (20+ career games), 15
+model features have a zero/NaN rate more than 10 points higher live than in the
+replay; the causes, from the biggest:
+
+1. **2026 play-by-play player columns are zero in the database, but the cache
+   has them.** For 2026 rows with targets, `recv_epa`, `recv_success_rate`,
+   `redzone_targets` and `rush_epa` are non-zero on 0.0-0.4% of rows (2025:
+   100% / 78% / 37% / 100%), while `recv_targets` and `rush_plays` are fine.
+   `data/raw/pbp_advanced_2026.parquet` holds real values (82% non-zero
+   `recv_epa`, weeks 1-4) and agrees with the database on every basic stat;
+   1,245 of 1,254 cached rows match a database row. The two scripts that fill
+   these columns (`backfill_pbp_features.py`, `backfill_pbp_situational_columns.py`)
+   are not part of the weekly refresh. Repairing the columns from the cache
+   in a scratch copy and re-running the live prediction changes the incumbent
+   for 159 of 706 players (mean 0.04 points, max 1.6; 29 players by more than
+   0.25; mean +0.03) and brings the live zero rates of `recv_epa_per_target`,
+   `rush_epa_per_play` and `redzone_target_share_pct` close to the replay's.
+2. **`weekly_pfr`, `ngs_*`, `snap_counts`, `utilization_scores`,
+   `team_week_player_shares` and `game_weather` have no 2026 rows.** Upstream
+   has 2026 weekly PFR (weeks 1-4), NGS and snap counts (through week 5). No
+   script in the repo writes `weekly_pfr` at all (the table was populated ad
+   hoc), and `backfill_all_data.py` is not in the weekly job. Feeds
+   `team_sack_rate_allowed`, `team_run_block_ybc_avg` (41% zero live, 0% in the
+   replay), `qb_pressure_pct`, `rb_yac/ybc_avg`, `recv_drop_pct`.
+3. **Personnel and pass-participation features cannot be filled yet.**
+   nflverse has not published `pbp_participation_2026` (HTTP 404; the 2025
+   file is there). `team_pct_11/12/13/21_personnel_roll3_mean` and
+   `pbp_pass_play_participation_pct_roll3_mean` stay empty until it appears.
+4. **Weather is observed, not forecast, in replays.** `wind_speed_mph`,
+   `precipitation_flag` and `temperature_bucket` read `game_weather`, filled from
+   Open-Meteo's historical archive (after the game), so a replay sees the target
+   game's measured weather and live sees none (the 2026 table is empty and the
+   features default). `scripts/audit_serving_leakage.py` does not poison this
+   table, so its "no same-week leak" result excludes it. Neutralising the three
+   features on the 2025 week 5 and 6 replay frames shifts raw predictions by
+   0.02 points on average (max 1.0-1.3; 30-35 of ~640 rows by more than 0.10;
+   mean signed about 0). Small and not signed, but real.
+5. **Draft identity is stale for the whole 2026 class.** `draft_picks_v2` holds
+   pre-debut draft-feed ids (`MEN516487`) for all 80 skill-position picks;
+   nflverse now publishes official ids for 79, and 49 already have 2026 stat
+   rows under them. So draft-capital rookie features cannot join those 49
+   (and no 2026 draftee reaches `_drafted_rookie_stub_rows`, which joins on
+   `players`). The rookie team lookup ranking (`get_current_team_map`, table
+   priority) is a smaller matter: it only places rookies who reach the stub path,
+   and those are served pure pace at zero games. `data/draft_picks.parquet`,
+   which the draft features also read, is a pinned served file, so refreshing it
+   breaks the forward-test lineage; the `draft_picks_v2` table is not pinned.
+
+What can be done without touching pinned code: items 1, 2 (needs a new loader
+for `weekly_pfr`) and 5 (database table only) are data refreshes. Whether to do
+them before week 6 is the rule owner's call: each changes what the live
+incumbent sees, in the direction of the training and replay inputs.

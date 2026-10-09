@@ -23,7 +23,12 @@ poison reaches the model, so the pass is not vacuous.
 
 Not poisoned, because they are pre-game by design: Vegas lines, rest days,
 venue, depth charts, rosters, injury reports (kickoff-guarded, see
-`tests/test_leakage_guards.py`), draft and combine data. `qbr` and
+`tests/test_leakage_guards.py`), draft and combine data.
+**Correction (2026-10-09): `game_weather` is not pre-game.** It holds observed
+weather from a historical archive, was not poisoned, and feeds three model
+features. Replacing them with their no-weather defaults moves raw predictions by
+0.02 points on average (GAPS.md, 2026-10-09), so the pass above excludes a
+small, real dependence on measured weather. `qbr` and
 `seasonal_pfr` have no rows for 2025 onward.
 
 ## Truncation test — five model features depend on later rows (`truncation.json`)
