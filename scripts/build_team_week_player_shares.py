@@ -144,8 +144,17 @@ def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     pop = load_population(conn, lo, hi)
     if pop.empty:
         return pop
-    vol = load_volumes(conn, lo, hi)
+    return build_shares_from(pop, load_volumes(conn, lo, hi))
 
+
+def build_shares_from(pop: pd.DataFrame, vol: pd.DataFrame) -> pd.DataFrame:
+    """Shares and lagged history for a population and its volumes.
+
+    Every feature attached to a (player, season, week) row uses only rows
+    strictly before it, so a row whose volumes are unknown (a pre-kickoff
+    stub, see scripts/build_prekickoff_share_rows.py) gets the same features
+    it would have had once played.
+    """
     panel = pop.merge(vol, on=["player_id", "season", "week"], how="left")
     for c in ALL_VOLUME_COLS:
         panel[c] = panel[c].fillna(0.0)

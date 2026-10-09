@@ -1,0 +1,96 @@
+{
+  "scoring_definition": "raw_eight_component_ppr_excludes_fumbles_and_two_point_conversions",
+  "raw_truth_sha256": "7dce3178b87b6ecc9083eb612bff8f4dd0ed76924df566a5ba8623b2c51ec40d",
+  "input_sha256": {
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/interceptions_predictions.csv": "d43857d926a492d30d578479b4c55d3f7163ecf5c13922a3b36244f7537a3359",
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/passing_tds_predictions.csv": "7193aeb3eb4d838b9f9d5e895bd533ebd721d0421b17cbbf675cfd411daf8282",
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/passing_yards_predictions.csv": "faa9205ba5b7c5a25fe10b34c1289b50482cc7b9cb16405d7c59b4135147714f",
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/receiving_tds_predictions.csv": "5785796c3ad179de51271afb9eada8072d8bf0ca789fc90f2357ee17001ab087",
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/receiving_yards_predictions.csv": "4ef99b3cf7e86fccfddaab2560cc11ebd15d7d34a6722efce2bdf698505df4a4",
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/receptions_predictions.csv": "15d9b3b77b570c7e2eaadcca5ae0e98628163bf92673e617ea3911b3e944abae",
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/rushing_tds_predictions.csv": "61bebf0a2bd49d81dc6cdaa4bb0bbad078a1c00f3d719a38f11f43783e7c7f50",
+    "data/experiments/full_ppr_safe_blend_event_mass_20260924/rushing_yards_predictions.csv": "cb74c66aeca01511dd28f445adf845082bfc4319eddedd6d16bb1ec537acdc5f",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/interceptions_predictions.csv": "d971cc185d26f860ce579f692dc009d9aabfd0a4bbc9037c55d86dd731e8084e",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/passing_tds_predictions.csv": "fed1b2f1ada5dc1f8ef9eb3722eaba0073b7d8efd533c343b829ea583b1a40aa",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/passing_yards_predictions.csv": "b95a30128e62001014c11eb4c0f1e037a522ace7388ef9368a426050bc2bde5e",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/receiving_tds_predictions.csv": "552f63fbda1b3c2af039cd5e3876ae217dd5d91d92cb0b8252476b82f64eb881",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/receiving_yards_predictions.csv": "49b61cb36735b9b4e39b15cedc371783b558deae6a4fe1542c9e7928bd011f1a",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/receptions_predictions.csv": "a96eb3a6772ee90c9607687a55b42f0cde0925e73cb43b99365ef48d23158398",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/rushing_tds_predictions.csv": "3ab7f7351cdc95c4ec9ba5e1894e4c3788d23e567bd2b6fbbd9a7cba003c1cc2",
+    "data/experiments/full_ppr_selector_no_sameweek_team_20261008/team_totals/rushing_yards_predictions.csv": "216e4a36798a72abfd9dd0554fc3bd074438f98f3e89388d94fe8c58c5951b77"
+  },
+  "input_audit": {
+    "rows": 40559,
+    "folds": {
+      "0": {
+        "season": 2023,
+        "rows": 13404
+      },
+      "1": {
+        "season": 2024,
+        "rows": 13466
+      },
+      "2": {
+        "season": 2025,
+        "rows": 13689
+      }
+    },
+    "targets": {
+      "rushing_yards": {
+        "allocation_arms": 4,
+        "allocation_rows_per_arm": 40559,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      },
+      "receiving_yards": {
+        "allocation_arms": 4,
+        "allocation_rows_per_arm": 34932,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      },
+      "receptions": {
+        "allocation_arms": 4,
+        "allocation_rows_per_arm": 34932,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      },
+      "receiving_tds": {
+        "allocation_arms": 9,
+        "allocation_rows_per_arm": 34932,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      },
+      "rushing_tds": {
+        "allocation_arms": 9,
+        "allocation_rows_per_arm": 40559,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      },
+      "passing_yards": {
+        "allocation_arms": 4,
+        "allocation_rows_per_arm": 5627,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      },
+      "passing_tds": {
+        "allocation_arms": 9,
+        "allocation_rows_per_arm": 5627,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      },
+      "interceptions": {
+        "allocation_arms": 9,
+        "allocation_rows_per_arm": 5627,
+        "team_weeks": 1632,
+        "rolling3_week1_null_team_weeks": 96
+      }
+    },
+    "negative_yard_rows": 576,
+    "off_position_stat_rows": 71,
+    "former_label_discrepancy": {
+      "changed_rows": 641,
+      "mean_absolute_points": 0.009682684484331468,
+      "max_absolute_points": 11.9
+    }
+  }
+}

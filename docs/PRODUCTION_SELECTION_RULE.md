@@ -1,7 +1,8 @@
 # Production model selection rule (pre-registered)
 
 Status: **frozen at the commit that adds this file** (pre-registered
-2026-10-08). That commit's hash is recorded in the forward-test lineage file
+2026-10-08). **Amended 2026-10-08 (Amendment 1, below); where they differ,
+the amendment governs.** That commit's hash is recorded in the forward-test lineage file
 at freeze (see G10). Nothing below may change after any candidate's results on
 an evaluation set are viewed. Any later change goes under "Amendments" with its
 date and reason, and the affected comparisons are re-run.
@@ -274,4 +275,120 @@ of roughly 0.12 or more to pass.
 
 ## Amendments
 
-None.
+### Amendment 1 (2026-10-08), committed before any candidate result under it was viewed
+
+Nothing in this amendment was chosen after viewing a candidate's accuracy.
+The corrected Plan A selector's comparison numbers, and every gate result,
+were left unopened until this amendment was committed.
+
+**A1.1 Incumbent: live production, not the unblended model.**
+- Since 2026-09-17, `src/predict.py` has served the weekly model blended toward
+  the Step 8 season pace (`_blend_toward_season_pace`, κ = `PACE_BLEND_KAPPA` = 3).
+  The original rule named the unblended model as the incumbent and the blend
+  as a candidate; that was backwards.
+- The incumbent is now the live blend. Its 2025 predictions apply production's
+  own blend function to the held-out served fold
+  (`scripts/export_live_blend_fold.py`; predictions sha256 `63ad88af…c31242`).
+- **Verified against production:** on 2026 weeks 1 and 4,
+  `predict(as_of=…)` and this script agree on every player's games played and
+  blended points (0 mismatches, max difference 0.0; 700 and 704 players).
+  The weekly model inside the blend is the 2025 held-out refit, not the live
+  weights.
+- **Caveat:** κ = 3 was tuned on the 2025 walk-forward, so the incumbent is
+  flattered on 2025. That is conservative for every candidate.
+- The forward test (G10) compares against the live blend as served.
+
+**A1.2 Candidates and Holm family.**
+- Candidates: Plan A (corrected, A1.3) and the unblended served model. The
+  Holm family is these two (k = 2).
+- **Plan A + Plan B arm: dropped.** Plan B's `joint_other_mae` arm has no
+  serving path, and its results are invalid (A1.3).
+- "Served + pace blend" is no longer a candidate; it is the incumbent.
+
+**A1.3 Plan A results before 2026-10-08 are void.**
+- Plan A's team-total arms used the predicted game's own team opportunity
+  totals (17 same-week columns). Fixed in `2f602233`; see GAPS.md 2026-10-08.
+- Every earlier Plan A or Plan A + Plan B number is void, including the 2025
+  matched result against served (Δ −0.27) recorded under "Known limitation".
+- Corrected Plan A: selector re-run in
+  `data/experiments/full_ppr_selector_no_sameweek_team_20261008/`
+  (`joint_selector.json` sha256 `d8e6e025…824565`), same allocation inputs.
+  The 2025 artifact freezes its fold-2 arms, trained 2013–2024
+  (`plan_a_fixed_fold2.joblib`, sha256 `c5dd2c63…a35`). It reproduces the
+  selector's 2025 predictions exactly (13,689 rows, max difference 0.0) and
+  has no same-week team column in any arm.
+
+**A1.4 Pre-kickoff forecasting population.**
+- **Player list.** Each week's list is production's own forecast universe,
+  frozen and hashed before kickoff (`scripts/build_prekickoff_population.py`).
+  For 2025 it is replayed with `predict(as_of=…)`, with three "today"
+  lookups recomputed as of the week, because production's live versions leak
+  the future when replayed: eligibility (games in the lookback seasons
+  strictly before the week), rookie teams (previous week's
+  `weekly_rosters`, else draft team) and positions (previous week's roster,
+  else last game before the week). Bye teams are dropped.
+- **Plan A's renormalization population.** Each team's most recent roster
+  earlier in the season (`canonical_player_weeks`, every status), plus the
+  list, whose team and position take precedence. Week 1 uses the list alone.
+  Forecasts are kept for listed players only
+  (`scripts/export_plan_a_prekickoff.py`).
+- **Pre-kickoff rows.** Built from data strictly before the week
+  (`scripts/build_prekickoff_share_rows.py`). **Leakage audit:** rebuilding a
+  past week from pre-kickoff data reproduces every player feature and every
+  team-arm column exactly (2025 weeks 1, 2, 6, 12, 18; 2024 week 9; 2026
+  weeks 1–4). As a negative control, all 17 formerly leaked columns differ.
+  The audit is part of every forward week.
+- **Rolling-3** goes through the same export (predictions sha256
+  `c1bded4f…df5a6f`). It does not renormalize; it differs from the stored-row
+  baseline only for players the list places on a stale team.
+- The incumbent and the unblended served model forecast each player
+  independently, so the population does not change their forecasts.
+
+**A1.5 Evaluation set.**
+- 2025: the frozen matched set ∩ the 2025 pre-kickoff lists = **5,824** rows
+  (2 dropped: one in week 11, one in week 14). Rows join on
+  (player_id, season, week); team and position come from the target game.
+- 2025 Plan A predictions: sha256 `b5585a9f…42d8f1`.
+
+**A1.6 Forward test (G10), operational requirements.** Each week, before the
+first kickoff:
+1. Load the week's `weekly_rosters` and rebuild `canonical_player_weeks` after
+   the previous week's stats are complete (the canonical table was stale at
+   2026 week 1 until 2026-10-08).
+2. Freeze and hash the live list; run the leakage audit on the previous
+   completed week.
+3. Write and hash every model's forecasts.
+The window starts at the first week whose first kickoff follows the
+**later** of this amendment's commit, the lineage freeze, and a full dry run
+of steps 1–3 that passes. The start week is recorded in the lineage file at
+freeze. Players on no list who play are unscored; their count and share are
+reported each week.
+
+**A1.7 Pre-registration checks against the amended incumbent and candidate.**
+Script `scripts/selection_rule_checks.py`, sha256
+`d819e3f30b963c4a76de821be964ea0023b15ce33e78da21e835db7252ab7085`; output
+`data/experiments/selection_rule_checks_amended_20261008/`. The gates,
+bootstrap and family rule are unchanged.
+
+| Check | Original (unblended served vs leaked Plan A) | Amended (live blend vs corrected Plan A, 5,824 rows) |
+|---|---|---|
+| Two-way bootstrap two-sided coverage | 0.987–1.000 | 0.991–1.000 |
+| Equal model blocked, 2025 | 17–18% | 14–19% |
+| Equal model blocked, 8-week forward | 9–10% | 8–18% |
+| Equal model passes both stages | ~75% | ~65–80% |
+| G1 one-sided half-width | 0.117 | 0.094 |
+
+Power (any single cell blocks), amended. Noise is sized to the live blend −
+corrected Plan A prediction gap (sd 2.90):
+
+| Injected regression | Induced worsening | Blocked, 2025 | Blocked, forward |
+|---|---|---|---|
+| 25% of players, full noise | RMSE +0.17 | 1.00 | 0.82 |
+| All QB rows, full noise | QB MAE +0.44 | 0.48 | 0.38 |
+| All QB rows, half noise | QB MAE +0.10 | 0.22 | 0.26 |
+| Top-12 rows, half noise | top-12 MAE +0.09 | 0.20 | 0.24 |
+| All rows, quarter noise | RMSE +0.04 | 0.47 | 0.34 |
+| \|bias\| 0.3 further from zero | \|bias\| +0.30 | 1.00 | 1.00 |
+
+The weak spot stated above still holds: regressions confined to one position
+or tier are mostly missed (20–48% here).

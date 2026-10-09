@@ -36,16 +36,43 @@ TIERINGS = ["tier_roll3", "tier_served"]
 
 
 # ---------------------------------------------------------------- data
-def load(paired: Path, roll3: Path) -> pd.DataFrame:
+def load(paired: Path, roll3: Path, incumbent: Path | None = None,
+         candidate: Path | None = None) -> pd.DataFrame:
+    """Paired rows; `served_prediction` / `plan_a_prediction` replaced by `incumbent` / `candidate`.
+
+    A pre-kickoff candidate forecasts a frozen list keyed by the list's team,
+    which can be stale, so it joins on (player_id, season, week). Matched rows
+    it did not forecast are dropped from every arm and counted.
+    """
     df = pd.read_csv(paired, dtype={"player_id": str})
+    if candidate is not None:
+        k3 = ["player_id", "season", "week"]
+        cand = pd.read_csv(candidate, dtype={"player_id": str})[k3 + ["predicted_ppr"]]
+        if cand.duplicated(k3).any():
+            raise ValueError("candidate forecasts a player-week twice")
+        before = len(df)
+        df = df.drop(columns="plan_a_prediction").merge(
+            cand.rename(columns={"predicted_ppr": "plan_a_prediction"}), on=k3, how="inner", validate="one_to_one")
+        print(f"candidate covers {len(df)} of {before} matched rows; dropped {before - len(df)}")
+    if incumbent is not None:
+        inc = pd.read_csv(incumbent, dtype={"player_id": str})[KEY + ["predicted_ppr"]]
+        inc = inc.merge(df[KEY], on=KEY, how="inner", validate="one_to_one")
+        assert_identical_key_sets({"paired": df[KEY], "incumbent": inc[KEY]})
+        df = df.drop(columns="served_prediction").merge(
+            inc.rename(columns={"predicted_ppr": "served_prediction"}), on=KEY, validate="one_to_one")
     r3 = pd.read_csv(roll3, dtype={"player_id": str})
     r3 = r3[r3.season.isin(df.season.unique())]
-    r3 = r3.merge(df[["player_id", "season", "week"]], on=["player_id", "season", "week"])
-    assert_identical_key_sets({
-        "served": df[KEY], "plan_a": df[KEY], "rolling3": r3[KEY],
-    })
-    df = df.merge(r3[KEY + ["predicted_ppr_baseline"]].rename(
-        columns={"predicted_ppr_baseline": "roll3"}), on=KEY, validate="one_to_one")
+    k3 = ["player_id", "season", "week"]
+    if "predicted_ppr_baseline" in r3.columns:   # selector OOF rows, keyed by the played game
+        r3 = r3.merge(df[k3], on=k3)
+        assert_identical_key_sets({"served": df[KEY], "plan_a": df[KEY], "rolling3": r3[KEY]})
+        df = df.merge(r3[KEY + ["predicted_ppr_baseline"]].rename(
+            columns={"predicted_ppr_baseline": "roll3"}), on=KEY, validate="one_to_one")
+    else:                                         # pre-kickoff export, keyed by the list's team
+        r3 = r3[k3 + ["predicted_ppr"]].rename(columns={"predicted_ppr": "roll3"})
+        df = df.merge(r3, on=k3, how="left", validate="one_to_one")
+        if df.roll3.isna().any():
+            raise ValueError(f"rolling-3 missing for {int(df.roll3.isna().sum())} evaluated rows")
     for col in ("served_prediction", "plan_a_prediction", "roll3", "actual_full_ppr"):
         if not np.isfinite(df[col].to_numpy(float)).all():
             raise ValueError(f"nonfinite {col}")
@@ -277,12 +304,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--paired", type=Path, default=PAIRED)
     ap.add_argument("--rolling3", type=Path, default=ROLL3)
+    ap.add_argument("--candidate", type=Path,
+                    help="candidate predictions.csv replacing the paired rows' Plan A arm")
+    ap.add_argument("--incumbent", type=Path,
+                    help="incumbent predictions.csv replacing the paired rows' served arm")
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--quick", action="store_true", help="small R/B smoke run")
     a = ap.parse_args()
     q = a.quick
-    p = Panel(load(a.paired, a.rolling3))
+    p = Panel(load(a.paired, a.rolling3, a.incumbent, a.candidate))
     vc = variance_components(p)
     print(f"rows={len(p.y)} weeks={p.W} players={p.P} | sd week={vc['week']:.3f} "
           f"game={vc['game']:.3f} player={vc['player']:.3f} resid={vc['resid']:.3f}")
@@ -349,8 +380,13 @@ def main() -> None:
     print(f"\nG1 pooled MAE, two-way bootstrap: one-sided 95% half-width median={np.median(g1):.3f}")
 
     report = {
-        "inputs": {"paired_rows": str(a.paired.relative_to(ROOT)), "paired_rows_sha256": file_sha256(a.paired),
-                   "rolling3": str(a.rolling3.relative_to(ROOT)), "rolling3_sha256": file_sha256(a.rolling3)},
+        "inputs": {"paired_rows": str(a.paired.resolve().relative_to(ROOT)), "paired_rows_sha256": file_sha256(a.paired),
+                   "rolling3": str(a.rolling3.resolve().relative_to(ROOT)), "rolling3_sha256": file_sha256(a.rolling3),
+                   "incumbent": str(a.incumbent.resolve().relative_to(ROOT)) if a.incumbent else None,
+                   "incumbent_sha256": file_sha256(a.incumbent) if a.incumbent else None,
+                   "candidate": str(a.candidate.resolve().relative_to(ROOT)) if a.candidate else None,
+                   "candidate_sha256": file_sha256(a.candidate) if a.candidate else None,
+                   "rows": int(len(p.y))},
         "script_sha256": file_sha256(Path(__file__)),
         "seed": a.seed, "quick": q, "backstop": BACKSTOP,
         "variance_components": {k: v for k, v in vc.items() if k != "resid_pool"},
