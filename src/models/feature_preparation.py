@@ -718,10 +718,13 @@ def _prepare_training_data(
     except Exception as e:
         logger.warning("Player embeddings skipped: %s", e)
 
-    # Winsorize targets at 1st/99th percentile per position.
-    # Bounds are derived from train data and applied symmetrically to both
-    # train and test to avoid distribution mismatch during evaluation.
-    winsor_bounds = {}  # (pos, col) -> (lo, hi)
+    # Winsorize TRAINING targets at 1st/99th percentile per position.
+    # Test targets are deliberately left raw: they are evaluation labels, and
+    # clipping them scored every backtest/OOF capture against capped outcomes
+    # (2025 smoke fold: MAE 4.30 clipped vs 4.36 raw) and gave the calibrated
+    # simulation residual tails that stopped at the training 99th percentile.
+    # It also made captured actuals disagree with raw next-game points, which
+    # stopped two full served-fold runs on 2026-10-07 (GAPS.md, that date).
     for pos in ["QB", "RB", "WR", "TE"]:
         mask = train_data["position"] == pos
         target_cols = [f"target_{n}w" for n in [1, 4, 18]] + [
@@ -733,14 +736,7 @@ def _prepare_training_data(
             if len(valid) < 20:
                 continue
             lo, hi = valid.quantile(0.01), valid.quantile(0.99)
-            winsor_bounds[(pos, col)] = (lo, hi)
             train_data.loc[mask, col] = train_data.loc[mask, col].clip(lo, hi)
-
-    # Apply the same train-derived bounds to test targets
-    for (pos, col), (lo, hi) in winsor_bounds.items():
-        if col in test_data.columns:
-            test_mask = test_data["position"] == pos
-            test_data.loc[test_mask, col] = test_data.loc[test_mask, col].clip(lo, hi)
 
     if not fit_models:
         return train_data, test_data, None

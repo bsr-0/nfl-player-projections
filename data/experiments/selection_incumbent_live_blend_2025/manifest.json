@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "label": "served_live_pace_blend",
+  "test_season": 2025,
+  "pace_blend_kappa": 3.0,
+  "blend_function": "src.predict.NFLPredictor._blend_toward_season_pace",
+  "games_played": "player_weekly_stats rows in the target season with week < target week",
+  "inputs": {
+    "served_fold_predictions": "data/experiments/full_ppr_head_to_head_20260930/served_2025_fold_v6/predictions.csv",
+    "served_fold_predictions_sha256": "5896cecb0edf89b762085e74ffe512bffe38de0a619588a1de12904198a1a3ed",
+    "served_fold_manifest_sha256": "f7d1c9b49a31cc7fe2db6e10cedb7d1a2380462f8ef371c7c895cf7dc08c5976",
+    "step8_pace_table": "data/step8_pace_by_season.csv",
+    "step8_pace_table_sha256": "c8acbbb51cfc81c0a933a449e3c0a70b349a2dc4ba7c79e6185eb341bd4fb859"
+  },
+  "rows": 6093,
+  "rows_with_pace": 5991,
+  "mean_pace_weight": 0.35787559650633527,
+  "predictions_sha256": "63ad88afe4906465e627232cb02740bb23e085f8a1f556dfbef81fd4b9c31242",
+  "script_sha256": "ab039e4dd28985367e09ea9bc6abfba671a4debb2cc14e50cad165b733ed062b"
+}

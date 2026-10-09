@@ -31,3 +31,14 @@ def test_team_feature_columns_exclude_current_week_totals():
     assert "team_rushing_yards" not in cols
     assert "team_targets_roll3" in cols
     assert "team_rushing_yards_roll3" in cols
+
+
+def test_team_feature_columns_exclude_same_week_opportunity_totals():
+    """Every same-week team column in the real table must be refused, not just the volume targets."""
+    from src.models.team_allocation.features import ALL_VOLUME_COLS, OPPORTUNITY_COLS, ROLL_WINDOW
+    same_week = [f"team_{c}" for c in [*ALL_VOLUME_COLS, *OPPORTUNITY_COLS]]
+    lagged = [f"{c}{s}" for c in same_week for s in ("_s2d", f"_roll{ROLL_WINDOW}")]
+    df = pd.DataFrame(columns=same_week + lagged + ["share_of_team_targets_roll3", "team"])
+    cols = _team_feature_columns(df, "receiving_yards")
+    assert not set(cols) & set(same_week)
+    assert set(cols) == set(lagged)

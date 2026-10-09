@@ -15666,6 +15666,134 @@ zero-clipping, QB negatively correlated with his own team's score).
 serving artifacts can be fitted and step 8 fails (softly) until a walk-forward
 run writes one. Then:
 
-    python scripts/evaluate_calibrated_simulation.py --oof-run-dir <run> --output-dir <bt> --confirm-season 2025
+    python scripts/evaluate_calibrated_simulation.py --oof-run-dir <run> --output-dir <bt>   # add --confirm-season N only if N is the panel's latest season
     python scripts/fit_simulation_artifacts.py --oof-run-dir <run> --backtest-run-dir <bt>
     python scripts/generate_simulation_data.py --season 2026
+
+**Correction (2026-10-06):** the `--confirm-season 2025` in the commands above is
+rejected by the script when the panel also holds a later season. The production
+panel `20260929T213026Z_238c3590_production_fp_canonical` includes 2 weeks of 2026
+(292 rows), so 2025 cannot be the confirmation season; a 2023-2025 development
+run is the only valid use of it until a fuller season exists.
+
+## 2026-10-07 — Test targets were winsorized; served-fold runs failed after training
+
+**Symptom.** Two full served-fold runs (`export_served_fold_full_ppr.py run`,
+~4 h each) stopped after training with "captured shifted actual does not match
+mapped target game", discarding the in-memory predictions. The first run's log
+ended the same way.
+
+**Root cause.** `_prepare_training_data` clipped TEST `target_*` columns to the
+per-position training 1st/99th percentiles. Captured actuals were therefore
+capped copies of the raw next-game points. Predictions never depended on it,
+but every evaluation did:
+
+- Served backtest/walk-forward metrics scored capped outcomes (2025 smoke fold:
+  MAE 4.30 clipped vs 4.36 raw). Historical reported MAEs are slightly optimistic.
+- Every OOF panel's `actual_points`/`residual` stopped at the clip bounds, so the
+  calibrated simulation was fitted on capped tails. The 09-28 fix made
+  `oof_capture.next_game_identity` tolerate the clip instead of removing it, and
+  that tolerance also accepted any row loss that landed at a position extreme.
+
+**Fixed.**
+- `feature_preparation`: only training targets are winsorized. `oof_capture`
+  and `checked_production_fold` require captured actuals to equal raw exactly.
+  Tests pin both.
+- `export_served_fold_full_ppr.py`: `run` passes `oof_strict=True`, persists
+  `raw_capture.parquet`, `coverage.parquet` and `fit_state.json` (with model
+  hashes) before validating, and the new `finalize` subcommand re-validates and
+  publishes a persisted fit without refitting. The training lineage is the
+  fit-time source hashes; finalize-time differences are recorded separately.
+- `scripts/smoke_served_fold.py` (testing only, ~4 min): the real `run`, then
+  `finalize` on a copy, then predeclare/compare, on 3 training seasons with 1
+  trial. It requires zero captured-vs-raw differences. Run it before any long fit.
+- Panel `20260929T213026Z_238c3590_production_fp_canonical` repaired without
+  refitting by `scripts/repair_oof_panel_actuals.py`: 228 clipped rows (153 high,
+  75 low, up to 22.4 pts) rescored from `player_weekly_stats.fantasy_points`.
+  All other rows matched raw exactly, which is the repair's precondition.
+  New panel: `20261008T002641Z_238c3590_production_fp_canonical_raw_actuals`
+  (verified). Simulation re-backtested on it
+  (`calibrated_simulation_backtest_20261007_raw_actuals`): same ranking,
+  role_factor still best, cov50/80 0.489/0.785, below-support 13.4% -> 1.6%.
+  Artifacts refit (`data/models/simulation/20261008T003959900405Z`) and the
+  2026 simulation JSONs regenerated.
+
+**Also fixed (latent, never triggered).**
+- QB dual-target pick could choose a utilization model while
+  `position_target_type["QB"] == "fp"`, or with an unfitted converter. Every
+  conversion site requires config "util", so raw utilization would have been
+  served and scored as points. Now vetoed (`selection_method:
+  config_target_type_fp_veto`).
+- The QB single-path fallback recorded `qb_target: "fp"` regardless of the
+  target it trained on. It now records the configured target.
+- Missing horizon-target columns in `train_all_positions` fell back silently to
+  the other target type, or to a player-level shift that crossed seasons. They
+  now raise.
+- **Injury feed crash.** nflverse now publishes `date_modified` without a
+  timezone. `InjuryDataLoader.get_player_injury_status` compared it to tz-aware
+  UTC kickoffs, raised TypeError, and `add_external_features`' broad `except`
+  set `injury_score=1.0` / `is_injured=0` for every row with only a printed
+  message.
+  - Fix: naive values are read as UTC. Read that way, reports cluster at
+    2-4pm ET; as Eastern they would fall at 7-9pm. The latest-report dedupe
+    already parsed them that way.
+  - The `except` now degrades only on `OSError` (an unreachable feed).
+  - Impact was almost nil: `FeatureEngineer._merge_injury_data_from_cache`
+    re-fills `injury_score` from `player_injuries`, which mirrors nflverse
+    row-for-row through 2025. Smoke-fold predictions were bit-identical before
+    and after.
+  - 2025+ files carry no `date_modified`, so their kickoff leakage check cannot
+    run. Those rows are kept as unverifiable (0.01% of 2023-24 reports were
+    post-kickoff).
+  - Live 2026 still under-covers injuries until the DB is refreshed (182
+    cached rows vs 1,071 published).
+- Checked and harmless: `injury_prob_ml` 100% missing is the documented
+  retired column. The "PBP participation unavailable (NameError)" message is
+  the handled nfl_data_py 0.3.2 bug in `pbp_stats_aggregator.import_pbp`; 2026
+  personnel features stay empty until nflverse publishes participation data.
+
+## 2026-10-08 — Plan A team totals read the predicted game's own team stats
+
+**Symptom.** Forecasting a 2025 week from pre-kickoff rows (stub rows for the
+target week) collapsed Plan A's team totals: week 6 receiving yards 228 → 83
+per team, rushing yards 111 → 14, while predicted shares barely moved.
+
+**Root cause.** `_team_feature_columns`
+(`src/evaluation/team_reconstruction_candidates.py`) excluded same-week team
+columns by name, listing only the volume targets. The 17 same-week team
+opportunity totals added on 2026-09-24 (`6fafe766`: `team_pass_plays`,
+`team_snap_count`, `team_air_yards`, `team_neutral_targets`, ...) passed
+through. Every team-total arm (ridge, xgb, blend) of every target trained and
+predicted with the play and snap counts of the game being forecast.
+
+**Impact.** Every Plan A and Plan A + Plan B result since 09-24 is invalid:
+the full-PPR selector (2.36984), the Plan B arm (2.34608), the frozen joint
+artifacts, and the 2025 matched comparison against served (Δ −0.27). The
+selector chose its arms on leaked numbers, so a corrected column list needs a
+fresh selection, not a patch. Served, the pace blend and rolling-3 are not
+affected. `feature_columns()` (player features) already excluded these
+columns, so the allocation (share) arms are unaffected.
+
+**Fixed.**
+- `_team_feature_columns` now allow-lists by suffix: only `team_*_s2d` and
+  `team_*_roll3` columns. Test:
+  `test_team_feature_columns_exclude_same_week_opportunity_totals`.
+- The pre-kickoff leakage audit (`scripts/build_prekickoff_share_rows.py
+  audit`) now also checks every column a team-total arm can read; with the
+  old list it fails on all 17 columns (zeros before kickoff).
+- Selector re-run without them:
+  `data/experiments/full_ppr_selector_no_sameweek_team_20261008/`.
+
+**Related, found the same day.**
+- `predict(as_of=...)` replays are not as-of: player eligibility counts games
+  after the as-of week (`get_eligible_seasons` uses today's last
+  `ELIGIBLE_SEASONS_LOOKBACK` seasons), rookie teams come from
+  `get_current_team_map()` (today's rosters), and positions from the latest
+  roster snapshot. Live serving is unaffected. `scripts/build_prekickoff_population.py`
+  replays with all three computed as of the week; existing `as_of` backtests
+  of the serving path still use today's values.
+- `canonical_player_weeks` was not rebuilt by any refresh step and stopped at
+  2026 week 1; `weekly_rosters` had no 2026 rows. Both were rebuilt on
+  2026-10-08. The canonical builder breaks roster-status ties
+  nondeterministically (120 historical rows differ between identical runs;
+  keys, team and position are stable).

@@ -203,6 +203,27 @@ class TestInjuryTimingGuard:
         assert len(result) == 1
         assert result.iloc[0]["player_id"] == "P1"
 
+    def test_tz_naive_date_modified_is_read_as_utc(self):
+        """nflverse began publishing date_modified tz-naive; comparing it to
+        tz-aware kickoffs raised TypeError and silently disabled every
+        injury feature (2026-10-07)."""
+        injuries = pd.DataFrame({
+            "gsis_id": ["P1", "P2"], "season": [2024, 2024], "week": [5, 5],
+            "team": ["AAA", "AAA"], "report_status": ["Questionable", "Out"],
+            "date_modified": pd.to_datetime(["2024-10-04 20:00:00", "2024-10-06 18:30:00"]),
+        })
+        assert injuries["date_modified"].dt.tz is None
+        result = InjuryDataLoader().get_player_injury_status(injuries)
+        assert list(result["player_id"]) == ["P1"]
+
+    def test_missing_date_modified_column_is_kept(self):
+        """2025+ injury files have no date_modified; unverifiable is kept."""
+        injuries = pd.DataFrame({
+            "gsis_id": ["P1"], "season": [2025], "week": [5], "team": ["AAA"],
+            "report_status": ["Out"]})
+        result = InjuryDataLoader().get_player_injury_status(injuries)
+        assert len(result) == 1 and result.iloc[0]["injury_score"] == 0.0
+
     def test_keeps_reports_with_unmatched_schedule(self):
         """No leakage evidence for an unmatched team/week — keep the row (missingness != leakage)."""
         injuries = pd.DataFrame({

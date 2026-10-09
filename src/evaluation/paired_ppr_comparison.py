@@ -60,6 +60,23 @@ def check_keys(frame: pd.DataFrame, name: str) -> None:
         raise ValueError(f"{name}: duplicate player target-game key")
 
 
+def assert_identical_key_sets(frames: dict[str, pd.DataFrame]) -> None:
+    """Every model must forecast exactly the same target games, or nothing is compared."""
+    if len(frames) < 2:
+        raise ValueError("key-set check needs at least two models")
+    keysets = {}
+    for name, frame in frames.items():
+        check_keys(frame, name)
+        keysets[name] = set(map(tuple, frame[KEY].astype(str).to_numpy()))
+    (ref_name, ref), *others = keysets.items()
+    problems = []
+    for name, keys in others:
+        missing, extra = len(ref - keys), len(keys - ref)
+        if missing or extra:
+            problems.append(f"{name} vs {ref_name}: {missing} missing, {extra} extra")
+    if problems:
+        raise ValueError("model key sets differ: " + "; ".join(problems))
+
 def finite_columns(frame: pd.DataFrame, columns: list[str], name: str) -> np.ndarray:
     if set(columns) - set(frame.columns):
         raise ValueError(f"{name}: missing required columns {sorted(set(columns) - set(frame.columns))}")

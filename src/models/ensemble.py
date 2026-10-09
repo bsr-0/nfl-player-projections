@@ -689,7 +689,8 @@ class ModelTrainer:
                         json.dump(
                             {
                                 "qb_target": chosen["qb_target"],
-                                "selection_method": "holdout_owner_fp_objective",
+                                "selection_method": ("config_target_type_fp_veto" if chosen.get("util_vetoed")
+                                                     else "holdout_owner_fp_objective"),
                                 "rmse_fp_model": chosen.get("rmse_fp"),
                                 "rmse_util_model_as_fp": chosen.get("rmse_util_as_fp"),
                                 "mae_fp_model": chosen.get("mae_fp"),
@@ -724,31 +725,22 @@ class ModelTrainer:
             pos_target_cfg = MODEL_CONFIG.get("position_target_type", {})
             target_type = pos_target_cfg.get(position, "util")
 
-            # Prepare targets
+            # Prepare targets. _create_horizon_targets always supplies these
+            # columns; a missing one used to fall back silently to the OTHER
+            # target type (recorded as this one) or to a player-level shift
+            # that crossed season boundaries. Refuse instead.
             y_dict = {}
             for n_weeks in n_weeks_list:
                 if target_type == "fp":
                     # Train directly on fantasy points (end-to-end, no utilization intermediary)
                     target_col = f"target_{n_weeks}w"
-                    if target_col in pos_data.columns:
-                        y_dict[n_weeks] = pos_data[target_col]
-                    else:
-                        y_dict[n_weeks] = pos_data.groupby("player_id")["fantasy_points"].transform(
-                            lambda x: x.shift(-1) if n_weeks == 1 else x.shift(-1).rolling(window=n_weeks, min_periods=1).sum()
-                        )
                 else:
                     # Original two-stage: predict utilization, then convert to FP
-                    util_col = f"target_util_{n_weeks}w" if n_weeks > 1 else "target_util_1w"
-                    if util_col in pos_data.columns:
-                        y_dict[n_weeks] = pos_data[util_col]
-                    else:
-                        target_col = f"target_{n_weeks}w"
-                        if target_col in pos_data.columns:
-                            y_dict[n_weeks] = pos_data[target_col]
-                        else:
-                            y_dict[n_weeks] = pos_data.groupby("player_id")["utilization_score"].transform(
-                                lambda x: x.shift(-1) if n_weeks == 1 else x.shift(-1).rolling(window=n_weeks, min_periods=1).mean()
-                            )
+                    target_col = f"target_util_{n_weeks}w" if n_weeks > 1 else "target_util_1w"
+                if target_col not in pos_data.columns:
+                    raise ValueError(f"{position}: {target_col} missing for target_type "
+                                     f"{target_type!r}; horizon targets were not built")
+                y_dict[n_weeks] = pos_data[target_col]
 
             if target_type == "fp":
                 print(f"  {position}: training directly on fantasy points (end-to-end)")
@@ -926,15 +918,19 @@ class ModelTrainer:
             
             self.trained_models[position] = multi_model
             
-            # QB fallback: if dual-path unavailable we train FP target model and persist choice
+            # QB fallback: dual path unavailable, so the single path trained on
+            # the configured target_type. Persist THAT, not a hardcoded "fp":
+            # under target_type "util" a recorded "fp" disables the util->FP
+            # conversion and serves raw utilization as points.
             if position == "QB":
                 qb_choice_path = MODELS_DIR / QB_TARGET_CHOICE_FILENAME
                 with open(qb_choice_path, "w") as f:
                     json.dump(
                         {
-                            "qb_target": "fp",
+                            "qb_target": target_type,
                             "selection_method": "fallback_no_qb_holdout",
-                            "reason": "Insufficient QB holdout rows for dual-target selection; using fantasy points for owner-facing objective.",
+                            "reason": ("Insufficient QB holdout rows for dual-target selection; "
+                                       f"trained on configured position_target_type {target_type!r}."),
                         },
                         f,
                         indent=2,
@@ -1143,7 +1139,20 @@ class ModelTrainer:
             and np.isfinite(rmse_fp)
             and (rmse_util_as_fp + margin < rmse_fp)
         )
-        if not util_wins:
+        # A utilization-target QB model is only converted to fantasy points
+        # when position_target_type["QB"] == "util" (every should_convert in
+        # train.py/ensemble.py/evaluate.py requires it). Under "fp" a util win
+        # would serve and score raw utilization as points, so the configured
+        # target is binding; the comparison is still reported.
+        # Likewise an unfitted converter means nothing can convert it at serve
+        # time (the comparison above then used a bare 0.25 scale).
+        config_target = MODEL_CONFIG.get("position_target_type", {}).get("QB", "util")
+        util_vetoed = bool(util_wins) and (config_target == "fp" or not qb_conv.is_fitted)
+        if util_vetoed:
+            print("  QB util model scored better on validation but its output would not be "
+                  f"converted to points (position_target_type={config_target!r}, "
+                  f"converter fitted={qb_conv.is_fitted}); keeping the FP model.")
+        if not util_wins or util_vetoed:
             qb_target = "fp"
             y_dict_winner = y_dict_fp
         else:
@@ -1170,6 +1179,7 @@ class ModelTrainer:
         return {
             "model": winner,
             "qb_target": qb_target,
+            "util_vetoed": util_vetoed,
             "metrics": metrics,
             "r2_util": r2_util_as_fp,
             "r2_fp": r2_fp,

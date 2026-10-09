@@ -15,7 +15,8 @@ import pandas as pd
 
 from src.evaluation.full_ppr_head_to_head import FULL_SCORING_DEFINITION, scoring_weights
 from src.evaluation.paired_ppr_comparison import (
-    KEY, check_keys, file_sha256, finite_columns, paired_week_interval, read_rows,
+    KEY, assert_identical_key_sets, check_keys, file_sha256, finite_columns,
+    paired_week_interval, read_rows,
 )
 
 
@@ -189,6 +190,12 @@ def compare(population_manifest: Path, served_manifest: Path, output_dir: Path,
     if not rows._merge.eq("both").all():
         raise ValueError("declared population is missing full-PPR truth")
     rows = rows.drop(columns="_merge")
+    # Every arm must forecast exactly the declared population: no gaps, no extras.
+    assert_identical_key_sets({
+        "population": population[KEY],
+        **{label: arm[KEY].merge(population[KEY], on=KEY, how="inner")
+           for label, arm in (("plan_a", plan_a), ("served", served))},
+    })
     for label, arm in (("plan_a", plan_a), ("served", served)):
         subset = arm[KEY + ["predicted_ppr", "actual_ppr"]].rename(columns={
             "predicted_ppr": f"{label}_prediction", "actual_ppr": f"{label}_recorded_actual"})

@@ -1,0 +1,123 @@
+{
+  "label": "plan_a_prekickoff",
+  "season": 2025,
+  "weeks": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "artifact": "data/experiments/selection_candidates_2025/rolling3.joblib",
+  "artifact_sha256": "c506f1382f55e5e01c8262927bafe21bc08d32e2eefe5ed741f6941844a906e2",
+  "model_version": "rolling3-baseline",
+  "renormalization_population": "most recent same-season roster per team (all statuses) + frozen list",
+  "weeks_detail": {
+    "1": {
+      "listed": 663,
+      "added_from_prior_roster": 0,
+      "list_sha256": "2d08d781cf952f4681877563ccd67ec486e1d548c144ed382b895f03a1c2836d"
+    },
+    "2": {
+      "listed": 738,
+      "added_from_prior_roster": 269,
+      "list_sha256": "0b314487948dd98e08100a62d853f4bf14bada5b268545918d873da337fdf079"
+    },
+    "3": {
+      "listed": 735,
+      "added_from_prior_roster": 138,
+      "list_sha256": "953e30c0259426cf518fd5bb656c5c4c7b7bbf9cd5befd972ec3a7abce3fec46"
+    },
+    "4": {
+      "listed": 740,
+      "added_from_prior_roster": 135,
+      "list_sha256": "9a3f20375a456d92854fe07d2736e390bd8fa18e2567d423764eca3519e2a1a4"
+    },
+    "5": {
+      "listed": 666,
+      "added_from_prior_roster": 200,
+      "list_sha256": "31f1c359742996c8800b1ace809748c6a1159edb358b83bbbcd7fda96265bbd2"
+    },
+    "6": {
+      "listed": 696,
+      "added_from_prior_roster": 174,
+      "list_sha256": "99642bfd93df7008406fd9a425db863089468f0022ac8efc18e3d46b1fae6238"
+    },
+    "7": {
+      "listed": 707,
+      "added_from_prior_roster": 168,
+      "list_sha256": "194c885618fbc211c74f4d2e1907b02f5ae99846c18aa8f75e229ab304ee05fd"
+    },
+    "8": {
+      "listed": 618,
+      "added_from_prior_roster": 255,
+      "list_sha256": "b499f42355d21d14e2c0f0fc9e85bdb06f43f63fa98787731b734efbacf3b819"
+    },
+    "9": {
+      "listed": 655,
+      "added_from_prior_roster": 214,
+      "list_sha256": "18d91e9c6c761e6ead96132640ba3decce90596be6261b989b9db8c23c1b79bd"
+    },
+    "10": {
+      "listed": 659,
+      "added_from_prior_roster": 214,
+      "list_sha256": "6f10c2d05ad561b6eb53365428e1a4ae899be68f294f8f70ce7f940f9257845a"
+    },
+    "11": {
+      "listed": 712,
+      "added_from_prior_roster": 171,
+      "list_sha256": "c42a1e9a69cb0229b3c1928097c065476ec839180ca8d9a2d1af4abf07a60610"
+    },
+    "12": {
+      "listed": 663,
+      "added_from_prior_roster": 206,
+      "list_sha256": "9d2b4ad7f5e4a70e7aef43ed105fe0f9523796dc2ceab4c6d7df79a1759168a6"
+    },
+    "13": {
+      "listed": 765,
+      "added_from_prior_roster": 122,
+      "list_sha256": "2b6292d6a8b1d96186c9de5506cc0dba4948212b671bf1e0a29fc44cda77a1eb"
+    },
+    "14": {
+      "listed": 663,
+      "added_from_prior_roster": 215,
+      "list_sha256": "ae12f80ffdcf26f9f98a9b16ca27b925d3496d8612b63937e41fcc306511dfa3"
+    },
+    "15": {
+      "listed": 762,
+      "added_from_prior_roster": 136,
+      "list_sha256": "b72037f54bfd06427625d71df8f229f852cf3417f0fac8de469ceec4e21b1f1a"
+    },
+    "16": {
+      "listed": 771,
+      "added_from_prior_roster": 124,
+      "list_sha256": "11c6e03860d3893af3679d446fa8eb3ff220249e3f173d91d22782fc332eaa0c"
+    },
+    "17": {
+      "listed": 773,
+      "added_from_prior_roster": 124,
+      "list_sha256": "c8492a6b85c9ce472f2840febe02f68f3c858d63b60cd389812206c0a220c9bf"
+    },
+    "18": {
+      "listed": 775,
+      "added_from_prior_roster": 125,
+      "list_sha256": "bf99d6e8c680fbd587e17496717abc3882c72550f7cf91273cbf4d4510647b51"
+    }
+  },
+  "rows": 12761,
+  "predictions_sha256": "c1bded4f4675807365199f8b91bbf77ef0327a2369f8828d0ce7d8e146df5a6f",
+  "script_sha256": "6bf84668de39eb3e2751c4d8627aee6c448e1170c624317819189f21b7a29fa3"
+}

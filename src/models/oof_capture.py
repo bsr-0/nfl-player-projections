@@ -145,16 +145,11 @@ def next_game_identity(frame: pd.DataFrame) -> pd.DataFrame:
         if derived[has].isna().any():
             raise ValueError("next observed row does not reproduce target_1w; "
                              "the fold frame lost or reordered rows after targets were built")
-        # By capture time _prepare_training_data has winsorized target_1w to
-        # per-position training quantiles; fantasy_points is untouched. Within
-        # a position the clip bounds are then target_1w's own min/max, so a
-        # correct mapping reproduces target_1w as clip(next fantasy_points).
-        # Comparing unclipped values failed every real fold (GAPS.md 2026-09-28).
-        position = ordered.loc[has, "position"] if "position" in ordered.columns else None
-        bounds = stated[has].groupby(position, dropna=False) if position is not None else None
-        lo = bounds.transform("min") if bounds is not None else stated[has].min()
-        hi = bounds.transform("max") if bounds is not None else stated[has].max()
-        if not np.allclose(derived[has].clip(lo, hi), stated[has], atol=1e-4, rtol=0):
+        # Test targets are raw since 2026-10-07 (_prepare_training_data
+        # winsorizes training targets only), so a correct mapping reproduces
+        # target_1w exactly. The 2026-09-28 clip allowance here is gone: it
+        # accepted any row-loss that happened to land at a position extreme.
+        if not np.allclose(derived[has], stated[has], atol=1e-4, rtol=0):
             raise ValueError("next observed row does not reproduce target_1w; "
                              "the fold frame lost or reordered rows after targets were built")
     return out.reindex(frame.index)

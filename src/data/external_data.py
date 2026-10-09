@@ -178,6 +178,16 @@ class InjuryDataLoader:
         # Standardize column names
         df = injuries_df.copy()
 
+        if 'date_modified' in df.columns:
+            # nflverse now publishes date_modified tz-naive (it was tz-aware
+            # UTC). Kickoffs are tz-aware UTC, so the comparison below raised
+            # TypeError, the caller's broad except set injury_score=1.0 for
+            # every row, and no model trained on injury status (found
+            # 2026-10-07). The naive values are UTC: read that way, reports
+            # cluster at 2-4pm ET (when practice reports are released); read
+            # as Eastern they would fall at 7-9pm. The latest-report dedupe
+            # below already parses them with utc=True.
+            df['date_modified'] = pd.to_datetime(df['date_modified'], utc=True, errors='coerce')
         if 'date_modified' in df.columns and 'team' in df.columns:
             kickoffs = self._load_kickoff_times(sorted(df['season'].dropna().unique().tolist()))
             if not kickoffs.empty:
@@ -979,7 +989,11 @@ class ExternalDataIntegrator:
             # Duplicate or contradictory source identities are data-integrity
             # failures, not an unavailable optional feed.
             raise
-        except Exception as e:
+        except OSError as e:
+            # An unreachable feed (HTTPError/URLError are OSErrors) degrades to
+            # "no injury data". Anything else is a code defect: a broad except
+            # here hid a tz TypeError that zeroed injury features in every
+            # run until 2026-10-07.
             print(f"  Error adding injuries: {e}")
             result['injury_score'] = 1.0
             result['is_injured'] = 0

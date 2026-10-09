@@ -101,7 +101,7 @@ python scripts/generate_app_data.py             # weekly/season predictions
 python scripts/generate_draft_data.py           # draft board JSON
 python scripts/draft_advisor.py --mode spread --season 2025
 python scripts/predict_upcoming_games.py --season 2026 --week 2  # win, ATS, and O/U forecasts
-python scripts/evaluate_calibrated_simulation.py --oof-run-dir <oof_run> --output-dir <out> --confirm-season 2025  # simulation backtest
+python scripts/evaluate_calibrated_simulation.py --oof-run-dir <oof_run> --output-dir <out>  # simulation backtest (add --confirm-season N only if N is the panel's latest season)
 python scripts/fit_simulation_artifacts.py --oof-run-dir <oof_run> [--backtest-run-dir <out>]  # serving artifacts
 python scripts/generate_simulation_data.py --season 2026           # calibrated player simulation JSON
 python scripts/generate_simulation_data.py --season 2026 --write-parquet  # JSON + analysis Parquet

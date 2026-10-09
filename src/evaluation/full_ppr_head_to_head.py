@@ -175,9 +175,20 @@ def checked_production_fold(captured: pd.DataFrame, target_map: pd.DataFrame) ->
     origin_key = ["player_id", "season", "week", "team", "position"]
     renamed = target_map.rename(columns={"origin_season": "season", "origin_week": "week",
                                          "origin_team": "team", "origin_position": "position"})
-    joined = captured.merge(renamed, on=origin_key, how="left", validate="one_to_one", indicator=True)
+    # Newer captures carry their own target-game columns; keep them apart so the
+    # merge cannot suffix-collide, then require them to agree with the mapping.
+    own = {c: f"captured_{c}" for c in captured.columns if c in renamed.columns and c.startswith("target_")}
+    joined = captured.rename(columns=own).merge(
+        renamed, on=origin_key, how="left", validate="one_to_one", indicator=True)
     if not joined._merge.eq("both").all() or joined.target_week.isna().any():
         raise ValueError("captured production origin has no next observed target game")
+    for column, kept in own.items():
+        mine = joined[kept]
+        known = mine.notna()
+        if not (mine[known].astype(str) == joined.loc[known, column].astype(str)).all() and not (
+                pd.to_numeric(mine[known], errors="coerce") == pd.to_numeric(
+                    joined.loc[known, column], errors="coerce")).all():
+            raise ValueError(f"captured {column} disagrees with the target-game mapping")
     if not joined.target_season.eq(joined.season).all() or not joined.target_week.gt(joined.week).all():
         raise ValueError("production target does not follow its origin in the same season")
     for season, part in joined.groupby("season"):
@@ -192,6 +203,8 @@ def checked_production_fold(captured: pd.DataFrame, target_map: pd.DataFrame) ->
     target_values = finite_columns(joined, target_cols + ["target_fantasy_points"],
                                    "production target game")
     source_actual = target_values[:, -1]
+    # Exact: _prepare_training_data leaves test targets raw (2026-10-07), so a
+    # captured actual that differs is a mapping or lineage error, not clipping.
     if (np.abs(joined.actual_points.to_numpy(float) - source_actual) > 0.05).any():
         raise ValueError("captured shifted actual does not match mapped target game")
     raw_components = joined[target_cols].rename(

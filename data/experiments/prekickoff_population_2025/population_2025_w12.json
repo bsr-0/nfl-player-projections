@@ -1,0 +1,14 @@
+{
+  "season": 2025,
+  "week": 12,
+  "replay": true,
+  "eligible_ids_as_of": 750,
+  "production_rows": 764,
+  "repositioned_as_of": 4,
+  "dropped_bye_or_unknown_team": 101,
+  "players": 663,
+  "file": "population_2025_w12.csv",
+  "sha256": "9d2b4ad7f5e4a70e7aef43ed105fe0f9523796dc2ceab4c6d7df79a1759168a6",
+  "written_at": "2026-10-09T00:44:34.819618+00:00",
+  "script_sha256": "3faf34842dfd742246ca459214b13e261d8c90b2ca69cd0b9e6d94fd735e74c1"
+}
