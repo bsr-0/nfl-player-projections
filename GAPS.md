@@ -15797,3 +15797,73 @@ columns, so the allocation (share) arms are unaffected.
   2026-10-08. The canonical builder breaks roster-status ties
   nondeterministically (120 historical rows differ between identical runs;
   keys, team and position are stable).
+
+## 2026-10-08 — Open items from the production-selection work (not fixed)
+
+Found while building and applying `docs/PRODUCTION_SELECTION_RULE.md`. None
+changes the 2025 verdict (the live blend stays); each is open.
+
+**Leakage and correctness risks**
+- **Served pipeline not audited for same-week leakage.** Plan A's team-total
+  arms read the predicted game's own team stats (entry above). The served
+  weekly model's feature path has not had the equivalent audit (rebuild a past
+  week from pre-kickoff data, compare every feature). It is the live model.
+- **Stale team for players who changed teams.** Production assigns a player
+  his last-played team until he plays for the new one: 57 listed players in
+  2025 week 6. This is live serving behavior (opponent, team context, Plan A's
+  team-week grouping), not only a replay artifact.
+- **Unplayed-week rows in `canonical_player_weeks`.** Roster rows for a week
+  exist as soon as `weekly_rosters` has them, before the games (2026 week 5
+  had 757 on 2026-10-08). A `team_week_player_shares` rebuild in that state
+  would treat them as zero-volume games and corrupt the next week's lags.
+  Only run order (rebuild after the week's stats) prevents it; the builder
+  does not.
+
+**Data gaps**
+- **No 2026 snap counts.** `snap_counts` has no 2026 rows, so every 2026
+  canonical row is participation "unknown"; `player_weekly_stats.snap_count`
+  is present on 94.6% of 2026 rows (2025: 99.5%).
+- **`team_week_player_shares` not rebuilt for 2026.**
+  `scripts/build_prekickoff_share_rows.py` works around it by building from
+  the canonical panel; anything reading the stored table sees no 2026.
+- **Schedule has dates, not kickoff times.** The forward test's deadline is
+  therefore midnight US/Eastern on the week's first game date (conservative).
+- **Production's universe missed 2 of 5,826 matched 2025 targets** (weeks 11
+  and 14); they are outside the amended 5,824-row selection set.
+
+**Stale documents**
+- Leaked Plan A numbers are still presented as results in
+  `docs/FULL_PPR_2025_MATCHED_COMPARISON.md`, `docs/PLAN_B_FUTURE_RUN.md`,
+  `docs/TEAM_LEVEL_ALLOCATION_MODELS.md` and the experiment READMEs
+  (`full_ppr_with_plan_b_20260925/README.md`, among others). Only CLAUDE.md
+  and this file mark them invalid.
+
+**Selection-rule limitations (stated in the rule, by design)**
+- **G7 (80% interval coverage) is not evaluable on 2025:** neither candidate
+  export carries prediction intervals.
+- **Guardrails catch broad regressions, not narrow ones:** one-position or
+  one-tier regressions were caught 20–48% of the time; a truly equal model
+  passes both stages 65–80% of the time.
+- **Plan A + Plan B arm has no serving path** (`joint_other_mae` is not an
+  artifact arm), so it was dropped from selection.
+
+**Code and test debt**
+- **Gate logic exists twice:** `scripts/selection_rule_checks.py` (frozen
+  evidence for the committed check results) and
+  `src/evaluation/selection_gates.py` (the engine). A future change to one must
+  be mirrored or the checks re-run.
+- **`scripts/run_forward_week.py` has no unit tests;** only the 2026 week 5
+  dry run has exercised it.
+- **The comparator's key-set assertion is unreachable today:**
+  `compare_full_ppr_head_to_head.py`'s earlier pair checks already guarantee
+  coverage. It matters only once more arms are added.
+- **Weekly forward-test job paused.** `launchd` could not read `~/Documents`
+  (exit 127); the agent is installed but unloaded and
+  `scripts/forward_week_job.sh` is uncommitted. Weeks of the frozen 6–13
+  window run only by hand (`python scripts/run_forward_week.py run` before
+  Thursday 00:00 ET); a missed week cannot be recovered.
+
+**Local clutter (uncommitted)**
+- `data/experiments/selection_rule_checks_live_blend_20261008/` (checks built
+  on leaked Plan A) and `selection_candidates_2025/plan_a_fold2.joblib` (the
+  leaked fold-2 artifact) are superseded and can be deleted.
