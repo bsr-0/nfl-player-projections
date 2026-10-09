@@ -1588,6 +1588,52 @@ class DatabaseManager:
                     team_map.setdefault(player_id, team)
         return team_map
 
+    # Roster statuses that carry no current team: released, retired, in transit
+    # (a TRD row keeps the club the player is leaving) or a free agent.
+    UNATTACHED_ROSTER_STATUSES = ("CUT", "RET", "TRD", "UFA", "RFA", "UDF")
+
+    def get_roster_team_map(self, as_of: Optional[Tuple[int, int]] = None) -> Dict[str, str]:
+        """Team per player from his most recent roster snapshot that names one.
+
+        Unlike ``get_current_team_map`` this ranks snapshots by (season, week)
+        across ``weekly_rosters_v2`` and ``weekly_rosters`` together, not by
+        table: the v2 table stops at 2026 week 1, so table priority returned
+        week-1 teams for players who moved afterwards. Snapshots whose status
+        carries no team (``UNATTACHED_ROSTER_STATUSES``) are skipped, so a
+        released player keeps the last club that actually held him.
+
+        ``as_of=(season, week)`` keeps only snapshots strictly before that week,
+        so a replay sees the roster it would have had; None reads everything.
+        """
+        cutoff, params = "", []
+        if as_of is not None:
+            cutoff = "AND (season < ? OR (season = ? AND week < ?))"
+            params = [int(as_of[0]), int(as_of[0]), int(as_of[1])]
+        marks = ",".join("?" * len(self.UNATTACHED_ROSTER_STATUSES))
+        selects, bound = [], []
+        with self._get_connection() as conn:
+            for priority, table in enumerate(("weekly_rosters_v2", "weekly_rosters")):
+                columns = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+                if not {"player_id", "team", "season", "week"} <= columns:
+                    continue
+                status = f"AND (status IS NULL OR status NOT IN ({marks}))" if "status" in columns else ""
+                selects.append(
+                    f"SELECT player_id, team, season, week, {priority} AS priority FROM {table} "
+                    f"WHERE team IS NOT NULL AND TRIM(team) != '' "
+                    f"AND player_id IS NOT NULL AND TRIM(player_id) != '' {status} {cutoff}")
+                bound += ([*self.UNATTACHED_ROSTER_STATUSES] if status else []) + params
+            if not selects:
+                return {}
+            query = f"""
+                SELECT player_id, team FROM (
+                    SELECT player_id, team, ROW_NUMBER() OVER (
+                        PARTITION BY player_id ORDER BY season DESC, week DESC, priority
+                    ) AS rn FROM ({" UNION ALL ".join(selects)})
+                ) WHERE rn = 1
+            """
+            rows = conn.execute(query, bound).fetchall()
+        return {player_id: team for player_id, team in rows}
+
     def reconcile_player_positions_from_rosters(self) -> int:
         """Update ``players.position`` from authoritative roster snapshots."""
         pos_map = self.get_authoritative_player_positions()

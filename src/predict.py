@@ -382,7 +382,8 @@ class NFLPredictor:
         games_per_player = player_data.groupby("player_id").size().reset_index(name="games_count")
         latest_data = player_data.groupby("player_id").last().reset_index()
         latest_data = latest_data.merge(games_per_player, on="player_id")
-        
+        latest_data = self._apply_roster_teams(latest_data, as_of)
+
         # Overwrite season/week/opponent/home_away for the upcoming game so matchup features are correct
         schedule_map = get_schedule_map_for_week(self.db, pred_season, pred_week)
         latest_data["season"] = pred_season
@@ -719,6 +720,32 @@ class NFLPredictor:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
     
+    def _apply_roster_teams(self, latest_data: pd.DataFrame,
+                            as_of: Optional[Tuple[int, int]]) -> pd.DataFrame:
+        """Put each player on the club his latest roster snapshot names.
+
+        `latest_data` is each player's last COMPLETED game, so its `team` is
+        the club of that game. A player who has moved since (a trade, a
+        signing, a practice-squad elevation) keeps the old club until he
+        plays for the new one, and the opponent, home/away and team-matchup
+        features of the upcoming game are then read for the wrong club
+        (57 of 696 listed players in 2025 week 6, GAPS.md 2026-10-08). In a
+        replay (`as_of`) only snapshots from before the target week count.
+        A snapshot team is used only if it is a club that appears in this
+        frame, so a legacy abbreviation cannot introduce a new one.
+        """
+        if "team" not in latest_data.columns:
+            return latest_data
+        roster = latest_data["player_id"].map(self.db.get_roster_team_map(as_of=as_of))
+        known = set(latest_data["team"].dropna().astype(str))
+        moved = roster.notna() & roster.isin(known) & (roster != latest_data["team"])
+        if moved.any():
+            print(f"  roster team: {int(moved.sum())} of {len(latest_data)} players moved "
+                  f"since their last game; using their roster club")
+            latest_data = latest_data.copy()
+            latest_data.loc[moved, "team"] = roster[moved]
+        return latest_data
+
     @staticmethod
     def _apply_snap_imputation(data: pd.DataFrame) -> pd.DataFrame:
         """Apply the train-fitted snap imputation, for serving parity with

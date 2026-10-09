@@ -140,11 +140,64 @@ def _lagged_team_totals(panel: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def drop_unplayed_team_weeks(conn: sqlite3.Connection, pop: pd.DataFrame,
+                             vol: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[int, int, str]]]:
+    """Remove roster rows of games that have not been played yet.
+
+    `canonical_player_weeks` gets a row for a team-week as soon as
+    `weekly_rosters` lists it, before the game. Treated as a played week those
+    rows are zero-volume games: they pull every lagged share and team total of
+    the next week toward zero. Only the order of the refresh steps used to
+    prevent that.
+
+    A team-week is *unplayed* when the schedule lists it without a score and
+    no player on it has a stats row; it is dropped. One whose game has a score
+    but no stats rows is a data gap, and raises: dropping it would hide the
+    gap and keeping it would corrupt the lags. A team with no scheduled game
+    that week (a bye) is left as it was.
+    Returns the kept rows and the dropped (season, week, team) triples.
+    """
+    if not _table_exists(conn, "schedule"):
+        raise ValueError("schedule table not found -- cannot tell played weeks from unplayed ones")
+    seasons = sorted(pop.season.unique())
+    sched = pd.read_sql(
+        f"SELECT season, week, home_team, away_team, home_score, away_score FROM schedule "
+        f"WHERE season IN ({','.join('?' * len(seasons))})", conn, params=[int(x) for x in seasons])
+    scored = sched.home_score.notna() & sched.away_score.notna()
+    games = pd.concat([
+        sched.assign(team=sched.home_team, scored=scored),
+        sched.assign(team=sched.away_team, scored=scored)])[["season", "week", "team", "scored"]]
+    games = games.groupby(["season", "week", "team"], as_index=False).scored.max()
+
+    key = ["season", "week", "team"]
+    with_stats = (pop.merge(vol[["player_id", "season", "week"]].drop_duplicates(),
+                            on=["player_id", "season", "week"])[key].drop_duplicates()
+                  .assign(has_stats=True))
+    tw = pop[key].drop_duplicates().merge(with_stats, on=key, how="left").merge(games, on=key, how="left")
+    missing = tw[tw.has_stats.isna() & tw.scored.notna()]
+    gap = missing[missing.scored.astype(bool)]
+    if len(gap):
+        raise ValueError(
+            f"{len(gap)} team-week(s) have a final score but no player stats rows, e.g. "
+            f"{gap[key].head(5).to_dict('records')} -- load the stats (src.data.auto_refresh) before building")
+    unplayed = missing[~missing.scored.astype(bool)]
+    if unplayed.empty:
+        return pop, []
+    drop = set(map(tuple, unplayed[key].itertuples(index=False, name=None)))
+    mask = [(a, b, c) in drop for a, b, c in zip(pop.season, pop.week, pop.team)]
+    return pop[[not m for m in mask]].reset_index(drop=True), sorted(drop)
+
+
 def build_shares(conn: sqlite3.Connection, lo: int, hi: int) -> pd.DataFrame:
     pop = load_population(conn, lo, hi)
     if pop.empty:
         return pop
-    return build_shares_from(pop, load_volumes(conn, lo, hi))
+    vol = load_volumes(conn, lo, hi)
+    pop, unplayed = drop_unplayed_team_weeks(conn, pop, vol)
+    if unplayed:
+        weeks = sorted({(s, w) for s, w, _ in unplayed})
+        print(f"left out {len(unplayed)} unplayed team-weeks (scheduled, no score, no stats): {weeks}")
+    return build_shares_from(pop, vol)
 
 
 def build_shares_from(pop: pd.DataFrame, vol: pd.DataFrame) -> pd.DataFrame:

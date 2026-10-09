@@ -28,7 +28,8 @@ import numpy as np
 import pandas as pd
 
 from config.settings import DB_PATH, POSITIONS
-from scripts.build_team_week_player_shares import build_shares, build_shares_from, load_volumes
+from scripts.build_team_week_player_shares import (
+    build_shares, build_shares_from, drop_unplayed_team_weeks, load_volumes)
 from src.evaluation.team_reconstruction_candidates import _team_feature_columns
 from src.models.team_allocation.features import feature_columns, load_share_rows
 
@@ -44,6 +45,10 @@ def history(con: sqlite3.Connection, season: int, week: int) -> tuple[pd.DataFra
         con, params=[*POSITIONS, season - 1, season, week])
     vol = load_volumes(con, season - 1, season)
     vol = vol[(vol.season < season) | (vol.week < week)]
+    pop, _ = drop_unplayed_team_weeks(con, pop, vol)
+    if week > 1 and (season, week - 1) not in set(zip(vol.season, vol.week)):
+        raise ValueError(f"{season} week {week - 1} has no stats yet: run the data refresh "
+                         f"(src.data.auto_refresh) before forecasting week {week}")
     return pop, vol
 
 
