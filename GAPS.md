@@ -15929,3 +15929,13 @@ incumbent runs on a degraded input that the 2025 replay did not see. The
 forward test measures the live model as it is. Fixing it (the lag-1 value is
 computable from weeks before the target) changes model inputs, so it needs its
 own amendment and re-freeze before week 6, or it waits for after the window.
+
+**Resolved 2026-10-09 (Amendment 3).** The two always-zero live features are fixed:
+`_with_target_week_rows` in `src/features/feature_engineering.py` adds the
+predicted week's row before the lag-1 mean, only when the table is current to
+the week before or a bye. Identical on all 43,848 historical keys; live week 5
+goes from 100% zero to 0%. The live incumbent's dry-run forecasts moved on 229
+of 661 players (mean 0.05, max 1.6 points). Still open: other live-vs-replay
+input differences (2026 play-by-play participation and personnel features are
+empty because nflverse has not published them; several roll3 features have
+higher zero rates in live than in the 2025 replay, not yet traced).
