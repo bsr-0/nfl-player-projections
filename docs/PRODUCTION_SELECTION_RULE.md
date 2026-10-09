@@ -448,3 +448,52 @@ as on 2025") against them unchanged.
 **A2.5 Limit.** This permits one re-freeze, before the first window week is
 written. From then on the original text governs: a change to any pinned file
 during the window voids it.
+
+### Amendment 3 (2026-10-09), committed before any forward-window week was written
+
+At the rule owner's direction. No window week has been written, run for real,
+or hashed; the window directory holds only dry runs. Nothing here was chosen
+after viewing a candidate's accuracy.
+
+**A3.1 What changes.** Two features of the served model, 
+`opp_fpts_allowed_s2d_lag1` and `opp_fpts_allowed_dvoa_adjusted_lag1`, were
+0.0 on every live prediction row. Each is a lag-1 value stored on the row of
+the week it describes, and that row exists only after the game, so a game not
+yet played found no row and defaulted. Training and replays always had it.
+`src/features/feature_engineering.py` now adds the predicted week's row before
+the lag-1 mean, only when the table is current to the week before or a bye
+(`_with_target_week_rows`). The value is the mean of every earlier week, the
+same quantity a played week's row holds. No model, weight, fill, threshold or
+feature list changes.
+
+**A3.2 Evidence.**
+- On all 43,848 historical (opponent, season, week, position) keys in
+  `player_weekly_stats`, old and new code return identical values for both
+  features, so training and every replay, including the 2025 evidence in
+  A1.5–A1.7, are unchanged.
+- On the live 2026 week 5 matchups (120 rows) the share at 0.0 goes from 100%
+  to 0%.
+- Before the fix, scoring the 2025 week 6 replay frame with both features at
+  0.0 moved raw model predictions by 0.12 points on average (up to 2.1;
+  113 of 642 rows by more than 0.25), which is the size of the live-versus-
+  replay gap this removes. This is a property of the inputs, not a candidate's
+  accuracy against outcomes.
+
+**A3.3 Conditions, all met.** No window week had been written. The served
+model files, kappa, the Plan A and rolling-3 artifacts, the gates, thresholds,
+tests and the 8-week window are unchanged, and the start week stays 6.
+
+**A3.4 Procedure and limit.**
+- This supersedes A2.5's count: it permits exactly one further re-freeze, now,
+  and no other. After the first window week is written the original text
+  governs and a change to any pinned file voids the window.
+- The Amendment 2 lineage, dry run and canonical audit are kept under
+  `*_superseded_a2_20261009`. The new lineage records this amendment's commit
+  and also pins `src/features/feature_engineering.py`, where the served
+  features are defined.
+- A full dry run of A1.6 steps 1–3 must pass on the new code. Its live-model
+  forecasts are expected to differ from the previous dry run's (the inputs
+  changed); there is no pass criterion on the size of the difference.
+- Differences between live and replay inputs that remain are not addressed here
+  (for example the 2026 play-by-play participation features, which nflverse
+  has not published; `GAPS.md`).
