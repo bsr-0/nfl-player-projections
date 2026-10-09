@@ -1,0 +1,53 @@
+{
+  "frozen_at": "2026-10-09T18:39:59.822423+00:00",
+  "rule": "docs/PRODUCTION_SELECTION_RULE.md",
+  "rule_sha256": "031a801fd54447a5831a9bf9309ff6c9d46253d5214dc75a4aff261f1500e421",
+  "rule_commits": {
+    "original": "147bc1b80b6a52aafdcc3d33fa9ccc9da60db8ad",
+    "amendment_1": "66df69530a17e2471a22e7a3e52ff77f820a22e3",
+    "amendment_2": "7a4e9213da7fab5b018312f81a8ee0f1daa2b611"
+  },
+  "head_commit": "c1867609624dad5d84af3fcaae73b819a183c74b",
+  "season": 2026,
+  "start_week": 6,
+  "window_weeks": 8,
+  "served": {
+    "pace_blend_kappa": 3.0,
+    "files_sha256": {
+      "data/models/feature_scaler_bounded.joblib": "3422004faf772858c11169e6d2a31749a2101210100d3177576a4f26f7dab2a0",
+      "data/models/injury_risk_model.joblib": "88d0541d370cce9ac0218506f36afed220e4fa87149c0ad58c396daf60e1b1e6",
+      "data/models/multiweek_qb.joblib": "f35350ff00353dfa0e5d27662d79e46d90ccd7a6ed89266448a100b924d9deef",
+      "data/models/multiweek_rb.joblib": "a5b00d1e7bb901c89faf74ecc0475f97de7abd7839ebeadea222b9552f2ec03b",
+      "data/models/multiweek_te.joblib": "73febfe39694cc67680f89f4687284980671f61bec0694855a17e90545e3b19f",
+      "data/models/multiweek_wr.joblib": "a7421314758ea6a1a76b3ac3df26fe2a3c6c875e072f43164271c6879cd8dc4a",
+      "data/models/qb_target_choice.json": "e845469a0e9df939bf1d3ae1fd2ba03093faf91edd615dd0f36433240c67b808",
+      "data/models/utilization_percentile_bounds.json": "dd46f06454e2f6d2f14bc87c0bf516ed255f1e3b4959aafa83ac3c3fb41b5066",
+      "data/models/utilization_weights.json": "e9f9132f7d1edb0bd8c6b66501d100fba0e571d3ddd83c349eda16b319c7fe23",
+      "data/step8_pace_by_season.csv": "c8acbbb51cfc81c0a933a449e3c0a70b349a2dc4ba7c79e6185eb341bd4fb859",
+      "data/draft_picks.parquet": "b62be95e11d643347eb3b70bf82f35ac3f2588d631619200ec83ec5ae1a8e125"
+    }
+  },
+  "plan_a": {
+    "artifact": "data/experiments/selection_forward_2026/artifacts/plan_a_2026.joblib",
+    "sha256": "83174e0938cd4279efcf7992417997c5bb7e299d3233b5d307cf6d41f295ab26",
+    "model_version": "plan-a-no-sameweek-team-20261008-2026"
+  },
+  "rolling3": {
+    "artifact": "data/experiments/selection_forward_2026/artifacts/rolling3.joblib",
+    "sha256": "c506f1382f55e5e01c8262927bafe21bc08d32e2eefe5ed741f6941844a906e2"
+  },
+  "scripts_sha256": {
+    "scripts/run_forward_week.py": "549e91ae1b6af10fc828b3be7ea26f826462d657bcac73997f5472ae8c806a62",
+    "scripts/build_prekickoff_population.py": "1a28ff20c3c4350e6654125f5b26bd73d6a6b3c95e59e18e8bc517e2f84a0e5c",
+    "scripts/build_prekickoff_share_rows.py": "becd07fa9c2bc40c4cb2e8465d7955d72a7093eb71b4a970d424bfad1a05f315",
+    "scripts/export_plan_a_prekickoff.py": "f304a464e5c5cbb77bbb8e1c004ae7cef46a04fcdfc4c562ea5c747a127757f7",
+    "scripts/build_team_week_player_shares.py": "8c55b1b46cf85956567152b46b671c8b07fde32bb11b7d8af09566240d530e34",
+    "scripts/build_canonical_player_weeks.py": "ceff140f303cc64e62726a657e6b3808d7d8b69723dbe12234bc693de66bc3fc",
+    "scripts/backfill_weekly_rosters.py": "45820e246f6781a6b6792febb91cc87c4302fed903d16f5954bec9a4ff7db2af",
+    "src/predict.py": "0754107644d149a97d0335b5c548d12e8c31419c2b84e868a9b3a97902370912",
+    "src/utils/database.py": "91f48f65f838fd08e1575d88b6e3cca5d58420e87e913362ac4a0298db008214",
+    "src/models/team_allocation/joint_serving.py": "835042ac574d8ac96e299c759637832ea9181acad5b6ab541f6539776e43056c",
+    "src/evaluation/team_reconstruction_candidates.py": "408f0ef4daaad7fc5239dbc07371c887c2201f2d73f1f114d81ca49f45de0847",
+    "src/evaluation/selection_gates.py": "e2d7e252e43fa518bbe32ab8e62a2c2c38e2a5d816c816a6f5ce6464bab6e630"
+  }
+}
