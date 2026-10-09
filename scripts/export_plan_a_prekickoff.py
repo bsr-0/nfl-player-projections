@@ -52,6 +52,18 @@ def renormalization_population(con: sqlite3.Connection, listed: pd.DataFrame,
     return pop, {"listed": int(len(listed)), "added_from_prior_roster": int(len(roster))}
 
 
+def forecast_week(art: JointPlanAArtifact, con: sqlite3.Connection, listed: pd.DataFrame,
+                  season: int, week: int) -> tuple[pd.DataFrame, dict]:
+    """One week's forecasts for exactly the listed players."""
+    pop, info = renormalization_population(con, listed, season, week)
+    rows = prekickoff_rows(season, week, pop, con)
+    pred = art.predict(rows, include_actual=False)
+    pred = pred[pred.player_id.isin(listed.player_id)]
+    if len(pred) != len(listed) or not np.isfinite(pred.predicted_ppr).all():
+        raise ValueError(f"week {week}: expected {len(listed)} finite forecasts, got {len(pred)}")
+    return pred, info
+
+
 def export(artifact_path: Path, population_dir: Path, season: int, weeks: list[int], output_dir: Path) -> dict:
     if output_dir.exists():
         raise ValueError(f"output exists: {output_dir}")
@@ -64,12 +76,7 @@ def export(artifact_path: Path, population_dir: Path, season: int, weeks: list[i
             if file_sha256(path) != meta["sha256"]:
                 raise ValueError(f"frozen list changed: {path}")
             listed = pd.read_csv(path, dtype={"player_id": str})
-            pop, info = renormalization_population(con, listed, season, week)
-            rows = prekickoff_rows(season, week, pop, con)
-            pred = art.predict(rows, include_actual=False)
-            pred = pred[pred.player_id.isin(listed.player_id)]
-            if len(pred) != len(listed) or not np.isfinite(pred.predicted_ppr).all():
-                raise ValueError(f"week {week}: expected {len(listed)} finite forecasts, got {len(pred)}")
+            pred, info = forecast_week(art, con, listed, season, week)
             parts.append(pred)
             weeks_meta[week] = info | {"list_sha256": meta["sha256"]}
             print(json.dumps({"week": week, **info}), flush=True)

@@ -104,7 +104,9 @@ def teams_playing(predictor: NFLPredictor, season: int, week: int) -> set[str]:
     return teams
 
 
-def population(predictor: NFLPredictor, season: int, week: int, *, replay: bool) -> tuple[pd.DataFrame, dict]:
+def population(predictor: NFLPredictor, season: int, week: int, *,
+               replay: bool) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+    """The frozen list, its metadata, and production's full output for the same call."""
     ctx = as_of(predictor, season, week) if replay else contextlib.nullcontext(None)
     with ctx as n_eligible:
         out = predictor.predict(n_weeks=1, top_n=1_000_000, as_of=(season, week) if replay else None)
@@ -127,7 +129,7 @@ def population(predictor: NFLPredictor, season: int, week: int, *, replay: bool)
             "dropped_bye_or_unknown_team": int(on_bye.sum())}
     pop = pop[~on_bye].sort_values(COLUMNS).reset_index(drop=True)
     meta["players"] = int(len(pop))
-    return pop, meta
+    return pop, meta, out
 
 
 def main() -> None:
@@ -153,7 +155,7 @@ def main() -> None:
         path = a.output_dir / f"population_{season}_w{week:02d}.csv"
         if path.exists():
             raise ValueError(f"refusing to overwrite a frozen list: {path}")
-        pop, meta = population(predictor, season, week, replay=replay)
+        pop, meta, _ = population(predictor, season, week, replay=replay)
         pop.to_csv(path, index=False)
         meta |= {"file": path.name, "sha256": file_sha256(path),
                  "written_at": datetime.now(timezone.utc).isoformat(),
