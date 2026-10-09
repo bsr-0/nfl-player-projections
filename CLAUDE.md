@@ -6,7 +6,7 @@
 1. SERVED WEEKLY PPR
    Status ........ LIVE (unblended model; served through the pace blend, row 2)
    Metric ........ MAE 4.44 (OOF 2024–26, raw outcomes); 4.36 on 5,826-game 2025 matched set
-   Open .......... lost to Plan A at every position on matched set (10-08)
+   Open .......... the 10-08 loss to Plan A is void (Plan A leak, row 4)
 
 2. SERVED + BLEND  (pace blend, 09-17)
    Status ........ LIVE since 09-17 (src/predict.py, kappa=3)
@@ -19,14 +19,14 @@
    Open .......... none
 
 4. PLAN A
-   Status ........ RESEARCH, LEADS SERVED
-   Metric ........ MAE 2.370 (Plan A scale); 4.08 on 5,826-game 2025 matched set
-   Open .......... beat served by 0.27 MAE; QB 0.81, RB 0.30, WR 0.19, TE 0.15 (all CIs exclude 0)
+   Status ........ RESEARCH, RESULTS INVALID (10-08: same-week team leak)
+   Metric ........ none valid; 2.370 and 4.08 used same-game team totals
+   Open .......... selector re-run without same-week team columns; pre-kickoff export
 
 5. PLAN A + PLAN B ARM
-   Status ........ RESEARCH
-   Metric ........ MAE 2.346 (Plan A scale); -0.145 vs rolling-3, CI [-0.160, -0.129]
-   Open .......... never paired vs served; best Plan A-scale MAE, run on matched set next
+   Status ........ DROPPED from selection (10-08); results invalid (same leak)
+   Metric ........ none valid; 2.346 used same-game team totals
+   Open .......... no serving path for the Plan B arm
 
 6. PLAN B  (shares only)
    Status ........ RESEARCH

@@ -29,7 +29,6 @@ from src.models.position_models import SeasonAwareTimeSeriesSplit
 from src.models.team_allocation.baseline import RollingShareBaseline
 from src.models.team_allocation.features import (
     ROLL_WINDOW,
-    ALL_VOLUME_COLS,
     VOLUME_COLS,
     feature_columns,
     filter_population,
@@ -106,12 +105,16 @@ def _best_volume_alpha(y_volume: np.ndarray, model_share: np.ndarray,
 
 
 def _team_feature_columns(df: pd.DataFrame, target: str) -> List[str]:
-    """Only lagged team-context columns for the team-total forecaster."""
-    current = {f"team_{name}" for name in ALL_VOLUME_COLS}
-    cols = [
-        c for c in df.columns
-        if c.startswith("team_") and c not in current and c != f"team_{target}"
-    ]
+    """Only lagged team-context columns for the team-total forecaster.
+
+    Allow-list by suffix: a team column is a feature only if it is a
+    season-to-date or rolling mean of earlier weeks. Excluding same-week
+    columns by name instead let the 17 same-week team opportunity totals
+    (team_pass_plays, team_snap_count, ...) of the game being predicted
+    through from 2026-09-24 to 2026-10-08 (GAPS.md).
+    """
+    lagged = ("_s2d", f"_roll{ROLL_WINDOW}")
+    cols = [c for c in df.columns if c.startswith("team_") and c.endswith(lagged)]
     if not cols:
         raise ValueError("team-week table has no lagged team features")
     return cols

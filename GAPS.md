@@ -15751,3 +15751,49 @@ but every evaluation did:
   retired column. The "PBP participation unavailable (NameError)" message is
   the handled nfl_data_py 0.3.2 bug in `pbp_stats_aggregator.import_pbp`; 2026
   personnel features stay empty until nflverse publishes participation data.
+
+## 2026-10-08 — Plan A team totals read the predicted game's own team stats
+
+**Symptom.** Forecasting a 2025 week from pre-kickoff rows (stub rows for the
+target week) collapsed Plan A's team totals: week 6 receiving yards 228 → 83
+per team, rushing yards 111 → 14, while predicted shares barely moved.
+
+**Root cause.** `_team_feature_columns`
+(`src/evaluation/team_reconstruction_candidates.py`) excluded same-week team
+columns by name, listing only the volume targets. The 17 same-week team
+opportunity totals added on 2026-09-24 (`6fafe766`: `team_pass_plays`,
+`team_snap_count`, `team_air_yards`, `team_neutral_targets`, ...) passed
+through. Every team-total arm (ridge, xgb, blend) of every target trained and
+predicted with the play and snap counts of the game being forecast.
+
+**Impact.** Every Plan A and Plan A + Plan B result since 09-24 is invalid:
+the full-PPR selector (2.36984), the Plan B arm (2.34608), the frozen joint
+artifacts, and the 2025 matched comparison against served (Δ −0.27). The
+selector chose its arms on leaked numbers, so a corrected column list needs a
+fresh selection, not a patch. Served, the pace blend and rolling-3 are not
+affected. `feature_columns()` (player features) already excluded these
+columns, so the allocation (share) arms are unaffected.
+
+**Fixed.**
+- `_team_feature_columns` now allow-lists by suffix: only `team_*_s2d` and
+  `team_*_roll3` columns. Test:
+  `test_team_feature_columns_exclude_same_week_opportunity_totals`.
+- The pre-kickoff leakage audit (`scripts/build_prekickoff_share_rows.py
+  audit`) now also checks every column a team-total arm can read; with the
+  old list it fails on all 17 columns (zeros before kickoff).
+- Selector re-run without them:
+  `data/experiments/full_ppr_selector_no_sameweek_team_20261008/`.
+
+**Related, found the same day.**
+- `predict(as_of=...)` replays are not as-of: player eligibility counts games
+  after the as-of week (`get_eligible_seasons` uses today's last
+  `ELIGIBLE_SEASONS_LOOKBACK` seasons), rookie teams come from
+  `get_current_team_map()` (today's rosters), and positions from the latest
+  roster snapshot. Live serving is unaffected. `scripts/build_prekickoff_population.py`
+  replays with all three computed as of the week; existing `as_of` backtests
+  of the serving path still use today's values.
+- `canonical_player_weeks` was not rebuilt by any refresh step and stopped at
+  2026 week 1; `weekly_rosters` had no 2026 rows. Both were rebuilt on
+  2026-10-08. The canonical builder breaks roster-status ties
+  nondeterministically (120 historical rows differ between identical runs;
+  keys, team and position are stable).
