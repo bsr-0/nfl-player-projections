@@ -1,0 +1,196 @@
+{
+  "2025-w06": {
+    "rows_compared": 28883,
+    "columns_compared": 501,
+    "differing_columns": {
+      "combine_score": {
+        "rows": 22630,
+        "model_feature": true
+      },
+      "injury_prob_advanced": {
+        "rows": 137,
+        "model_feature": false
+      },
+      "injury_prob_combined": {
+        "rows": 137,
+        "model_feature": false
+      },
+      "injury_risk_level": {
+        "rows": 22,
+        "model_feature": false
+      },
+      "prior_injuries": {
+        "rows": 137,
+        "model_feature": false
+      },
+      "qb_blitz_rate_roll3_mean": {
+        "rows": 476,
+        "model_feature": false
+      },
+      "qb_hit_rate_roll3_mean": {
+        "rows": 464,
+        "model_feature": false
+      },
+      "qb_pressure_pct_roll3_mean": {
+        "rows": 452,
+        "model_feature": true
+      },
+      "rb_yac_avg_roll3_mean": {
+        "rows": 23,
+        "model_feature": true
+      },
+      "rb_ybc_avg_roll3_mean": {
+        "rows": 23,
+        "model_feature": true
+      },
+      "scheme_pass_rate_delta": {
+        "rows": 584,
+        "model_feature": false
+      },
+      "season_position_rank": {
+        "rows": 1127,
+        "model_feature": false
+      },
+      "team_neutral_pass_rate_oe_roll3_mean": {
+        "rows": 354,
+        "model_feature": true
+      }
+    },
+    "model_features_differing": [
+      "combine_score",
+      "qb_pressure_pct_roll3_mean",
+      "rb_yac_avg_roll3_mean",
+      "rb_ybc_avg_roll3_mean",
+      "team_neutral_pass_rate_oe_roll3_mean"
+    ]
+  },
+  "2025-w14": {
+    "rows_compared": 31639,
+    "columns_compared": 484,
+    "differing_columns": {
+      "air_yards_share_pct_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "catch_rate_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "combine_score": {
+        "rows": 24847,
+        "model_feature": true
+      },
+      "completion_pct_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "goal_line_carry_share_pct_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "injury_prob_advanced": {
+        "rows": 88,
+        "model_feature": false
+      },
+      "injury_prob_combined": {
+        "rows": 88,
+        "model_feature": false
+      },
+      "injury_risk_level": {
+        "rows": 13,
+        "model_feature": false
+      },
+      "int_rate_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "pass_success_rate_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "prior_injuries": {
+        "rows": 88,
+        "model_feature": false
+      },
+      "qb_pressure_pct_roll3_mean": {
+        "rows": 8,
+        "model_feature": true
+      },
+      "rb_yac_avg_roll3_mean": {
+        "rows": 1122,
+        "model_feature": true
+      },
+      "rb_ybc_avg_roll3_mean": {
+        "rows": 57,
+        "model_feature": true
+      },
+      "redzone_target_share_pct_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "rush_share_pct_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "scheme_pass_rate_delta": {
+        "rows": 565,
+        "model_feature": false
+      },
+      "season_position_rank": {
+        "rows": 1787,
+        "model_feature": false
+      },
+      "target_share_pct_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "td_rate_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_neutral_pass_rate_oe_roll3_mean": {
+        "rows": 358,
+        "model_feature": true
+      },
+      "team_pct_11_personnel_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_pct_12_personnel_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_pct_13_personnel_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_pct_21_personnel_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_rb_lead_share_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_rb_target_share_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_te_target_share_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      },
+      "team_wr_target_share_roll3_mean_missing": {
+        "rows": 616,
+        "model_feature": false
+      }
+    },
+    "model_features_differing": [
+      "combine_score",
+      "qb_pressure_pct_roll3_mean",
+      "rb_yac_avg_roll3_mean",
+      "rb_ybc_avg_roll3_mean",
+      "team_neutral_pass_rate_oe_roll3_mean"
+    ]
+  }
+}
