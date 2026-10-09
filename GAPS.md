@@ -15914,3 +15914,18 @@ correctness risks").
 `scripts/build_prekickoff_share_rows.py`, so `run_forward_week.py` reports
 "lineage broken" until the lineage is re-frozen or the edits are dropped. That
 choice is the rule owner's; nothing has been re-frozen.
+
+**Found while verifying the re-freeze (2026-10-09, not fixed).** Two model
+features, `opp_fpts_allowed_s2d_lag1` and `opp_fpts_allowed_dvoa_adjusted_lag1`,
+are 0.0 on 100% of live prediction rows (706 of 706 for week 5), against 6.7%
+in the 2025 week 6 replay. The lookup joins on (opponent, season, week) in
+`team_defense_stats`, and the target week's row does not exist until the game
+is played, so live serving can never fill them, while training and replays
+(whose target week is already played) always do. Scoring the 2025 week 6
+replay frame with both set to 0.0 moves the raw model's predictions by 0.12
+points on average (2% of the 5.84 mean; 0.16 for QB and WR), up to 2.1, with
+113 of 642 rows moving by more than 0.25, before the pace blend. So the live
+incumbent runs on a degraded input that the 2025 replay did not see. The
+forward test measures the live model as it is. Fixing it (the lag-1 value is
+computable from weeks before the target) changes model inputs, so it needs its
+own amendment and re-freeze before week 6, or it waits for after the window.
