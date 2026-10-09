@@ -1,0 +1,255 @@
+{
+  "n_rows": 5824,
+  "B": 10000,
+  "seed": 42,
+  "alpha": 0.05,
+  "min_effect": 0.1,
+  "holm_family": [
+    "plan_a",
+    "served_unblended"
+  ],
+  "candidates": {
+    "plan_a": {
+      "mae": 4.267929258241758,
+      "incumbent_mae": 4.266208924968075,
+      "G1": {
+        "point_difference": 0.0017203332736837515,
+        "p_one_sided": 0.5082491750824918,
+        "upper_bound_95": 0.09793695049923262,
+        "holm_rejects": false,
+        "passes": false
+      },
+      "guardrails": {
+        "G2 RMSE": {
+          "point_worsening": 0.24552905294275007,
+          "lower_bound": 0.11591573682313779,
+          "fails": true
+        },
+        "G3 MAE QB": {
+          "point_worsening": -0.16384933940770707,
+          "lower_bound": -0.6099196721041167,
+          "fails": false
+        },
+        "G3 MAE RB": {
+          "point_worsening": 0.09139681244280871,
+          "lower_bound": -0.11652848040756983,
+          "fails": false
+        },
+        "G3 MAE WR": {
+          "point_worsening": 0.024437045626655517,
+          "lower_bound": -0.1266839920885868,
+          "fails": false
+        },
+        "G3 MAE TE": {
+          "point_worsening": -0.04947414910980596,
+          "lower_bound": -0.1764195392104759,
+          "fails": false
+        },
+        "G4 MAE tier_rolling3 1-12": {
+          "point_worsening": 0.23856896591861662,
+          "lower_bound": -0.05701387471630842,
+          "fails": false
+        },
+        "G4 MAE tier_rolling3 13-36": {
+          "point_worsening": 0.03212677727011277,
+          "lower_bound": -0.18546951729371008,
+          "fails": false
+        },
+        "G4 MAE tier_incumbent 1-12": {
+          "point_worsening": 0.2250984174249865,
+          "lower_bound": -0.11973521870291001,
+          "fails": false
+        },
+        "G4 MAE tier_incumbent 13-36": {
+          "point_worsening": 0.0769826244090175,
+          "lower_bound": -0.17019356530795668,
+          "fails": false
+        },
+        "G5 |bias| overall": {
+          "point_worsening": 0.5768021514207282,
+          "lower_bound": 0.39605439784538427,
+          "fails": true
+        },
+        "G5 |bias| tier_rolling3 1-12": {
+          "point_worsening": -0.161035125432469,
+          "lower_bound": -1.7126226257555957,
+          "fails": false
+        },
+        "G5 |bias| tier_rolling3 13-36": {
+          "point_worsening": 0.4908288081053128,
+          "lower_bound": 0.1519896243735681,
+          "fails": true
+        },
+        "G5 |bias| tier_rolling3 37+": {
+          "point_worsening": 1.2293754085855861,
+          "lower_bound": 0.9936945106003036,
+          "fails": true
+        },
+        "G5 |bias| tier_incumbent 1-12": {
+          "point_worsening": 1.175559456948299,
+          "lower_bound": -0.029449628351455995,
+          "fails": false
+        },
+        "G5 |bias| tier_incumbent 13-36": {
+          "point_worsening": 0.627796494653862,
+          "lower_bound": 0.25917073435305127,
+          "fails": true
+        },
+        "G5 |bias| tier_incumbent 37+": {
+          "point_worsening": 0.40936853451821076,
+          "lower_bound": 0.2711696061542437,
+          "fails": true
+        },
+        "G6 Spearman": {
+          "point_worsening": 0.006802223596455435,
+          "lower_bound": -0.010867316189616396,
+          "fails": false
+        }
+      },
+      "guardrail_failures": [
+        "G2 RMSE",
+        "G5 |bias| overall",
+        "G5 |bias| tier_rolling3 13-36",
+        "G5 |bias| tier_rolling3 37+",
+        "G5 |bias| tier_incumbent 13-36",
+        "G5 |bias| tier_incumbent 37+"
+      ],
+      "G7": null,
+      "G8_weeks_1_3_report": {
+        "n": 688,
+        "mae_difference": 0.05467491439112404
+      },
+      "G9": {
+        "rolling3_mae": 4.474878090659341,
+        "passes": true
+      },
+      "guardrails_pass": false,
+      "stage_passes": false
+    },
+    "served_unblended": {
+      "mae": 4.355612085345718,
+      "incumbent_mae": 4.266208924968075,
+      "G1": {
+        "point_difference": 0.08940316037764358,
+        "p_one_sided": 0.9983001699830018,
+        "upper_bound_95": 0.13414421560165013,
+        "holm_rejects": false,
+        "passes": false
+      },
+      "guardrails": {
+        "G2 RMSE": {
+          "point_worsening": 0.04638819225904278,
+          "lower_bound": -0.016209472470030347,
+          "fails": false
+        },
+        "G3 MAE QB": {
+          "point_worsening": 0.18676882014256935,
+          "lower_bound": -0.08169013806640757,
+          "fails": false
+        },
+        "G3 MAE RB": {
+          "point_worsening": 0.13385157500689088,
+          "lower_bound": 0.022226783275382387,
+          "fails": true
+        },
+        "G3 MAE WR": {
+          "point_worsening": 0.10590873612583206,
+          "lower_bound": 0.04937157771389706,
+          "fails": true
+        },
+        "G3 MAE TE": {
+          "point_worsening": -0.017183440706620173,
+          "lower_bound": -0.0645471683960081,
+          "fails": false
+        },
+        "G4 MAE tier_rolling3 1-12": {
+          "point_worsening": 0.10164437456550815,
+          "lower_bound": -0.08332055583538014,
+          "fails": false
+        },
+        "G4 MAE tier_rolling3 13-36": {
+          "point_worsening": 0.10854367044764662,
+          "lower_bound": -0.010675011530248368,
+          "fails": false
+        },
+        "G4 MAE tier_incumbent 1-12": {
+          "point_worsening": 0.16087848606490474,
+          "lower_bound": -0.00720588419513916,
+          "fails": false
+        },
+        "G4 MAE tier_incumbent 13-36": {
+          "point_worsening": 0.11953756146721205,
+          "lower_bound": -0.0067620581277467754,
+          "fails": false
+        },
+        "G5 |bias| overall": {
+          "point_worsening": -0.36623375476217357,
+          "lower_bound": -0.6311257679840677,
+          "fails": false
+        },
+        "G5 |bias| tier_rolling3 1-12": {
+          "point_worsening": -0.7256394286580723,
+          "lower_bound": -1.5236837426761558,
+          "fails": false
+        },
+        "G5 |bias| tier_rolling3 13-36": {
+          "point_worsening": -0.8921605174335917,
+          "lower_bound": -1.0332530898832308,
+          "fails": false
+        },
+        "G5 |bias| tier_rolling3 37+": {
+          "point_worsening": -0.007163906062229719,
+          "lower_bound": -0.2458302698729347,
+          "fails": false
+        },
+        "G5 |bias| tier_incumbent 1-12": {
+          "point_worsening": 0.6810177671674427,
+          "lower_bound": -1.1371472490868084,
+          "fails": false
+        },
+        "G5 |bias| tier_incumbent 13-36": {
+          "point_worsening": -0.5642002651349934,
+          "lower_bound": -1.0545847600120972,
+          "fails": false
+        },
+        "G5 |bias| tier_incumbent 37+": {
+          "point_worsening": -0.2200747157559236,
+          "lower_bound": -0.2817306992779605,
+          "fails": false
+        },
+        "G6 Spearman": {
+          "point_worsening": 0.0055467463893258935,
+          "lower_bound": -0.002816049396671864,
+          "fails": false
+        }
+      },
+      "guardrail_failures": [
+        "G3 MAE RB",
+        "G3 MAE WR"
+      ],
+      "G7": null,
+      "G8_weeks_1_3_report": {
+        "n": 688,
+        "mae_difference": 0.0880946165463678
+      },
+      "G9": {
+        "rolling3_mae": 4.474878090659341,
+        "passes": true
+      },
+      "guardrails_pass": false,
+      "stage_passes": false
+    }
+  },
+  "coverage": {
+    "matched_rows": 5826,
+    "evaluated_rows": 5824,
+    "dropped_not_on_list": 2
+  },
+  "inputs_sha256": {
+    "paired": "803f7771fba80b7ab58c3d724c8f9f59e94de010fae115aeb6d9b85ed81cd439",
+    "incumbent": "63ad88afe4906465e627232cb02740bb23e085f8a1f556dfbef81fd4b9c31242",
+    "plan_a": "b5585a9fc9c081f5722f1215af7b77aaaa3d4f56e84cc6adc2950f494042d8f1",
+    "rolling3": "c1bded4f4675807365199f8b91bbf77ef0327a2369f8828d0ce7d8e146df5a6f"
+  },
+  "script_sha256": "a0ef97886aebe78ace4085173d30d7bf5a1a6db5895c7d6eaf879c8c4a1caab3"
+}

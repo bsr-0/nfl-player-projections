@@ -5,23 +5,23 @@
 ```
 1. SERVED WEEKLY PPR
    Status ........ LIVE (unblended model; served through the pace blend, row 2)
-   Metric ........ MAE 4.44 (OOF 2024–26, raw outcomes); 4.36 on 5,826-game 2025 matched set
-   Open .......... the 10-08 loss to Plan A is void (Plan A leak, row 4)
+   Metric ........ MAE 4.356 on 2025 selection set (5,824 rows); 4.44 OOF 2024–26
+   Open .......... fails the selection rule vs the live blend (10-08: G1, RB/WR guardrails)
 
 2. SERVED + BLEND  (pace blend, 09-17)
    Status ........ LIVE since 09-17 (src/predict.py, kappa=3)
-   Metric ........ MAE 4.35 -> 4.24 (2025, n=6,356)
-   Open .......... not re-run on raw targets; not on matched set
+   Metric ........ MAE 4.266 on 2025 selection set (5,824 rows, raw outcomes)
+   Open .......... incumbent; stays in production under the selection rule (10-08)
 
 3. ROLLING-3 BASELINE
    Status ........ BASELINE
-   Metric ........ MAE 2.491 (Plan A scale)
+   Metric ........ MAE 2.491 (Plan A scale); 4.475 on 2025 selection set
    Open .......... none
 
 4. PLAN A
-   Status ........ RESEARCH, RESULTS INVALID (10-08: same-week team leak)
-   Metric ........ none valid; 2.370 and 4.08 used same-game team totals
-   Open .......... selector re-run without same-week team columns; pre-kickoff export
+   Status ........ RESEARCH; not selected (10-08)
+   Metric ........ corrected: MAE 2.426 (Plan A scale, -0.065 vs rolling-3); 4.268 on 2025 selection set
+   Open .......... ties the live blend (+0.002); fails G1 and RMSE/bias guardrails
 
 5. PLAN A + PLAN B ARM
    Status ........ DROPPED from selection (10-08); results invalid (same leak)
