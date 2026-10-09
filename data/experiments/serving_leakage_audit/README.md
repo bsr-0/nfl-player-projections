@@ -42,3 +42,10 @@ frame. This is not a leak into replays or live serving (both truncate before
 feature engineering; the poison test shows it), but it means the training
 frame's fills see the future and differ from serving's. Logged in GAPS.md,
 not fixed: changing it changes model inputs.
+
+## Re-run on the final code (Amendment 3) — `poison_after_amendment3.json`
+
+The poison test was repeated for 2025 week 6 after the roster-club, unplayed-week
+and opponent-feature changes: no feature and no prediction changed; the control
+still changed predictions. (The opponent-feature change is a no-op on every
+historical key, so replays are unaffected by construction; this confirms it.)

@@ -1,0 +1,851 @@
+{
+  "2025-w06": {
+    "after_target_poisoned": {
+      "player_weekly_stats": {
+        "columns": 44,
+        "rows": 6349
+      },
+      "team_stats": {
+        "columns": 24,
+        "rows": 570
+      },
+      "team_defense_stats": {
+        "columns": 11,
+        "rows": 570
+      },
+      "team_offense_stats": {
+        "columns": 4,
+        "rows": 570
+      },
+      "team_personnel_stats": {
+        "columns": 6,
+        "rows": 414
+      },
+      "team_scheme_tendencies": {
+        "columns": 7,
+        "rows": 414
+      },
+      "snap_counts": {
+        "columns": 6,
+        "rows": 19333
+      },
+      "ngs_passing": {
+        "columns": 19,
+        "rows": 450
+      },
+      "ngs_receiving": {
+        "columns": 13,
+        "rows": 1034
+      },
+      "ngs_rushing": {
+        "columns": 12,
+        "rows": 491
+      },
+      "weekly_pfr": {
+        "columns": 18,
+        "rows": 5507
+      },
+      "pbp_pass_participation": {
+        "columns": 3,
+        "rows": 7279
+      },
+      "utilization_scores": {
+        "columns": 7,
+        "rows": 4026
+      },
+      "team_week_player_shares": {
+        "columns": 224,
+        "rows": 9732
+      },
+      "seasonal_pfr": {
+        "columns": 8,
+        "rows": 0
+      },
+      "qbr": {
+        "columns": 12,
+        "rows": 0
+      },
+      "schedule": {
+        "columns": 2,
+        "rows": 479
+      },
+      "canonical_player_weeks": {
+        "columns": 10,
+        "rows": 13790
+      },
+      "_tables_with_no_rows_to_poison": [
+        "qbr",
+        "seasonal_pfr"
+      ]
+    },
+    "after_target": {
+      "same_players": true,
+      "players": 642,
+      "columns_compared": 504,
+      "differing_columns": {},
+      "model_features_differing": [],
+      "predictions": {
+        "predicted_points": {
+          "max_abs_diff": 0.0,
+          "rows_differing": 0
+        },
+        "predicted_ppg": {
+          "max_abs_diff": 0.0,
+          "rows_differing": 0
+        },
+        "expected_points": {
+          "max_abs_diff": 0.0,
+          "rows_differing": 0
+        }
+      }
+    },
+    "control_from_previous_week_poisoned": {
+      "player_weekly_stats": {
+        "columns": 44,
+        "rows": 6692
+      },
+      "team_stats": {
+        "columns": 24,
+        "rows": 600
+      },
+      "team_defense_stats": {
+        "columns": 11,
+        "rows": 600
+      },
+      "team_offense_stats": {
+        "columns": 4,
+        "rows": 600
+      },
+      "team_personnel_stats": {
+        "columns": 6,
+        "rows": 442
+      },
+      "team_scheme_tendencies": {
+        "columns": 7,
+        "rows": 442
+      },
+      "snap_counts": {
+        "columns": 6,
+        "rows": 20641
+      },
+      "ngs_passing": {
+        "columns": 19,
+        "rows": 478
+      },
+      "ngs_receiving": {
+        "columns": 13,
+        "rows": 1106
+      },
+      "ngs_rushing": {
+        "columns": 12,
+        "rows": 516
+      },
+      "weekly_pfr": {
+        "columns": 18,
+        "rows": 5891
+      },
+      "pbp_pass_participation": {
+        "columns": 3,
+        "rows": 7774
+      },
+      "utilization_scores": {
+        "columns": 7,
+        "rows": 4305
+      },
+      "team_week_player_shares": {
+        "columns": 224,
+        "rows": 10418
+      },
+      "seasonal_pfr": {
+        "columns": 8,
+        "rows": 0
+      },
+      "qbr": {
+        "columns": 12,
+        "rows": 0
+      },
+      "schedule": {
+        "columns": 2,
+        "rows": 493
+      },
+      "canonical_player_weeks": {
+        "columns": 10,
+        "rows": 14476
+      },
+      "_tables_with_no_rows_to_poison": [
+        "qbr",
+        "seasonal_pfr"
+      ]
+    },
+    "control_from_previous_week": {
+      "same_players": true,
+      "players": 642,
+      "columns_compared": 504,
+      "differing_columns": {
+        "air_yards": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "air_yards_norm": {
+          "rows": 60,
+          "model_feature": false
+        },
+        "air_yards_per_attempt": {
+          "rows": 341,
+          "model_feature": false
+        },
+        "air_yards_share_pct": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "average_depth_of_target": {
+          "rows": 336,
+          "model_feature": false
+        },
+        "catch_rate": {
+          "rows": 263,
+          "model_feature": false
+        },
+        "completion_pct": {
+          "rows": 339,
+          "model_feature": false
+        },
+        "dropback_norm": {
+          "rows": 34,
+          "model_feature": false
+        },
+        "dropback_rate_pct": {
+          "rows": 35,
+          "model_feature": false
+        },
+        "expected_game_total": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "expected_point_diff": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "fantasy_points": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "fumbles": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "fumbles_lost": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "games_played": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "goal_line_carry_share_pct": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "goal_line_touches": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "high_leverage_touches": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "high_value_touch_rate": {
+          "rows": 327,
+          "model_feature": false
+        },
+        "inline_rate_norm": {
+          "rows": 87,
+          "model_feature": false
+        },
+        "inline_rate_pct": {
+          "rows": 87,
+          "model_feature": false
+        },
+        "int_rate": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "interceptions": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "matchup_pass_diff": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "matchup_rush_diff": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "matchup_scoring_edge": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "matchup_yards_diff": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "neutral_rushes": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "neutral_targets": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "ngs_aggressiveness": {
+          "rows": 28,
+          "model_feature": false
+        },
+        "ngs_avg_air_yards_to_sticks": {
+          "rows": 28,
+          "model_feature": false
+        },
+        "ngs_avg_cushion": {
+          "rows": 72,
+          "model_feature": false
+        },
+        "ngs_avg_intended_air_yards": {
+          "rows": 72,
+          "model_feature": false
+        },
+        "ngs_avg_separation": {
+          "rows": 72,
+          "model_feature": false
+        },
+        "ngs_avg_time_to_throw": {
+          "rows": 28,
+          "model_feature": false
+        },
+        "ngs_avg_yac_above_expectation": {
+          "rows": 72,
+          "model_feature": false
+        },
+        "ngs_catch_percentage": {
+          "rows": 72,
+          "model_feature": false
+        },
+        "ngs_completion_percentage_above_expectation": {
+          "rows": 28,
+          "model_feature": false
+        },
+        "ngs_efficiency": {
+          "rows": 25,
+          "model_feature": false
+        },
+        "ngs_percent_attempts_gte_eight_defenders": {
+          "rows": 25,
+          "model_feature": false
+        },
+        "ngs_rush_yards_over_expected_per_att": {
+          "rows": 25,
+          "model_feature": false
+        },
+        "offensive_momentum_score": {
+          "rows": 223,
+          "model_feature": false
+        },
+        "opp_fpts_allowed": {
+          "rows": 521,
+          "model_feature": true
+        },
+        "opp_fpts_allowed_dvoa_adjusted_lag1": {
+          "rows": 521,
+          "model_feature": true
+        },
+        "opp_fpts_allowed_s2d_lag1": {
+          "rows": 521,
+          "model_feature": true
+        },
+        "opportunities": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "pass_epa": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "pass_epa_per_play": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "pass_plays": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "pass_success_rate": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "pass_wpa": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "pass_wpa_per_play": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "passing_attempts": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "passing_completions": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "passing_tds": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "passing_yards": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "play_volume_norm": {
+          "rows": 33,
+          "model_feature": false
+        },
+        "play_volume_pct": {
+          "rows": 33,
+          "model_feature": false
+        },
+        "receiving_tds": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "receiving_yards": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "receptions": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "recv_epa": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "recv_epa_per_target": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "recv_success_rate": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "recv_targets": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "recv_wpa": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "recv_wpa_per_target": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "redzone_opp_norm": {
+          "rows": 35,
+          "model_feature": false
+        },
+        "redzone_opp_pct": {
+          "rows": 35,
+          "model_feature": false
+        },
+        "redzone_share_norm": {
+          "rows": 74,
+          "model_feature": false
+        },
+        "redzone_share_pct": {
+          "rows": 81,
+          "model_feature": false
+        },
+        "redzone_target_share_pct": {
+          "rows": 340,
+          "model_feature": false
+        },
+        "redzone_targets": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "redzone_targets_norm": {
+          "rows": 213,
+          "model_feature": false
+        },
+        "redzone_targets_pct": {
+          "rows": 213,
+          "model_feature": false
+        },
+        "route_part_norm": {
+          "rows": 136,
+          "model_feature": false
+        },
+        "route_participation_pct": {
+          "rows": 136,
+          "model_feature": false
+        },
+        "rush_epa": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_epa_per_play": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_inside_10": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_inside_5": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_plays": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_share_norm": {
+          "rows": 116,
+          "model_feature": false
+        },
+        "rush_share_pct": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_success_rate": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_wpa": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rush_wpa_per_play": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rushing_attempts": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rushing_tds": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "rushing_yards": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "short_yardage_rushes": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "snap_count": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "snap_share": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "snap_share_norm": {
+          "rows": 305,
+          "model_feature": false
+        },
+        "snap_share_pct": {
+          "rows": 319,
+          "model_feature": false
+        },
+        "target_share_norm": {
+          "rows": 306,
+          "model_feature": false
+        },
+        "target_share_pct": {
+          "rows": 341,
+          "model_feature": false
+        },
+        "targets": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "targets_15_plus": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "td_int_ratio": {
+          "rows": 337,
+          "model_feature": false
+        },
+        "td_rate": {
+          "rows": 340,
+          "model_feature": false
+        },
+        "team_a_avg_drive_epa": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_drive_count": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_drive_success_rate": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_neutral_pass_plays": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_neutral_pass_rate": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_neutral_pass_rate_lg": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_neutral_pass_rate_oe": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_neutral_run_plays": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_pace_sec_per_play": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_pass_attempts": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_pass_rate": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_passing_yards": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_plays_per_game": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_points_allowed": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_points_per_drive": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_points_scored": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_redzone_scores": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_rush_attempts": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_rushing_yards": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_total_yards": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_a_turnovers": {
+          "rows": 521,
+          "model_feature": false
+        },
+        "team_pct_11_personnel": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_pct_12_personnel": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_pct_13_personnel": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_pct_21_personnel": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_rb_lead_share": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_rb_target_share": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_receptions": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_snaps": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_target_concentration": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_targets": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_te_target_share": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "team_wr_target_share": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "temp": {
+          "rows": 219,
+          "model_feature": false
+        },
+        "third_down_targets": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "total_tds": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "total_touches": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "total_yards": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "touch_share_norm": {
+          "rows": 81,
+          "model_feature": false
+        },
+        "touch_share_pct": {
+          "rows": 81,
+          "model_feature": false
+        },
+        "two_minute_targets": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "two_point_conversions": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "util_air_yards_share": {
+          "rows": 30,
+          "model_feature": false
+        },
+        "util_dropback_rate": {
+          "rows": 35,
+          "model_feature": false
+        },
+        "util_redzone_share": {
+          "rows": 284,
+          "model_feature": false
+        },
+        "util_rush_share": {
+          "rows": 286,
+          "model_feature": false
+        },
+        "util_snap_share": {
+          "rows": 339,
+          "model_feature": false
+        },
+        "util_target_share": {
+          "rows": 339,
+          "model_feature": false
+        },
+        "utilization_score": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "weather_score": {
+          "rows": 196,
+          "model_feature": false
+        },
+        "weather_temp_f": {
+          "rows": 219,
+          "model_feature": false
+        },
+        "weather_wind_mph": {
+          "rows": 219,
+          "model_feature": false
+        },
+        "weighted_opportunities": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "wind": {
+          "rows": 219,
+          "model_feature": false
+        },
+        "yards_per_attempt": {
+          "rows": 342,
+          "model_feature": false
+        },
+        "yards_per_carry": {
+          "rows": 339,
+          "model_feature": false
+        },
+        "yards_per_reception": {
+          "rows": 339,
+          "model_feature": false
+        },
+        "yards_per_target": {
+          "rows": 338,
+          "model_feature": false
+        },
+        "yards_per_td": {
+          "rows": 341,
+          "model_feature": false
+        }
+      },
+      "model_features_differing": [
+        "opp_fpts_allowed",
+        "opp_fpts_allowed_dvoa_adjusted_lag1",
+        "opp_fpts_allowed_s2d_lag1"
+      ],
+      "predictions": {
+        "predicted_points": {
+          "max_abs_diff": 1.3100254943488778,
+          "rows_differing": 231
+        },
+        "predicted_ppg": {
+          "max_abs_diff": 1.3100254943488778,
+          "rows_differing": 231
+        },
+        "expected_points": {
+          "max_abs_diff": 1.3100254943488778,
+          "rows_differing": 220
+        }
+      }
+    },
+    "verdict": {
+      "no_leak_detected": true,
+      "control_changed_predictions": true
+    }
+  }
+}
