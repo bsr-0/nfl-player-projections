@@ -15867,3 +15867,50 @@ changes the 2025 verdict (the live blend stays); each is open.
 - `data/experiments/selection_rule_checks_live_blend_20261008/` (checks built
   on leaked Plan A) and `selection_candidates_2025/plan_a_fold2.joblib` (the
   leaked fold-2 artifact) are superseded and can be deleted.
+
+## 2026-10-09 — Live serving path audited for same-week leakage; stale team and unplayed-week rows fixed
+
+Follow-up to the 2026-10-08 open-items entry (its first three "Leakage and
+correctness risks").
+
+**Audit (`scripts/audit_serving_leakage.py`, results in
+`data/experiments/serving_leakage_audit/`).**
+- *Poison test: passed* for 2025 weeks 6 and 14. Overwriting every post-game
+  outcome at or after the target week (database tables, and the downloaded
+  schedules' scores and measured weather) changed no feature and no
+  prediction; the control that poisons the last visible week changed 231 and
+  265 predictions. The 2025 replays of the live model are not contaminated by
+  same-week data.
+- *Truncation test: five model features differ* between a played-history frame
+  and a frame that also holds the target week and later:
+  `combine_score`, `qb_pressure_pct_roll3_mean`, `rb_yac_avg_roll3_mean`,
+  `rb_ybc_avg_roll3_mean`, `team_neutral_pass_rate_oe_roll3_mean`. Each is an
+  imputed fill (a median or mean over the whole frame), not a player's later
+  data; e.g. 2025 QB pressure is 0.0 with weeks 1-5 in the frame and 0.5 with
+  the season. Not a leak into replay or live serving (both truncate first), but
+  training fills see the future and differ from serving's. **Not fixed**:
+  changing fills changes model inputs and needs a retrain.
+- Not covered: sources treated as pre-game by design (lines, rest, depth
+  charts, rosters, kickoff-guarded injury reports).
+
+**Fixed.**
+- *Stale team.* `predict()` now puts each player on the club of his latest
+  roster snapshot (`DatabaseManager.get_roster_team_map`, ranked by
+  (season, week) across `weekly_rosters_v2` and `weekly_rosters`; CUT, RET,
+  TRD and free-agent rows skipped; replays use only snapshots before the target
+  week). Week 6 of 2025: 65 of 642 players moved, changing 57 columns (`team`,
+  `opponent`, `home_away`, opponent-strength features), **but no predicted point changed**; the
+  effect is on the displayed opponent and on the team grouping Plan A uses.
+  `get_current_team_map` (used for rookie stubs) still ranks by table, so a
+  rookie can still be placed on a week-1 team; not fixed.
+- *Unplayed-week rows.* `scripts/build_team_week_player_shares.py` leaves out
+  team-weeks that are scheduled, unscored and have no stats rows (30 team-weeks,
+  2026 week 5, today) and raises on a scored game with no stats rows.
+  `scripts/build_prekickoff_share_rows.py` refuses to forecast a week whose
+  predecessor has no stats at all.
+
+**Consequence for the forward test.** These edits change the pinned hashes of
+`src/predict.py`, `scripts/build_team_week_player_shares.py` and
+`scripts/build_prekickoff_share_rows.py`, so `run_forward_week.py` reports
+"lineage broken" until the lineage is re-frozen or the edits are dropped. That
+choice is the rule owner's; nothing has been re-frozen.
