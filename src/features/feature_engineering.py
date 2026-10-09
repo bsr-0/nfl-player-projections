@@ -382,6 +382,41 @@ def _load_depth_chart_asof_table() -> pd.DataFrame:
     return table
 
 
+def _with_target_week_rows(frame: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    """Add the not-yet-played rows a lag-1 lookup needs, for serving.
+
+    `frame` holds one row per (team, season, week) already played. A lag-1
+    feature of week W (`shift(1).expanding().mean()` per team-season) is stored
+    on the row of week W, and that row exists only after the game. Predicting an
+    upcoming game therefore joined on a missing key and the feature fell back
+    to 0.0 on every live row, while training and replays (whose target week is
+    already in the table) always had it.
+
+    `games` carries the (opponent, season, week) being predicted. For each
+    (opponent, season) whose last stored week is the week before, or two before
+    (a bye), an all-NaN row is appended at the predicted week, so the lag-1
+    expanding mean at that row is the mean of every earlier week -- the value a
+    played week's row holds. A week already present, a gap further back, or a
+    table more than one week stale is left alone and still defaults.
+    """
+    wanted = pd.DataFrame({
+        "team": games["opponent"].astype(object),
+        "season": pd.to_numeric(games["season"], errors="coerce"),
+        "week": pd.to_numeric(games["week"], errors="coerce"),
+    })
+    wanted = wanted[wanted.team.notna() & (wanted.team.astype(str) != "")]
+    wanted = wanted.dropna(subset=["season", "week"]).drop_duplicates()
+    if wanted.empty or frame.empty:
+        return frame
+    last = frame.groupby(["team", "season"], as_index=False).week.max().rename(columns={"week": "last_week"})
+    need = wanted.merge(last, on=["team", "season"], how="inner")
+    need = need[(need.week > need.last_week) & (need.week - need.last_week <= 2)]
+    if need.empty:
+        return frame
+    out = pd.concat([frame, need[["team", "season", "week"]]], ignore_index=True)
+    return out.sort_values(["team", "season", "week"], kind="stable").reset_index(drop=True)
+
+
 def _get_team_matchup_lookups(all_team_stats: pd.DataFrame, team_metrics: List[str]) -> Tuple:
     """Build (team_a_avgs, team_b_avgs, inseason_df, mom_df) from the full
     team_stats table, cached across calls within a process."""
@@ -2523,6 +2558,10 @@ class FeatureEngineer:
             df["opp_fpts_allowed_s2d_lag1"] = 0.0
             return df
 
+        # The predicted week has no row until it is played; add it so the lag-1
+        # value is computed (see _with_target_week_rows).
+        tds = _with_target_week_rows(tds, df)
+
         # Per-(team, season) expanding mean through week N-1.  Pattern lifted
         # from the canonical `season_expanding_ppg` at line ~381 but scoped
         # to (team, season) on the team_defense_stats frame rather than the
@@ -2692,6 +2731,10 @@ class FeatureEngineer:
         # faced that week. Deduplicate defensively (team_stats is already
         # one row per team-week by construction, but don't assume it).
         opp_link = opp_link.drop_duplicates(subset=["team", "season", "week"])
+        # The predicted week has no row until it is played; add it so the lag-1
+        # residual mean is computed (see _with_target_week_rows). The added
+        # row has no opponent and no residual of its own.
+        opp_link = _with_target_week_rows(opp_link, df)
 
         # Pass 2: attach the opponent's pre-game expected output to each
         # defense-week, compute the residual against what was actually
