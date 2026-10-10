@@ -55,6 +55,31 @@ def atomic_write(path: str | Path, writer: Callable[[Path], None]) -> Path:
     return path
 
 
+def _json_default(obj: Any) -> Any:
+    """Fallback for values the stdlib encoder rejects.
+
+    A numpy bool_/integer/floating/ndarray reaching this module crashes
+    ``json.dumps`` with a bare ``TypeError`` -- unlike a missing key or a
+    bad path, that isn't caught by anything downstream, so a metrics dict
+    built from a pandas/numpy comparison (e.g. ``arr.mean() > threshold``,
+    which is ``np.bool_`` even though it prints like a Python bool) can take
+    down a caller that only expected this write to fail on OSError/ValueError.
+    This mirrors the ad-hoc ``_NumpyEncoder`` / ``default=str`` handling
+    already duplicated at several call sites in src/models/train.py -- one
+    conversion here instead of one per caller.
+    """
+    import numpy as np
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+
 def atomic_write_json(payload: Any, path: str | Path, *, indent: int | None = 2) -> Path:
     """Atomically write ``payload`` as JSON.
 
@@ -66,7 +91,8 @@ def atomic_write_json(payload: Any, path: str | Path, *, indent: int | None = 2)
     """
     def _write(tmp: Path) -> None:
         with open(tmp, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, indent=indent, allow_nan=False))
+            handle.write(json.dumps(payload, indent=indent, allow_nan=False,
+                                    default=_json_default))
             handle.write("\n")
 
     return atomic_write(path, _write)

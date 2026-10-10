@@ -9,6 +9,7 @@ Infinity tokens that are not valid JSON.
 """
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -79,6 +80,37 @@ def test_json_output_is_valid_and_newline_terminated(tmp_path):
     text = target.read_text()
     assert text.endswith("\n")
     assert json.loads(text) == {"b": 2, "a": [1, 2, 3]}
+
+
+def test_json_writer_converts_numpy_scalars_and_arrays(tmp_path):
+    """A metrics dict built from a pandas/numpy comparison holds `np.bool_`
+    (e.g. `arr.mean() > threshold`), not `bool` -- stdlib `json` rejects it
+    with a bare `TypeError`. Observed for real: a walk-forward run crashed
+    writing its fold metrics after 15+ hours of tuning
+    (oof_production_fp_canonical_20260926_142212.log:8150,
+    "TypeError: Object of type bool_ is not JSON serializable").
+    """
+    target = tmp_path / "out.json"
+    payload = {
+        "beats_threshold": np.bool_(True),
+        "n_folds": np.int64(5),
+        "mae": np.float32(4.5),
+        "per_fold_mae": np.array([4.1, 4.9]),
+    }
+    atomic_write_json(payload, target)
+    assert json.loads(target.read_text()) == {
+        "beats_threshold": True,
+        "n_folds": 5,
+        "mae": pytest.approx(4.5),
+        "per_fold_mae": [pytest.approx(4.1), pytest.approx(4.9)],
+    }
+
+
+def test_json_writer_still_rejects_truly_unserializable_objects(tmp_path):
+    target = tmp_path / "out.json"
+    with pytest.raises(TypeError):
+        atomic_write_json({"bad": object()}, target)
+    assert not target.exists()
 
 
 def test_parquet_round_trips_without_the_index(tmp_path):
