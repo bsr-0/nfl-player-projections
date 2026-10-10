@@ -16014,3 +16014,34 @@ identical to the estimate made on a scratch copy. The Plan A share-row leakage
 audit still passes (2025 weeks 6 and 14). Plan A's own 2026 history also reads
 `redzone_targets`, `neutral_*` and similar, so its live inputs move toward the
 2025 training data too. Items 2 and 5 of the entry above remain open.
+
+**Item 2 fixed 2026-10-09 (data and a new loader; no pinned file changed, no re-freeze).**
+`scripts/refresh_live_inputs.py` appends the rows the weekly refresh never loaded:
+`weekly_pfr` (1,686 rows, weeks 1-4), `ngs_passing/receiving/rushing` (130/293/128),
+`snap_counts` (5,970) for 2026, and `seasonal_pfr` for 2025 (934), which the
+`*_prior` features of 2026 read. Each table is a direct dump of an nflverse
+release; before writing, the script re-fetches a stored season (2025; 2024 for
+seasonal PFR) and requires every stored row to be reproduced with no cell missing
+on one side only. `weekly_pfr` reproduces exactly; NGS, snap counts and seasonal
+PFR have revised values (3,691 / 6,227 / 2,415 NGS cells, 23 snap, 37 seasonal):
+nflverse recomputes them after the fact, so a row appended now can differ a
+little from the same row re-fetched later. Existing rows are never changed. Only
+weeks already in `player_weekly_stats` are loaded and never the week-0 season
+aggregates (unused by the model: poisoning them changes no prediction). Seasonal
+PFR loads finished seasons only. Idempotent (second pass adds nothing); backup
+`data/backups/nfl_data_pre_live_inputs_20261009_195134.db`. It is now step 1b of
+`scripts/forward_week_job.sh` (also committed). `utilization_scores` is write-only
+(no reader) and was left alone; `game_weather` and `team_week_player_shares` are
+unchanged on purpose (observed weather; the pre-kickoff builder works around the
+stored shares table).
+Effect on the live incumbent (measured on a scratch copy, same rows as the real
+database): 206 of 706 players move (mean 0.06 points, max 1.6, 52 by more than
+0.25), QBs most (mean 0.22) because the team sack-rate and run-block features
+feed them; zero/NaN share of `team_sack_rate_allowed_roll3_mean` 0.43 -> 0.05
+(replay 0.12). Against a matched 2025 week 5 replay, live model features that
+differ by more than 10 points in zero/NaN rate went from 8 to 6, and the six left
+are the unfixable ones: observed weather and the unpublished 2026 participation
+and personnel data. Loading snap counts changes no settled canonical key, team or
+position (the runner's check) but sets `participation_state` for 1,271 2026 rows
+from unknown to known. Plan A share-row leakage audit still passes.
+Remaining open: item 5 (stale 2026 draft identity).
