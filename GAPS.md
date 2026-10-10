@@ -16158,3 +16158,16 @@ refresh would have hidden the rest of that week from both reload triggers until
 the next Thursday; `newest_complete_week` now discounts it
 (`tests/test_current_season_staleness.py`). `auto_refresh` itself was not run in
 the rehearsal for that reason, so its first real run with these fixes is Tuesday.
+
+**Plan A + B and Plan B closed (2026-10-10).**
+Plan B only allocates a team total to players; it has no team totals of its own,
+so it has no standalone points result. Its points result is the Plan A + B arm
+(Plan B shares on Plan A team totals): on the leak-free rerun the selector took
+Plan B's allocation for rushing, receiving and passing yards only, for -0.023
+pooled MAE against corrected Plan A, nearly all of it QB passing yards (-0.231);
+RB, WR and TE flat. Decision: no general serving path, and the narrower QB
+passing-yards-only path is dropped too. Its 2025-fold gain (-0.05) is below the
+selection rule's 0.10 minimum effect, and adding it mid-window would need its own
+serving path, leakage check and a rule amendment. Revisit only after the forward
+window (2026 weeks 6-13). Plan A and the unblended served model remain
+forward-test candidates; nothing else about them is open.
