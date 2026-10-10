@@ -16171,3 +16171,15 @@ selection rule's 0.10 minimum effect, and adding it mid-window would need its ow
 serving path, leakage check and a rule amendment. Revisit only after the forward
 window (2026 weeks 6-13). Plan A and the unblended served model remain
 forward-test candidates; nothing else about them is open.
+
+**Game outcome models served stale 2026 inputs from week 2 on (found 2026-10-10).**
+The game path builds form and Elo from scored schedule rows and reads four of
+the `team_stats` columns repaired on 2026-10-09; with only week 1 scored, every
+2026 game prediction from week 2 on saw one week of the season and flagged
+itself a cold start. On week 5 the repair moves win probabilities by 0.04-0.06
+on average (XGB flips 4 of 15 winners) and ridge margins by 1.3 points (4 ATS
+picks flip). Replayed on the 33 games played in weeks 3-5, the fixed and stale
+inputs are not distinguishable (paired Brier and margin MAE intervals span zero)
+and neither beats the Vegas line. Details:
+`data/experiments/game_outcome_data_repair_20261010/`. The accuracy review in
+CLAUDE.md row 9 is still open.
