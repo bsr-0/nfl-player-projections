@@ -5,6 +5,9 @@
 #   1. load last week's stats, rosters and schedule (the site refresh's step 1)
 #   1b. load weekly PFR, NGS, snap counts and prior-season PFR for the weeks just
 #       loaded (scripts/refresh_live_inputs.py; the model reads them)
+#   1c. replace draft-feed placeholder ids in draft_picks_v2 with the official GSIS
+#       ids nflverse has published (scripts/refresh_draft_identity.py; rookies who
+#       debuted otherwise have no draft capital)
 #   2. load this week's injury reports (step 2; the live forecast reads them)
 #   3. scripts/run_forward_week.py run -- refuses if the lineage broke, the
 #      week is outside 2026 weeks 6-13, the deadline passed, or the week is
@@ -33,6 +36,8 @@ fi
   "$PY" -m src.data.auto_refresh || echo "auto_refresh exited $?"
   echo "== $(date) refresh_live_inputs"
   "$PY" scripts/refresh_live_inputs.py --seasons 2026 --write || echo "refresh_live_inputs exited $?"
+  echo "== $(date) refresh_draft_identity"
+  "$PY" scripts/refresh_draft_identity.py --seasons 2026 --write || echo "refresh_draft_identity exited $?"
   echo "== $(date) backfill_injuries"
   "$PY" scripts/backfill_injuries.py --seasons 2026 2026 || echo "backfill_injuries exited $?"
   echo "== $(date) run_forward_week run"

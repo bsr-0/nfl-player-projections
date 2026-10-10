@@ -16045,3 +16045,42 @@ and personnel data. Loading snap counts changes no settled canonical key, team o
 position (the runner's check) but sets `participation_state` for 1,271 2026 rows
 from unknown to known. Plan A share-row leakage audit still passes.
 Remaining open: item 5 (stale 2026 draft identity).
+
+**Item 5 fixed 2026-10-09 (database table and a new loader; no pinned file changed, no re-freeze).**
+`scripts/refresh_draft_identity.py` replaced the draft-feed placeholder ids in
+`draft_picks_v2` with the official GSIS ids nflverse now publishes: 254 of the
+2026 class's 257 picks (79 of 80 QB/RB/WR/TE; Jam Miller, 7/245, has none yet).
+Rows are matched on (season, round, pick), a match whose position or PFR id
+disagrees is skipped, an existing GSIS id is never overwritten, and the UPDATE
+itself refuses to touch one (`tests/test_refresh_draft_identity.py`). Backup
+`data/backups/nfl_data_pre_draft_identity_20261009_211045.db`; a second pass finds
+nothing. It is step 1c of `scripts/forward_week_job.sh`, so ids for players who
+debut later arrive as nflverse publishes them. Earlier classes already agreed
+with upstream (2018-2025: one conflict, 2019 pick 11, left alone).
+Effect: before this, all 49 debuted 2026 skill rookies (and one fullback) joined
+no draft row and were served as undrafted (`draft_round` 8, `is_undrafted` 1;
+J. Love, pick 3, drew the undrafted prior 5.20 instead of 13.13). On the live
+frame (706 players) the incumbent moves for 39 players (mean +0.48 among them,
+max +3.13; Love 6.65 -> 9.78) and the unblended model for the same 39 (mean
++0.92, max 5.48); Plan A and rolling-3 do not read draft data and are unchanged.
+`data/draft_picks.parquet` (pinned) still holds the placeholders; the served code
+reads it only for the combine PFR-to-GSIS map, where `draft_picks_v2` and
+`get_pfr_to_gsis_map` override it, so it was left alone. `get_current_team_map`
+(table-priority ranking) is also unchanged: it only places rookies on the
+drafted-rookie stub path, which is still empty (every 2026 draftee in `players`
+has stats, and the others are not in `players`).
+
+**Dry run on the final data (`data/experiments/selection_forward_2026/data_refresh_dry_run.md`).**
+Items 1, 2 and 5 were never dry-run together. On the final data the run exits 0
+with the lineage intact, canonical settled rows unchanged and the same 661
+listed players. Against the Amendment 3 dry run: incumbent 239 rows changed (mean
+0.109, max 3.13), unblended 239 (0.204, 5.48), rolling-3 0, and **Plan A 503 rows
+(mean 0.391, max 4.23)**. Re-running Plan A on the database before each step
+shows all of the Plan A change comes from item 1 (PBP columns repaired; Plan A
+reads `redzone_targets`, `neutral_*` and similar): item 2 and item 5 move it 0
+rows. That item 1 effect on Plan A was expected in direction but not measured when
+item 1 was fixed.
+
+All five open items of the 2026-10-09 live-versus-replay entry are now resolved
+or unfixable on our side (weather is observed in replays; 2026 participation and
+personnel data are unpublished).
