@@ -35,13 +35,13 @@
 
 7. SIM MARGINALS
    Status ........ LIVE
-   Metric ........ CRPS 3.09; coverage 0.49 / 0.79 (50% / 80%)
-   Open .......... none
+   Metric ........ CRPS 3.09; cov 0.49 / 0.79 (2024-25 backtest); 2026 wks 1-4 (n=1,431): 3.20, 0.49 / 0.77
+   Open .......... site centres draws on the pace blend but calibration is on unblended residuals: team/game total 80% cov 0.56 / 0.52 (10-10)
 
 8. CORRELATION LAYER
    Status ........ LIVE, UNPROVEN
-   Metric ........ stack CRPS 9.39 vs 9.48 (not significant)
-   Open .......... needs more 2026 weeks
+   Metric ........ stack CRPS 9.39 vs 9.48 (not significant); 2026 wks 1-4: 9.77 vs 9.90 (-0.13, ~2.8 se)
+   Open .......... same direction on 2026; needs the forward weeks to call it proven
 
 9. GAME OUTCOME MODELS
    Status ........ LIVE; matches but does not beat the Vegas line (10-10 walk-forward, 2022-25 + 2026 wks 1-4)

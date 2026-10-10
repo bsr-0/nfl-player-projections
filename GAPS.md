@@ -16193,3 +16193,21 @@ random forest are weaker. Margin MAE trails the closing line for every model
 52-54%. No edge over the market shown. The CLAUDE.md row 9 accuracy review is
 done; what remains is whether the site should present these as picks at all.
 Details and logs in `data/experiments/game_outcome_data_repair_20261010/`.
+
+**Simulation and correlation layer on 2026 weeks 1-4 (2026-10-10).** The
+10-07 backtest's 3.09 CRPS and 0.49/0.79 coverage are 98% 2024-25 (292 of 12,456
+player-games are 2026). Rescored on every 2026 player-game through week 4 on the
+repaired database (1,431 rows, calibration fitted before 2025 week 22): the
+marginals hold (unblended-centred CRPS 3.20, coverage 0.49/0.77; 2024-25 weeks
+2-5: 3.13, 0.48/0.79) and the role-factor copula improves the stack CRPS by 0.134
+(about 2.8 se) and team and game totals less. **Finding:** the site's simulation
+is centred on the pace-blended prediction while its calibration is fitted on the
+unblended model's play-conditional residuals. The blend is a per-scheduled-game
+expectation (the Step 8 pace discounts missed games), so for players who played
+it runs 22% under per game (131.5 vs 168.5 points; unblended 161.2) and the
+simulated team and game totals are under-covered (80% intervals hold 56% of team
+and 52% of game totals). Not changed: the simulation generator is not a pinned
+file, but which prediction the site should present (expected value including
+availability, or the conditional-on-playing number the intervals are built for)
+is a product decision. Details in
+`data/experiments/simulation_2026_check_20261010/`.

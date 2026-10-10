@@ -1,0 +1,32 @@
+
+centred on predicted_points
+                          crps  cov50  cov80
+kind       mode                             
+game_total independent  31.334  0.203  0.516
+           role_factor  30.345  0.328  0.625
+           team_factor  30.667  0.297  0.562
+stack      independent  10.016  0.397  0.651
+           role_factor   9.946  0.476  0.698
+           team_factor  10.001  0.405  0.667
+team_total independent  17.723  0.297  0.555
+           role_factor  17.411  0.344  0.641
+           team_factor  17.535  0.328  0.625
+  stack      role_factor - independent CRPS = -0.070 (se 0.049, n=126)
+  team_total role_factor - independent CRPS = -0.312 (se 0.079, n=128)
+  game_total role_factor - independent CRPS = -0.989 (se 0.235, n=64)
+
+centred on predicted_points_model
+                          crps  cov50  cov80
+kind       mode                             
+game_total independent  20.435  0.453  0.625
+           role_factor  20.100  0.547  0.750
+           team_factor  20.187  0.531  0.734
+stack      independent   9.900  0.341  0.667
+           role_factor   9.766  0.413  0.706
+           team_factor   9.863  0.349  0.690
+team_total independent  13.376  0.430  0.703
+           role_factor  13.295  0.500  0.812
+           team_factor  13.290  0.445  0.781
+  stack      role_factor - independent CRPS = -0.134 (se 0.047, n=126)
+  team_total role_factor - independent CRPS = -0.080 (se 0.077, n=128)
+  game_total role_factor - independent CRPS = -0.335 (se 0.222, n=64)
