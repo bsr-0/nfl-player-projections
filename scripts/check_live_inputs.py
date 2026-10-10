@@ -20,7 +20,7 @@ worst week of 2020-2025 and well below the broken state (every team):
     high_leverage_touches      0.0%             25%
     redzone_targets           18.8%             50%
 
-Missing 2026 weekly PFR / NGS / snap-count rows for the newest week and a draft
+Missing 2026 weekly PFR / NGS / snap-count / participation rows for the newest week and a draft
 table without official ids are reported as warnings only: those lag upstream
 for a day or two and degrade a forecast less than they are worth missing a
 deadline for.
@@ -46,7 +46,9 @@ LIMITS = {  # max share of teams with a zero weekly sum
     "neutral_targets": 0.25, "neutral_rushes": 0.25, "third_down_targets": 0.25,
     "high_leverage_touches": 0.25, "redzone_targets": 0.50,
 }
-WEEKLY_TABLES = ["weekly_pfr", "snap_counts", "ngs_passing", "ngs_receiving", "ngs_rushing"]
+WEEKLY_TABLES = ["weekly_pfr", "snap_counts", "ngs_passing", "ngs_receiving", "ngs_rushing",
+                 # nflverse participation; empty for 2026 until it is published
+                 "team_personnel_stats", "pbp_pass_participation"]
 
 
 def zero_share_by_week(con: sqlite3.Connection, season: int) -> pd.DataFrame:

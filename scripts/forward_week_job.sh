@@ -8,6 +8,8 @@
 #   1c. replace draft-feed placeholder ids in draft_picks_v2 with the official GSIS
 #       ids nflverse has published (scripts/refresh_draft_identity.py; rookies who
 #       debuted otherwise have no draft capital)
+#   1d. load 2026 personnel groupings and pass-play participation once nflverse
+#       publishes them (scripts/refresh_participation.py; until then a no-op)
 #   2. load this week's injury reports (step 2; the live forecast reads them)
 #   2b. scripts/check_live_inputs.py -- fails if the loaded weeks' team-level PBP
 #       columns read zero (Plan A would silently forecast a run-heavy league);
@@ -41,6 +43,8 @@ fi
   "$PY" scripts/refresh_live_inputs.py --seasons 2026 --write || echo "refresh_live_inputs exited $?"
   echo "== $(date) refresh_draft_identity"
   "$PY" scripts/refresh_draft_identity.py --seasons 2026 --write || echo "refresh_draft_identity exited $?"
+  echo "== $(date) refresh_participation"
+  "$PY" scripts/refresh_participation.py --seasons 2026 --write || echo "refresh_participation exited $?"
   echo "== $(date) backfill_injuries"
   "$PY" scripts/backfill_injuries.py --seasons 2026 2026 || echo "backfill_injuries exited $?"
   echo "== $(date) check_live_inputs"

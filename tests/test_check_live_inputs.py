@@ -1,6 +1,6 @@
 import sqlite3
 
-from scripts.check_live_inputs import LIMITS, check
+from scripts.check_live_inputs import LIMITS, WEEKLY_TABLES, check
 
 TEAMS = [f"T{i:02d}" for i in range(32)]
 
@@ -17,7 +17,7 @@ def _db(zero_weeks=(), zero_share=1.0, with_tables=True, draft_ids=True):
                 f"INSERT INTO player_weekly_stats VALUES (2026, ?, ?, ?, {', '.join('?' * len(LIMITS))})",
                 [(week, team, f"{team}-{k}", *([v] * len(LIMITS))) for k in range(2)])
     if with_tables:
-        for t in ("weekly_pfr", "snap_counts", "ngs_passing", "ngs_receiving", "ngs_rushing"):
+        for t in WEEKLY_TABLES:
             con.execute(f"CREATE TABLE {t} (season INT, week INT)")
             con.executemany(f"INSERT INTO {t} VALUES (2026, ?)", [(1,), (2,), (3,)])
     con.execute("CREATE TABLE draft_picks_v2 (player_id TEXT, draft_season INT)")

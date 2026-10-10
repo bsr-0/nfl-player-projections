@@ -16104,3 +16104,24 @@ there: the script assigned zsh's read-only `status`, so it exited after the runn
 and never sent either notification. Renamed to `rc`; success, check failure and
 "already written" now notify as intended (`tests/test_check_live_inputs.py`
 covers the check; the job shell was exercised with stubs, not under launchd).
+
+**2026 participation and personnel: unfixable today, and the loaders would have frozen (2026-10-09).**
+The "PBP participation unavailable (NameError)" line is nfl_data_py's broken error
+handler around an HTTP 404 (handled by `import_pbp`): nflverse has still not
+published `pbp_participation_2026.parquet` (2025's is there), and the 2026 PBP
+carries no personnel columns, so `team_pct_11/12/13/21_personnel_roll3_mean` and
+`pbp_pass_play_participation_pct_roll3_mean` cannot be derived from anything we
+have. Plan A does not read them; the served model does. Three things would have
+kept them stale even after publication:
+`ensure_team_personnel_stats()` (every live predict) fetches only seasons with no
+rows, so the first week found would be the last; `get_*_from_pbp` caches a season
+in data/raw on first success and returns the cache from then on; and nothing in the
+live path loads `pbp_pass_participation`. `scripts/refresh_participation.py`
+(step 1d of `forward_week_job.sh`) re-derives the season without the cache and
+upserts played weeks (both tables have UNIQUE keys; team-weeks under 20 plays, 10
+pass plays, are left out as partly published games). Until the file exists it is a
+no-op. `--validate 2025` reproduces all 570 stored personnel team-weeks and all
+9,984 participation player-weeks key for key (6 and 86 rows have revised values).
+`check_live_inputs.py` warns while the newest week has no rows. Changing the live
+predictor's skip would need `src/utils/database.py`, which is pinned; the script
+avoids it.
