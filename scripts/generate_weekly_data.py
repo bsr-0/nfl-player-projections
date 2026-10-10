@@ -187,7 +187,11 @@ KEEP = ["player_id", "name", "position", "team", "opponent", "home_away",
         # fabricated into the site JSON.
         "target_share", "rush_share", "pass_share", "usage_share",
         "participation_prob", "will_play_probability",
-        "actual_points"]
+        "actual_points",
+        # Provenance. "published": the row as committed before its game's
+        # kickoff (src/evaluation/published_record.py), scored against the
+        # result once final; "live": a game not yet kicked off.
+        "source", "published_at", "published_commit", "published_mode", "final"]
 
 
 def completed_games(season: int) -> int:
@@ -259,38 +263,61 @@ def _clean(df: pd.DataFrame) -> list:
     cols = [c for c in KEEP if c in df.columns]
     out = df[cols].copy()
     for c in out.columns:
-        if pd.api.types.is_numeric_dtype(out[c]):
+        if pd.api.types.is_numeric_dtype(out[c]) and not pd.api.types.is_bool_dtype(out[c]):
             out[c] = out[c].astype(float).round(2)
     return json.loads(out.to_json(orient="records"))
 
 
 def build_weekly_model(season, weeks, top_n):
-    from src.predict import NFLPredictor
-    p = NFLPredictor()
-    if not p.initialize():
-        print("no trained models; run `python -m src.models.train` first")
-        return [], {}
-    written, counts, results = [], {}, {}
-    for wk in weeks:
-        df = p.predict(n_weeks=1, position=None, top_n=top_n, as_of=(season, wk))
-        if df.empty:
-            continue
-        if "opponent" in df.columns:   # no opponent = bye, no game to project
-            df = df[df["opponent"].astype(str).str.strip().ne("")]
-        if df.empty:
-            continue
-        actual = actual_points(season, wk)
-        if len(actual):
-            df["actual_points"] = df["player_id"].map(actual)
-            res = week_result(df)
-            if res:
-                results[str(wk)] = res
-        df = df.sort_values("predicted_points", ascending=False)
-        (OUT_DIR / f"weekly_{season}_wk{wk}.json").write_text(json.dumps(_clean(df)))
-        written.append(wk); counts[str(wk)] = len(df)
-        played = f", played: MAE {results[str(wk)]['mae']}" if str(wk) in results else ""
-        print(f"  wk{wk}: {len(df):4d} players, median "
-              f"{df['predicted_points'].median():.1f}{played}", flush=True)
+    """Write one file per week: for every game that has kicked off, the rows
+    as published before its kickoff (git history; never a later replay) with
+    actual points once final; for games not yet started, a live prediction.
+
+    Weeks with any kicked-off game are always rewritten, whatever `weeks`
+    asks for, so a played week can never be left holding a hindsight replay.
+    Returns (written weeks, row counts, per-week honesty summaries).
+    """
+    from src.evaluation.published_record import kickoff_times, player_week
+
+    now = pd.Timestamp.now(tz="UTC")
+    con = sqlite3.connect(DB_PATH)
+    try:
+        games = kickoff_times(season, con)
+        started = sorted(int(w) for w in games.loc[games["kickoff"] <= now, "week"].unique())
+        todo = sorted(set(weeks) | set(started))
+        predictor = None
+        written, counts, results = [], {}, {}
+        for wk in todo:
+            published, summary = player_week(con, season, wk, games, now)
+            if summary:
+                results[str(wk)] = summary
+            upcoming = games[(games["week"] == wk) & (games["kickoff"] > now)]
+            parts = []
+            if not published.empty:
+                parts.append(published.assign(source="published"))
+            if not upcoming.empty:
+                if predictor is None:
+                    from src.predict import NFLPredictor
+                    predictor = NFLPredictor()
+                    if not predictor.initialize():
+                        print("no trained models; run `python -m src.models.train` first")
+                        return [], {}, {}
+                df = predictor.predict(n_weeks=1, position=None, top_n=top_n, as_of=(season, wk))
+                if not df.empty and "opponent" in df.columns:   # no opponent = bye
+                    df = df[df["opponent"].astype(str).str.strip().ne("")]
+                teams = set(upcoming[["home_team", "away_team"]].to_numpy().ravel())
+                if not df.empty:
+                    parts.append(df[df["team"].isin(teams)].assign(source="live"))
+            if not parts:
+                continue
+            df = pd.concat(parts, ignore_index=True).sort_values("predicted_points", ascending=False)
+            (OUT_DIR / f"weekly_{season}_wk{wk}.json").write_text(json.dumps(_clean(df)))
+            written.append(wk); counts[str(wk)] = len(df)
+            n_pub = int((df["source"] == "published").sum())
+            played = f", published-and-final MAE {summary['mae']} on {summary['n']}" if summary and summary.get("mae") is not None else ""
+            print(f"  wk{wk}: {len(df):4d} players ({n_pub} published before kickoff){played}", flush=True)
+    finally:
+        con.close()
     return written, counts, results
 
 
@@ -316,23 +343,36 @@ def main() -> int:
         return 1
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for stale in OUT_DIR.glob(f"weekly_{season}_wk*.json"):
-        stale.unlink()
-
     written, counts, results = build_weekly_model(season, weeks, args.top_n)
 
     if not written:
         print("nothing written")
         return 1
 
+    # Weeks outside this run keep their files; the meta describes all of them.
+    on_disk = sorted(int(f.stem.split("_wk")[1]) for f in OUT_DIR.glob(f"weekly_{season}_wk*.json"))
+    for wk in on_disk:
+        if str(wk) not in counts:
+            counts[str(wk)] = len(json.loads((OUT_DIR / f"weekly_{season}_wk{wk}.json").read_text()))
+    from src.evaluation.published_record import season_player_summary
+    published_frames = []
+    for wk in on_disk:
+        rows = pd.DataFrame(json.loads((OUT_DIR / f"weekly_{season}_wk{wk}.json").read_text()))
+        if "source" in rows.columns:
+            published_frames.append(rows[rows["source"] == "published"])
+    track_record = season_player_summary(published_frames)
+
     latest = latest_serving_backtest()
     meta = {
         "season": int(season),
         "mode": mode,
-        "weeks": written,
-        "counts": counts,
-        # Per played week: served-number accuracy against real results.
+        "weeks": on_disk,
+        "counts": {str(w): counts[str(w)] for w in on_disk},
+        # Per week with a kicked-off game: the projections as published
+        # before kickoff against real results, plus what could not be scored
+        # (src/evaluation/published_record.py).
         "week_results": results,
+        "track_record": track_record,
         "completed_game_rows": int(played),
         "has_intervals": True,
         "pace_blend_kappa": PACE_BLEND_KAPPA,
@@ -344,7 +384,7 @@ def main() -> int:
                   f"(w = g / (g + {PACE_BLEND_KAPPA:g}))"),
     }
     (OUT_DIR / "weekly_meta.json").write_text(json.dumps(meta, indent=2))
-    print(f"\nmode={mode}, wrote weeks {written[0]}-{written[-1]} for {season}")
+    print(f"\nmode={mode}, wrote weeks {written} for {season}; meta lists {on_disk[0]}-{on_disk[-1]}")
     return 0
 
 

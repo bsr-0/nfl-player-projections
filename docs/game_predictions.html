@@ -12,12 +12,11 @@
   build_prediction_rows() + the saved joblib artifacts in data/models/ --
   the same serving path as scripts/predict_upcoming_games.py.
 
-  Deliberately shows NO predicted-vs-actual comparison for played weeks --
-  unlike weekly.html, these models have no as_of replay mode (they're
-  trained once on all history and saved), so re-scoring an already-played
-  game would be in-sample, not a real prediction. All accuracy claims here
-  come from the models' own walk-forward backtest metadata instead, which
-  IS honest held-out performance -- see the note below the table.
+  Played games show the prediction exactly as committed to the repository
+  before kickoff (git history, src/evaluation/published_record.py) next to
+  the final score -- never a re-run: the saved models are trained once on all
+  history, so re-scoring a played game would be in-sample. The walk-forward
+  backtest metadata remains the long-run accuracy claim.
 
   Honest headline, per GAPS.md: these models track the market closely but
   do not clearly beat it. Pooled walk-forward accuracy for win/loss ties
@@ -78,6 +77,15 @@
   .acctable { border-collapse:collapse; margin-top:6px; }
   .acctable th, .acctable td { padding:4px 12px 4px 0; border:none; white-space:nowrap; }
   .acctable th { position:static; text-transform:none; letter-spacing:0; font-size:11px; }
+  .banner.result { background:#152219; border-color:#25452c; color:#c6e6cc; }
+  .banner.result ul { margin:6px 0 0; padding-left:18px; }
+  .hit { color:var(--good); font-weight:600; } .miss { color:var(--warn); font-weight:600; }
+  .push { color:var(--dim); }
+  .record { margin:12px 24px 0; max-width:900px; font-size:13px; color:var(--dim); }
+  .record summary { cursor:pointer; color:var(--fg); }
+  .record table { width:auto; margin-top:8px; }
+  .record th, .record td { padding:4px 14px 4px 0; border-bottom:1px solid var(--line); }
+  .record th { position:static; background:none; }
 </style>
 
 <header>
@@ -91,6 +99,8 @@
   </nav>
 </header>
 <div id="banner"></div>
+<div id="resultbanner"></div>
+<details class="record" id="trackrecord"></details>
 
 <div class="controls">
   <div class="ctl"><label>Week</label>
@@ -124,6 +134,7 @@
       <th class="num">Market total</th>
       <th class="num sortable" data-key="_total" title="sort by predicted total">Predicted total</th>
       <th class="num sortable" data-key="_ouedge" title="sort by edge over market total">O/U pick</th>
+      <th class="num result-col">Final</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
@@ -142,15 +153,15 @@
   being scored -- see <code>src/evaluation/game_outcome_backtester.py</code>
   / <code>game_margin_backtester.py</code>): <span id="accline">—</span></p>
 
-  <p><strong>Why no "actual" column for played weeks.</strong> Unlike the
-  weekly player-projection page, these models are trained once on all
-  available history and saved -- they don't have a mode that replays what
-  they would have known before a specific past week. Re-scoring an
-  already-played game with the saved model would be in-sample (that game
-  was part of its training data), which would overstate accuracy if shown
-  here as if it were a real prediction. This page only ever shows
-  scheduled-but-unplayed games; all accuracy claims come from the
-  walk-forward backtest above instead.</p>
+  <p><strong>Played games.</strong> Once a game kicks off, its row is the
+  prediction as it was committed to this project's repository before kickoff,
+  taken from the repository's history -- not re-run afterwards (the saved
+  models were trained on all history, so a re-run would have seen the game).
+  The market spread and total shown are the ones that row was published
+  against. Final games add the score and whether each call was right: the
+  winner (for the chosen win/loss model), the spread pick and the over/under
+  pick (for the chosen margin/total model). Games with no prediction committed
+  before kickoff are listed in the track record, never filled in later.</p>
 
   <p>Source: <code>docs/data/game_predictions_{season}_wk{N}.json</code>,
   written by <code>scripts/generate_game_predictions_data.py</code>.</p>
@@ -174,6 +185,15 @@ function annotate(rows) {
     r._ouedge = (r._total != null && r.total_line != null) ? r._total - r.total_line : null;
     r._atspick = r._atsedge == null || r._atsedge === 0 ? null : (r._atsedge > 0 ? r.home_team : r.away_team);
     r._oupick = r._ouedge == null || r._ouedge === 0 ? null : (r._ouedge > 0 ? "OVER" : "UNDER");
+    r._isfinal = !!r.final && r.home_score != null && r.away_score != null;
+    if (r._isfinal) {
+      const m = r.home_score - r.away_score, t = r.home_score + r.away_score;
+      r._winres = (m === 0 || r._homeprob == null) ? null : ((r._homeprob >= 0.5) === (m > 0) ? "hit" : "miss");
+      r._atsres = (r._atspick == null || r.spread_line == null) ? null
+        : (m === r.spread_line ? "push" : (Math.sign(r._margin - r.spread_line) === Math.sign(m - r.spread_line) ? "hit" : "miss"));
+      r._oures = (r._oupick == null || r.total_line == null) ? null
+        : (t === r.total_line ? "push" : (Math.sign(r._total - r.total_line) === Math.sign(t - r.total_line) ? "hit" : "miss"));
+    }
   }
   return rows;
 }
@@ -194,6 +214,9 @@ function render() {
     th.classList.toggle("asc", th.dataset.key === key && SORT.asc);
   });
 
+  const anyFinal = rows.some(r => r._isfinal || r.source === "published");
+  document.querySelectorAll(".result-col").forEach(el => el.style.display = anyFinal ? "" : "none");
+  weekResultBanner(rows);
   $("rows").innerHTML = rows.map(r => {
     const p = r._homeprob;
     const pct = p == null ? 50 : Math.round(p * 100);
@@ -207,18 +230,97 @@ function render() {
     const diffCell = (v, big) => v == null ? "" :
       `<div class="diff${Math.abs(v) >= big ? " hi" : ""}">${v > 0 ? "+" : ""}${v.toFixed(1)} vs market</div>`;
 
+    const mark = res => res == null ? "" : `<div class="diff ${res}">${res === "hit" ? "✓ right" : res === "miss" ? "✗ wrong" : "push"}</div>`;
+    const finalCell = !anyFinal ? "" : `<td class="num result-col">${r._isfinal
+        ? `${r.away_team} ${r.away_score} – ${r.home_team} ${r.home_score}`
+        : (r.source === "published" ? "in progress" : "—")}</td>`;
     return `<tr>
       <td class="game">${r.away_team} @ ${r.home_team}
-        ${p != null ? `<div class="diff">favors <span class="fav">${favTeam}</span></div>` : ""}</td>
+        ${p != null ? `<div class="diff">favors <span class="fav">${favTeam}</span></div>` : ""}${mark(r._winres)}</td>
       <td class="probcell">${bar}</td>
       <td class="num">${fmt1(r.spread_line)}</td>
       <td class="num">${fmt1(r._margin)}${diffCell(marginDiff, 3)}</td>
-      <td class="num">${r._atspick ? `<span class="pick">${r._atspick}</span>${diffCell(r._atsedge, 3)}` : "—"}</td>
+      <td class="num">${r._atspick ? `<span class="pick">${r._atspick}</span>${diffCell(r._atsedge, 3)}${mark(r._atsres)}` : "—"}</td>
       <td class="num">${fmt1(r.total_line)}</td>
       <td class="num">${fmt1(r._total)}${diffCell(totalDiff, 4)}</td>
-      <td class="num">${r._oupick ? `<span class="pick">${r._oupick}</span>${diffCell(r._ouedge, 4)}` : "—"}</td>
+      <td class="num">${r._oupick ? `<span class="pick">${r._oupick}</span>${diffCell(r._ouedge, 4)}${mark(r._oures)}` : "—"}</td>
+      ${finalCell}
     </tr>`;
   }).join("");
+}
+
+const WL_LABEL = { logistic: "Logistic", xgb: "XGBoost", rf: "Random forest" };
+const fmtWhen = iso => iso ? new Date(iso).toLocaleString(undefined,
+  { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "—";
+
+function tally(rows, key) {
+  const hit = rows.filter(r => r[key] === "hit").length, miss = rows.filter(r => r[key] === "miss").length;
+  const push = rows.filter(r => r[key] === "push").length;
+  return hit + miss ? `${hit}–${miss}${push ? `–${push}` : ""} (${Math.round(100 * hit / (hit + miss))}%)` : "—";
+}
+
+function weekResultBanner(rows) {
+  const el = $("resultbanner");
+  const res = META.week_results && META.week_results[String(WEEK)];
+  const fin = rows.filter(r => r._isfinal);
+  if (!res) { el.innerHTML = ""; return; }
+  const items = [];
+  if ((res.snapshots || []).length)
+    items.push("Committed " + res.snapshots.map(sn => `${fmtWhen(sn.published_at)} (${sn.games.length} game${sn.games.length === 1 ? "" : "s"}, commit <code>${sn.commit}</code>)`).join(", ")
+      + ". Each game uses the last version committed before its own kickoff.");
+  if (fin.length) {
+    const wl = $("wlmodel").value, reg = $("regmodel").value;
+    const decided = fin.filter(r => r.home_score !== r.away_score);
+    const fav = decided.filter(r => r.spread_line != null && r.spread_line !== 0);
+    const favHit = fav.filter(r => (r.spread_line > 0) === (r.home_score > r.away_score)).length;
+    const brier = decided.length ? decided.reduce((a, r) => a + (r._homeprob - (r.home_score > r.away_score ? 1 : 0)) ** 2, 0) / decided.length : null;
+    const mae = (f) => fin.reduce((a, r) => a + Math.abs(f(r)), 0) / fin.length;
+    items.push(`<strong>Winners: ${WL_LABEL[wl]} ${tally(decided, "_winres")}</strong>, market favorite
+      ${fav.length ? `${favHit}–${fav.length - favHit} (${Math.round(100 * favHit / fav.length)}%)` : "—"}; Brier ${brier == null ? "—" : brier.toFixed(3)} (lower is better; 0.25 = coin flip).`);
+    items.push(`Margin miss ${mae(r => r._margin - (r.home_score - r.away_score)).toFixed(1)} points vs. the market spread's
+      ${mae(r => r.spread_line - (r.home_score - r.away_score)).toFixed(1)}; total miss ${mae(r => r._total - (r.home_score + r.away_score)).toFixed(1)}
+      vs. the market total's ${mae(r => r.total_line - (r.home_score + r.away_score)).toFixed(1)}.
+      Spread picks ${tally(fin, "_atsres")}, over/under ${tally(fin, "_oures")} (${reg}; break-even at standard odds is 52.4%).`);
+  }
+  if ((res.games_not_published || []).length)
+    items.push(`No prediction was committed before kickoff for ${res.games_not_published.join(", ")}; not shown or scored.`);
+  const live = rows.filter(r => r.source === "live").length;
+  if (live) items.push(`${live} game${live === 1 ? " is" : "s are"} not yet played: live predictions.`);
+  el.innerHTML = `<div class="banner result"><strong>Week ${WEEK}: what was published before kickoff,
+    against what happened.</strong> Nothing here is re-run with hindsight. Small samples: one week is a
+    handful of games. <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
+}
+
+function renderTrackRecord() {
+  const el = $("trackrecord");
+  const tr = META.track_record;
+  if (!tr || !tr.n) { el.style.display = "none"; return; }
+  const wl = tr.win_loss || {}, mg = tr.margin || {}, tt = tr.total || {};
+  const rec = (x) => x ? `${x.correct}–${x.n - x.correct} (${Math.round(100 * x.correct / x.n)}%)` : "—";
+  const f2 = v => v == null ? "—" : (+v).toFixed(2), f3 = v => v == null ? "—" : (+v).toFixed(3);
+  const ats = (x, w, l, ps) => x ? `${x[w]}–${x[l]}${x[ps] ? `–${x[ps]}` : ""}` : "—";
+  const missing = Object.entries(META.games_not_published || {}).map(([w, g]) => `week ${w}: ${g.length === 16 ? "all games" : g.join(", ")}`);
+  el.innerHTML = `<summary><strong>Track record, ${SEASON} to date:</strong> ${tr.n} final games as published
+      before kickoff · logistic picked ${rec(wl.logistic)} winners, market favorite ${rec(wl.market_favorite)}</summary>
+    <table><thead><tr><th>Model</th><th class="num">Winners</th><th class="num">Brier</th>
+      <th class="num">Margin miss</th><th class="num">Spread picks</th><th class="num">Total miss</th><th class="num">O/U picks</th></tr></thead><tbody>
+      <tr><td>Logistic · Ridge</td><td class="num">${rec(wl.logistic)}</td><td class="num">${f3(wl.logistic?.brier)}</td>
+        <td class="num">${f2(mg.ridge?.mae)}</td><td class="num">${ats(mg.ridge, "ats_won", "ats_lost", "ats_push")}</td>
+        <td class="num">${f2(tt.ridge?.mae)}</td><td class="num">${ats(tt.ridge, "ou_won", "ou_lost", "ou_push")}</td></tr>
+      <tr><td>XGBoost</td><td class="num">${rec(wl.xgb)}</td><td class="num">${f3(wl.xgb?.brier)}</td>
+        <td class="num">${f2(mg.xgb?.mae)}</td><td class="num">${ats(mg.xgb, "ats_won", "ats_lost", "ats_push")}</td>
+        <td class="num">${f2(tt.xgb?.mae)}</td><td class="num">${ats(tt.xgb, "ou_won", "ou_lost", "ou_push")}</td></tr>
+      <tr><td>Random forest</td><td class="num">${rec(wl.rf)}</td><td class="num">${f3(wl.rf?.brier)}</td>
+        <td class="num">${f2(mg.rf?.mae)}</td><td class="num">${ats(mg.rf, "ats_won", "ats_lost", "ats_push")}</td>
+        <td class="num">${f2(tt.rf?.mae)}</td><td class="num">${ats(tt.rf, "ou_won", "ou_lost", "ou_push")}</td></tr>
+      <tr><td>Market line</td><td class="num">${rec(wl.market_favorite)}</td><td class="num">—</td>
+        <td class="num">${f2(mg.market_line?.mae)}</td><td class="num">—</td>
+        <td class="num">${f2(tt.market_line?.mae)}</td><td class="num">—</td></tr>
+    </tbody></table>
+    <p>Each game counts once, as committed before its kickoff and against the spread and total in that row.
+    Spread and over/under records are won–lost(–push); break-even at standard odds is 52.4%.
+    ${missing.length ? "Never committed before kickoff, so not counted: " + missing.join("; ") + "." : ""}
+    Too few games for any of these to separate from the market; the walk-forward backtest below is the long-run measure.</p>`;
 }
 
 function setHash() {
@@ -246,7 +348,9 @@ function loadWeek(week) {
     .then(r => r.ok ? r.json() : [])
     .then(rows => {
       RAW = rows || [];
+      const nFinal = RAW.filter(r => r.final).length;
       $("meta").textContent = `${SEASON} Week ${WEEK} · ${RAW.length} games`
+        + (nFinal ? ` · ${nFinal} final` : "")
         + ` · generated ${META.generated_at.slice(0,10)}`;
     });
 }
@@ -283,10 +387,11 @@ fetch("data/game_predictions_meta.json")
       $(id).addEventListener("change", () => { render(); setHash(); });
 
     $("banner").innerHTML =
-      `<div class="banner"><strong>Predictions for scheduled-but-unplayed games only.</strong>
-       Three model types per target (see the dropdowns above) trained on the full
-       game history back to 2006; the market's own spread/total is shown alongside
-       every prediction for comparison.</div>`;
+      `<div class="banner"><strong>Game predictions.</strong> Three model types per
+       target (see the dropdowns above) trained on the full game history back to 2006;
+       the market's own spread/total is shown alongside every prediction. Played
+       games show what was committed before kickoff and how it turned out.</div>`;
+    renderTrackRecord();
 
     if (meta.measured) {
       const wl = meta.measured.win_loss || {};

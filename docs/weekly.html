@@ -16,6 +16,12 @@
   understate ceilings. Showing a bare number would imply a precision the model
   does not have. Each row also shows what the number is made of (season pace
   vs. in-season form), and once a week is played, what actually happened.
+
+  Honesty rule for played weeks: a game that has kicked off shows the rows
+  committed to the repository before its kickoff (git history, via
+  src/evaluation/published_record.py), never a later re-run, scored against
+  the result. The banner says when each was committed, which model mode made
+  it, and what could not be scored (no stat line, or no projection at all).
 -->
 <style>
   :root { --bg:#0f1216; --panel:#171b21; --line:#252b33; --fg:#e6e9ee; --dim:#98a2b0;
@@ -32,6 +38,14 @@
             background:#1a2230; border:1px solid #2c3e55; color:#c9d6e6;
             font-size:13px; max-width:900px; }
   .banner.result { background:#152219; border-color:#25452c; color:#c6e6cc; }
+  .banner.result ul { margin:6px 0 0; padding-left:18px; }
+  .banner.result li { margin:2px 0; }
+  .record { margin:12px 24px 0; max-width:900px; font-size:13px; color:var(--dim); }
+  .record summary { cursor:pointer; color:var(--fg); }
+  .record table { width:auto; margin-top:8px; }
+  .record th, .record td { padding:4px 14px 4px 0; border-bottom:1px solid var(--line); }
+  .record th { position:static; background:none; }
+  .record tr.season td { color:var(--fg); font-weight:600; }
   .controls { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-end;
               padding:14px 24px; border-bottom:1px solid var(--line); background:var(--panel); }
   .ctl label { display:block; font-size:11px; text-transform:uppercase;
@@ -122,6 +136,7 @@
 </header>
 <div id="banner"></div>
 <div id="resultbanner"></div>
+<details class="record" id="trackrecord"></details>
 
 <div class="controls">
   <div class="ctl"><label>Week</label>
@@ -197,8 +212,10 @@
   <p id="accnote"><strong>Accuracy.</strong> Average absolute error per
   player-week on that same held-out season: <span id="maeline">—</span>. Ranking
   is more reliable than the absolute values. For weeks of the current season
-  that have been played, the banner above the table shows this week's own
-  numbers.</p>
+  that have been played, the table and banner show the projections exactly as
+  they were committed before each game's kickoff (taken from the repository's
+  history, never re-run with later data) next to what happened, and the track
+  record above sums them up.</p>
 
   <p id="baselinenote"><strong>How much the model beats guessing.</strong>
   <span id="baselineline">—</span></p>
@@ -233,6 +250,19 @@ const fmt1 = v => (v == null || isNaN(v)) ? "—" : (+v).toFixed(1);
 function played() {
   return RAW.some(r => r.actual_points != null);
 }
+
+// Early 2026 weeks were published without player_id; fall back to name/team.
+const pid = r => r.player_id ?? `${r.name}|${r.team}|${r.position}`;
+
+const MODE_LABEL = {
+  season_prorated: "season projection ÷ 17 (no weekly model, no range)",
+  weekly_model: "weekly model, not yet blended toward the season pace",
+  weekly_blend: "weekly model blended toward the season pace (current)",
+};
+const fmtWhen = iso => iso ? new Date(iso).toLocaleString(undefined,
+  { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "—";
+const signed = (v, d = 1) => v == null ? "—" : `${v > 0 ? "+" : ""}${(+v).toFixed(d)}`;
+const pct = v => v == null ? "—" : `${Math.round(v * 100)}%`;
 
 function teamsInvolved(r) {
   return [r.team, r.opponent].filter(Boolean);
@@ -323,6 +353,8 @@ function render() {
     // Pace vs form. pace_weight is the share of the served number that came
     // from the season pace; missing when the player has no season projection.
     let mix = '<span class="mixtext">weekly only</span>';
+    if (r.published_mode === "season_prorated")
+      mix = '<span class="mixtext" title="published before the weekly model was served">season ÷ 17</span>';
     if (r.pace_weight != null) {
       const pw = Math.round(r.pace_weight * 100);
       const title = `season pace ${fmt1(r.pace_prior)} × ${pw}%  +  weekly model ${fmt1(r.predicted_points_model)} × ${100-pw}%  =  ${fmt1(pt)}`
@@ -337,10 +369,10 @@ function render() {
             : `<span class="${r._miss > 0 ? "over" : "under"}">${r._miss > 0 ? "+" : ""}${r._miss.toFixed(1)}</span>`}</td>`
       : "";
 
-    const checked = COMPARE.has(r.player_id) ? "checked" : "";
+    const checked = COMPARE.has(pid(r)) ? "checked" : "";
     const disabled = (!checked && COMPARE.size >= MAX_COMPARE) ? "disabled" : "";
     return `<tr>
-      <td class="cmpcell"><input type="checkbox" class="cmp-check" data-pid="${r.player_id}"
+      <td class="cmpcell"><input type="checkbox" class="cmp-check" data-pid="${pid(r)}"
             ${checked} ${disabled} title="compare"></td>
       <td class="num">${i+1}</td>
       <td>${r.name ?? ""}${badges}</td>
@@ -361,7 +393,7 @@ function render() {
 
 function renderCompare() {
   const panel = $("compare");
-  const picked = RAW.filter(r => COMPARE.has(r.player_id));
+  const picked = RAW.filter(r => COMPARE.has(pid(r)));
   $("cmp-count").textContent = picked.length;
   panel.classList.toggle("open", picked.length > 0);
   if (!picked.length) { $("cmp-body").innerHTML = ""; return; }
@@ -387,7 +419,7 @@ function renderCompare() {
 
   const head = `<tr><th class="rowlabel"></th>${picked.map(r =>
     `<th class="cmpcol">${r.name ?? ""}
-       <button class="cmp-remove" data-pid="${r.player_id}" title="remove">×</button></th>`).join("")}</tr>`;
+       <button class="cmp-remove" data-pid="${pid(r)}" title="remove">×</button></th>`).join("")}</tr>`;
   const body = rowsDef.map(([label, fn]) =>
     `<tr><td class="rowlabel">${label}</td>${picked.map(r => `<td>${fn(r)}</td>`).join("")}</tr>`
   ).join("");
@@ -398,11 +430,64 @@ function weekResultBanner(week) {
   const res = META.week_results && META.week_results[String(week)];
   const el = $("resultbanner");
   if (!res) { el.innerHTML = ""; return; }
-  const cov = res.coverage80 != null ? `, ${Math.round(res.coverage80 * 100)}% of outcomes inside the 80% range` : "";
-  el.innerHTML = `<div class="banner result"><strong>Week ${week} has been played.</strong>
-    Against real results for the ${res.n} projected players who recorded a stat line:
-    average miss ${res.mae.toFixed(1)} points, mean error ${res.bias > 0 ? "+" : ""}${res.bias.toFixed(1)}
-    (positive = projected above actual)${cov}. The Actual and Miss columns show each player.</div>`;
+  const items = [];
+  const snaps = res.snapshots || [];
+  if (snaps.length) {
+    items.push("Committed " + snaps.map(sn =>
+      `${fmtWhen(sn.published_at)} (${sn.games.length} game${sn.games.length === 1 ? "" : "s"}; `
+      + `${MODE_LABEL[sn.mode] || sn.mode || "mode not recorded"}; commit <code>${sn.commit}</code>)`).join(", ")
+      + ". Each game uses the last version committed before its own kickoff.");
+  }
+  if (res.n != null) {
+    const cov = res.coverage80 != null
+      ? `; the 80% range held ${pct(res.coverage80)} of ${res.n_with_range} outcomes`
+      : "; no range was published this week";
+    items.push(`<strong>Average miss ${(+res.mae).toFixed(1)} points</strong>, mean error ${signed(res.bias)}
+      (positive = projected above actual), RMSE ${(+res.rmse).toFixed(1)}, over the ${res.n} projected
+      players who recorded a stat line${cov}.`);
+  }
+  const notScored = [];
+  if (res.n_no_stat_line) notScored.push(`${res.n_no_stat_line} projected players recorded no stat line (inactive or did not play) and are not scored`);
+  if (res.n_unprojected) {
+    const top = (res.unprojected_top || []).filter(u => u.actual_points >= 5)
+      .map(u => `${u.name} ${u.team} ${(+u.actual_points).toFixed(1)}`).slice(0, 5);
+    notScored.push(`${res.n_unprojected} players recorded a stat line without a published projection`
+      + (res.n_unprojected_5plus ? ` (${res.n_unprojected_5plus} scored 5+ points${top.length ? ": " + top.join(", ") : ""})` : ""));
+  }
+  if (res.n_duplicate_rows_dropped) notScored.push(`${res.n_duplicate_rows_dropped} duplicate listings of a player were counted once`);
+  if ((res.games_not_published || []).length) notScored.push(`no projection was committed before kickoff for ${res.games_not_published.join(", ")}`);
+  if (notScored.length) items.push("Not in the numbers above: " + notScored.join("; ") + ".");
+  const live = RAW.filter(r => r.source === "live").length;
+  if (live) items.push(`${live} rows are for games not yet played and are live projections.`);
+  el.innerHTML = `<div class="banner result"><strong>Week ${week}: what was published before kickoff,
+    against what happened.</strong> Nothing here is re-run with hindsight.
+    <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
+}
+
+function renderTrackRecord() {
+  const el = $("trackrecord");
+  const wr = META.week_results || {};
+  const weeks = Object.keys(wr).map(Number).filter(w => wr[w].n != null).sort((a, b) => a - b);
+  const tr = META.track_record;
+  if (!weeks.length || !tr) { el.style.display = "none"; return; }
+  const row = (label, r, cls = "") => `<tr class="${cls}"><td>${label}</td>
+    <td class="num">${r.n}</td><td class="num">${(+r.mae).toFixed(2)}</td>
+    <td class="num">${signed(r.bias, 2)}</td><td class="num">${(+r.rmse).toFixed(2)}</td>
+    <td class="num">${r.coverage80 != null ? pct(r.coverage80) : "—"}</td>
+    <td class="num">${r.n_no_stat_line ?? "—"}</td><td class="num">${r.n_unprojected ?? "—"}</td></tr>`;
+  const pos = tr.by_position ? Object.entries(tr.by_position).filter(([, v]) => v)
+    .map(([p, v]) => `${p} ${(+v.mae).toFixed(2)} (${signed(v.bias, 2)})`).join(" · ") : "";
+  el.innerHTML = `<summary><strong>Track record, ${SEASON} to date:</strong> average miss
+      ${(+tr.mae).toFixed(2)} points on ${tr.n} player-games, mean error ${signed(tr.bias, 2)},
+      80% range held ${tr.coverage80 != null ? pct(tr.coverage80) : "—"} (projections as published before kickoff)</summary>
+    <table><thead><tr><th>Week</th><th class="num">Scored</th><th class="num">Avg miss</th>
+      <th class="num">Mean error</th><th class="num">RMSE</th><th class="num">80% range held</th>
+      <th class="num">No stat line</th><th class="num">Unprojected</th></tr></thead>
+    <tbody>${weeks.map(w => row(`Week ${w}`, wr[w])).join("")}${row("Season", tr, "season")}</tbody></table>
+    <p>By position (average miss, mean error): ${pos}. "No stat line" players were projected but did
+    not record a stat line and are not scored; "Unprojected" players recorded one without a published
+    projection. Weeks 1 and 2 were published by earlier versions of the model (see each week's banner).
+    For comparison, the model's full replay of 2025 is in the notes below.</p>`;
 }
 
 function setHash() {
@@ -424,7 +509,7 @@ function applyHash() {
   const finish = () => {
     // teamfilter's options are only populated once RAW is loaded for the week.
     if ([...$("teamfilter").options].some(o => o.value === wantedTeam)) $("teamfilter").value = wantedTeam;
-    COMPARE = new Set(wantedCmp.filter(pid => RAW.some(r => r.player_id === pid)).slice(0, MAX_COMPARE));
+    COMPARE = new Set(wantedCmp.filter(id => RAW.some(r => pid(r) === id)).slice(0, MAX_COMPARE));
     render();
     setHash();
   };
@@ -538,6 +623,8 @@ fetch("data/weekly_meta.json")
                 + "heuristics, not a decisive one.");
       }
     }
+
+    renderTrackRecord();
 
     // Restore a shared view (#wk=3&pos=RB&q=hill), else the first week; and
     // follow the hash when it changes (back/forward, a pasted link).

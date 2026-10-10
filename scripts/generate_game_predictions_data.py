@@ -2,22 +2,19 @@
 
 Serves the phase-1/2 models in src/models/game_outcome/ (see GAPS.md's
 2026-09-18/19 entries) -- win/loss probability, predicted spread margin,
-predicted over/under total, for every SCHEDULED-BUT-NOT-YET-PLAYED game,
-via the same build_prediction_rows()/load_model() serving path as
-scripts/predict_upcoming_games.py.
+predicted over/under total -- via the same build_prediction_rows()/
+load_model() serving path as scripts/predict_upcoming_games.py.
 
-Deliberately does NOT show "predicted vs. actual" for already-played games
-the way docs/weekly.html does for player projections. weekly.html can do
-that honestly because NFLPredictor.predict(as_of=...) replays what the
-model would have known at that past week (a real walk-forward-style
-serving path). The game-outcome models have no such as_of mode -- they are
-trained once on ALL history and saved -- so re-running them against an
-already-played game would be in-sample (that game was IN the training set)
-and would overstate accuracy if displayed as if it were a real prediction.
-Instead, the page's accuracy claims come entirely from the models'
-walk-forward backtest metadata (game_outcome_model_metadata.json /
-game_margin_model_metadata.json / game_total_model_metadata.json), which
-IS honest held-out performance -- see measured_accuracy() below.
+Two kinds of rows per week file (`source`):
+- "live": a game that has not kicked off, predicted now.
+- "published": a game that has kicked off. Its row is the one committed to
+  this repository before its kickoff (src/evaluation/published_record.py),
+  never a re-run: the saved models are trained once on all history, so
+  re-scoring a played game would be in-sample and overstate accuracy. Once
+  the game is final the row carries the score, and the meta file carries
+  the week's and the season's accuracy of what was published, beside the
+  market line it was published against.
+The models' walk-forward backtest metadata stays the long-run accuracy claim.
 
 Usage:
     python scripts/generate_game_predictions_data.py
@@ -128,17 +125,22 @@ def measured_accuracy() -> dict | None:
 def _clean(df: pd.DataFrame) -> list:
     out = df.copy()
     for c in out.columns:
-        if pd.api.types.is_numeric_dtype(out[c]):
+        if pd.api.types.is_numeric_dtype(out[c]) and not pd.api.types.is_bool_dtype(out[c]):
             out[c] = out[c].astype(float).round(3)
     return json.loads(out.to_json(orient="records"))
 
 
-def build_predictions(season: int) -> tuple[list[int], dict[str, int]]:
+def build_predictions(season: int, games: pd.DataFrame, now: pd.Timestamp) -> dict[int, pd.DataFrame]:
+    """Live predictions for every game that has not kicked off, by week."""
     from src.models.game_outcome.features import build_prediction_rows, feature_columns
 
     rows = build_prediction_rows(season)
     if rows.empty:
-        return [], {}
+        return {}
+    upcoming = games.loc[games["kickoff"] > now, ["week", "home_team", "away_team"]]
+    rows = rows.merge(upcoming, on=["week", "home_team", "away_team"], how="inner")
+    if rows.empty:
+        return {}
 
     feat_cols = feature_columns(rows)
     # Keep the site-generation serving path identical to the CLI path:
@@ -159,19 +161,13 @@ def build_predictions(season: int) -> tuple[list[int], dict[str, int]]:
             out[out_col] = model.predict(X)
     if missing:
         print(f"  warning: missing model artifact(s), skipping: {missing}")
+    # season/week are implied by the filename (same convention as
+    # weekly_{season}_wk{N}.json) -- dropped rather than carried per row.
+    return {int(wk): d.drop(columns=["season", "week"]).assign(source="live")
+            for wk, d in out.groupby("week")}
 
-    written, counts = [], {}
-    for wk, wk_df in out.groupby("week"):
-        wk = int(wk)
-        # season/week are implied by the filename (same convention as
-        # weekly_{season}_wk{N}.json) -- dropped here rather than carried
-        # per-row, redundantly, as a float.
-        wk_df = wk_df.drop(columns=["season", "week"])
-        (OUT_DIR / f"game_predictions_{season}_wk{wk}.json").write_text(json.dumps(_clean(wk_df)))
-        written.append(wk)
-        counts[str(wk)] = len(wk_df)
-        print(f"  wk{wk}: {len(wk_df)} games")
-    return sorted(written), counts
+
+PUBLISHED_KEEP = ["published_at", "published_commit", "kickoff", "final", "home_score", "away_score"]
 
 
 def main() -> int:
@@ -182,15 +178,50 @@ def main() -> int:
     from src.utils.nfl_calendar import get_current_nfl_season
     season = args.season or get_current_nfl_season()
 
+    import sqlite3
+    from config.settings import DB_PATH
+    from src.evaluation.published_record import game_week, kickoff_times, season_game_summary
+
+    now = pd.Timestamp.now(tz="UTC")
+    with sqlite3.connect(DB_PATH) as con:
+        games = kickoff_times(season, con)
+
+    print(f"Generating game predictions for {season}: live for unplayed games, "
+          "published-before-kickoff rows for the rest...")
+    live = build_predictions(season, games, now)
+
+    weeks = sorted(int(w) for w in games["week"].unique())
+    files, counts, results, published_frames = {}, {}, {}, []
+    for wk in weeks:
+        published, summary = game_week(season, wk, games, now)
+        if summary:
+            results[str(wk)] = summary
+        parts = []
+        if not published.empty:
+            keep = [c for c in published.columns
+                    if c in PUBLISHED_KEEP or c.startswith(("home_win_prob_", "predicted_"))
+                    or c in ("home_team", "away_team", "spread_line", "total_line")]
+            published = published[keep].assign(source="published")
+            published_frames.append(published)
+            parts.append(published)
+        if wk in live:
+            parts.append(live[wk])
+        if parts:
+            files[wk] = pd.concat(parts, ignore_index=True)
+
+    if not files:
+        print("No games to write -- nothing written.")
+        return 1
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for stale in OUT_DIR.glob(f"game_predictions_{season}_wk*.json"):
         stale.unlink()
-
-    print(f"Generating game predictions for {season} (scheduled-but-unplayed games only)...")
-    written, counts = build_predictions(season)
-    if not written:
-        print("No scheduled-but-unplayed games found -- nothing written.")
-        return 1
+    for wk, df in files.items():
+        (OUT_DIR / f"game_predictions_{season}_wk{wk}.json").write_text(json.dumps(_clean(df)))
+        counts[str(wk)] = len(df)
+        n_pub = int((df["source"] == "published").sum())
+        print(f"  wk{wk}: {len(df)} games ({n_pub} published before kickoff)")
+    written = sorted(files)
+    not_published = {w: r["games_not_published"] for w, r in results.items() if r.get("games_not_published")}
 
     meta = {
         "season": int(season),
@@ -198,6 +229,10 @@ def main() -> int:
         "counts": counts,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "measured": measured_accuracy(),
+        # Played games: the predictions as committed before kickoff, scored.
+        "week_results": results,
+        "track_record": season_game_summary(published_frames),
+        "games_not_published": not_published,
         "model": (
             "phase-1 win/loss classifiers (logistic/xgboost/random_forest) + "
             "phase-2 margin/total regressors (ridge/xgboost/random_forest), "

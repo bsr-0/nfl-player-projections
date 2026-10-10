@@ -20,7 +20,7 @@
     18
   ],
   "counts": {
-    "2": 16,
+    "2": 15,
     "3": 16,
     "4": 16,
     "5": 15,
@@ -38,7 +38,7 @@
     "17": 16,
     "18": 16
   },
-  "generated_at": "2026-10-08T01:54:39+00:00",
+  "generated_at": "2026-10-10T17:09:55+00:00",
   "measured": {
     "win_loss": {
       "logistic": {
@@ -111,6 +111,507 @@
         "ou_accuracy": null
       }
     }
+  },
+  "week_results": {
+    "1": {
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [],
+      "games_not_published": [
+        "CHI@CAR",
+        "TB@CIN",
+        "NO@DET",
+        "BUF@HOU",
+        "BAL@IND",
+        "CLE@JAX",
+        "DEN@KC",
+        "SF@LA",
+        "ARI@LAC",
+        "MIA@LV",
+        "GB@MIN",
+        "DAL@NYG",
+        "WAS@PHI",
+        "ATL@PIT",
+        "NE@SEA",
+        "NYJ@TEN"
+      ],
+      "games_final": 0
+    },
+    "2": {
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "f0d99b38",
+          "published_at": "2026-09-19T13:19+00:00",
+          "mode": null,
+          "games": [
+            "SEA@ARI",
+            "CAR@ATL",
+            "NO@BAL",
+            "MIN@CHI",
+            "WAS@DAL",
+            "JAX@DEN",
+            "CIN@HOU",
+            "IND@KC",
+            "NYG@LA",
+            "LV@LAC",
+            "PIT@NE",
+            "GB@NYJ",
+            "MIA@SF",
+            "CLE@TB",
+            "PHI@TEN"
+          ]
+        }
+      ],
+      "games_not_published": [
+        "DET@BUF"
+      ],
+      "games_final": 15,
+      "n": 15,
+      "n_ties": 0,
+      "win_loss": {
+        "logistic": {
+          "correct": 10,
+          "n": 15,
+          "brier": 0.238
+        },
+        "xgb": {
+          "correct": 10,
+          "n": 15,
+          "brier": 0.229
+        },
+        "rf": {
+          "correct": 9,
+          "n": 15,
+          "brier": 0.245
+        },
+        "market_favorite": {
+          "correct": 10,
+          "n": 15
+        }
+      },
+      "margin": {
+        "ridge": {
+          "mae": 12.33,
+          "ats_won": 5,
+          "ats_lost": 10,
+          "ats_push": 0
+        },
+        "xgb": {
+          "mae": 12.4,
+          "ats_won": 5,
+          "ats_lost": 10,
+          "ats_push": 0
+        },
+        "rf": {
+          "mae": 12.45,
+          "ats_won": 6,
+          "ats_lost": 9,
+          "ats_push": 0
+        },
+        "market_line": {
+          "mae": 12.2
+        }
+      },
+      "total": {
+        "ridge": {
+          "mae": 10.54,
+          "ou_won": 9,
+          "ou_lost": 6,
+          "ou_push": 0
+        },
+        "xgb": {
+          "mae": 11.19,
+          "ou_won": 5,
+          "ou_lost": 10,
+          "ou_push": 0
+        },
+        "rf": {
+          "mae": 10.77,
+          "ou_won": 7,
+          "ou_lost": 8,
+          "ou_push": 0
+        },
+        "market_line": {
+          "mae": 10.57
+        }
+      }
+    },
+    "3": {
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "f0d99b38",
+          "published_at": "2026-09-19T13:19+00:00",
+          "mode": null,
+          "games": [
+            "LAC@BUF",
+            "PHI@CHI",
+            "CAR@CLE",
+            "BAL@DAL",
+            "LA@DEN",
+            "NYJ@DET",
+            "ATL@GB",
+            "HOU@IND",
+            "NE@JAX",
+            "KC@MIA",
+            "LV@NO",
+            "TEN@NYG",
+            "CIN@PIT",
+            "ARI@SF",
+            "MIN@TB",
+            "SEA@WAS"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "games_final": 16,
+      "n": 16,
+      "n_ties": 0,
+      "win_loss": {
+        "logistic": {
+          "correct": 8,
+          "n": 16,
+          "brier": 0.244
+        },
+        "xgb": {
+          "correct": 10,
+          "n": 16,
+          "brier": 0.218
+        },
+        "rf": {
+          "correct": 9,
+          "n": 16,
+          "brier": 0.225
+        },
+        "market_favorite": {
+          "correct": 8,
+          "n": 16
+        }
+      },
+      "margin": {
+        "ridge": {
+          "mae": 8.41,
+          "ats_won": 5,
+          "ats_lost": 9,
+          "ats_push": 2
+        },
+        "xgb": {
+          "mae": 7.97,
+          "ats_won": 11,
+          "ats_lost": 3,
+          "ats_push": 2
+        },
+        "rf": {
+          "mae": 7.81,
+          "ats_won": 10,
+          "ats_lost": 4,
+          "ats_push": 2
+        },
+        "market_line": {
+          "mae": 8.16
+        }
+      },
+      "total": {
+        "ridge": {
+          "mae": 11.34,
+          "ou_won": 10,
+          "ou_lost": 6,
+          "ou_push": 0
+        },
+        "xgb": {
+          "mae": 11.14,
+          "ou_won": 7,
+          "ou_lost": 9,
+          "ou_push": 0
+        },
+        "rf": {
+          "mae": 11.05,
+          "ou_won": 10,
+          "ou_lost": 6,
+          "ou_push": 0
+        },
+        "market_line": {
+          "mae": 11.25
+        }
+      }
+    },
+    "4": {
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "f0d99b38",
+          "published_at": "2026-09-19T13:19+00:00",
+          "mode": null,
+          "games": [
+            "TEN@BAL",
+            "NE@BUF",
+            "DET@CAR",
+            "NYJ@CHI",
+            "JAX@CIN",
+            "PIT@CLE",
+            "DAL@HOU",
+            "KC@LV",
+            "MIA@MIN",
+            "ATL@NO",
+            "ARI@NYG",
+            "LA@PHI",
+            "LAC@SEA",
+            "DEN@SF",
+            "GB@TB",
+            "IND@WAS"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "games_final": 16,
+      "n": 16,
+      "n_ties": 0,
+      "win_loss": {
+        "logistic": {
+          "correct": 9,
+          "n": 16,
+          "brier": 0.202
+        },
+        "xgb": {
+          "correct": 10,
+          "n": 16,
+          "brier": 0.194
+        },
+        "rf": {
+          "correct": 8,
+          "n": 16,
+          "brier": 0.215
+        },
+        "market_favorite": {
+          "correct": 9,
+          "n": 16
+        }
+      },
+      "margin": {
+        "ridge": {
+          "mae": 6.47,
+          "ats_won": 10,
+          "ats_lost": 6,
+          "ats_push": 0
+        },
+        "xgb": {
+          "mae": 7.16,
+          "ats_won": 7,
+          "ats_lost": 9,
+          "ats_push": 0
+        },
+        "rf": {
+          "mae": 6.63,
+          "ats_won": 9,
+          "ats_lost": 7,
+          "ats_push": 0
+        },
+        "market_line": {
+          "mae": 6.69
+        }
+      },
+      "total": {
+        "ridge": {
+          "mae": 11.88,
+          "ou_won": 6,
+          "ou_lost": 10,
+          "ou_push": 0
+        },
+        "xgb": {
+          "mae": 11.8,
+          "ou_won": 8,
+          "ou_lost": 8,
+          "ou_push": 0
+        },
+        "rf": {
+          "mae": 11.95,
+          "ou_won": 8,
+          "ou_lost": 8,
+          "ou_push": 0
+        },
+        "market_line": {
+          "mae": 11.56
+        }
+      }
+    },
+    "5": {
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "fa41ed2c",
+          "published_at": "2026-10-08T03:28+00:00",
+          "mode": null,
+          "games": [
+            "TB@DAL"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "games_final": 1,
+      "n": 1,
+      "n_ties": 0,
+      "win_loss": {
+        "logistic": {
+          "correct": 0,
+          "n": 1,
+          "brier": 0.483
+        },
+        "xgb": {
+          "correct": 0,
+          "n": 1,
+          "brier": 0.305
+        },
+        "rf": {
+          "correct": 0,
+          "n": 1,
+          "brier": 0.393
+        },
+        "market_favorite": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "margin": {
+        "ridge": {
+          "mae": 11.6,
+          "ats_won": 0,
+          "ats_lost": 1,
+          "ats_push": 0
+        },
+        "xgb": {
+          "mae": 10.12,
+          "ats_won": 1,
+          "ats_lost": 0,
+          "ats_push": 0
+        },
+        "rf": {
+          "mae": 12.37,
+          "ats_won": 0,
+          "ats_lost": 1,
+          "ats_push": 0
+        },
+        "market_line": {
+          "mae": 11.5
+        }
+      },
+      "total": {
+        "ridge": {
+          "mae": 9.34,
+          "ou_won": 1,
+          "ou_lost": 0,
+          "ou_push": 0
+        },
+        "xgb": {
+          "mae": 11.91,
+          "ou_won": 1,
+          "ou_lost": 0,
+          "ou_push": 0
+        },
+        "rf": {
+          "mae": 13.6,
+          "ou_won": 0,
+          "ou_lost": 1,
+          "ou_push": 0
+        },
+        "market_line": {
+          "mae": 12.5
+        }
+      }
+    }
+  },
+  "track_record": {
+    "n": 48,
+    "n_ties": 0,
+    "win_loss": {
+      "logistic": {
+        "correct": 27,
+        "n": 48,
+        "brier": 0.233
+      },
+      "xgb": {
+        "correct": 30,
+        "n": 48,
+        "brier": 0.215
+      },
+      "rf": {
+        "correct": 26,
+        "n": 48,
+        "brier": 0.231
+      },
+      "market_favorite": {
+        "correct": 27,
+        "n": 48
+      }
+    },
+    "margin": {
+      "ridge": {
+        "mae": 9.06,
+        "ats_won": 20,
+        "ats_lost": 26,
+        "ats_push": 2
+      },
+      "xgb": {
+        "mae": 9.13,
+        "ats_won": 24,
+        "ats_lost": 22,
+        "ats_push": 2
+      },
+      "rf": {
+        "mae": 8.96,
+        "ats_won": 25,
+        "ats_lost": 21,
+        "ats_push": 2
+      },
+      "market_line": {
+        "mae": 9.0
+      }
+    },
+    "total": {
+      "ridge": {
+        "mae": 11.23,
+        "ou_won": 26,
+        "ou_lost": 22,
+        "ou_push": 0
+      },
+      "xgb": {
+        "mae": 11.39,
+        "ou_won": 21,
+        "ou_lost": 27,
+        "ou_push": 0
+      },
+      "rf": {
+        "mae": 11.32,
+        "ou_won": 25,
+        "ou_lost": 23,
+        "ou_push": 0
+      },
+      "market_line": {
+        "mae": 11.17
+      }
+    }
+  },
+  "games_not_published": {
+    "1": [
+      "CHI@CAR",
+      "TB@CIN",
+      "NO@DET",
+      "BUF@HOU",
+      "BAL@IND",
+      "CLE@JAX",
+      "DEN@KC",
+      "SF@LA",
+      "ARI@LAC",
+      "MIA@LV",
+      "GB@MIN",
+      "DAL@NYG",
+      "WAS@PHI",
+      "ATL@PIT",
+      "NE@SEA",
+      "NYJ@TEN"
+    ],
+    "2": [
+      "DET@BUF"
+    ]
   },
   "model": "phase-1 win/loss classifiers (logistic/xgboost/random_forest) + phase-2 margin/total regressors (ridge/xgboost/random_forest), src/models/game_outcome/ -- see GAPS.md 2026-09-18/19 entries"
 }

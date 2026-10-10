@@ -22,11 +22,11 @@
     18
   ],
   "counts": {
-    "1": 700,
-    "2": 703,
-    "3": 703,
-    "4": 704,
-    "5": 657,
+    "1": 523,
+    "2": 673,
+    "3": 682,
+    "4": 685,
+    "5": 660,
     "6": 619,
     "7": 618,
     "8": 608,
@@ -43,34 +43,665 @@
   },
   "week_results": {
     "1": {
-      "n": 356,
-      "mae": 4.76,
-      "bias": -2.02,
-      "coverage80": 0.792
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "d5bb1e4b",
+          "published_at": "2026-09-06T19:16+00:00",
+          "mode": "season_prorated",
+          "games": [
+            "CHI@CAR",
+            "TB@CIN",
+            "NO@DET",
+            "BUF@HOU",
+            "BAL@IND",
+            "CLE@JAX",
+            "DEN@KC",
+            "SF@LA",
+            "ARI@LAC",
+            "MIA@LV",
+            "GB@MIN",
+            "DAL@NYG",
+            "WAS@PHI",
+            "ATL@PIT",
+            "NE@SEA",
+            "NYJ@TEN"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "n_published_final": 523,
+      "n_no_stat_line": 215,
+      "n_unprojected": 51,
+      "n_unprojected_5plus": 9,
+      "games_final": 16,
+      "n": 308,
+      "mae": 4.9,
+      "bias": -1.79,
+      "rmse": 7.16,
+      "by_position": {
+        "QB": {
+          "n": 29,
+          "mae": 7.84,
+          "bias": -4.58,
+          "rmse": 9.66
+        },
+        "RB": {
+          "n": 67,
+          "mae": 5.76,
+          "bias": -3.19,
+          "rmse": 8.35
+        },
+        "WR": {
+          "n": 136,
+          "mae": 4.6,
+          "bias": -0.97,
+          "rmse": 6.74
+        },
+        "TE": {
+          "n": 76,
+          "mae": 3.56,
+          "bias": -0.94,
+          "rmse": 5.42
+        }
+      },
+      "n_duplicate_rows_dropped": 11,
+      "unprojected_top": [
+        {
+          "name": "Bi.Robinson",
+          "team": "ATL",
+          "position": "RB",
+          "actual_points": 31.3
+        },
+        {
+          "name": "C.Wentz",
+          "team": "MIN",
+          "position": "QB",
+          "actual_points": 19.2
+        },
+        {
+          "name": "M.Willis",
+          "team": "MIA",
+          "position": "QB",
+          "actual_points": 16.7
+        },
+        {
+          "name": "D.Watson",
+          "team": "CLE",
+          "position": "QB",
+          "actual_points": 14.0
+        },
+        {
+          "name": "M.Nabers",
+          "team": "NYG",
+          "position": "WR",
+          "actual_points": 12.9
+        },
+        {
+          "name": "D.Lock",
+          "team": "SEA",
+          "position": "QB",
+          "actual_points": 12.8
+        },
+        {
+          "name": "J.Brooks",
+          "team": "CAR",
+          "position": "RB",
+          "actual_points": 7.2
+        },
+        {
+          "name": "C.Rush",
+          "team": "ATL",
+          "position": "QB",
+          "actual_points": 5.7
+        },
+        {
+          "name": "R.Sanders",
+          "team": "CLE",
+          "position": "RB",
+          "actual_points": 5.6
+        },
+        {
+          "name": "B.Allen",
+          "team": "NYJ",
+          "position": "RB",
+          "actual_points": 4.0
+        }
+      ]
     },
     "2": {
-      "n": 359,
-      "mae": 4.29,
-      "bias": -1.33,
-      "coverage80": 0.76
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "af17432f",
+          "published_at": "2026-09-17T04:52+00:00",
+          "mode": "weekly_model",
+          "games": [
+            "DET@BUF"
+          ]
+        },
+        {
+          "commit": "da3a8792",
+          "published_at": "2026-09-19T00:26+00:00",
+          "mode": "weekly_blend",
+          "games": [
+            "SEA@ARI",
+            "CAR@ATL",
+            "NO@BAL",
+            "MIN@CHI",
+            "WAS@DAL",
+            "JAX@DEN",
+            "CIN@HOU",
+            "IND@KC",
+            "NYG@LA",
+            "LV@LAC",
+            "PIT@NE",
+            "GB@NYJ",
+            "MIA@SF",
+            "CLE@TB",
+            "PHI@TEN"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "n_published_final": 673,
+      "n_no_stat_line": 328,
+      "n_unprojected": 14,
+      "n_unprojected_5plus": 1,
+      "games_final": 16,
+      "n": 345,
+      "mae": 4.44,
+      "bias": -1.19,
+      "rmse": 6.34,
+      "coverage80": 0.759,
+      "n_with_range": 345,
+      "by_position": {
+        "QB": {
+          "n": 38,
+          "mae": 7.38,
+          "bias": -2.89,
+          "rmse": 9.38,
+          "coverage80": 0.632,
+          "n_with_range": 38
+        },
+        "RB": {
+          "n": 91,
+          "mae": 3.33,
+          "bias": -0.4,
+          "rmse": 4.44,
+          "coverage80": 0.857,
+          "n_with_range": 91
+        },
+        "WR": {
+          "n": 146,
+          "mae": 4.65,
+          "bias": -1.22,
+          "rmse": 6.65,
+          "coverage80": 0.767,
+          "n_with_range": 146
+        },
+        "TE": {
+          "n": 70,
+          "mae": 3.85,
+          "bias": -1.26,
+          "rmse": 5.72,
+          "coverage80": 0.686,
+          "n_with_range": 70
+        }
+      },
+      "n_duplicate_rows_dropped": 0,
+      "unprojected_top": [
+        {
+          "name": "G.Bernard",
+          "team": "PIT",
+          "position": "WR",
+          "actual_points": 7.5
+        },
+        {
+          "name": "D.Herman",
+          "team": "MIA",
+          "position": "RB",
+          "actual_points": 2.8
+        },
+        {
+          "name": "E.All",
+          "team": "CIN",
+          "position": "TE",
+          "actual_points": 2.5
+        },
+        {
+          "name": "B.Thompson",
+          "team": "LAC",
+          "position": "WR",
+          "actual_points": 2.3
+        },
+        {
+          "name": "S.Roush",
+          "team": "CHI",
+          "position": "TE",
+          "actual_points": 1.9
+        },
+        {
+          "name": "O.Delp",
+          "team": "NO",
+          "position": "TE",
+          "actual_points": 1.8
+        },
+        {
+          "name": "C.Young",
+          "team": "CIN",
+          "position": "WR",
+          "actual_points": 1.7
+        },
+        {
+          "name": "R.Gilliam",
+          "team": "NE",
+          "position": "RB",
+          "actual_points": 1.4
+        },
+        {
+          "name": "D.Burks",
+          "team": "IND",
+          "position": "WR",
+          "actual_points": 1.4
+        },
+        {
+          "name": "D.Claiborne",
+          "team": "MIN",
+          "position": "RB",
+          "actual_points": 1.2
+        }
+      ]
     },
     "3": {
-      "n": 361,
-      "mae": 4.38,
-      "bias": -1.68,
-      "coverage80": 0.784
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "da3a8792",
+          "published_at": "2026-09-19T00:26+00:00",
+          "mode": "weekly_blend",
+          "games": [
+            "ATL@GB"
+          ]
+        },
+        {
+          "commit": "abb7d2e8",
+          "published_at": "2026-09-27T00:43+00:00",
+          "mode": "weekly_blend",
+          "games": [
+            "LAC@BUF",
+            "PHI@CHI",
+            "CAR@CLE",
+            "BAL@DAL",
+            "LA@DEN",
+            "NYJ@DET",
+            "HOU@IND",
+            "NE@JAX",
+            "KC@MIA",
+            "LV@NO",
+            "TEN@NYG",
+            "CIN@PIT",
+            "ARI@SF",
+            "MIN@TB",
+            "SEA@WAS"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "n_published_final": 682,
+      "n_no_stat_line": 335,
+      "n_unprojected": 15,
+      "n_unprojected_5plus": 3,
+      "games_final": 16,
+      "n": 347,
+      "mae": 4.42,
+      "bias": -1.71,
+      "rmse": 6.28,
+      "coverage80": 0.793,
+      "n_with_range": 347,
+      "by_position": {
+        "QB": {
+          "n": 33,
+          "mae": 7.17,
+          "bias": -3.77,
+          "rmse": 8.83,
+          "coverage80": 0.727,
+          "n_with_range": 33
+        },
+        "RB": {
+          "n": 86,
+          "mae": 4.14,
+          "bias": -0.81,
+          "rmse": 5.86,
+          "coverage80": 0.872,
+          "n_with_range": 86
+        },
+        "WR": {
+          "n": 147,
+          "mae": 4.16,
+          "bias": -1.69,
+          "rmse": 5.84,
+          "coverage80": 0.857,
+          "n_with_range": 147
+        },
+        "TE": {
+          "n": 81,
+          "mae": 4.07,
+          "bias": -1.86,
+          "rmse": 6.24,
+          "coverage80": 0.617,
+          "n_with_range": 81
+        }
+      },
+      "n_duplicate_rows_dropped": 0,
+      "unprojected_top": [
+        {
+          "name": "C.Keenum",
+          "team": "CHI",
+          "position": "QB",
+          "actual_points": 24.5
+        },
+        {
+          "name": "A.Hooper",
+          "team": "ATL",
+          "position": "TE",
+          "actual_points": 9.1
+        },
+        {
+          "name": "J.Sturdivant",
+          "team": "GB",
+          "position": "WR",
+          "actual_points": 5.2
+        },
+        {
+          "name": "J.Cuevas",
+          "team": "BAL",
+          "position": "TE",
+          "actual_points": 2.4
+        },
+        {
+          "name": "T.DeVito",
+          "team": "NE",
+          "position": "QB",
+          "actual_points": 1.4
+        },
+        {
+          "name": "O.Beckham",
+          "team": "NYG",
+          "position": "WR",
+          "actual_points": 0.0
+        },
+        {
+          "name": "L.Nichols",
+          "team": "PIT",
+          "position": "RB",
+          "actual_points": 0.0
+        },
+        {
+          "name": "A.Tyus",
+          "team": "CAR",
+          "position": "RB",
+          "actual_points": 0.0
+        },
+        {
+          "name": "J.Pritchett",
+          "team": "NYJ",
+          "position": "WR",
+          "actual_points": 0.0
+        },
+        {
+          "name": "M.Bredeson",
+          "team": "MIN",
+          "position": "RB",
+          "actual_points": 0.0
+        }
+      ]
     },
     "4": {
-      "n": 356,
-      "mae": 4.36,
-      "bias": -1.73,
-      "coverage80": 0.803
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "abb7d2e8",
+          "published_at": "2026-09-27T00:43+00:00",
+          "mode": "weekly_blend",
+          "games": [
+            "TEN@BAL",
+            "NE@BUF",
+            "DET@CAR",
+            "NYJ@CHI",
+            "JAX@CIN",
+            "PIT@CLE",
+            "DAL@HOU",
+            "KC@LV",
+            "MIA@MIN",
+            "ATL@NO",
+            "ARI@NYG",
+            "LA@PHI",
+            "LAC@SEA",
+            "DEN@SF",
+            "GB@TB",
+            "IND@WAS"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "n_published_final": 685,
+      "n_no_stat_line": 340,
+      "n_unprojected": 13,
+      "n_unprojected_5plus": 2,
+      "games_final": 16,
+      "n": 345,
+      "mae": 4.45,
+      "bias": -1.92,
+      "rmse": 6.63,
+      "coverage80": 0.812,
+      "n_with_range": 345,
+      "by_position": {
+        "QB": {
+          "n": 32,
+          "mae": 4.99,
+          "bias": -2.3,
+          "rmse": 6.08,
+          "coverage80": 1.0,
+          "n_with_range": 32
+        },
+        "RB": {
+          "n": 88,
+          "mae": 4.7,
+          "bias": -2.49,
+          "rmse": 7.3,
+          "coverage80": 0.818,
+          "n_with_range": 88
+        },
+        "WR": {
+          "n": 148,
+          "mae": 4.81,
+          "bias": -1.84,
+          "rmse": 7.12,
+          "coverage80": 0.838,
+          "n_with_range": 148
+        },
+        "TE": {
+          "n": 77,
+          "mae": 3.26,
+          "bias": -1.28,
+          "rmse": 4.82,
+          "coverage80": 0.675,
+          "n_with_range": 77
+        }
+      },
+      "n_duplicate_rows_dropped": 0,
+      "unprojected_top": [
+        {
+          "name": "J.Daniels",
+          "team": "TB",
+          "position": "QB",
+          "actual_points": 11.4
+        },
+        {
+          "name": "A.Kaliakmanis",
+          "team": "WAS",
+          "position": "QB",
+          "actual_points": 11.0
+        },
+        {
+          "name": "M.Redman",
+          "team": "GB",
+          "position": "TE",
+          "actual_points": 4.9
+        },
+        {
+          "name": "B.Jordan",
+          "team": "HOU",
+          "position": "TE",
+          "actual_points": 2.3
+        },
+        {
+          "name": "E.Sarratt",
+          "team": "BAL",
+          "position": "WR",
+          "actual_points": 2.3
+        },
+        {
+          "name": "G.Bartholomew",
+          "team": "MIN",
+          "position": "TE",
+          "actual_points": 1.4
+        },
+        {
+          "name": "L.Nichols",
+          "team": "PIT",
+          "position": "RB",
+          "actual_points": 0.0
+        },
+        {
+          "name": "J.Jones",
+          "team": "MIN",
+          "position": "WR",
+          "actual_points": 0.0
+        },
+        {
+          "name": "J.Reed",
+          "team": "CAR",
+          "position": "WR",
+          "actual_points": 0.0
+        },
+        {
+          "name": "P.Herbert",
+          "team": "LAC",
+          "position": "TE",
+          "actual_points": 0.0
+        }
+      ]
+    },
+    "5": {
+      "published_basis": "last version committed before each game's kickoff",
+      "snapshots": [
+        {
+          "commit": "fa41ed2c",
+          "published_at": "2026-10-08T03:28+00:00",
+          "mode": "weekly_blend",
+          "games": [
+            "TB@DAL"
+          ]
+        }
+      ],
+      "games_not_published": [],
+      "n_published_final": 38,
+      "n_no_stat_line": 16,
+      "n_unprojected": 0,
+      "n_unprojected_5plus": 0,
+      "games_final": 1,
+      "n": 22,
+      "mae": 4.37,
+      "bias": -1.51,
+      "rmse": 7.03,
+      "coverage80": 0.864,
+      "n_with_range": 22,
+      "by_position": {
+        "QB": {
+          "n": 2,
+          "mae": 8.09,
+          "bias": -4.2,
+          "rmse": 9.12,
+          "coverage80": 1.0,
+          "n_with_range": 2
+        },
+        "RB": {
+          "n": 5,
+          "mae": 5.3,
+          "bias": -3.07,
+          "rmse": 9.16,
+          "coverage80": 0.8,
+          "n_with_range": 5
+        },
+        "WR": {
+          "n": 9,
+          "mae": 5.29,
+          "bias": -1.66,
+          "rmse": 7.38,
+          "coverage80": 0.778,
+          "n_with_range": 9
+        },
+        "TE": {
+          "n": 6,
+          "mae": 0.97,
+          "bias": 0.91,
+          "rmse": 1.31,
+          "coverage80": 1.0,
+          "n_with_range": 6
+        }
+      },
+      "n_duplicate_rows_dropped": 0,
+      "unprojected_top": []
     }
   },
-  "completed_game_rows": 1440,
+  "track_record": {
+    "n": 1367,
+    "mae": 4.54,
+    "bias": -1.65,
+    "rmse": 6.6,
+    "coverage80": 0.789,
+    "n_with_range": 1059,
+    "by_position": {
+      "QB": {
+        "n": 134,
+        "mae": 6.87,
+        "bias": -3.35,
+        "rmse": 8.63,
+        "coverage80": 0.781,
+        "n_with_range": 105
+      },
+      "RB": {
+        "n": 337,
+        "mae": 4.41,
+        "bias": -1.65,
+        "rmse": 6.56,
+        "coverage80": 0.848,
+        "n_with_range": 270
+      },
+      "WR": {
+        "n": 586,
+        "mae": 4.56,
+        "bias": -1.44,
+        "rmse": 6.62,
+        "coverage80": 0.82,
+        "n_with_range": 450
+      },
+      "TE": {
+        "n": 310,
+        "mae": 3.64,
+        "bias": -1.3,
+        "rmse": 5.53,
+        "coverage80": 0.667,
+        "n_with_range": 234
+      }
+    }
+  },
+  "completed_game_rows": 1462,
   "has_intervals": true,
   "pace_blend_kappa": 3.0,
-  "generated_at": "2026-10-08T01:54:36+00:00",
+  "generated_at": "2026-10-10T17:09:50+00:00",
   "measured": {
     "QB": {
       "mae": 6.68,

@@ -165,7 +165,18 @@ def generate_week(season: int, week: int, draws: int, seed: int, write_parquet: 
         print(f"  wk{week}: artifacts were fitted on data through {artifacts.fitted_through}, "
               f"which includes this week's outcomes; refused")
         return None
-    games, rows, report = build_week_inputs(_read(game_path), _read(player_path), season=season,
+    game_rows, player_rows = _read(game_path), _read(player_path)
+    # Games that have kicked off carry their published pre-kickoff rows and
+    # results (generate_weekly_data.py / generate_game_predictions_data.py);
+    # only games still to be played are simulated.
+    if "source" in game_rows.columns:
+        game_rows = game_rows[game_rows["source"] != "published"]
+    if "source" in player_rows.columns:
+        player_rows = player_rows[player_rows["source"] != "published"]
+    if game_rows.empty:
+        print(f"  wk{week}: every game has kicked off; nothing to simulate, existing file kept")
+        return None
+    games, rows, report = build_week_inputs(game_rows, player_rows, season=season,
                                             week=week, known_player_ids=artifacts.known_player_ids)
     if rows.empty:
         print(f"  wk{week}: no scheduled QB/RB/WR/TE rows, skipped")

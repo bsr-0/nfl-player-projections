@@ -16211,3 +16211,25 @@ file, but which prediction the site should present (expected value including
 availability, or the conditional-on-playing number the intervals are built for)
 is a product decision. Details in
 `data/experiments/simulation_2026_check_20261010/`.
+
+**Site pages now show what was published before kickoff for played 2026 games (2026-10-10).**
+Both generators used to rewrite past weeks: the weekly page showed a later
+`predict(as_of)` replay against actual points (current code and repaired data,
+so not what anyone saw), and the game page hid played games. Now, for every game
+that has kicked off, `src/evaluation/published_record.py` takes the last version
+of `docs/data/{weekly,game_predictions}_{season}_wk{N}.json` committed before that
+game's kickoff (nflverse kickoff time; git commit time as the timestamp) and
+scores it: player MAE, bias, RMSE and 80%-range coverage, plus projected players
+with no stat line (not scored) and players with a stat line but no projection
+(counted, top names listed); games: winners, Brier, margin and total misses and
+spread/over-under records beside the market line the row was published against.
+Games never committed before kickoff are listed, never filled in (2026: all of
+week 1's games, week 2's Thursday game). Each page has a per-week banner and a
+season track record. 2026 to date as published: players 4.54 MAE on 1,367
+player-games, mean error -1.65 (QB -3.35), 80% range held 79%; games: logistic
+27-21 on winners = market favorite 27-21, margin miss 9.06 vs the line's 9.00,
+spread picks 20-26-2. Weeks 1-2 were published by earlier model modes (season
+pace / unblended weekly model) and weeks 1-2 player files had no player_id, so
+they are matched by name (ambiguous names left unscored). The record only covers
+what was committed before kickoff: site data must be committed before each
+Thursday for that week to count.
