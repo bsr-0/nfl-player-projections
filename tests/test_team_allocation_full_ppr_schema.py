@@ -58,6 +58,9 @@ def test_builder_emits_full_ppr_columns_and_compositional_shares():
             {"player_id": "w", "season": 2024, "week": week, "targets": 7, "rushing_attempts": 0, "receiving_yards": 90, "rushing_yards": 0, "receptions": 5, "receiving_tds": 1, "rushing_tds": 0, "passing_yards": 0, "passing_tds": 0, "interceptions": 0},
         ])
     pd.DataFrame(stats).to_sql("player_weekly_stats", con, index=False)
+    # build_shares needs the schedule to tell played team-weeks from unplayed ones.
+    pd.DataFrame([{"season": 2024, "week": w, "home_team": "AAA", "away_team": "BBB",
+                   "home_score": 24, "away_score": 20} for w in (1, 2)]).to_sql("schedule", con, index=False)
     panel = build_shares(con, 2024, 2024)
     assert set(ALL_VOLUME_COLS).issubset(panel.columns)
     assert set(ALL_SHARE_COLS).issubset(panel.columns)

@@ -27,6 +27,9 @@ def _panel():
          "receptions": 2, "receiving_tds": 0, "rushing_tds": 0, "passing_yards": 10,
          "passing_tds": 0, "interceptions": 0},
     ]).to_sql("player_weekly_stats", con, index=False)
+    # build_shares needs the schedule to tell played team-weeks from unplayed ones.
+    pd.DataFrame([{"season": 2025, "week": 1, "home_team": "AAA", "away_team": "BBB",
+                   "home_score": 17, "away_score": 10}]).to_sql("schedule", con, index=False)
     panel = build_shares(con, 2025, 2025)
     con.close()
     return panel
