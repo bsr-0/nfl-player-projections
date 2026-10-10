@@ -46,3 +46,36 @@ construction (the models were trained on full form and Elo); the replay cannot
 say it predicts better yet. Neither state beats the Vegas line on this sample.
 
 `week5_predictions_by_state.csv` and `replay_2026_weeks2_5.csv` are local only (gitignored).
+
+## Walk-forward accuracy review (run 2026-10-10 on the repaired database)
+
+`train_game_outcome_model.py --no-save` and `train_game_margin_model.py --no-save`
+(logs `backtest_winprob.log`, `backtest_margin_total.log`): each fold trains on
+strictly earlier seasons. 5,482 games; test seasons 2022-2025 (about 285 games
+each) plus 2026 weeks 1-4 (65 games, too few to read). Pooled over 1,201 games:
+
+| Home win | Accuracy | Log loss | AUC | Brier |
+| --- | ---: | ---: | ---: | ---: |
+| Logistic | 0.673 | 0.613 | 0.714 | 0.213 |
+| XGBoost | 0.654 | 0.627 | 0.698 | 0.219 |
+| Random forest | 0.671 | 0.623 | 0.705 | 0.217 |
+| Vegas favorite | 0.673 | 0.609 | 0.720 | 0.211 |
+
+| Margin / total MAE | Ridge | XGBoost | RF | Market line |
+| --- | ---: | ---: | ---: | ---: |
+| Margin | 9.654 | 9.831 | 9.742 | 9.558 |
+| Total | 10.191 | 10.273 | 10.218 | 10.211 |
+
+Ridge picks against the spread won 46.9% (95% interval 44.0-49.8% on about 1,150
+picks; break-even at -110 is 52.4%), and over/under picks 53.7% (ridge), 52.3%
+(XGBoost), 51.8% (RF).
+
+Reading: no model beats the market. The logistic model matches the Vegas
+favorite's accuracy and is slightly behind it on log loss, AUC and Brier;
+XGBoost, the weakest, is the one whose week 5 picks moved most. Margin MAE trails
+the closing line for every model, and only the ridge total edges the line (10.191
+vs 10.211, a 0.2% gap). Against the spread the models lose money in this
+sample. The over/under results are the only ones above break-even and they are
+within noise of 50%. The stale-input problem therefore did not hide a model that
+was beating the market; it changes which of several roughly-equal forecasts the
+site showed.

@@ -16183,3 +16183,13 @@ inputs are not distinguishable (paired Brier and margin MAE intervals span zero)
 and neither beats the Vegas line. Details:
 `data/experiments/game_outcome_data_repair_20261010/`. The accuracy review in
 CLAUDE.md row 9 is still open.
+
+**Game outcome accuracy review (2026-10-10).** Walk-forward on the repaired
+database, 5,482 games, test seasons 2022-2025 plus 2026 weeks 1-4 (1,201 games
+pooled): the logistic model equals the Vegas favorite on accuracy (0.673) and
+trails it slightly on log loss (0.613 vs 0.609), AUC and Brier; XGBoost and the
+random forest are weaker. Margin MAE trails the closing line for every model
+(ridge 9.654 vs 9.558); ridge picks against the spread won 46.9%, over/under
+52-54%. No edge over the market shown. The CLAUDE.md row 9 accuracy review is
+done; what remains is whether the site should present these as picks at all.
+Details and logs in `data/experiments/game_outcome_data_repair_20261010/`.
