@@ -9,6 +9,9 @@
 #       ids nflverse has published (scripts/refresh_draft_identity.py; rookies who
 #       debuted otherwise have no draft capital)
 #   2. load this week's injury reports (step 2; the live forecast reads them)
+#   2b. scripts/check_live_inputs.py -- fails if the loaded weeks' team-level PBP
+#       columns read zero (Plan A would silently forecast a run-heavy league);
+#       on failure no forecast is written and the notification says so
 #   3. scripts/run_forward_week.py run -- refuses if the lineage broke, the
 #      week is outside 2026 weeks 6-13, the deadline passed, or the week is
 #      already written (so the second Wednesday attempt is a no-op).
@@ -40,17 +43,25 @@ fi
   "$PY" scripts/refresh_draft_identity.py --seasons 2026 --write || echo "refresh_draft_identity exited $?"
   echo "== $(date) backfill_injuries"
   "$PY" scripts/backfill_injuries.py --seasons 2026 2026 || echo "backfill_injuries exited $?"
-  echo "== $(date) run_forward_week run"
-  "$PY" scripts/run_forward_week.py run
+  echo "== $(date) check_live_inputs"
+  if "$PY" scripts/check_live_inputs.py; then
+    echo "== $(date) run_forward_week run"
+    "$PY" scripts/run_forward_week.py run
+  else
+    echo "LIVE INPUT CHECK FAILED: no forecast written; fix the data, then rerun the steps by hand before the deadline"
+    false
+  fi
 } >"$LOG" 2>&1
-status=$?
+rc=$?  # not `status`: read-only in zsh
 
-if [[ $status -eq 0 ]]; then
+if [[ $rc -eq 0 ]]; then
   week=$(grep -m1 '"week":' "$LOG" | tr -dc '0-9')
   notify "Week $week forecasts frozen before the deadline."
 elif grep -q "refusing to overwrite" "$LOG"; then
   : # this week was already written by the earlier attempt
+elif grep -q "LIVE INPUT CHECK FAILED" "$LOG"; then
+  notify "Live inputs failed the check -- NO forecast written; see $LOG"
 else
   notify "Weekly run FAILED -- see $LOG"
 fi
-exit $status
+exit $rc

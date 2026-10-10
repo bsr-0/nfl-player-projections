@@ -16084,3 +16084,23 @@ item 1 was fixed.
 All five open items of the 2026-10-09 live-versus-replay entry are now resolved
 or unfixable on our side (weather is observed in replays; 2026 participation and
 personnel data are unpublished).
+
+**Guard against empty live inputs added 2026-10-09 (`scripts/check_live_inputs.py`; no pinned file changed).**
+Zeroed PBP columns were invisible downstream: Plan A forecast a run-heavy league
+(team passing 205 against a 229 norm) with nothing to flag it. The check computes,
+for every loaded 2026 week, the share of teams whose summed `neutral_targets`,
+`neutral_rushes`, `third_down_targets`, `high_leverage_touches` and
+`redzone_targets` is exactly zero, and fails if it exceeds 25% (50% for red-zone
+targets). The worst single week of 2020-2025 was 3.8%, 8.3%, 0%, 0% and 18.8%; the
+broken state was 94-100%. Today's database passes (worst week 0%, 0%, 0%, 0%, 6%)
+and the pre-repair database fails on all four loaded weeks. Missing weekly PFR /
+NGS / snap-count rows for the newest week and a draft table without official ids
+are warnings only: they lag upstream by a day or two and would cost a deadline
+for a smaller degradation. `forward_week_job.sh` runs it after the refresh steps
+and before the runner; on failure no forecast is written and the notification says
+so. By hand: `python scripts/check_live_inputs.py` before `run_forward_week.py run`.
+Testing the job's branches with stubbed commands also found a bug that was already
+there: the script assigned zsh's read-only `status`, so it exited after the runner
+and never sent either notification. Renamed to `rc`; success, check failure and
+"already written" now notify as intended (`tests/test_check_live_inputs.py`
+covers the check; the job shell was exercised with stubs, not under launchd).
