@@ -16125,3 +16125,36 @@ no-op. `--validate 2025` reproduces all 570 stored personnel team-weeks and all
 `check_live_inputs.py` warns while the newest week has no rows. Changing the live
 predictor's skip would need `src/utils/database.py`, which is pinned; the script
 avoids it.
+
+**Week 6 rehearsal (2026-10-09, late): three refresh defects found and fixed before the real run.**
+Running the weekly steps by hand on a Friday (week 5's Thursday game played,
+the rest not) turned up:
+1. *A partial week served from the PBP cache.* `data/raw/pbp_advanced_2026.parquet`
+   (written 17:55 by the PBP repair) held week 5 for 2 teams. The cache was
+   rebuilt only when its newest week was behind the calendar, and the calendar
+   stays on week 5 until Thursday Oct 15, so Tuesday's load would have reused it
+   and stored week 5 with PBP columns zero for ~30 teams (the new guard would
+   then have blocked the forecast). `get_pbp_advanced_stats` now also rebuilds a
+   current-season cache whose newest week has fewer teams than the schedule
+   lists (`stale_cache_reason`), and checks the team cache on its own.
+2. *The team-level PBP cache stuck at week 1.* Callers that skip the team frame
+   refresh only the player cache, so `pbp_team_advanced_2026.parquet` stayed at
+   week 1 (Sep 15) and 18 PBP-derived `team_stats` columns were NULL for every
+   team in weeks 2-4. The served model reads two (`neutral_pass_rate_oe`,
+   `pace_sec_per_play`); on live rows their roll3 means quietly averaged the
+   filled weeks, so the zero/NaN audit missed them. Plan A reads none.
+   `scripts/repair_team_pbp_columns.py` filled the 1,728 NULL cells (UPDATE of
+   NULL cells only; `--validate 2025` reproduces all 570 team-weeks, 5 red-zone
+   values revised). Effect: 101 of 706 live players move, mean abs 0.09 among
+   them, max 1.29, mean signed +0.001. `check_live_inputs.py` now fails when more
+   than 25% of a loaded week's teams lack either column (2024 and 2025 pass).
+3. *Schedule scores stopped after week 1.* `auto_refresh` loaded a season's
+   schedule only when it had none. It now reloads the current season every time
+   (`insert_schedule` keeps existing values). Weeks 1-4 were loaded by hand;
+   week 5's Thursday score was held back so no game is scored without stats
+   before Tuesday. The check warns on unscored games in loaded weeks.
+Also: `auto_refresh` counted a partly loaded newest week as loaded, so a Friday
+refresh would have hidden the rest of that week from both reload triggers until
+the next Thursday; `newest_complete_week` now discounts it
+(`tests/test_current_season_staleness.py`). `auto_refresh` itself was not run in
+the rehearsal for that reason, so its first real run with these fixes is Tuesday.

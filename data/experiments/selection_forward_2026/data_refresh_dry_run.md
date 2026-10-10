@@ -62,3 +62,35 @@ of 13.13. 50 rows now carry real draft round, pick, value and capital.
   B. Sharp +0.18, M. Benson -0.16): the undrafted prior sits next to round 7.
 - No same-week information is involved: draft round and pick are facts known
   before the player's first game.
+
+## Rehearsal of the week 6 steps (2026-10-09, late)
+
+The weekly job's steps were run by hand against the real database, except
+`auto_refresh`: on a Friday it would store week 5 from Thursday's game alone
+(see GAPS.md, "Week 6 rehearsal"). Found and fixed on the way: a PBP cache
+holding a partial week 5 that the loader would have reused through Wednesday,
+a team-level PBP cache stuck at week 1 (18 `team_stats` columns NULL for weeks
+2-4; repaired, backup `nfl_data_pre_team_pbp_20261009_234609.db`), and schedule
+scores missing after week 1 (weeks 1-4 loaded, backup
+`nfl_data_pre_schedule_scores_20261009_234228.db`).
+
+`refresh_live_inputs`, `refresh_draft_identity` and `refresh_participation` had
+nothing to add, `backfill_injuries` wrote 1,398 rows, `check_live_inputs` passed
+(warnings: no 2026 participation yet). Dry run exited 0, lineage intact, 165,857
+settled canonical rows unchanged, same 661 listed players. Previous run in
+`dry_run_superseded_team_pbp_20261009/`.
+
+| Model | Rows changed (of 661) | Mean abs change | Max abs change |
+| --- | ---: | ---: | ---: |
+| Incumbent (live blend) | 91 | 0.013 | 1.29 |
+| Unblended served | 91 | 0.024 | 2.26 |
+| Plan A | 0 | 0 | 0 |
+| Rolling-3 | 0 | 0 | 0 |
+
+90 of the 91 changes are the `team_stats` repair (`team_neutral_pass_rate_oe_roll3_mean`,
+`team_pace_sec_per_play_roll3_mean`); each matches the repair's isolated effect on
+scratch copies of identical data, where it moves 101 of 706 live players (mean abs
+0.09 among them, mean signed +0.001). The 91st is B. Mayfield (+0.64): the injury
+backfill added 327 2026 rows, among them his final week 5 status ("Out", thumb;
+before: none). That an "Out" status raises the incumbent's forecast is odd and
+not investigated here.

@@ -3,8 +3,8 @@
   "week": 5,
   "dry_run": true,
   "deadline_utc": "2026-10-08T04:00:00+00:00",
-  "started_utc": "2026-10-10T04:47:00.470508+00:00",
-  "written_utc": "2026-10-10T04:49:35.145742+00:00",
+  "started_utc": "2026-10-10T02:11:01.150988+00:00",
+  "written_utc": "2026-10-10T02:13:31.085618+00:00",
   "before_deadline": false,
   "lineage_sha256": "8e8e9344935a3d85f728693c7f167f2646d137b5513f7a7b8760bbaf2aa7a195",
   "artifacts_sha256": {
@@ -35,7 +35,7 @@
     }
   },
   "list_sha256": "1013aef691bd57fd8578949b5e3a4393909ba0a00f283906b75a16372db8de5e",
-  "forecasts_sha256": "616404b17817e8fd070189a0b078dc29803d4512eba91760729d6bc56e53b7b3",
+  "forecasts_sha256": "ccce4a1d3b23995fec7ee76e6edd0b372648e9a4a1e392535a42787ee081874a",
   "models": [
     "incumbent_live_blend",
     "served_unblended",

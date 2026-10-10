@@ -1204,6 +1204,41 @@ def _pbp_cache_paths(season: int) -> tuple:
     return player_cache, team_cache
 
 
+def _scheduled_teams_by_week(season: int) -> dict:
+    """{week: number of teams with a scheduled game} from the local schedule table."""
+    import sqlite3
+    from config.settings import DB_PATH
+    with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as con:
+        sched = pd.read_sql("SELECT week, home_team, away_team FROM schedule WHERE season = ?",
+                            con, params=[int(season)])
+    teams = pd.concat([sched[["week", "home_team"]].rename(columns={"home_team": "team"}),
+                       sched[["week", "away_team"]].rename(columns={"away_team": "team"})])
+    return teams.dropna().groupby("week").team.nunique().to_dict()
+
+
+def stale_cache_reason(cached: pd.DataFrame, current_week: int, scheduled: dict):
+    """Why a current-season PBP cache must be rebuilt, or None if it can be used.
+
+    Stale when its newest week is behind the calendar, or when that week is
+    only partly there: fewer teams than the schedule lists for it. The second
+    case is a cache written between a week's first and last game (a Friday
+    holds Thursday's game only); the calendar does not move to the next week
+    until the following Thursday, so the first rule alone kept serving that
+    partial week through the whole forecasting window.
+    """
+    if cached is None or cached.empty or "week" not in cached.columns:
+        return None
+    newest = int(cached["week"].max())
+    if current_week > 0 and newest < current_week:
+        return f"cached week {newest}, current week {current_week}"
+    expected = scheduled.get(newest, 0)
+    if "team" in cached.columns and expected:
+        have = cached.loc[cached["week"] == newest, "team"].nunique()
+        if have < expected:
+            return f"week {newest} has {have} of {expected} scheduled teams"
+    return None
+
+
 def get_pbp_advanced_stats(season: int,
                            include_team: bool = True,
                            include_advanced: bool = None,
@@ -1212,9 +1247,9 @@ def get_pbp_advanced_stats(season: int,
     Load or compute advanced PBP-derived player/team stats with caching.
     Returns (player_weekly_df, team_weekly_df).
 
-    For the current in-progress season, the cache is invalidated when the
-    cached data has fewer weeks than the current NFL week so new game data
-    is picked up automatically.
+    For the current in-progress season each cache (player and team, checked
+    separately) is rebuilt when ``stale_cache_reason`` says so: its newest
+    week is behind the calendar, or only partly played.
     """
     if include_advanced is None:
         include_advanced = PBP_ADVANCED_FEATURES_ENABLED
@@ -1222,6 +1257,19 @@ def get_pbp_advanced_stats(season: int,
     player_cache, team_cache = _pbp_cache_paths(season)
     player_df = None
     team_df = None
+
+    def _is_stale(df, label: str) -> bool:
+        try:
+            from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week
+            if season != get_current_nfl_season():
+                return False
+            current_week = int(get_current_nfl_week().get("week_num", 0) or 0)
+            reason = stale_cache_reason(df, current_week, _scheduled_teams_by_week(season))
+        except Exception:
+            return False
+        if reason:
+            print(f"  PBP {label} cache for {season} is stale ({reason}); refreshing")
+        return bool(reason)
 
     # Detect whether cached data is stale for the current in-progress season
     cache_is_stale = False
@@ -1231,26 +1279,18 @@ def get_pbp_advanced_stats(season: int,
         except Exception:
             print(f"  Warning: corrupt PBP cache for season {season}, rebuilding")
             player_df = None
-        # For the current season, check if cache is missing recent weeks
-        if player_df is not None and "week" in player_df.columns:
-            try:
-                from src.utils.nfl_calendar import get_current_nfl_season, get_current_nfl_week
-                current_season = get_current_nfl_season()
-                if season == current_season:
-                    week_info = get_current_nfl_week()
-                    current_week = int(week_info.get("week_num", 0) or 0)
-                    cached_max_week = int(player_df["week"].max())
-                    if current_week > 0 and cached_max_week < current_week:
-                        print(f"  PBP cache for {season} is stale (cached week {cached_max_week}, current week {current_week}); refreshing")
-                        cache_is_stale = True
-                        player_df = None
-            except Exception:
-                pass
+        if player_df is not None and _is_stale(player_df, "player"):
+            cache_is_stale = True
+            player_df = None
     if include_team and use_cache and team_cache.exists() and not cache_is_stale:
         try:
             team_df = pd.read_parquet(team_cache)
         except Exception:
             print(f"  Warning: corrupt team PBP cache for season {season}, rebuilding")
+            team_df = None
+        # Checked on its own: callers that skip the team frame refresh only the
+        # player cache, so the team cache can fall behind it (2026: stuck at week 1).
+        if team_df is not None and _is_stale(team_df, "team"):
             team_df = None
     elif cache_is_stale:
         team_df = None

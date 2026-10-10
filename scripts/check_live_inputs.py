@@ -20,10 +20,15 @@ worst week of 2020-2025 and well below the broken state (every team):
     high_leverage_touches      0.0%             25%
     redzone_targets           18.8%             50%
 
-Missing 2026 weekly PFR / NGS / snap-count / participation rows for the newest week and a draft
-table without official ids are reported as warnings only: those lag upstream
-for a day or two and degrade a forecast less than they are worth missing a
-deadline for.
+It also fails if, in a loaded week, more than 25% of the teams that played have
+no `team_stats` value for a PBP-derived column the served model reads
+(TEAM_STATS_COLUMNS; 2026 weeks 2-4 were NULL for every team when the team PBP
+cache stopped at week 1).
+
+Missing 2026 weekly PFR / NGS / snap-count / participation rows for the newest
+week, unscored games in loaded weeks and a draft table without official ids are
+reported as warnings only: those lag upstream for a day or two and degrade a
+forecast less than they are worth missing a deadline for.
 
     python scripts/check_live_inputs.py [--season 2026] [--db PATH]
 
@@ -46,6 +51,9 @@ LIMITS = {  # max share of teams with a zero weekly sum
     "neutral_targets": 0.25, "neutral_rushes": 0.25, "third_down_targets": 0.25,
     "high_leverage_touches": 0.25, "redzone_targets": 0.50,
 }
+# team_stats columns the served model reads (team_*_roll3_mean); max share of
+# the week's teams with no value
+TEAM_STATS_COLUMNS = {"neutral_pass_rate_oe": 0.25, "pace_sec_per_play": 0.25}
 WEEKLY_TABLES = ["weekly_pfr", "snap_counts", "ngs_passing", "ngs_receiving", "ngs_rushing",
                  # nflverse participation; empty for 2026 until it is published
                  "team_personnel_stats", "pbp_pass_participation"]
@@ -83,6 +91,26 @@ def check(con: sqlite3.Connection, season: int) -> dict:
         elif not con.execute(f"SELECT 1 FROM {table} WHERE season = ? AND week = ? LIMIT 1",
                              (season, newest)).fetchone():
             warnings.append(f"{table} has no {season} week {newest} rows")
+    teams = pd.read_sql("SELECT week, COUNT(DISTINCT team) AS teams FROM player_weekly_stats "
+                        "WHERE season = ? AND week >= 1 GROUP BY week", con, params=[season]).set_index("week").teams
+    if "team_stats" not in have:
+        failures.append("table team_stats does not exist")
+    else:
+        filled = pd.read_sql(
+            "SELECT week, " + ", ".join(f"COUNT(DISTINCT CASE WHEN {c} IS NOT NULL THEN team END) AS {c}"
+                                        for c in TEAM_STATS_COLUMNS)
+            + " FROM team_stats WHERE season = ? AND week >= 1 GROUP BY week", con, params=[season]
+        ).set_index("week").reindex(teams.index).fillna(0)
+        for week, n in teams.items():
+            over = [f"{c} {1 - filled.at[week, c] / n:.0%} (limit {lim:.0%})"
+                    for c, lim in TEAM_STATS_COLUMNS.items() if 1 - filled.at[week, c] / n > lim]
+            if over:
+                failures.append(f"{season} week {int(week)}: teams with no team_stats value: " + ", ".join(over))
+    if "schedule" in have:
+        unscored = con.execute("SELECT COUNT(*) FROM schedule WHERE season = ? AND week BETWEEN 1 AND ? "
+                               "AND (home_score IS NULL OR away_score IS NULL)", (season, newest)).fetchone()[0]
+        if unscored:
+            warnings.append(f"schedule has {unscored} unscored {season} games in weeks 1-{newest}")
     if "draft_picks_v2" in have:
         n, ok = con.execute("SELECT COUNT(*), SUM(player_id LIKE '00-%') FROM draft_picks_v2 "
                             "WHERE draft_season = ?", (season,)).fetchone()

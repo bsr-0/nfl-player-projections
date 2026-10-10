@@ -43,6 +43,37 @@ from src.utils.nfl_calendar import (
 )
 
 
+def newest_complete_week(db: DatabaseManager, season: int) -> int:
+    """Newest stored week of `season`, minus one if that week is only partly loaded.
+
+    A refresh between a week's first and last game (Thursday night to Monday
+    night) stores that week from the games played so far. Counting it as the
+    local max then hid the rest of the week from both reload triggers: the PBP
+    one compares against the calendar, which stays on that week until the next
+    Thursday, and the weekly-release one finds nothing newer. A week counts as
+    partly loaded when fewer teams have stats rows than the schedule lists.
+    """
+    newest = int(db.get_latest_week_for_season(season) or 0)
+    if newest <= 0:
+        return newest
+    with db._get_connection() as conn:
+        have = conn.execute(
+            "SELECT COUNT(DISTINCT team) FROM player_weekly_stats WHERE season = ? AND week = ?",
+            (season, newest)).fetchone()[0]
+        try:
+            expected = conn.execute(
+                "SELECT COUNT(DISTINCT team) FROM (SELECT home_team AS team FROM schedule "
+                "WHERE season = ? AND week = ? UNION SELECT away_team FROM schedule "
+                "WHERE season = ? AND week = ?)", (season, newest, season, newest)).fetchone()[0]
+        except Exception:  # no schedule table: nothing to compare against
+            expected = 0
+    if expected and have < expected:
+        print(f"  {season} week {newest} is partly loaded ({have} of {expected} scheduled teams); "
+              f"treating week {newest - 1} as the newest complete week")
+        return newest - 1
+    return newest
+
+
 class NFLDataRefresher:
     """
     Automatically refresh NFL data from nfl-data-py.
@@ -122,9 +153,9 @@ class NFLDataRefresher:
         
         Returns (local_max_week, remote_max_week)
         """
-        # Get local max week
-        local_max = self.db.get_latest_week_for_season(season)
-        
+        # Get local max week, not counting one that is only partly loaded
+        local_max = newest_complete_week(self.db, season)
+
         # Get remote max week
         try:
             df = _fetch_weekly_data([season])
@@ -212,8 +243,13 @@ class NFLDataRefresher:
         
         # Load schedules for current and upcoming seasons (needed for matchup/Super Bowl week 22)
         for season in status['schedule_seasons']:
+            # The current season is reloaded every time: loading it only when
+            # absent stored week 1's scores and never another (2026 weeks 2-4
+            # were unscored), and insert_schedule's upsert keeps existing
+            # values, so a reload only adds scores, lines and time changes.
             need_schedule = (
-                season > max(status['local_seasons'] or [0])
+                season == current
+                or season > max(status['local_seasons'] or [0])
                 or not self.db.has_schedule_for_season(season)
             )
             if need_schedule:
