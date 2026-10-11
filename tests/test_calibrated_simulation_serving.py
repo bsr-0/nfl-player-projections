@@ -86,7 +86,25 @@ def _serving_week(season=2026, week=5):
                  "predicted_points": 8.0, "actual_points": 99.0})
     rows.append({"player_id": "T9_WR1", "team": "T9", "opponent": "T8", "position": "WR",
                  "predicted_points": 9.0, "actual_points": 99.0})
-    return games, pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    # The weekly page's blended number sits below the unblended model; draws centre on the model.
+    frame["predicted_points_model"] = frame["predicted_points"]
+    frame["predicted_points"] = frame["predicted_points"] * 0.8
+    return games, frame
+
+
+def test_draws_centre_on_the_unblended_model_and_carry_the_blend(artifacts):
+    games, players = _serving_week()
+    g, rows, _ = generate.build_week_inputs(games, players, season=2026, week=5,
+                                            known_player_ids=artifacts.known_player_ids)
+    payload = generate.simulate_week(g, rows, artifacts, draws=3000, seed=11, model_config={})
+    for game_id, matrix in payload.draws.items():
+        gp = payload.game_players(game_id)
+        assert np.allclose(gp["blend_prediction"], gp["served_prediction"] * 0.8)
+        assert np.abs(matrix.mean(axis=0) - gp["served_prediction"].to_numpy()).max() < 0.6
+    lacking = players.drop(columns="predicted_points_model")
+    with pytest.raises(ValueError, match="predicted_points_model"):
+        generate.build_week_inputs(games, lacking, season=2026, week=5, known_player_ids=frozenset())
 
 
 def test_week_inputs_drop_outcomes_and_report_exclusions(artifacts):

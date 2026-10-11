@@ -2,12 +2,22 @@
 """Generate calibrated-copula simulation summaries from the serving JSON files.
 
 Downstream of generate_weekly_data.py and generate_game_predictions_data.py; it
-does not access SQLite or retrain anything. Each player's draws are the served
-prediction plus a calibrated marginal deviation, reordered into game-level
-dependence by the role-factor copula -- exactly the backtest's
-``calibrated_role_factor`` arm (src/models/calibrated_simulation.py). Artifacts
-come from scripts/fit_simulation_artifacts.py; without them this fails rather
-than falling back to anything.
+does not access SQLite or retrain anything. Each player's draws are the weekly
+model's UNBLENDED prediction (``predicted_points_model``) plus a calibrated
+marginal deviation, reordered into game-level dependence by the role-factor
+copula -- exactly the backtest's ``calibrated_role_factor`` arm
+(src/models/calibrated_simulation.py). Artifacts come from
+scripts/fit_simulation_artifacts.py; without them this fails rather than
+falling back to anything.
+
+Why unblended (2026-10-11): the calibration is fitted on the unblended model's
+residuals for players who played, so the draws are "points if he plays". The
+weekly page's number is the pace blend, which leans on the season pace / 17 --
+a per-scheduled-game expectation that already discounts missed games -- and ran
+22% under on players who played in 2026 weeks 1-4; centred on it, team and game
+fantasy totals held 56% / 52% of outcomes in their 80% intervals (unblended:
+81% / 75% with the role factor). The payload's ``served_prediction`` is the
+centre of the draws; ``blend_prediction`` carries the weekly page's number.
 
 Weeks at or before the artifacts' fitted-through week are refused: their own
 outcomes shaped the calibration.
@@ -89,7 +99,8 @@ def build_week_inputs(games: pd.DataFrame, players: pd.DataFrame, *, season: int
 
     outcome_columns = [c for c in players.columns if c == "actual_points" or str(c).startswith("actual_")]
     players = players.drop(columns=outcome_columns)
-    if missing := {"player_id", "team", "opponent", "position", "predicted_points"} - set(players.columns):
+    if missing := {"player_id", "team", "opponent", "position", "predicted_points",
+                   "predicted_points_model"} - set(players.columns):
         raise ValueError(f"weekly predictions lack {sorted(missing)}")
     players = players.assign(player_id=players["player_id"].astype(str), team=players["team"].astype(str),
                              opponent=players["opponent"].astype(str),
@@ -110,10 +121,11 @@ def build_week_inputs(games: pd.DataFrame, players: pd.DataFrame, *, season: int
     wrong_opponent = players["opponent"] != info.map(lambda v: v[3])
     if wrong_opponent.any():
         raise ValueError(f"{int(wrong_opponent.sum())} players' opponent disagrees with the schedule")
-    predicted = pd.to_numeric(players["predicted_points"], errors="coerce")
+    predicted = pd.to_numeric(players["predicted_points_model"], errors="coerce")
     if predicted.isna().any() or not np.isfinite(predicted.to_numpy(float)).all():
-        raise ValueError("served predicted_points must be finite for every simulated player")
-    players["predicted_points"] = predicted.astype(float)
+        raise ValueError("the unblended predicted_points_model must be finite for every simulated player")
+    players["blend_prediction"] = pd.to_numeric(players["predicted_points"], errors="coerce").astype(float)
+    players["predicted_points"] = predicted.astype(float)   # the centre of the draws
     players["season"], players["week"] = season, week
     players["is_cold_start"] = ~players["player_id"].isin(known_player_ids)
     players = players.sort_values(["game_id", "player_id"], kind="mergesort").reset_index(drop=True)
@@ -149,7 +161,7 @@ def simulate_week(games: pd.DataFrame, rows: pd.DataFrame, artifacts: Simulation
         games=games[["game_id", "season", "week", "home_team", "away_team", *SERVED_GAME_FIELDS]]
         .reset_index(drop=True),
         players=players[["game_id", "player_id", "team", "position", "served_prediction", "role_key",
-                         "is_cold_start"]],
+                         "is_cold_start", "blend_prediction"]],
         draws=matrices)
     return payload
 
@@ -185,6 +197,7 @@ def generate_week(season: int, week: int, draws: int, seed: int, write_parquet: 
     provenance = manifest.get("provenance", {})
     payload = simulate_week(games, rows, artifacts, draws=draws, seed=seed, model_config={
         "simulation_status": "calibrated_copula", "season": season, "week": week, "draws": draws,
+        "centre": "predicted_points_model (unblended weekly model; points if he plays)",
         "marginal_candidate": manifest.get("marginal_candidate"),
         "selection_reason": artifacts.selection.get("reason"),
         "dependence": "role_factor", "dependence_fit_status": artifacts.dependence.diagnostics.get("status"),

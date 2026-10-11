@@ -117,6 +117,8 @@ def player_summary(payload: SimulationPayload) -> list[dict]:
         for column, row in enumerate(rows.itertuples(index=False)):
             output.append({"game_id": game_id, "player_id": row.player_id, "team": row.team,
                            "position": row.position, "served_prediction": float(row.served_prediction),
+                           **({"blend_prediction": float(row.blend_prediction)}
+                              if "blend_prediction" in rows.columns and pd.notna(row.blend_prediction) else {}),
                            **summarize_values(matrix[:, column])})
     return sorted(output, key=lambda entry: (entry["game_id"], entry["player_id"]))
 
