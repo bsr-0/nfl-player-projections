@@ -16,9 +16,21 @@ Two kinds of rows per week file (`source`):
   market line it was published against.
 The models' walk-forward backtest metadata stays the long-run accuracy claim.
 
+A third kind, "backtest": a completed game with no published prediction (every
+week-1 game, which predates this page, or a game whose file was never
+committed) is filled from models fitted on earlier seasons only
+(src/evaluation/game_backtest.py). Those rows are out of sample but were not
+published, and the page says so; the meta file also scores every completed game
+of the season that way (``backtest``), beside the published record.
+
+The saved models are refit here when games have completed since they were
+fitted (src/models/game_outcome/registry.py; seconds, using the hyperparameters
+already on file), so a new week needs only this script.
+
 Usage:
     python scripts/generate_game_predictions_data.py
     python scripts/generate_game_predictions_data.py --season 2026
+    python scripts/generate_game_predictions_data.py --no-refit    # warn instead of refitting
 """
 from __future__ import annotations
 
@@ -37,30 +49,6 @@ import pandas as pd
 from config.settings import MODELS_DIR
 
 OUT_DIR = Path("docs/data")
-
-# (output column, artifact filename, "proba" for classifiers or "point" for
-# regressors) -- same list as scripts/predict_upcoming_games.py, kept as an
-# independent copy rather than a shared import since that script prints a
-# console table and has no reason to depend on this one (or vice versa).
-MODEL_SPECS = [
-    ("home_win_prob_logistic", "game_outcome_logistic.joblib", "proba"),
-    ("home_win_prob_xgb", "game_outcome_xgb.joblib", "proba"),
-    ("home_win_prob_rf", "game_outcome_rf.joblib", "proba"),
-    ("predicted_margin_ridge", "game_margin_ridge.joblib", "point"),
-    ("predicted_margin_xgb", "game_margin_xgb.joblib", "point"),
-    ("predicted_margin_rf", "game_margin_rf.joblib", "point"),
-    ("predicted_total_ridge", "game_total_ridge.joblib", "point"),
-    ("predicted_total_xgb", "game_total_xgb.joblib", "point"),
-    ("predicted_total_rf", "game_total_rf.joblib", "point"),
-]
-
-
-def _load_if_exists(path: Path):
-    from src.models.game_outcome.models import load_model
-    if not path.exists():
-        return None
-    return load_model(path)
-
 
 def measured_accuracy() -> dict | None:
     """Honest, held-out walk-forward backtest numbers from each model's own
@@ -132,6 +120,7 @@ def _clean(df: pd.DataFrame) -> list:
 
 def build_predictions(season: int, games: pd.DataFrame, now: pd.Timestamp) -> dict[int, pd.DataFrame]:
     """Live predictions for every game that has not kicked off, by week."""
+    from src.models.game_outcome import registry
     from src.models.game_outcome.features import build_prediction_rows, feature_columns
 
     rows = build_prediction_rows(season)
@@ -145,22 +134,9 @@ def build_predictions(season: int, games: pd.DataFrame, now: pd.Timestamp) -> di
     feat_cols = feature_columns(rows)
     # Keep the site-generation serving path identical to the CLI path:
     # schedule odds may arrive from SQLite as object strings, while the saved
-    # models were trained on numeric feature columns.
-    X = rows[feat_cols].apply(pd.to_numeric, errors="coerce")
+    # models were trained on numeric feature columns (predict_set coerces).
     out = rows[["season", "week", "home_team", "away_team", "spread_line", "total_line"]].copy()
-
-    missing = []
-    for out_col, filename, kind in MODEL_SPECS:
-        model = _load_if_exists(MODELS_DIR / filename)
-        if model is None:
-            missing.append(filename)
-            continue
-        if kind == "proba":
-            out[out_col] = model.predict_proba(X)[:, 1]
-        else:
-            out[out_col] = model.predict(X)
-    if missing:
-        print(f"  warning: missing model artifact(s), skipping: {missing}")
+    out = pd.concat([out, registry.predict_set(registry.load_set("production"), rows[feat_cols])], axis=1)
     # season/week are implied by the filename (same convention as
     # weekly_{season}_wk{N}.json) -- dropped rather than carried per row.
     return {int(wk): d.drop(columns=["season", "week"]).assign(source="live")
@@ -173,6 +149,8 @@ PUBLISHED_KEEP = ["published_at", "published_commit", "kickoff", "final", "home_
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--season", type=int, default=None)
+    ap.add_argument("--no-refit", action="store_true",
+                    help="warn instead of refitting saved models that predate the latest results")
     args = ap.parse_args()
 
     from src.utils.nfl_calendar import get_current_nfl_season
@@ -183,8 +161,14 @@ def main() -> int:
     from src.evaluation.published_record import game_week, kickoff_times, season_game_summary
 
     now = pd.Timestamp.now(tz="UTC")
+    from src.evaluation.game_backtest import backtest_summary, season_backtest, unpublished_rows
+    from src.models.game_outcome import registry
+
     with sqlite3.connect(DB_PATH) as con:
         games = kickoff_times(season, con)
+        _, note = registry.ensure_set("production", con=con, refit=not args.no_refit)
+        print(f"Saved game models: {note}")
+        backtest, backtest_info = season_backtest(season, con, refit=not args.no_refit)
 
     print(f"Generating game predictions for {season}: live for unplayed games, "
           "published-before-kickoff rows for the rest...")
@@ -206,6 +190,17 @@ def main() -> int:
             parts.append(published)
         if wk in live:
             parts.append(live[wk])
+        # Completed games nobody published a prediction for: out-of-sample backtest rows.
+        wk_bt = backtest[backtest["week"] == wk]
+        if not wk_bt.empty:
+            have = set() if published.empty else set(zip(published["home_team"], published["away_team"]))
+            fill = wk_bt[[(h, a) not in have for h, a in zip(wk_bt["home_team"], wk_bt["away_team"])]]
+            if not fill.empty:
+                keep = [c for c in fill.columns if c in PUBLISHED_KEEP or c.startswith(("home_win_prob_", "predicted_"))
+                        or c in ("home_team", "away_team", "spread_line", "total_line")]
+                fill = fill[keep].assign(source="backtest")
+                fill["kickoff"] = fill["kickoff"].map(lambda t: t.isoformat(timespec="minutes") if pd.notna(t) else None)
+                parts.append(fill)
         if parts:
             files[wk] = pd.concat(parts, ignore_index=True)
 
@@ -232,6 +227,18 @@ def main() -> int:
         # Played games: the predictions as committed before kickoff, scored.
         "week_results": results,
         "track_record": season_game_summary(published_frames),
+        # Every completed game of every complete week, scored with models fitted on
+        # earlier seasons only. Out of sample, but not published before kickoff.
+        "backtest": {
+            "basis": ("models fitted on seasons before %s only (nothing from this season reaches the fit); "
+                      "team form and Elo use only games before each game; the spread and total are the lines "
+                      "now stored for the game" % season),
+            "fitted": {k: backtest_info.get(k) for k in
+                       ("fitted_before_season", "trained_through", "n_training_games", "fitted_at", "weeks")},
+            **(backtest_summary(backtest) if not backtest.empty else {"n": 0}),
+        } if not backtest.empty else None,
+        "models": {k: v for k, v in registry.read_manifest().get("sets", {}).get("production", {}).items()
+                   if k in ("trained_through", "n_games", "fitted_at")},
         "games_not_published": not_published,
         "model": (
             "phase-1 win/loss classifiers (logistic/xgboost/random_forest) + "

@@ -16233,3 +16233,27 @@ pace / unblended weekly model) and weeks 1-2 player files had no player_id, so
 they are matched by name (ambiguous names left unscored). The record only covers
 what was committed before kickoff: site data must be committed before each
 Thursday for that week to count.
+
+**Weeks 1-4 backtests on the site; game models saved with a refit-only path (2026-10-11).**
+Game outcomes: `src/evaluation/game_backtest.py` scores every completed game of
+every complete week with models fitted on seasons before 2026 only (the
+walk-forward set; reproduces the training script's 2026 fold exactly). Completed
+games nobody published (all of week 1, DET@BUF) now show as rows tagged
+`backtest`, scored apart from the published record; the page has a backtest
+panel. Weeks 1-4, 64 games: logistic 41-23 = market favorite 41-23, XGBoost 42-22;
+margin miss ridge 9.78 vs line 9.63; ridge ATS 27-32-5, O/U 29-35. No edge.
+Weekly PPR: `scripts/replay_weekly_backtest.py` runs the served model + pace
+blend as of each completed week (production universe as of the week, models
+fitted <= 2025) on the repaired database, ~75 s a week. Weeks 1-4: MAE 4.46 on
+1,406 player-games, bias -1.64, 80% range 79% (QB 6.87, bias -3.34). On the
+1,015 players both cover, published 4.38 vs replay 4.36: the stale inputs cost
+almost nothing. Shown as a "Replay" column and panel, labelled not published.
+Saved game models: `scripts/refit_game_models.py` refits the nine models in ~7 s
+with the sidecars' hyperparameters (no backtest); joblibs stay gitignored, the
+manifest `data/models/game_models_manifest.json` records trained-through week,
+game count and artifact hashes. `generate_game_predictions_data.py` (step 7 of
+refresh_site_data.py) refits when games completed since (`--no-refit` to only
+warn). Production refit through 2026 wk5 (5,482 games) moved week 5 picks by
+0.002 logistic probability on average. Sep 19 models are backed up locally in
+`data/models/game_backup_20260919/`. Note: spread_line and total_line are model
+features.

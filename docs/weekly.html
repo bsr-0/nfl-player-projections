@@ -2,6 +2,9 @@
 <meta charset="utf-8">
 <title>Weekly Projections</title>
 <!--
+  Replay column / panel: docs/data/weekly_replay_{season}.json (scripts/replay_weekly_backtest.py), today's served
+  pipeline run as of each completed week on the repaired data. Labelled everywhere as not published; the published
+  record (git history, src/evaluation/published_record.py) stays the record of what was said.
   Weekly projections: the weekly ensemble (1w horizon) shrunk toward the
   Step 8 season pace by games played this season. One path for every week;
   see scripts/generate_weekly_data.py and src/predict.py
@@ -137,6 +140,7 @@
 <div id="banner"></div>
 <div id="resultbanner"></div>
 <details class="record" id="trackrecord"></details>
+<details class="record" id="replayrecord"></details>
 
 <div class="controls">
   <div class="ctl"><label>Week</label>
@@ -176,6 +180,7 @@
       <th class="mixcell sortable" data-key="pace_weight" title="sort by pace share">Pace · Form</th>
       <th class="num sortable actual-col" data-key="actual_points" title="sort by actual">Actual</th>
       <th class="num sortable actual-col" data-key="_miss" title="sort by miss">Miss</th>
+      <th class="num replay-col" title="Not published: today's pipeline run as of this week (see the Replay panel). Projection and its miss.">Replay</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
@@ -241,6 +246,7 @@
 const POS = ["QB","RB","WR","TE"];
 const MAX_COMPARE = 4;
 let RAW = [], META = null, SEASON = null, WEEK = null;
+let REPLAY = null;          // docs/data/weekly_replay_{season}.json, or null
 let SORT = { key: "predicted_points", asc: false };
 let COMPARE = new Set();
 
@@ -262,6 +268,14 @@ const MODE_LABEL = {
 const fmtWhen = iso => iso ? new Date(iso).toLocaleString(undefined,
   { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "—";
 const signed = (v, d = 1) => v == null ? "—" : `${v > 0 ? "+" : ""}${(+v).toFixed(d)}`;
+let REPLAY_IDX = {};
+// The replay's row for a player in the shown week, if the replay covers that week.
+function replayRow(r) {
+  if (!REPLAY || !REPLAY.rows || !REPLAY.rows[String(WEEK)]) return null;
+  if (!REPLAY_IDX[WEEK]) REPLAY_IDX[WEEK] = new Map(REPLAY.rows[String(WEEK)].map(x => [x.player_id, x]));
+  return r.player_id ? (REPLAY_IDX[WEEK].get(r.player_id) ?? null) : null;
+}
+const hasReplay = () => !!(REPLAY && REPLAY.rows && REPLAY.rows[String(WEEK)]);
 const pct = v => v == null ? "—" : `${Math.round(v * 100)}%`;
 
 function teamsInvolved(r) {
@@ -308,6 +322,8 @@ function render() {
     th.classList.toggle("asc", th.dataset.key === key && SORT.asc);
   });
   document.querySelectorAll(".actual-col").forEach(el => el.style.display = isPlayed ? "" : "none");
+  const showReplay = isPlayed && hasReplay();
+  document.querySelectorAll(".replay-col").forEach(el => el.style.display = showReplay ? "" : "none");
 
   // One shared scale so bars are comparable down the column.
   const hi = Math.max(1, ...rows.map(r => Math.max(
@@ -369,6 +385,15 @@ function render() {
             : `<span class="${r._miss > 0 ? "over" : "under"}">${r._miss > 0 ? "+" : ""}${r._miss.toFixed(1)}</span>`}</td>`
       : "";
 
+    let repCell = "";
+    if (showReplay) {
+      const rp = replayRow(r);
+      const rm = rp && act != null ? rp.predicted_points - act : null;
+      repCell = `<td class="num replay-col" title="not published: today's pipeline run as of this week">${rp
+        ? `${fmt1(rp.predicted_points)}${rm == null ? "" : ` <span class="${rm > 0 ? "over" : "under"}">(${rm > 0 ? "+" : ""}${rm.toFixed(1)})</span>`}`
+        : "—"}</td>`;
+    }
+
     const checked = COMPARE.has(pid(r)) ? "checked" : "";
     const disabled = (!checked && COMPARE.size >= MAX_COMPARE) ? "disabled" : "";
     return `<tr>
@@ -384,7 +409,7 @@ function render() {
       <td class="num">${fmt1(up)}</td>
       <td class="rangecell">${bar}</td>
       <td class="mixcell">${mix}</td>
-      ${missCell}
+      ${missCell}${repCell}
     </tr>`;
   }).join("");
 
@@ -459,6 +484,13 @@ function weekResultBanner(week) {
   if (notScored.length) items.push("Not in the numbers above: " + notScored.join("; ") + ".");
   const live = RAW.filter(r => r.source === "live").length;
   if (live) items.push(`${live} rows are for games not yet played and are live projections.`);
+  const rp = REPLAY && REPLAY.week_results && REPLAY.week_results[String(week)];
+  if (rp && rp.n != null) {
+    const vp = rp.vs_published;
+    items.push(`<strong>Replay, not published:</strong> today's pipeline run as of this week misses by ${(+rp.mae).toFixed(2)} points
+      on ${rp.n} players (mean error ${signed(rp.bias, 2)})${vp ? `; on the ${vp.n_common} players both cover, the published projections missed by
+      ${vp.mae_published.toFixed(2)} and the replay by ${vp.mae_replay.toFixed(2)}` : ""}. Shown in the Replay column and the panel above; it is not what was said before kickoff.`);
+  }
   el.innerHTML = `<div class="banner result"><strong>Week ${week}: what was published before kickoff,
     against what happened.</strong> Nothing here is re-run with hindsight.
     <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
@@ -488,6 +520,47 @@ function renderTrackRecord() {
     not record a stat line and are not scored; "Unprojected" players recorded one without a published
     projection. Weeks 1 and 2 were published by earlier versions of the model (see each week's banner).
     For comparison, the model's full replay of 2025 is in the notes below.</p>`;
+}
+
+function renderReplay() {
+  const el = $("replayrecord");
+  const rp = REPLAY;
+  if (!rp || !rp.track_record || !(rp.weeks || []).length) { el.style.display = "none"; return; }
+  const tr = rp.track_record, wr = rp.week_results || {};
+  const f2 = v => v == null ? "—" : (+v).toFixed(2);
+  const row = (label, r, cls = "") => {
+    const vp = r.vs_published;
+    return `<tr class="${cls}"><td>${label}</td><td class="num">${r.n}</td><td class="num">${f2(r.mae)}</td>
+      <td class="num">${signed(r.bias, 2)}</td><td class="num">${f2(r.rmse)}</td>
+      <td class="num">${r.coverage80 != null ? pct(r.coverage80) : "—"}</td>
+      <td class="num">${vp ? vp.n_common : "—"}</td><td class="num">${vp ? f2(vp.mae_published) : "—"}</td>
+      <td class="num">${vp ? f2(vp.mae_replay) : "—"}</td></tr>`;
+  };
+  const common = rp.weeks.map(w => wr[String(w)] && wr[String(w)].vs_published).filter(Boolean);
+  const nC = common.reduce((a, c) => a + c.n_common, 0);
+  const seasonVp = nC ? { n_common: nC,
+    mae_published: common.reduce((a, c) => a + c.mae_published * c.n_common, 0) / nC,
+    mae_replay: common.reduce((a, c) => a + c.mae_replay * c.n_common, 0) / nC } : null;
+  const pos = tr.by_position ? Object.entries(tr.by_position).filter(([, v]) => v)
+    .map(([p, v]) => `${p} ${f2(v.mae)} (${signed(v.bias, 2)})`).join(" · ") : "";
+  const first = Math.min(...rp.weeks), last = Math.max(...rp.weeks);
+  el.innerHTML = `<summary><strong>Replay, ${SEASON} weeks ${first}–${last} (not published):</strong> average miss
+      ${f2(tr.mae)} points on ${tr.n} player-games, mean error ${signed(tr.bias, 2)},
+      80% range held ${tr.coverage80 != null ? pct(tr.coverage80) : "—"} (today's pipeline, run as of each week)</summary>
+    <table><thead><tr><th>Week</th><th class="num">Scored</th><th class="num">Avg miss</th><th class="num">Mean error</th>
+      <th class="num">RMSE</th><th class="num">80% range held</th><th class="num">Same players</th>
+      <th class="num">Published miss</th><th class="num">Replay miss</th></tr></thead>
+    <tbody>${rp.weeks.map(w => row(`Week ${w}`, wr[String(w)])).join("")}${row("All weeks", { ...tr, vs_published: seasonVp }, "season")}</tbody></table>
+    <p>By position (average miss, mean error): ${pos}.</p>
+    <p><strong>This is a replay, not the published record.</strong> It runs the weekly model and the pace blend as served now,
+    for each completed week as of that week, and scores it the same way as the track record above: players with a projection
+    and a stat line. The weekly models were fitted on seasons before ${SEASON}, so no ${SEASON} result reached them; the forecast
+    universe, rookies' teams and positions are rebuilt as of the week, and every form feature looks only at earlier games.
+    It differs from the published rows because those were made from the database as it stood then: weeks 2–4 were forecast while
+    the play-by-play team columns were empty and the schedule held scores for week 1 only (repaired Oct 9–10). The replay says how
+    the pipeline does on correct inputs; the track record says what was actually shown. Injury and weather inputs are the stored
+    values (observed weather, not the forecast), and the ${SEASON} participation and personnel features are empty, as they are live.
+    Four weeks is a small sample.</p>`;
 }
 
 function setHash() {
@@ -557,6 +630,8 @@ fetch("data/weekly_meta.json")
   .then(meta => {
     if (!meta || !meta.weeks || !meta.weeks.length) throw new Error("no weekly_meta.json");
     META = meta; SEASON = meta.season;
+    return fetch(`data/weekly_replay_${SEASON}.json`).then(r => r.ok ? r.json() : null).catch(() => null).then(rep => {
+    REPLAY = rep;
 
     const sel = $("week");
     sel.innerHTML = meta.weeks.map(w => {
@@ -625,11 +700,13 @@ fetch("data/weekly_meta.json")
     }
 
     renderTrackRecord();
+    renderReplay();
 
     // Restore a shared view (#wk=3&pos=RB&q=hill), else the first week; and
     // follow the hash when it changes (back/forward, a pasted link).
     window.addEventListener("hashchange", applyHash);
     return applyHash();
+    });
   })
   .catch(e => {
     // Surface the real error rather than blaming missing data.

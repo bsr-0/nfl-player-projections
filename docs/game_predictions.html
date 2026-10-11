@@ -18,6 +18,13 @@
   history, so re-scoring a played game would be in-sample. The walk-forward
   backtest metadata remains the long-run accuracy claim.
 
+  The one exception is labelled: a completed game with no prediction committed
+  before kickoff (all of week 1, which predates this page) shows a "backtest"
+  row from models fitted on EARLIER SEASONS ONLY
+  (src/evaluation/game_backtest.py). It is out of sample but was not
+  published, and it is scored apart from the published record. The backtest
+  panel scores every completed game of the season that way.
+
   Honest headline, per GAPS.md: these models track the market closely but
   do not clearly beat it. Pooled walk-forward accuracy for win/loss ties
   the Vegas-favorite baseline; margin/total MAE is close to, and only
@@ -86,6 +93,10 @@
   .record table { width:auto; margin-top:8px; }
   .record th, .record td { padding:4px 14px 4px 0; border-bottom:1px solid var(--line); }
   .record th { position:static; background:none; }
+  .bt { display:inline-block; margin-left:6px; padding:0 5px; border:1px solid #6b5b2a; border-radius:3px;
+        color:#e2c36b; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .banner.backtest { background:#221d10; border-color:#4a3f1c; color:#e6d9a8; }
+  .banner.backtest ul { margin:6px 0 0; padding-left:18px; }
 </style>
 
 <header>
@@ -101,6 +112,7 @@
 <div id="banner"></div>
 <div id="resultbanner"></div>
 <details class="record" id="trackrecord"></details>
+<details class="record" id="backtestrecord"></details>
 
 <div class="controls">
   <div class="ctl"><label>Week</label>
@@ -161,7 +173,9 @@
   against. Final games add the score and whether each call was right: the
   winner (for the chosen win/loss model), the spread pick and the over/under
   pick (for the chosen margin/total model). Games with no prediction committed
-  before kickoff are listed in the track record, never filled in later.</p>
+  before kickoff are listed in the track record, never passed off as published:
+  where models fitted on earlier seasons can score them, they appear as rows tagged
+  <span class="bt">backtest</span> and are scored apart from the published record.</p>
 
   <p>Source: <code>docs/data/game_predictions_{season}_wk{N}.json</code>,
   written by <code>scripts/generate_game_predictions_data.py</code>.</p>
@@ -235,7 +249,7 @@ function render() {
         ? `${r.away_team} ${r.away_score} – ${r.home_team} ${r.home_score}`
         : (r.source === "published" ? "in progress" : "—")}</td>`;
     return `<tr>
-      <td class="game">${r.away_team} @ ${r.home_team}
+      <td class="game">${r.away_team} @ ${r.home_team}${r.source === "backtest" ? '<span class="bt" title="not published before kickoff: models fitted on earlier seasons only">backtest</span>' : ""}
         ${p != null ? `<div class="diff">favors <span class="fav">${favTeam}</span></div>` : ""}${mark(r._winres)}</td>
       <td class="probcell">${bar}</td>
       <td class="num">${fmt1(r.spread_line)}</td>
@@ -259,36 +273,46 @@ function tally(rows, key) {
   return hit + miss ? `${hit}–${miss}${push ? `–${push}` : ""} (${Math.round(100 * hit / (hit + miss))}%)` : "—";
 }
 
+function scoreLines(fin) {
+  const wl = $("wlmodel").value, reg = $("regmodel").value;
+  const decided = fin.filter(r => r.home_score !== r.away_score);
+  const fav = decided.filter(r => r.spread_line != null && r.spread_line !== 0);
+  const favHit = fav.filter(r => (r.spread_line > 0) === (r.home_score > r.away_score)).length;
+  const brier = decided.length ? decided.reduce((a, r) => a + (r._homeprob - (r.home_score > r.away_score ? 1 : 0)) ** 2, 0) / decided.length : null;
+  const mae = (f) => fin.reduce((a, r) => a + Math.abs(f(r)), 0) / fin.length;
+  return [`<strong>Winners: ${WL_LABEL[wl]} ${tally(decided, "_winres")}</strong>, market favorite
+      ${fav.length ? `${favHit}–${fav.length - favHit} (${Math.round(100 * favHit / fav.length)}%)` : "—"}; Brier ${brier == null ? "—" : brier.toFixed(3)} (lower is better; 0.25 = coin flip).`,
+    `Margin miss ${mae(r => r._margin - (r.home_score - r.away_score)).toFixed(1)} points vs. the market spread's
+      ${mae(r => r.spread_line - (r.home_score - r.away_score)).toFixed(1)}; total miss ${mae(r => r._total - (r.home_score + r.away_score)).toFixed(1)}
+      vs. the market total's ${mae(r => r.total_line - (r.home_score + r.away_score)).toFixed(1)}.
+      Spread picks ${tally(fin, "_atsres")}, over/under ${tally(fin, "_oures")} (${reg}; break-even at standard odds is 52.4%).`];
+}
+
 function weekResultBanner(rows) {
   const el = $("resultbanner");
   const res = META.week_results && META.week_results[String(WEEK)];
-  const fin = rows.filter(r => r._isfinal);
-  if (!res) { el.innerHTML = ""; return; }
+  // Published rows and backtest rows are scored apart: only the first is a record of what was said.
+  const fin = rows.filter(r => r._isfinal && r.source !== "backtest");
+  const bt = rows.filter(r => r._isfinal && r.source === "backtest");
+  if (!res && !bt.length) { el.innerHTML = ""; return; }
   const items = [];
-  if ((res.snapshots || []).length)
+  if (res && (res.snapshots || []).length)
     items.push("Committed " + res.snapshots.map(sn => `${fmtWhen(sn.published_at)} (${sn.games.length} game${sn.games.length === 1 ? "" : "s"}, commit <code>${sn.commit}</code>)`).join(", ")
       + ". Each game uses the last version committed before its own kickoff.");
-  if (fin.length) {
-    const wl = $("wlmodel").value, reg = $("regmodel").value;
-    const decided = fin.filter(r => r.home_score !== r.away_score);
-    const fav = decided.filter(r => r.spread_line != null && r.spread_line !== 0);
-    const favHit = fav.filter(r => (r.spread_line > 0) === (r.home_score > r.away_score)).length;
-    const brier = decided.length ? decided.reduce((a, r) => a + (r._homeprob - (r.home_score > r.away_score ? 1 : 0)) ** 2, 0) / decided.length : null;
-    const mae = (f) => fin.reduce((a, r) => a + Math.abs(f(r)), 0) / fin.length;
-    items.push(`<strong>Winners: ${WL_LABEL[wl]} ${tally(decided, "_winres")}</strong>, market favorite
-      ${fav.length ? `${favHit}–${fav.length - favHit} (${Math.round(100 * favHit / fav.length)}%)` : "—"}; Brier ${brier == null ? "—" : brier.toFixed(3)} (lower is better; 0.25 = coin flip).`);
-    items.push(`Margin miss ${mae(r => r._margin - (r.home_score - r.away_score)).toFixed(1)} points vs. the market spread's
-      ${mae(r => r.spread_line - (r.home_score - r.away_score)).toFixed(1)}; total miss ${mae(r => r._total - (r.home_score + r.away_score)).toFixed(1)}
-      vs. the market total's ${mae(r => r.total_line - (r.home_score + r.away_score)).toFixed(1)}.
-      Spread picks ${tally(fin, "_atsres")}, over/under ${tally(fin, "_oures")} (${reg}; break-even at standard odds is 52.4%).`);
-  }
-  if ((res.games_not_published || []).length)
-    items.push(`No prediction was committed before kickoff for ${res.games_not_published.join(", ")}; not shown or scored.`);
+  if (fin.length) items.push(...scoreLines(fin));
+  if (res && (res.games_not_published || []).length)
+    items.push(bt.length
+      ? `No prediction was committed before kickoff for ${res.games_not_published.length === 16 ? "any game this week" : res.games_not_published.join(", ")}; those games are shown below as <span class="bt">backtest</span> rows and scored separately.`
+      : `No prediction was committed before kickoff for ${res.games_not_published.join(", ")}; not shown or scored.`);
   const live = rows.filter(r => r.source === "live").length;
   if (live) items.push(`${live} game${live === 1 ? " is" : "s are"} not yet played: live predictions.`);
-  el.innerHTML = `<div class="banner result"><strong>Week ${WEEK}: what was published before kickoff,
-    against what happened.</strong> Nothing here is re-run with hindsight. Small samples: one week is a
-    handful of games. <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
+  el.innerHTML = (res || fin.length ? `<div class="banner result"><strong>Week ${WEEK}: what was published before kickoff,
+    against what happened.</strong> Published rows are never re-run with hindsight. Small samples: one week is a
+    handful of games. <ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>` : "")
+    + (bt.length ? `<div class="banner backtest"><strong>Week ${WEEK}, backtest rows (${bt.length} game${bt.length === 1 ? "" : "s"}): not published.</strong>
+      Models fitted on seasons before ${META.backtest ? META.backtest.fitted.fitted_before_season : SEASON} only, so the results of these
+      games never reached them: out of sample, but made after the fact, with today's stored lines.
+      <ul>${scoreLines(bt).map(i => `<li>${i}</li>`).join("")}</ul></div>` : "");
 }
 
 function renderTrackRecord() {
@@ -321,6 +345,46 @@ function renderTrackRecord() {
     Spread and over/under records are won–lost(–push); break-even at standard odds is 52.4%.
     ${missing.length ? "Never committed before kickoff, so not counted: " + missing.join("; ") + "." : ""}
     Too few games for any of these to separate from the market; the walk-forward backtest below is the long-run measure.</p>`;
+}
+
+function renderBacktest() {
+  const el = $("backtestrecord");
+  const b = META.backtest, ss = b && b.season;
+  if (!ss || !ss.n) { el.style.display = "none"; return; }
+  const wl = ss.win_loss || {}, mg = ss.margin || {}, tt = ss.total || {};
+  const rec = (x) => x ? `${x.correct}–${x.n - x.correct} (${Math.round(100 * x.correct / x.n)}%)` : "—";
+  const f2 = v => v == null ? "—" : (+v).toFixed(2), f3 = v => v == null ? "—" : (+v).toFixed(3);
+  const ats = (x, w, l, ps) => x ? `${x[w]}–${x[l]}${x[ps] ? `–${x[ps]}` : ""}` : "—";
+  const wk = Object.entries(b.weeks || {}).map(([w, m]) => `<tr><td>Week ${w}</td><td class="num">${m.n}</td>
+      <td class="num">${rec(m.win_loss.logistic)}</td><td class="num">${rec(m.win_loss.market_favorite)}</td>
+      <td class="num">${f2(m.margin.ridge?.mae)}</td><td class="num">${f2(m.margin.market_line?.mae)}</td>
+      <td class="num">${ats(m.margin.ridge, "ats_won", "ats_lost", "ats_push")}</td></tr>`).join("");
+  const f = b.fitted || {};
+  el.innerHTML = `<summary><strong>Walk-forward backtest, ${SEASON} weeks ${Math.min(...f.weeks)}–${Math.max(...f.weeks)} (not published):</strong>
+      ${ss.n} games · logistic picked ${rec(wl.logistic)} winners, market favorite ${rec(wl.market_favorite)}</summary>
+    <table><thead><tr><th>Model</th><th class="num">Winners</th><th class="num">Brier</th>
+      <th class="num">Margin miss</th><th class="num">Spread picks</th><th class="num">Total miss</th><th class="num">O/U picks</th></tr></thead><tbody>
+      <tr><td>Logistic · Ridge</td><td class="num">${rec(wl.logistic)}</td><td class="num">${f3(wl.logistic?.brier)}</td>
+        <td class="num">${f2(mg.ridge?.mae)}</td><td class="num">${ats(mg.ridge, "ats_won", "ats_lost", "ats_push")}</td>
+        <td class="num">${f2(tt.ridge?.mae)}</td><td class="num">${ats(tt.ridge, "ou_won", "ou_lost", "ou_push")}</td></tr>
+      <tr><td>XGBoost</td><td class="num">${rec(wl.xgb)}</td><td class="num">${f3(wl.xgb?.brier)}</td>
+        <td class="num">${f2(mg.xgb?.mae)}</td><td class="num">${ats(mg.xgb, "ats_won", "ats_lost", "ats_push")}</td>
+        <td class="num">${f2(tt.xgb?.mae)}</td><td class="num">${ats(tt.xgb, "ou_won", "ou_lost", "ou_push")}</td></tr>
+      <tr><td>Random forest</td><td class="num">${rec(wl.rf)}</td><td class="num">${f3(wl.rf?.brier)}</td>
+        <td class="num">${f2(mg.rf?.mae)}</td><td class="num">${ats(mg.rf, "ats_won", "ats_lost", "ats_push")}</td>
+        <td class="num">${f2(tt.rf?.mae)}</td><td class="num">${ats(tt.rf, "ou_won", "ou_lost", "ou_push")}</td></tr>
+      <tr><td>Market line</td><td class="num">${rec(wl.market_favorite)}</td><td class="num">—</td>
+        <td class="num">${f2(mg.market_line?.mae)}</td><td class="num">—</td>
+        <td class="num">${f2(tt.market_line?.mae)}</td><td class="num">—</td></tr>
+    </tbody></table>
+    <table><thead><tr><th>By week</th><th class="num">Games</th><th class="num">Logistic winners</th><th class="num">Market favorite</th>
+      <th class="num">Ridge margin miss</th><th class="num">Market spread miss</th><th class="num">Ridge spread picks</th></tr></thead><tbody>${wk}</tbody></table>
+    <p><strong>This is a backtest, not the published record.</strong> Every completed game of the weeks above is scored by
+    models fitted on ${f.n_training_games} games from seasons before ${f.fitted_before_season} only (through ${f.trained_through.season} week ${f.trained_through.week}),
+    so no result from ${SEASON} reached the fit; each game's team form, Elo and rest use only games before it. Unlike the
+    published record it was produced after the games, and it uses the spread and total now stored for each game. Games that were
+    also published before kickoff are scored here too, so this panel and the track record overlap and differ: the published rows
+    came from the models as they were then. Same caveat as above: too few games to separate any model from the market.</p>`;
 }
 
 function setHash() {
@@ -390,8 +454,10 @@ fetch("data/game_predictions_meta.json")
       `<div class="banner"><strong>Game predictions.</strong> Three model types per
        target (see the dropdowns above) trained on the full game history back to 2006;
        the market's own spread/total is shown alongside every prediction. Played
-       games show what was committed before kickoff and how it turned out.</div>`;
+       games show what was committed before kickoff and how it turned out; games
+       with nothing committed show a labelled backtest row instead.</div>`;
     renderTrackRecord();
+    renderBacktest();
 
     if (meta.measured) {
       const wl = meta.measured.win_loss || {};

@@ -185,3 +185,6 @@ data/models/rollback/
 # Calibrated-simulation serving artifacts: regenerable with
 # scripts/fit_simulation_artifacts.py from a verified OOF panel.
 /data/models/simulation/
+
+# Local backup of the game models before the 2026-10-11 refit (joblibs are ignored above; keep the JSON copies out too)
+data/models/game_backup_*/

@@ -1,6 +1,7 @@
 {
   "season": 2026,
   "weeks": [
+    1,
     2,
     3,
     4,
@@ -20,7 +21,8 @@
     18
   ],
   "counts": {
-    "2": 15,
+    "1": 16,
+    "2": 16,
     "3": 16,
     "4": 16,
     "5": 15,
@@ -38,7 +40,7 @@
     "17": 16,
     "18": 16
   },
-  "generated_at": "2026-10-10T17:09:55+00:00",
+  "generated_at": "2026-10-11T04:57:16+00:00",
   "measured": {
     "win_loss": {
       "logistic": {
@@ -588,6 +590,389 @@
       "market_line": {
         "mae": 11.17
       }
+    }
+  },
+  "backtest": {
+    "basis": "models fitted on seasons before 2026 only (nothing from this season reaches the fit); team form and Elo use only games before each game; the spread and total are the lines now stored for the game",
+    "fitted": {
+      "fitted_before_season": 2026,
+      "trained_through": {
+        "season": 2025,
+        "week": 22
+      },
+      "n_training_games": 5417,
+      "fitted_at": "2026-10-11T04:51:18+00:00",
+      "weeks": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "season": {
+      "n": 64,
+      "n_ties": 0,
+      "win_loss": {
+        "logistic": {
+          "correct": 41,
+          "n": 64,
+          "brier": 0.229
+        },
+        "xgb": {
+          "correct": 42,
+          "n": 64,
+          "brier": 0.223
+        },
+        "rf": {
+          "correct": 40,
+          "n": 64,
+          "brier": 0.225
+        },
+        "market_favorite": {
+          "correct": 41,
+          "n": 64
+        }
+      },
+      "margin": {
+        "ridge": {
+          "mae": 9.78,
+          "ats_won": 27,
+          "ats_lost": 32,
+          "ats_push": 5
+        },
+        "xgb": {
+          "mae": 9.93,
+          "ats_won": 25,
+          "ats_lost": 34,
+          "ats_push": 5
+        },
+        "rf": {
+          "mae": 10.02,
+          "ats_won": 24,
+          "ats_lost": 35,
+          "ats_push": 5
+        },
+        "market_line": {
+          "mae": 9.63
+        }
+      },
+      "total": {
+        "ridge": {
+          "mae": 10.93,
+          "ou_won": 29,
+          "ou_lost": 35,
+          "ou_push": 0
+        },
+        "xgb": {
+          "mae": 11.05,
+          "ou_won": 28,
+          "ou_lost": 36,
+          "ou_push": 0
+        },
+        "rf": {
+          "mae": 11.03,
+          "ou_won": 28,
+          "ou_lost": 36,
+          "ou_push": 0
+        },
+        "market_line": {
+          "mae": 10.73
+        }
+      }
+    },
+    "weeks": {
+      "1": {
+        "n": 16,
+        "n_ties": 0,
+        "win_loss": {
+          "logistic": {
+            "correct": 12,
+            "n": 16,
+            "brier": 0.205
+          },
+          "xgb": {
+            "correct": 10,
+            "n": 16,
+            "brier": 0.216
+          },
+          "rf": {
+            "correct": 9,
+            "n": 16,
+            "brier": 0.221
+          },
+          "market_favorite": {
+            "correct": 12,
+            "n": 16
+          }
+        },
+        "margin": {
+          "ridge": {
+            "mae": 11.55,
+            "ats_won": 5,
+            "ats_lost": 10,
+            "ats_push": 1
+          },
+          "xgb": {
+            "mae": 11.7,
+            "ats_won": 6,
+            "ats_lost": 9,
+            "ats_push": 1
+          },
+          "rf": {
+            "mae": 11.82,
+            "ats_won": 5,
+            "ats_lost": 10,
+            "ats_push": 1
+          },
+          "market_line": {
+            "mae": 11.28
+          }
+        },
+        "total": {
+          "ridge": {
+            "mae": 12.0,
+            "ou_won": 5,
+            "ou_lost": 11,
+            "ou_push": 0
+          },
+          "xgb": {
+            "mae": 11.85,
+            "ou_won": 9,
+            "ou_lost": 7,
+            "ou_push": 0
+          },
+          "rf": {
+            "mae": 11.85,
+            "ou_won": 7,
+            "ou_lost": 9,
+            "ou_push": 0
+          },
+          "market_line": {
+            "mae": 11.69
+          }
+        }
+      },
+      "2": {
+        "n": 16,
+        "n_ties": 0,
+        "win_loss": {
+          "logistic": {
+            "correct": 11,
+            "n": 16,
+            "brier": 0.235
+          },
+          "xgb": {
+            "correct": 11,
+            "n": 16,
+            "brier": 0.238
+          },
+          "rf": {
+            "correct": 10,
+            "n": 16,
+            "brier": 0.238
+          },
+          "market_favorite": {
+            "correct": 11,
+            "n": 16
+          }
+        },
+        "margin": {
+          "ridge": {
+            "mae": 11.94,
+            "ats_won": 6,
+            "ats_lost": 10,
+            "ats_push": 0
+          },
+          "xgb": {
+            "mae": 12.01,
+            "ats_won": 6,
+            "ats_lost": 10,
+            "ats_push": 0
+          },
+          "rf": {
+            "mae": 12.08,
+            "ats_won": 7,
+            "ats_lost": 9,
+            "ats_push": 0
+          },
+          "market_line": {
+            "mae": 11.84
+          }
+        },
+        "total": {
+          "ridge": {
+            "mae": 10.79,
+            "ou_won": 7,
+            "ou_lost": 9,
+            "ou_push": 0
+          },
+          "xgb": {
+            "mae": 11.35,
+            "ou_won": 5,
+            "ou_lost": 11,
+            "ou_push": 0
+          },
+          "rf": {
+            "mae": 10.84,
+            "ou_won": 8,
+            "ou_lost": 8,
+            "ou_push": 0
+          },
+          "market_line": {
+            "mae": 10.69
+          }
+        }
+      },
+      "3": {
+        "n": 16,
+        "n_ties": 0,
+        "win_loss": {
+          "logistic": {
+            "correct": 9,
+            "n": 16,
+            "brier": 0.253
+          },
+          "xgb": {
+            "correct": 10,
+            "n": 16,
+            "brier": 0.238
+          },
+          "rf": {
+            "correct": 11,
+            "n": 16,
+            "brier": 0.237
+          },
+          "market_favorite": {
+            "correct": 9,
+            "n": 16
+          }
+        },
+        "margin": {
+          "ridge": {
+            "mae": 8.34,
+            "ats_won": 8,
+            "ats_lost": 6,
+            "ats_push": 2
+          },
+          "xgb": {
+            "mae": 8.55,
+            "ats_won": 6,
+            "ats_lost": 8,
+            "ats_push": 2
+          },
+          "rf": {
+            "mae": 8.69,
+            "ats_won": 5,
+            "ats_lost": 9,
+            "ats_push": 2
+          },
+          "market_line": {
+            "mae": 8.09
+          }
+        },
+        "total": {
+          "ridge": {
+            "mae": 11.07,
+            "ou_won": 10,
+            "ou_lost": 6,
+            "ou_push": 0
+          },
+          "xgb": {
+            "mae": 11.14,
+            "ou_won": 6,
+            "ou_lost": 10,
+            "ou_push": 0
+          },
+          "rf": {
+            "mae": 11.58,
+            "ou_won": 6,
+            "ou_lost": 10,
+            "ou_push": 0
+          },
+          "market_line": {
+            "mae": 10.94
+          }
+        }
+      },
+      "4": {
+        "n": 16,
+        "n_ties": 0,
+        "win_loss": {
+          "logistic": {
+            "correct": 9,
+            "n": 16,
+            "brier": 0.221
+          },
+          "xgb": {
+            "correct": 11,
+            "n": 16,
+            "brier": 0.202
+          },
+          "rf": {
+            "correct": 10,
+            "n": 16,
+            "brier": 0.204
+          },
+          "market_favorite": {
+            "correct": 9,
+            "n": 16
+          }
+        },
+        "margin": {
+          "ridge": {
+            "mae": 7.27,
+            "ats_won": 8,
+            "ats_lost": 6,
+            "ats_push": 2
+          },
+          "xgb": {
+            "mae": 7.48,
+            "ats_won": 7,
+            "ats_lost": 7,
+            "ats_push": 2
+          },
+          "rf": {
+            "mae": 7.48,
+            "ats_won": 7,
+            "ats_lost": 7,
+            "ats_push": 2
+          },
+          "market_line": {
+            "mae": 7.31
+          }
+        },
+        "total": {
+          "ridge": {
+            "mae": 9.86,
+            "ou_won": 7,
+            "ou_lost": 9,
+            "ou_push": 0
+          },
+          "xgb": {
+            "mae": 9.86,
+            "ou_won": 8,
+            "ou_lost": 8,
+            "ou_push": 0
+          },
+          "rf": {
+            "mae": 9.83,
+            "ou_won": 7,
+            "ou_lost": 9,
+            "ou_push": 0
+          },
+          "market_line": {
+            "mae": 9.62
+          }
+        }
+      }
+    }
+  },
+  "models": {
+    "fitted_at": "2026-10-11T04:51:57+00:00",
+    "n_games": 5482,
+    "trained_through": {
+      "season": 2026,
+      "week": 5
     }
   },
   "games_not_published": {

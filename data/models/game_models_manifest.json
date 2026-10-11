@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "sets": {
+    "production": {
+      "artifacts_sha256": {
+        "game_margin_rf.joblib": "ff62f6a64fbd2d129bf105717de656abfc63be859d710a48917847b01432543f",
+        "game_margin_ridge.joblib": "1bd965b9cca4a8fa4135c951b63fbc0373e22d4b3fc2c5bafd693bd91cdb8fca",
+        "game_margin_xgb.joblib": "e7e2e2b5697dd2ad5a9785e0db3b04b3d1f44102e847b32e4f3db31d5ffe3319",
+        "game_outcome_logistic.joblib": "085b59cdd8f0229861a312066635a3014b88498f90caa2274f6d7aa839a0e31b",
+        "game_outcome_rf.joblib": "51b843a8a2c13b329dbc476b2f50803b070f935feee530c8140666974da3f300",
+        "game_outcome_xgb.joblib": "c58b5f9d1fb5c6a96079f90b788e1a667d9c142ed769801976003f83d82ee9ab",
+        "game_total_rf.joblib": "27eb5c4f6cd2ebee0799fa742ea8b8c207fbf6b63c6f54683b93de0b66b1e0eb",
+        "game_total_ridge.joblib": "2ef24bc41a6b3bae740ab03feb849f1b865986b6cfb5d9294bc4872cd44f2700",
+        "game_total_xgb.joblib": "bfd4b8a815cf831546c22844cd995990050b845a801e12d4adb6e3feb50de933"
+      },
+      "dir": "data/models",
+      "feature_columns_sha256": "13f3a298cab644999c7051e26bebd113e345d59c4e55553ea8ad03ab77801d38",
+      "fitted_at": "2026-10-11T04:51:57+00:00",
+      "git_commit": "9875ad16",
+      "hyperparameters_from": {
+        "margin": "game_margin_model_metadata.json",
+        "outcome": "game_outcome_model_metadata.json",
+        "total": "game_total_model_metadata.json"
+      },
+      "n_features": 30,
+      "n_games": 5482,
+      "trained_before_season": null,
+      "trained_through": {
+        "season": 2026,
+        "week": 5
+      }
+    },
+    "walkforward_2026": {
+      "artifacts_sha256": {
+        "game_margin_rf.joblib": "e8aca8f360511e475726ce4497417cf6159b676422eded10c4c5d65880802a51",
+        "game_margin_ridge.joblib": "03284e771e346dec2fef7e9497ab6c16659b74e21059df49aee7cc38cee6cc0d",
+        "game_margin_xgb.joblib": "930e91bb5b4b0cba3e1ee75545cd0b9f4eb29b2cbbde2c5ea6e861bd8674230f",
+        "game_outcome_logistic.joblib": "f4627cff32162ea0d5a9bd4b74f968436427ce23a45f4fe74927d6c92ce14e01",
+        "game_outcome_rf.joblib": "8201efa85348d40975be8d980697a0cd3ddc9b71e43bf6d772cbd14694e2a42d",
+        "game_outcome_xgb.joblib": "d3135c2f244c2a409289536114fac872d68c86c3e347bb532769830803c82d84",
+        "game_total_rf.joblib": "ae616a5557fe66db8311a22dd3d73d4685aa143c67be131fcd29d74974a05f67",
+        "game_total_ridge.joblib": "ec479dd03a2a4b2fcc8bb4b5573a8ad64f69475dff084ca6d39c36e583db6331",
+        "game_total_xgb.joblib": "06854b8d60b422231f713713ecf3c75791a9abbc597b56706bf28ca763b20796"
+      },
+      "dir": "data/models/game_walkforward/2026",
+      "feature_columns_sha256": "13f3a298cab644999c7051e26bebd113e345d59c4e55553ea8ad03ab77801d38",
+      "fitted_at": "2026-10-11T04:51:18+00:00",
+      "git_commit": "9875ad16",
+      "hyperparameters_from": {
+        "margin": "game_margin_model_metadata.json",
+        "outcome": "game_outcome_model_metadata.json",
+        "total": "game_total_model_metadata.json"
+      },
+      "n_features": 30,
+      "n_games": 5417,
+      "trained_before_season": 2026,
+      "trained_through": {
+        "season": 2025,
+        "week": 22
+      }
+    }
+  }
+}

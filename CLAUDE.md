@@ -46,6 +46,9 @@
 9. GAME OUTCOME MODELS
    Status ........ LIVE; matches but does not beat the Vegas line (10-10 walk-forward, 2022-25 + 2026 wks 1-4)
    Metric ........ win acc 0.673 logistic = Vegas favorite 0.673 (Brier 0.213 vs 0.211); margin MAE 9.65 vs line 9.56; ATS 46.9%
-   Open .......... 2026 inputs were stale through wk 5 (fixed 10-09); no edge over the market shown
+   Open .......... no edge over the market shown; 2026 inputs were stale through wk 5 (fixed 10-09)
+   Saved ......... refit-only path: `python scripts/refit_game_models.py` (7 s, no backtest; joblibs gitignored, manifest
+                   data/models/game_models_manifest.json); generate_game_predictions_data.py refits when games completed since
+   Site .......... 2026 wks 1-4 backtest (models fitted on seasons < 2026): logistic 41-23 = market favorite 41-23; ridge ATS 27-32-5
 
 ```
