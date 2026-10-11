@@ -58,22 +58,29 @@ function renderPool(){
   }).join(""):"<tr><td colspan=\"7\" class=\"empty\">No matching players.</td></tr>";
   document.querySelectorAll(".lock").forEach(x=>x.onchange=()=>{if(x.checked)LOCKED.add(x.dataset.id);else LOCKED.delete(x.dataset.id);build()});
 }
-function top(arr,n){return arr.filter(Boolean).sort((a,b)=>(b.predicted_points||0)-(a.predicted_points||0)).slice(0,n)}
-function combos(arr,k){
-  const out=[];for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++)if(k===2)out.push([arr[i],arr[j]]);return out
-}
+function topN(arr,n){return arr.filter(Boolean).sort((a,b)=>(b.predicted_points||0)-(a.predicted_points||0)).slice(0,n)}
 function build(){
   if(!RAW.length)return;
-  const safe=$("poolmode").value==="safe";\n  const pool=RAW.filter(r=>!safe||!risk(r));\n  const locked=pool.filter(r=>LOCKED.has(String(r.player_id)));
-  const by=p=>top(pool.filter(r=>r.position===p),35);
-  const qs=by("QB"),rs=by("RB"),ws=by("WR"),ts=by("TE");
+  const safe=$("poolmode").value==="safe";
+  const pool=RAW.filter(r=>!safe||!risk(r));
+  const locked=pool.filter(r=>LOCKED.has(String(r.player_id)));
+  // Exact: the score is a sum, so for each choice of FLEX position the best lineup takes every
+  // locked player plus the top unlocked players to fill each position's count.
+  const isLocked=r=>LOCKED.has(String(r.player_id));
+  const fill=(p,n)=>{const l=locked.filter(r=>r.position===p);if(l.length>n)return null;
+    return l.concat(topN(pool.filter(r=>r.position===p&&!isLocked(r)),n-l.length)).slice(0,n)};
   let best=null;
-  for(const qb of qs)for(const rb of combos(rs,2))for(const wr of combos(ws,2))for(const te of ts){
-    const chosen=[qb,...rb,...wr,te],ids=new Set(chosen.map(r=>String(r.player_id)));
-    if(locked.some(r=>!ids.has(String(r.player_id))))continue;
-    const flex=top(pool.filter(r=>(r.position==="RB"||r.position==="WR"||r.position==="TE")&&!ids.has(String(r.player_id))),1)[0];
-    if(!flex)continue;
-    const lineup=[qb,...rb,...wr,te,flex],sum=lineup.reduce((a,r)=>a+(+r.predicted_points||0),0);
+  for(const fx of ["RB","WR","TE"]){
+    const need={QB:1,RB:2+(fx==="RB"),WR:2+(fx==="WR"),TE:1+(fx==="TE")};
+    const got={};let ok=true;
+    for(const p in need){got[p]=fill(p,need[p]);if(!got[p]||got[p].length<need[p])ok=false}
+    if(!ok)continue;
+    // FLEX = the lowest-projected player of the flex position, unless locked players force the order
+    const fxs=got[fx].slice().sort((a,b)=>(b.predicted_points||0)-(a.predicted_points||0));
+    const base={RB:2,WR:2,TE:1}[fx];
+    const lineup=[got.QB[0],...(fx==="RB"?fxs.slice(0,2):got.RB),...(fx==="WR"?fxs.slice(0,2):got.WR),
+                  ...(fx==="TE"?fxs.slice(0,1):got.TE),fxs[base]];
+    const sum=lineup.reduce((a,r)=>a+(+r.predicted_points||0),0);
     if(!best||sum>best.sum)best={lineup,sum};
   }
   if(!best){$("slots").innerHTML='<div class="empty">No valid lineup fits the current pool and locked players. Clear a lock or broaden the filters.</div>';return}
@@ -91,5 +98,5 @@ function build(){
 }
 $("week").onchange=()=>{LOCKED.clear();loadWeek($("week").value)}
 $("filter").onchange=renderPool;$("query").oninput=renderPool;$("poolmode").onchange=()=>{renderPool();build()};$("run").onclick=build;
-(async()=>{try{META=await (await fetch("data/weekly_meta.json")).json();$("meta").textContent="Season "+META.season+" · generated "+(META.generated_at||"—")+" · "+(META.mode);META.weeks.forEach(w=>{const o=document.createElement("option");o.value=w;o.textContent="Week "+w;$("week").appendChild(o)});const initial=Math.max(...META.weeks.filter(w=>META.counts&&META.counts[String(w)]));$("week").value=initial;await loadWeek(initial)}catch(e){$("meta").textContent="Weekly data unavailable."}})();
+(async()=>{try{META=await (await fetch("data/weekly_meta.json")).json();$("meta").textContent="Season "+META.season+" · generated "+(META.generated_at||"—")+" · "+(META.mode);META.weeks.forEach(w=>{const o=document.createElement("option");o.value=w;o.textContent="Week "+w;$("week").appendChild(o)});const last=META.week_last_kickoff||{},now=Date.now();const initial=META.weeks.find(w=>last[String(w)]&&new Date(last[String(w)]).getTime()+12*3600e3>now)??Math.max(...META.weeks);$("week").value=initial;await loadWeek(initial)}catch(e){$("meta").textContent="Weekly data unavailable."}})();
 </script>

@@ -158,7 +158,7 @@ def main() -> int:
 
     import sqlite3
     from config.settings import DB_PATH
-    from src.evaluation.published_record import game_week, kickoff_times, season_game_summary
+    from src.evaluation.published_record import game_week, kickoff_times, season_game_summary, week_last_kickoffs
 
     now = pd.Timestamp.now(tz="UTC")
     from src.evaluation.game_backtest import backtest_summary, season_backtest, unpublished_rows
@@ -223,6 +223,7 @@ def main() -> int:
         "weeks": written,
         "counts": counts,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "week_last_kickoff": week_last_kickoffs(games),
         "measured": measured_accuracy(),
         # Played games: the predictions as committed before kickoff, scored.
         "week_results": results,

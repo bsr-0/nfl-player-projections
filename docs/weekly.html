@@ -578,7 +578,7 @@ function applyHash() {
   $("q").value = h.q || "";
   const wantedTeam = h.team || "ALL";
   const wantedCmp = h.cmp ? h.cmp.split(",").filter(Boolean) : [];
-  const wk = (h.wk && META.weeks.includes(+h.wk)) ? +h.wk : META.weeks[0];
+  const wk = (h.wk && META.weeks.includes(+h.wk)) ? +h.wk : currentWeek(META);
   const finish = () => {
     // teamfilter's options are only populated once RAW is loaded for the week.
     if ([...$("teamfilter").options].some(o => o.value === wantedTeam)) $("teamfilter").value = wantedTeam;
@@ -587,6 +587,14 @@ function applyHash() {
     setHash();
   };
   return (wk === WEEK ? Promise.resolve() : loadWeek(wk)).then(finish);
+}
+
+// The week to open on: the first one whose last game kicked off under 12 hours
+// ago or later (so a week stays current through Monday night), else the last.
+function currentWeek(meta) {
+  const last = meta.week_last_kickoff || {}, now = Date.now();
+  const open = meta.weeks.find(w => last[String(w)] && new Date(last[String(w)]).getTime() + 12 * 3600e3 > now);
+  return open ?? (Object.keys(last).length ? meta.weeks[meta.weeks.length - 1] : meta.weeks[0]);
 }
 
 function readHash() {

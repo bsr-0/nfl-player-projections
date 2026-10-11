@@ -100,6 +100,12 @@ def kickoff_times(season: int, con: sqlite3.Connection) -> pd.DataFrame:
     return local.drop(columns="game_time")
 
 
+def week_last_kickoffs(games: pd.DataFrame) -> dict:
+    """{week: ISO time of the week's last kickoff}; pages open on the first week not yet over."""
+    last = games.dropna(subset=["kickoff"]).groupby("week")["kickoff"].max()
+    return {str(int(w)): t.isoformat(timespec="minutes") for w, t in last.items()}
+
+
 def player_actuals(con: sqlite3.Connection, season: int, week: int) -> pd.DataFrame:
     """Stat lines for a week: player_id, name, team, position, actual_points."""
     return pd.read_sql(

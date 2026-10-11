@@ -321,6 +321,12 @@ def build_weekly_model(season, weeks, top_n):
     return written, counts, results
 
 
+def _week_last_kickoffs(season: int) -> dict:
+    from src.evaluation.published_record import kickoff_times, week_last_kickoffs
+    with sqlite3.connect(DB_PATH) as con:
+        return week_last_kickoffs(kickoff_times(season, con))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--weeks", type=int, nargs=2, metavar=("FIRST", "LAST"),
@@ -377,6 +383,7 @@ def main() -> int:
         "has_intervals": True,
         "pace_blend_kappa": PACE_BLEND_KAPPA,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "week_last_kickoff": _week_last_kickoffs(season),
         "measured": measured_accuracy(latest),
         "baseline_standing": baseline_standing(latest),
         "model": ("weekly ensemble (1w horizon), log1p+smearing calibration, "

@@ -396,6 +396,14 @@ function setHash() {
   history.replaceState(null, "", "#" + parts.join("&"));
 }
 
+// The week to open on: the first one whose last game kicked off under 12 hours
+// ago or later (so a week stays current through Monday night), else the last.
+function currentWeek(meta) {
+  const last = meta.week_last_kickoff || {}, now = Date.now();
+  const open = meta.weeks.find(w => last[String(w)] && new Date(last[String(w)]).getTime() + 12 * 3600e3 > now);
+  return open ?? (Object.keys(last).length ? meta.weeks[meta.weeks.length - 1] : meta.weeks[0]);
+}
+
 function readHash() {
   const out = {};
   for (const kv of location.hash.replace(/^#/, "").split("&")) {
@@ -425,7 +433,7 @@ function applyHash() {
   const h = readHash();
   if (h.wl) $("wlmodel").value = h.wl;
   if (h.reg) $("regmodel").value = h.reg;
-  const wk = (h.wk && META.weeks.includes(+h.wk)) ? +h.wk : META.weeks[0];
+  const wk = (h.wk && META.weeks.includes(+h.wk)) ? +h.wk : currentWeek(META);
   return (wk === WEEK ? Promise.resolve() : loadWeek(wk)).then(() => { render(); setHash(); });
 }
 
