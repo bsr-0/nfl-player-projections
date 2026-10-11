@@ -45,11 +45,14 @@
    Open .......... pre-registered (docs/SIMULATION_FORWARD_CHECK.md Decision 1): stack CRPS wks 5-13, KEEP iff upper 95% < 0, else REVERT (Tue 12-08)
 
 9. GAME OUTCOME MODELS
-   Status ........ LIVE; matches but does not beat the Vegas line (10-10 walk-forward, 2022-25 + 2026 wks 1-4)
-   Metric ........ win acc 0.673 logistic = Vegas favorite 0.673 (Brier 0.213 vs 0.211); margin MAE 9.65 vs line 9.56; ATS 46.9%
-   Open .......... no edge over the market shown; 2026 inputs were stale through wk 5 (fixed 10-09)
-   Saved ......... refit-only path: `python scripts/refit_game_models.py` (7 s, no backtest; joblibs gitignored, manifest
-                   data/models/game_models_manifest.json); generate_game_predictions_data.py refits when games completed since
-   Site .......... 2026 wks 1-4 backtest (models fitted on seasons < 2026): logistic 41-23 = market favorite 41-23; ridge ATS 27-32-5
+   Status ........ CLOSED (10-11): LIVE as a market-tracking model; matches the Vegas line, no edge; no further model work
+   Metric ........ walk-forward 2022-25 + 2026 wks 1-5, tuned params (1,201 games): win acc 0.673 logistic = Vegas favorite 0.673
+                   (Brier 0.213 vs 0.211); margin MAE 9.645 vs line 9.558; total 10.198 vs 10.211; ridge ATS 46.9%, O/U 52.9%
+   Site .......... spread/total shown as "leans vs market", neutral, with the 46.9% record; 2026 wks 1-4 backtest panel
+                   (logistic 41-23 = market favorite 41-23); weeks with nothing published show labelled backtest rows
+   Saved ......... `python scripts/refit_game_models.py` (7 s; joblibs gitignored; manifest data/models/game_models_manifest.json
+                   with hyperparameter hash); generate_game_predictions_data.py refits when stale; training scripts now reuse
+                   the recorded hyperparameters unless --tune/--tune-optuna/--default-params
+   Open .......... none
 
 ```

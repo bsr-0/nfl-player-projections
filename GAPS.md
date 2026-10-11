@@ -16257,3 +16257,30 @@ warn). Production refit through 2026 wk5 (5,482 games) moved week 5 picks by
 0.002 logistic probability on average. Sep 19 models are backed up locally in
 `data/models/game_backup_20260919/`. Note: spread_line and total_line are model
 features.
+
+**Rows 7-9 closed out or pre-registered (2026-10-11).**
+Simulation: draws now centre on the unblended weekly model (`predicted_points_model`,
+"points if he plays"), which is what the residual calibration is fitted on; the
+weekly page's blended number rides along as `blend_prediction`. Regenerated 2026
+weeks 5-18. `docs/SIMULATION_FORWARD_CHECK.md` (committed before week 5's Sunday
+games) fixes two decisions on the published files of weeks 5-13: the correlation
+layer stays only if stack CRPS (role factor minus independent, players who played,
+per-game averages) has an upper 95% bound below 0 after week 13, else it reverts to
+independent draws; and a simulated quantity (player range, stack, team or game
+fantasy total) goes on the site only if, as published, its 80% coverage is in
+[0.72, 0.88] and 50% coverage in [0.40, 0.60] after week 8. Scorer:
+`scripts/score_simulation_forward.py`; it rebuilds the draws from each pre-kickoff
+commit and checks them against the published means (week 5 rebuild error 5e-14).
+Known risk written in: the simulation lists ~22 players per team at "if he plays"
+and week 5's Sunday injury statuses were not loaded, so availability errors count
+against published team totals.
+Game models: CLOSED as a market-tracking model. The training scripts used to save
+empty hyperparameters unless re-tuned, so any plain re-run silently dropped the
+Optuna tuning; the 2026-10-10 walk-forward review hit exactly that (it ran on
+config defaults). They now reuse the recorded ones (`--default-params` to opt
+out). Re-run on the repaired database with the tuned parameters (1,201 games):
+logistic 0.673 = Vegas favorite 0.673, Brier 0.213 vs 0.211; margin MAE 9.645 vs
+the line's 9.558; total 10.198 vs 10.211; ridge ATS 46.9%. The final fit is
+byte-identical to the registry refit. The page now shows spread and total as the
+side the model leans to, in neutral colour, with the measured record and the
+52.4% break-even, not as picks. Logs: `data/experiments/game_models_close_20261011/`.

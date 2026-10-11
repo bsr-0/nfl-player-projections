@@ -71,7 +71,7 @@
   .probtext { color:var(--dim); font-size:11px; margin-top:2px; font-variant-numeric:tabular-nums; }
   .diff { font-size:11px; color:var(--dim); margin-top:1px; }
   .diff.hi { color:var(--warn); }
-  .pick { color:var(--good); font-weight:600; }
+  .lean { color:var(--fg); }   /* neutral on purpose: the leans lost against the spread in the backtest */
   .note { padding:16px 24px 40px; color:var(--dim); font-size:12px; max-width:900px; }
   .note strong { color:var(--fg); }
   .note code { background:#0d1014; padding:1px 4px; border-radius:3px; }
@@ -142,10 +142,10 @@
       <th class="probcell sortable" data-key="_homeprob" title="sort by home win probability">Home win prob.</th>
       <th class="num">Market spread</th>
       <th class="num sortable" data-key="_margin" title="sort by predicted margin">Predicted margin</th>
-      <th class="num sortable" data-key="_atsedge" title="sort by edge over market spread">ATS pick</th>
+      <th class="num sortable" data-key="_atsedge" title="model margin minus the market spread: the side the model leans to, not a bet">Margin vs market</th>
       <th class="num">Market total</th>
       <th class="num sortable" data-key="_total" title="sort by predicted total">Predicted total</th>
-      <th class="num sortable" data-key="_ouedge" title="sort by edge over market total">O/U pick</th>
+      <th class="num sortable" data-key="_ouedge" title="model total minus the market total: the side the model leans to, not a bet">Total vs market</th>
       <th class="num result-col">Final</th>
     </tr></thead>
     <tbody id="rows"></tbody>
@@ -171,8 +171,8 @@
   models were trained on all history, so a re-run would have seen the game).
   The market spread and total shown are the ones that row was published
   against. Final games add the score and whether each call was right: the
-  winner (for the chosen win/loss model), the spread pick and the over/under
-  pick (for the chosen margin/total model). Games with no prediction committed
+  winner (for the chosen win/loss model), and which side of the market spread
+  and total the model leaned to (for the chosen margin/total model). Games with no prediction committed
   before kickoff are listed in the track record, never passed off as published:
   where models fitted on earlier seasons can score them, they appear as rows tagged
   <span class="bt">backtest</span> and are scored apart from the published record.</p>
@@ -254,15 +254,16 @@ function render() {
       <td class="probcell">${bar}</td>
       <td class="num">${fmt1(r.spread_line)}</td>
       <td class="num">${fmt1(r._margin)}${diffCell(marginDiff, 3)}</td>
-      <td class="num">${r._atspick ? `<span class="pick">${r._atspick}</span>${diffCell(r._atsedge, 3)}${mark(r._atsres)}` : "—"}</td>
+      <td class="num">${r._atspick ? `<span class="lean">leans ${r._atspick}</span>${diffCell(r._atsedge, Infinity)}${mark(r._atsres)}` : "—"}</td>
       <td class="num">${fmt1(r.total_line)}</td>
       <td class="num">${fmt1(r._total)}${diffCell(totalDiff, 4)}</td>
-      <td class="num">${r._oupick ? `<span class="pick">${r._oupick}</span>${diffCell(r._ouedge, 4)}${mark(r._oures)}` : "—"}</td>
+      <td class="num">${r._oupick ? `<span class="lean">leans ${r._oupick.toLowerCase()}</span>${diffCell(r._ouedge, Infinity)}${mark(r._oures)}` : "—"}</td>
       ${finalCell}
     </tr>`;
   }).join("");
 }
 
+let ATS_BT = null;   // walk-forward ridge ATS accuracy, from the meta file
 const WL_LABEL = { logistic: "Logistic", xgb: "XGBoost", rf: "Random forest" };
 const fmtWhen = iso => iso ? new Date(iso).toLocaleString(undefined,
   { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "—";
@@ -285,7 +286,7 @@ function scoreLines(fin) {
     `Margin miss ${mae(r => r._margin - (r.home_score - r.away_score)).toFixed(1)} points vs. the market spread's
       ${mae(r => r.spread_line - (r.home_score - r.away_score)).toFixed(1)}; total miss ${mae(r => r._total - (r.home_score + r.away_score)).toFixed(1)}
       vs. the market total's ${mae(r => r.total_line - (r.home_score + r.away_score)).toFixed(1)}.
-      Spread picks ${tally(fin, "_atsres")}, over/under ${tally(fin, "_oures")} (${reg}; break-even at standard odds is 52.4%).`];
+      Leans against the spread ${tally(fin, "_atsres")}, on the total ${tally(fin, "_oures")} (${reg}; a bettor needs 52.4% to break even at standard odds${ATS_BT != null ? `, and the walk-forward backtest's ridge spread leans won ${(ATS_BT * 100).toFixed(1)}%` : ""}).`];
 }
 
 function weekResultBanner(rows) {
@@ -327,7 +328,7 @@ function renderTrackRecord() {
   el.innerHTML = `<summary><strong>Track record, ${SEASON} to date:</strong> ${tr.n} final games as published
       before kickoff · logistic picked ${rec(wl.logistic)} winners, market favorite ${rec(wl.market_favorite)}</summary>
     <table><thead><tr><th>Model</th><th class="num">Winners</th><th class="num">Brier</th>
-      <th class="num">Margin miss</th><th class="num">Spread picks</th><th class="num">Total miss</th><th class="num">O/U picks</th></tr></thead><tbody>
+      <th class="num">Margin miss</th><th class="num">Spread leans</th><th class="num">Total miss</th><th class="num">Total leans</th></tr></thead><tbody>
       <tr><td>Logistic · Ridge</td><td class="num">${rec(wl.logistic)}</td><td class="num">${f3(wl.logistic?.brier)}</td>
         <td class="num">${f2(mg.ridge?.mae)}</td><td class="num">${ats(mg.ridge, "ats_won", "ats_lost", "ats_push")}</td>
         <td class="num">${f2(tt.ridge?.mae)}</td><td class="num">${ats(tt.ridge, "ou_won", "ou_lost", "ou_push")}</td></tr>
@@ -342,7 +343,8 @@ function renderTrackRecord() {
         <td class="num">${f2(tt.market_line?.mae)}</td><td class="num">—</td></tr>
     </tbody></table>
     <p>Each game counts once, as committed before its kickoff and against the spread and total in that row.
-    Spread and over/under records are won–lost(–push); break-even at standard odds is 52.4%.
+    Leans are won–lost(–push): whether the side of the market line the model leaned to was right. A bettor needs 52.4% to break even
+    at standard odds; they are shown as a record of the model against the market, not as advice.
     ${missing.length ? "Never committed before kickoff, so not counted: " + missing.join("; ") + "." : ""}
     Too few games for any of these to separate from the market; the walk-forward backtest below is the long-run measure.</p>`;
 }
@@ -363,7 +365,7 @@ function renderBacktest() {
   el.innerHTML = `<summary><strong>Walk-forward backtest, ${SEASON} weeks ${Math.min(...f.weeks)}–${Math.max(...f.weeks)} (not published):</strong>
       ${ss.n} games · logistic picked ${rec(wl.logistic)} winners, market favorite ${rec(wl.market_favorite)}</summary>
     <table><thead><tr><th>Model</th><th class="num">Winners</th><th class="num">Brier</th>
-      <th class="num">Margin miss</th><th class="num">Spread picks</th><th class="num">Total miss</th><th class="num">O/U picks</th></tr></thead><tbody>
+      <th class="num">Margin miss</th><th class="num">Spread leans</th><th class="num">Total miss</th><th class="num">Total leans</th></tr></thead><tbody>
       <tr><td>Logistic · Ridge</td><td class="num">${rec(wl.logistic)}</td><td class="num">${f3(wl.logistic?.brier)}</td>
         <td class="num">${f2(mg.ridge?.mae)}</td><td class="num">${ats(mg.ridge, "ats_won", "ats_lost", "ats_push")}</td>
         <td class="num">${f2(tt.ridge?.mae)}</td><td class="num">${ats(tt.ridge, "ou_won", "ou_lost", "ou_push")}</td></tr>
@@ -378,7 +380,7 @@ function renderBacktest() {
         <td class="num">${f2(tt.market_line?.mae)}</td><td class="num">—</td></tr>
     </tbody></table>
     <table><thead><tr><th>By week</th><th class="num">Games</th><th class="num">Logistic winners</th><th class="num">Market favorite</th>
-      <th class="num">Ridge margin miss</th><th class="num">Market spread miss</th><th class="num">Ridge spread picks</th></tr></thead><tbody>${wk}</tbody></table>
+      <th class="num">Ridge margin miss</th><th class="num">Market spread miss</th><th class="num">Ridge spread leans</th></tr></thead><tbody>${wk}</tbody></table>
     <p><strong>This is a backtest, not the published record.</strong> Every completed game of the weeks above is scored by
     models fitted on ${f.n_training_games} games from seasons before ${f.fitted_before_season} only (through ${f.trained_through.season} week ${f.trained_through.week}),
     so no result from ${SEASON} reached the fit; each game's team form, Elo and rest use only games before it. Unlike the
@@ -472,6 +474,11 @@ fetch("data/game_predictions_meta.json")
       if (mg.ridge && mg.market_line) {
         parts.push(`margin: ridge MAE ${mg.ridge.mae.toFixed(2)} vs. the market line's own MAE `
           + `${mg.market_line.mae.toFixed(2)} points`);
+      }
+      if (mg.ridge && mg.ridge.ats_accuracy != null) {
+        ATS_BT = mg.ridge.ats_accuracy;
+        parts.push(`the ridge model's lean against the spread was right ${(ATS_BT * 100).toFixed(1)}% of the time, `
+          + `below the 52.4% a bettor needs`);
       }
       if (tot.ridge && tot.market_line) {
         parts.push(`total: ridge MAE ${tot.ridge.mae.toFixed(2)} vs. the market line's own MAE `

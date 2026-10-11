@@ -40,76 +40,76 @@
     "17": 16,
     "18": 16
   },
-  "generated_at": "2026-10-11T05:05:06+00:00",
+  "generated_at": "2026-10-11T05:23:38+00:00",
   "measured": {
     "win_loss": {
       "logistic": {
-        "accuracy": 0.6762,
-        "log_loss": 0.6095,
-        "roc_auc": 0.7184
+        "accuracy": 0.6728,
+        "log_loss": 0.6128,
+        "roc_auc": 0.7142
       },
       "xgboost": {
-        "accuracy": 0.6615,
-        "log_loss": 0.6193,
-        "roc_auc": 0.7079
+        "accuracy": 0.6611,
+        "log_loss": 0.6211,
+        "roc_auc": 0.7058
       },
       "random_forest": {
-        "accuracy": 0.6606,
-        "log_loss": 0.6214,
-        "roc_auc": 0.7067
+        "accuracy": 0.6595,
+        "log_loss": 0.623,
+        "roc_auc": 0.7042
       },
       "vegas_favorite": {
-        "accuracy": 0.6762,
-        "log_loss": 0.606,
-        "roc_auc": 0.7243
+        "accuracy": 0.6728,
+        "log_loss": 0.6092,
+        "roc_auc": 0.7197
       },
       "home_field": {
-        "accuracy": 0.5547,
-        "log_loss": 0.6876,
+        "accuracy": 0.5537,
+        "log_loss": 0.6879,
         "roc_auc": 0.5
       }
     },
     "margin": {
       "ridge": {
-        "mae": 9.6564,
-        "rmse": 12.4929,
-        "ats_accuracy": 0.4679
+        "mae": 9.6449,
+        "rmse": 12.4759,
+        "ats_accuracy": 0.4687
       },
       "xgboost": {
-        "mae": 9.673,
-        "rmse": 12.5594,
-        "ats_accuracy": 0.4964
+        "mae": 9.6669,
+        "rmse": 12.544,
+        "ats_accuracy": 0.4936
       },
       "random_forest": {
-        "mae": 9.7037,
-        "rmse": 12.5344,
-        "ats_accuracy": 0.484
+        "mae": 9.7,
+        "rmse": 12.5228,
+        "ats_accuracy": 0.4816
       },
       "market_line": {
-        "mae": 9.5707,
-        "rmse": 12.4508,
+        "mae": 9.5579,
+        "rmse": 12.4327,
         "ats_accuracy": null
       }
     },
     "total": {
       "ridge": {
-        "mae": 10.1835,
-        "rmse": 13.0255,
-        "ou_accuracy": 0.5293
+        "mae": 10.198,
+        "rmse": 13.0073,
+        "ou_accuracy": 0.5285
       },
       "xgboost": {
-        "mae": 10.2006,
-        "rmse": 13.0186,
-        "ou_accuracy": 0.5179
+        "mae": 10.2223,
+        "rmse": 13.0055,
+        "ou_accuracy": 0.5134
       },
       "random_forest": {
-        "mae": 10.2325,
-        "rmse": 13.0478,
-        "ou_accuracy": 0.5206
+        "mae": 10.251,
+        "rmse": 13.0313,
+        "ou_accuracy": 0.5176
       },
       "market_line": {
-        "mae": 10.2031,
-        "rmse": 13.0609,
+        "mae": 10.2111,
+        "rmse": 13.0357,
         "ou_accuracy": null
       }
     }

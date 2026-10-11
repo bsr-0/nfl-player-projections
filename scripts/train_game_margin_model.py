@@ -125,6 +125,13 @@ def _tune_optuna(target: str, seasons, n_test_seasons: int, n_trials: int) -> di
     return tune_all_arms_optuna(REGRESSOR_SEARCH_SPACES, TUNABLE_ARM_CLASSES, X, y, season_arr, scorer, n_trials=n_trials)
 
 
+def _recorded_params(path: Path) -> dict:
+    """Hyperparameters a previous run recorded (empty if none), printed so a reuse is visible."""
+    params = json.loads(path.read_text()).get("tuned_params", {}) if path.exists() else {}
+    print(f"Reusing the hyperparameters recorded in {path.name}: {sorted(params) or 'none (config defaults)'}")
+    return params
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", choices=list(TARGET_CONFIG), default=None, help="Default: run both.")
@@ -136,6 +143,12 @@ def main() -> None:
         help="Real Optuna TPE search with N_TRIALS trials per arm (see optuna_tuning.py). Overrides --tune if both given.",
     )
     parser.add_argument("--no-save", action="store_true", help="Run the backtest only; skip persisting final models.")
+    parser.add_argument(
+        "--default-params", action="store_true",
+        help="Use the config defaults instead of the hyperparameters already recorded in the metadata sidecar. "
+             "Without this (and without --tune/--tune-optuna) the recorded ones are reused, so re-running the "
+             "backtest never silently drops a tuning.",
+    )
     args = parser.parse_args()
 
     seasons = list(range(args.seasons[0], args.seasons[1] + 1)) if args.seasons else None
@@ -148,6 +161,8 @@ def main() -> None:
             tuned_params = _tune_optuna(target, seasons, n_test_seasons, args.tune_optuna)
         elif args.tune:
             tuned_params = _tune(target, seasons, n_test_seasons)
+        elif not args.default_params:
+            tuned_params = _recorded_params(MODELS_DIR / f"game_{target}_model_metadata.json")
 
         print(f"\nRunning walk-forward backtest for target={target!r}...")
         report = run_walk_forward_backtest(

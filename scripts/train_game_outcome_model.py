@@ -121,6 +121,13 @@ def _tune_optuna(seasons, n_test_seasons: int, n_trials: int) -> dict:
     return tune_all_arms_optuna(CLASSIFIER_SEARCH_SPACES, TUNABLE_ARM_CLASSES, X, y, season_arr, scorer, n_trials=n_trials)
 
 
+def _recorded_params(path: Path) -> dict:
+    """Hyperparameters a previous run recorded (empty if none), printed so a reuse is visible."""
+    params = json.loads(path.read_text()).get("tuned_params", {}) if path.exists() else {}
+    print(f"Reusing the hyperparameters recorded in {path.name}: {sorted(params) or 'none (config defaults)'}")
+    return params
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seasons", nargs=2, type=int, metavar=("START", "END"), default=None)
@@ -131,6 +138,12 @@ def main() -> None:
         help="Real Optuna TPE search with N_TRIALS trials per arm (see optuna_tuning.py). Overrides --tune if both given.",
     )
     parser.add_argument("--no-save", action="store_true", help="Run the backtest only; skip persisting final models.")
+    parser.add_argument(
+        "--default-params", action="store_true",
+        help="Use the config defaults instead of the hyperparameters already recorded in the metadata sidecar. "
+             "Without this (and without --tune/--tune-optuna) the recorded ones are reused, so re-running the "
+             "backtest never silently drops a tuning.",
+    )
     args = parser.parse_args()
 
     seasons = list(range(args.seasons[0], args.seasons[1] + 1)) if args.seasons else None
@@ -141,6 +154,8 @@ def main() -> None:
         tuned_params = _tune_optuna(seasons, n_test_seasons, args.tune_optuna)
     elif args.tune:
         tuned_params = _tune(seasons, n_test_seasons)
+    elif not args.default_params:
+        tuned_params = _recorded_params(MODELS_DIR / "game_outcome_model_metadata.json")
 
     print("\nRunning walk-forward backtest...")
     report = run_walk_forward_backtest(seasons=seasons, n_test_seasons=args.n_test_seasons, tuned_params=tuned_params)
