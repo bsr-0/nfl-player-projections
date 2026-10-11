@@ -36,7 +36,7 @@ def stub(monkeypatch):
 
 
 def test_fit_set_saves_nine_models_and_a_manifest(stub, tmp_path):
-    entry = R.fit_set("production", con=None, models_dir=tmp_path, params={})
+    entry = R.fit_set("production", con=None, models_dir=tmp_path)
     assert sorted(entry["artifacts_sha256"]) == sorted(a[2] for a in R.ARTIFACTS) and len(entry["artifacts_sha256"]) == 9
     assert entry["trained_through"] == {"season": 2026, "week": 3} and entry["n_games"] == 72
     assert json.loads((tmp_path / R.MANIFEST_NAME).read_text())["sets"]["production"]["n_games"] == 72
@@ -48,14 +48,14 @@ def test_fit_set_saves_nine_models_and_a_manifest(stub, tmp_path):
 
 
 def test_walkforward_set_never_sees_its_own_season(stub, tmp_path):
-    entry = R.fit_set(R.walkforward_name(2026), con=None, models_dir=tmp_path, before_season=2026, params={})
+    entry = R.fit_set(R.walkforward_name(2026), con=None, models_dir=tmp_path, before_season=2026)
     assert entry["trained_before_season"] == 2026 and entry["n_games"] == 48
     assert entry["trained_through"] == {"season": 2025, "week": 3}
     assert (tmp_path / R.WALKFORWARD_DIR / "2026" / "game_outcome_rf.joblib").exists()
 
 
 def test_production_goes_stale_when_a_new_week_completes_and_refit_clears_it(stub, tmp_path):
-    R.fit_set("production", con=None, models_dir=tmp_path, params={})
+    R.fit_set("production", con=None, models_dir=tmp_path)
     ok, why = R.check_set("production", con=None, models_dir=tmp_path)
     assert ok, why
     stub["frames"] = _frames(weeks=(1, 2, 3, 4))
@@ -67,7 +67,7 @@ def test_production_goes_stale_when_a_new_week_completes_and_refit_clears_it(stu
 
 
 def test_no_refit_flag_reports_stale_instead_of_fitting(stub, tmp_path):
-    R.fit_set("production", con=None, models_dir=tmp_path, params={})
+    R.fit_set("production", con=None, models_dir=tmp_path)
     stub["frames"] = _frames(weeks=(1, 2, 3, 4))
     entry, note = R.ensure_set("production", con=None, models_dir=tmp_path, refit=False)
     assert note.startswith("STALE") and entry["trained_through"]["week"] == 3
@@ -75,7 +75,7 @@ def test_no_refit_flag_reports_stale_instead_of_fitting(stub, tmp_path):
 
 def test_walkforward_set_ignores_in_season_results(stub, tmp_path):
     name = R.walkforward_name(2026)
-    R.fit_set(name, con=None, models_dir=tmp_path, before_season=2026, params={})
+    R.fit_set(name, con=None, models_dir=tmp_path, before_season=2026)
     more = _frames(weeks=(1, 2, 3, 4))             # 2026 gains a week; seasons before 2026 gain nothing
     stub["frames"] = tuple(f[(f["season"] == 2026) | (f["week"] <= 3)].reset_index(drop=True) for f in more)
     assert R.check_set(name, con=None, models_dir=tmp_path, before_season=2026)[0]
@@ -84,11 +84,11 @@ def test_walkforward_set_ignores_in_season_results(stub, tmp_path):
 
 
 def test_a_changed_artifact_or_feature_list_is_not_current(stub, tmp_path):
-    R.fit_set("production", con=None, models_dir=tmp_path, params={})
+    R.fit_set("production", con=None, models_dir=tmp_path)
     (tmp_path / "game_total_rf.joblib").write_bytes(b"tampered")
     ok, why = R.check_set("production", con=None, models_dir=tmp_path)
     assert not ok and "game_total_rf.joblib" in why
-    R.fit_set("production", con=None, models_dir=tmp_path, params={})
+    R.fit_set("production", con=None, models_dir=tmp_path)
     frames = _frames()
     stub["frames"] = (frames[0].assign(f3=1.0), frames[1].assign(f3=1.0))
     ok, why = R.check_set("production", con=None, models_dir=tmp_path)
@@ -104,3 +104,15 @@ def test_tuned_params_come_from_the_sidecars(tmp_path):
     (tmp_path / "game_outcome_model_metadata.json").write_text(json.dumps({"tuned_params": {"logistic": {"C": 3.0}}}))
     got = R.tuned_params(tmp_path)
     assert got["outcome"] == {"logistic": {"C": 3.0}} and got["margin"] == {} and got["total"] == {}
+
+
+def test_retuned_hyperparameters_make_both_sets_stale(stub, tmp_path):
+    R.fit_set("production", con=None, models_dir=tmp_path)
+    R.fit_set(R.walkforward_name(2026), con=None, models_dir=tmp_path, before_season=2026)
+    (tmp_path / "game_outcome_model_metadata.json").write_text(json.dumps({"tuned_params": {"logistic": {"C": 3.0}}}))
+    for name, before in (("production", None), (R.walkforward_name(2026), 2026)):
+        ok, why = R.check_set(name, con=None, models_dir=tmp_path, before_season=before)
+        assert not ok and "hyperparameters" in why
+    entry, note = R.ensure_set(R.walkforward_name(2026), con=None, models_dir=tmp_path, before_season=2026)
+    assert note.startswith("refit")
+    assert R.check_set(R.walkforward_name(2026), con=None, models_dir=tmp_path, before_season=2026)[0]

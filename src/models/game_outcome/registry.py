@@ -107,6 +107,10 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def params_sha256(params: dict) -> str:
+    return hashlib.sha256(json.dumps(params, sort_keys=True, default=str).encode()).hexdigest()
+
+
 def _git_commit() -> Optional[str]:
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
@@ -158,6 +162,7 @@ def fit_set(name: str, *, con: sqlite3.Connection, models_dir: Path = MODELS_DIR
         "n_features": len(feats),
         "feature_columns_sha256": hashlib.sha256(json.dumps(feats).encode()).hexdigest(),
         "hyperparameters_from": {t: SIDECARS[t] for t in SIDECARS},
+        "hyperparameters_sha256": params_sha256(params),
         "artifacts_sha256": artifacts,
         "git_commit": _git_commit(),
     }
@@ -193,6 +198,8 @@ def check_set(name: str, *, con: sqlite3.Connection, models_dir: Path = MODELS_D
     got = (entry["trained_through"]["season"], entry["trained_through"]["week"])
     if latest is not None and latest > got:
         return False, f"fitted through {got[0]} wk{got[1]}; games are complete through {latest[0]} wk{latest[1]}"
+    if entry.get("hyperparameters_sha256") != params_sha256(tuned_params(models_dir)):
+        return False, "the hyperparameters in the metadata sidecars changed since the models were fitted"
     cols = feature_columns(build_game_outcome_rows(con=con))
     if hashlib.sha256(json.dumps(cols).encode()).hexdigest() != entry["feature_columns_sha256"]:
         return False, "the feature list changed since the models were fitted"
