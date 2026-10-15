@@ -1,0 +1,852 @@
+{
+  "generated_at": "2026-10-13T23:26+00:00",
+  "fold": "data/experiments/full_ppr_head_to_head_20260930/served_2025_fold_v6",
+  "preflight": "data/experiments/full_ppr_head_to_head_20260930/served_2025_preflight_v5",
+  "repeats": 5,
+  "seed": 42,
+  "features": "as of each week",
+  "groups": {
+    "Usage": [
+      "air_yards_share_pct_roll3_mean",
+      "depth_chart_rank",
+      "dest_team_pos_carry_pg",
+      "dest_team_pos_tgt_pg",
+      "goal_line_carry_share_pct_roll3_mean",
+      "passing_attempts_roll3_mean",
+      "pbp_pass_play_participation_pct_roll3_mean",
+      "receptions_roll3_mean",
+      "redzone_target_share_pct_roll3_mean",
+      "rush_share_pct_roll3_mean",
+      "rushing_attempts_roll3_mean",
+      "snap_share_accel",
+      "snap_share_pct_roll3_mean",
+      "targets_roll3_mean",
+      "team_rb_lead_share_roll3_mean",
+      "team_rb_target_share_roll3_mean",
+      "team_te_target_share_roll3_mean",
+      "team_wr_target_share_roll3_mean",
+      "wopr_roll3"
+    ],
+    "Recent production & efficiency": [
+      "catch_rate_roll3_mean",
+      "completion_pct_roll3_mean",
+      "fp_late6_vs_season",
+      "fp_volatility_roll5",
+      "ngs_aggressiveness_roll3_mean",
+      "ngs_avg_air_yards_to_sticks_roll3_mean",
+      "ngs_avg_intended_air_yards_roll3_mean",
+      "ngs_avg_separation_roll3_mean",
+      "ngs_avg_time_to_throw_roll3_mean",
+      "ngs_avg_yac_above_expectation_roll3_mean",
+      "ngs_completion_percentage_above_expectation_roll3_mean",
+      "ngs_rush_yards_over_expected_per_att_roll3_mean",
+      "pass_epa_per_play_roll3_mean",
+      "pass_success_rate_roll3_mean",
+      "passing_tds_roll3_mean",
+      "qb_pressure_pct_roll3_mean",
+      "rb_yac_avg_roll3_mean",
+      "rb_ybc_avg_roll3_mean",
+      "receiving_tds_roll3_mean",
+      "recv_drop_pct_roll3_mean",
+      "recv_epa_per_target_roll3_mean",
+      "rush_epa_per_play_roll3_mean",
+      "rushing_tds_roll3_mean",
+      "rushing_yards_roll3_mean",
+      "yards_per_attempt_roll3_mean",
+      "yards_per_carry_roll3_mean",
+      "yards_per_target_roll3_mean"
+    ],
+    "Opponent": [
+      "opp_fpts_allowed",
+      "opp_fpts_allowed_dvoa_adjusted_lag1",
+      "opp_fpts_allowed_s2d_lag1"
+    ],
+    "Betting line": [
+      "implied_team_total",
+      "spread"
+    ],
+    "Team context": [
+      "coaching_adaptation_score",
+      "coaching_change",
+      "coaching_change_impact",
+      "coaching_stability",
+      "current_qb_epa_per_att",
+      "team_changed",
+      "team_motion_rate",
+      "team_neutral_pass_rate_oe_roll3_mean",
+      "team_pace_sec_per_play_roll3_mean",
+      "team_pct_11_personnel_roll3_mean",
+      "team_pct_12_personnel_roll3_mean",
+      "team_pct_13_personnel_roll3_mean",
+      "team_pct_21_personnel_roll3_mean",
+      "team_play_action_rate",
+      "team_plays_roll3_mean",
+      "team_prior_season_wins",
+      "team_run_block_ybc_avg_roll3_mean",
+      "team_sack_rate_allowed_roll3_mean",
+      "team_target_concentration_roll3_mean"
+    ],
+    "Availability": [
+      "availability_3yr",
+      "injury_score"
+    ],
+    "Player history & profile": [
+      "age_curve",
+      "bayesian_prior_ppg",
+      "career_year_flag",
+      "combine_score",
+      "contract_apy_rank",
+      "draft_pick",
+      "draft_pick_value",
+      "draft_round",
+      "is_contract_year",
+      "is_power5",
+      "is_rookie",
+      "is_undrafted",
+      "prev_season_ppg",
+      "qb_bad_throw_pct_prior",
+      "qb_pocket_time_prior",
+      "rb_broken_tackles_prior",
+      "recv_drop_pct_season_prior",
+      "rookie_breakout_prob",
+      "rookie_bust_prob",
+      "rookie_ceiling_ppg",
+      "rookie_draft_value",
+      "rookie_floor_ppg",
+      "rookie_opportunity_score",
+      "speed_score"
+    ],
+    "Weather & venue": [
+      "is_dome",
+      "precipitation_flag",
+      "temperature_bucket",
+      "wind_speed_mph"
+    ]
+  },
+  "positions": {
+    "QB": {
+      "n": 602,
+      "games": 256,
+      "base_mae": 6.711,
+      "saved_fold_mae": 6.711,
+      "one_pass_reproduction_max_abs_diff": 0.0,
+      "asof_rows_moved": 465,
+      "asof_max_move": 0.017,
+      "families": {
+        "Usage": {
+          "est": 0.23827211859814423,
+          "lo": 0.09129298910639326,
+          "hi": 0.38147715714849867,
+          "n": 602,
+          "games": 256,
+          "features": 3,
+          "members": [
+            "depth_chart_rank",
+            "passing_attempts_roll3_mean",
+            "rushing_attempts_roll3_mean"
+          ]
+        },
+        "Recent production & efficiency": {
+          "est": 0.2718398353771541,
+          "lo": 0.07067323435488138,
+          "hi": 0.45484490001307903,
+          "n": 602,
+          "games": 256,
+          "features": 14,
+          "members": [
+            "completion_pct_roll3_mean",
+            "fp_late6_vs_season",
+            "fp_volatility_roll5",
+            "ngs_aggressiveness_roll3_mean",
+            "ngs_avg_air_yards_to_sticks_roll3_mean",
+            "ngs_avg_time_to_throw_roll3_mean",
+            "ngs_completion_percentage_above_expectation_roll3_mean",
+            "pass_epa_per_play_roll3_mean",
+            "pass_success_rate_roll3_mean",
+            "passing_tds_roll3_mean",
+            "qb_pressure_pct_roll3_mean",
+            "rushing_tds_roll3_mean",
+            "rushing_yards_roll3_mean",
+            "yards_per_attempt_roll3_mean"
+          ]
+        },
+        "Opponent": {
+          "est": 0.00300205667978331,
+          "lo": -0.0050430260648170145,
+          "hi": 0.010481904655666402,
+          "n": 602,
+          "games": 256,
+          "features": 3,
+          "members": [
+            "opp_fpts_allowed",
+            "opp_fpts_allowed_dvoa_adjusted_lag1",
+            "opp_fpts_allowed_s2d_lag1"
+          ]
+        },
+        "Betting line": {
+          "est": 0.02496345334234954,
+          "lo": -0.0007049566634282191,
+          "hi": 0.049595662190139694,
+          "n": 602,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "implied_team_total",
+            "spread"
+          ]
+        },
+        "Team context": {
+          "est": -0.017487851609025416,
+          "lo": -0.05024107690032979,
+          "hi": 0.015180452076849971,
+          "n": 602,
+          "games": 256,
+          "features": 12,
+          "members": [
+            "coaching_adaptation_score",
+            "coaching_change",
+            "coaching_change_impact",
+            "coaching_stability",
+            "team_changed",
+            "team_motion_rate",
+            "team_neutral_pass_rate_oe_roll3_mean",
+            "team_pace_sec_per_play_roll3_mean",
+            "team_play_action_rate",
+            "team_plays_roll3_mean",
+            "team_prior_season_wins",
+            "team_sack_rate_allowed_roll3_mean"
+          ]
+        },
+        "Availability": {
+          "est": 0.001716234750503524,
+          "lo": -0.008874559720695906,
+          "hi": 0.012338377111321836,
+          "n": 602,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "availability_3yr",
+            "injury_score"
+          ]
+        },
+        "Player history & profile": {
+          "est": 0.12153011878023484,
+          "lo": -0.02079283008817719,
+          "hi": 0.26890627893785385,
+          "n": 602,
+          "games": 256,
+          "features": 22,
+          "members": [
+            "age_curve",
+            "bayesian_prior_ppg",
+            "career_year_flag",
+            "combine_score",
+            "contract_apy_rank",
+            "draft_pick",
+            "draft_pick_value",
+            "draft_round",
+            "is_contract_year",
+            "is_power5",
+            "is_rookie",
+            "is_undrafted",
+            "prev_season_ppg",
+            "qb_bad_throw_pct_prior",
+            "qb_pocket_time_prior",
+            "rookie_breakout_prob",
+            "rookie_bust_prob",
+            "rookie_ceiling_ppg",
+            "rookie_draft_value",
+            "rookie_floor_ppg",
+            "rookie_opportunity_score",
+            "speed_score"
+          ]
+        },
+        "Weather & venue": {
+          "est": -0.0011539317708371404,
+          "lo": -0.007736138285791449,
+          "hi": 0.005077119827530762,
+          "n": 602,
+          "games": 256,
+          "features": 4,
+          "members": [
+            "is_dome",
+            "precipitation_flag",
+            "temperature_bucket",
+            "wind_speed_mph"
+          ]
+        }
+      }
+    },
+    "RB": {
+      "n": 1370,
+      "games": 256,
+      "base_mae": 4.799,
+      "saved_fold_mae": 4.799,
+      "one_pass_reproduction_max_abs_diff": 0.0,
+      "asof_rows_moved": 1110,
+      "asof_max_move": 0.013,
+      "families": {
+        "Usage": {
+          "est": 1.3791799669597808,
+          "lo": 1.1919246780740722,
+          "hi": 1.573119050276447,
+          "n": 1370,
+          "games": 256,
+          "features": 12,
+          "members": [
+            "depth_chart_rank",
+            "dest_team_pos_carry_pg",
+            "dest_team_pos_tgt_pg",
+            "goal_line_carry_share_pct_roll3_mean",
+            "redzone_target_share_pct_roll3_mean",
+            "rush_share_pct_roll3_mean",
+            "rushing_attempts_roll3_mean",
+            "snap_share_accel",
+            "snap_share_pct_roll3_mean",
+            "targets_roll3_mean",
+            "team_rb_lead_share_roll3_mean",
+            "team_rb_target_share_roll3_mean"
+          ]
+        },
+        "Recent production & efficiency": {
+          "est": 0.01600438734008723,
+          "lo": -0.041968211135349556,
+          "hi": 0.07869288449065331,
+          "n": 1370,
+          "games": 256,
+          "features": 9,
+          "members": [
+            "catch_rate_roll3_mean",
+            "fp_late6_vs_season",
+            "fp_volatility_roll5",
+            "ngs_rush_yards_over_expected_per_att_roll3_mean",
+            "rb_yac_avg_roll3_mean",
+            "rb_ybc_avg_roll3_mean",
+            "rush_epa_per_play_roll3_mean",
+            "rushing_tds_roll3_mean",
+            "yards_per_carry_roll3_mean"
+          ]
+        },
+        "Opponent": {
+          "est": -0.00019852604715492125,
+          "lo": -0.00809077485179972,
+          "hi": 0.007874302607888234,
+          "n": 1370,
+          "games": 256,
+          "features": 3,
+          "members": [
+            "opp_fpts_allowed",
+            "opp_fpts_allowed_dvoa_adjusted_lag1",
+            "opp_fpts_allowed_s2d_lag1"
+          ]
+        },
+        "Betting line": {
+          "est": -0.002362247991623119,
+          "lo": -0.010885553226527673,
+          "hi": 0.005747483134578911,
+          "n": 1370,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "implied_team_total",
+            "spread"
+          ]
+        },
+        "Team context": {
+          "est": -0.004465340998724703,
+          "lo": -0.022007551000246303,
+          "hi": 0.012920927158738993,
+          "n": 1370,
+          "games": 256,
+          "features": 14,
+          "members": [
+            "coaching_adaptation_score",
+            "coaching_change",
+            "coaching_change_impact",
+            "coaching_stability",
+            "team_changed",
+            "team_motion_rate",
+            "team_neutral_pass_rate_oe_roll3_mean",
+            "team_pace_sec_per_play_roll3_mean",
+            "team_pct_12_personnel_roll3_mean",
+            "team_pct_21_personnel_roll3_mean",
+            "team_play_action_rate",
+            "team_plays_roll3_mean",
+            "team_prior_season_wins",
+            "team_run_block_ybc_avg_roll3_mean"
+          ]
+        },
+        "Availability": {
+          "est": -0.013481865989980291,
+          "lo": -0.03137522313381553,
+          "hi": 0.0046289154836450346,
+          "n": 1370,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "availability_3yr",
+            "injury_score"
+          ]
+        },
+        "Player history & profile": {
+          "est": 0.10251070915126444,
+          "lo": -0.005514714084936346,
+          "hi": 0.20784701455953378,
+          "n": 1370,
+          "games": 256,
+          "features": 21,
+          "members": [
+            "age_curve",
+            "bayesian_prior_ppg",
+            "career_year_flag",
+            "combine_score",
+            "contract_apy_rank",
+            "draft_pick",
+            "draft_pick_value",
+            "draft_round",
+            "is_contract_year",
+            "is_power5",
+            "is_rookie",
+            "is_undrafted",
+            "prev_season_ppg",
+            "rb_broken_tackles_prior",
+            "rookie_breakout_prob",
+            "rookie_bust_prob",
+            "rookie_ceiling_ppg",
+            "rookie_draft_value",
+            "rookie_floor_ppg",
+            "rookie_opportunity_score",
+            "speed_score"
+          ]
+        },
+        "Weather & venue": {
+          "est": 0.0031156620816236475,
+          "lo": -0.0007353420864340031,
+          "hi": 0.007211318853757166,
+          "n": 1370,
+          "games": 256,
+          "features": 4,
+          "members": [
+            "is_dome",
+            "precipitation_flag",
+            "temperature_bucket",
+            "wind_speed_mph"
+          ]
+        }
+      }
+    },
+    "WR": {
+      "n": 2385,
+      "games": 256,
+      "base_mae": 4.265,
+      "saved_fold_mae": 4.265,
+      "one_pass_reproduction_max_abs_diff": 0.0,
+      "asof_rows_moved": 1851,
+      "asof_max_move": 0.022,
+      "families": {
+        "Usage": {
+          "est": 1.2722519261932634,
+          "lo": 1.1341163981279536,
+          "hi": 1.4066753918337476,
+          "n": 2385,
+          "games": 256,
+          "features": 12,
+          "members": [
+            "air_yards_share_pct_roll3_mean",
+            "depth_chart_rank",
+            "dest_team_pos_tgt_pg",
+            "pbp_pass_play_participation_pct_roll3_mean",
+            "receptions_roll3_mean",
+            "redzone_target_share_pct_roll3_mean",
+            "rush_share_pct_roll3_mean",
+            "snap_share_accel",
+            "snap_share_pct_roll3_mean",
+            "targets_roll3_mean",
+            "team_wr_target_share_roll3_mean",
+            "wopr_roll3"
+          ]
+        },
+        "Recent production & efficiency": {
+          "est": 0.025102961221515438,
+          "lo": -0.0029180874513384703,
+          "hi": 0.053161445926030004,
+          "n": 2385,
+          "games": 256,
+          "features": 10,
+          "members": [
+            "catch_rate_roll3_mean",
+            "fp_late6_vs_season",
+            "fp_volatility_roll5",
+            "ngs_avg_intended_air_yards_roll3_mean",
+            "ngs_avg_separation_roll3_mean",
+            "ngs_avg_yac_above_expectation_roll3_mean",
+            "receiving_tds_roll3_mean",
+            "recv_drop_pct_roll3_mean",
+            "recv_epa_per_target_roll3_mean",
+            "yards_per_target_roll3_mean"
+          ]
+        },
+        "Opponent": {
+          "est": 0.0033221205519579433,
+          "lo": -0.0014008160739959908,
+          "hi": 0.00822489625401391,
+          "n": 2385,
+          "games": 256,
+          "features": 3,
+          "members": [
+            "opp_fpts_allowed",
+            "opp_fpts_allowed_dvoa_adjusted_lag1",
+            "opp_fpts_allowed_s2d_lag1"
+          ]
+        },
+        "Betting line": {
+          "est": -0.0012895481001769962,
+          "lo": -0.005105628317890154,
+          "hi": 0.002460905833394906,
+          "n": 2385,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "implied_team_total",
+            "spread"
+          ]
+        },
+        "Team context": {
+          "est": 0.01746990401426157,
+          "lo": 0.00521396902986169,
+          "hi": 0.03011284734953966,
+          "n": 2385,
+          "games": 256,
+          "features": 16,
+          "members": [
+            "coaching_adaptation_score",
+            "coaching_change",
+            "coaching_change_impact",
+            "coaching_stability",
+            "current_qb_epa_per_att",
+            "team_changed",
+            "team_motion_rate",
+            "team_neutral_pass_rate_oe_roll3_mean",
+            "team_pace_sec_per_play_roll3_mean",
+            "team_pct_11_personnel_roll3_mean",
+            "team_pct_12_personnel_roll3_mean",
+            "team_play_action_rate",
+            "team_plays_roll3_mean",
+            "team_prior_season_wins",
+            "team_sack_rate_allowed_roll3_mean",
+            "team_target_concentration_roll3_mean"
+          ]
+        },
+        "Availability": {
+          "est": -0.005109443026719185,
+          "lo": -0.015305647267673368,
+          "hi": 0.005575905463600685,
+          "n": 2385,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "availability_3yr",
+            "injury_score"
+          ]
+        },
+        "Player history & profile": {
+          "est": 0.2106874802783341,
+          "lo": 0.13611712663407713,
+          "hi": 0.28263599162925085,
+          "n": 2385,
+          "games": 256,
+          "features": 21,
+          "members": [
+            "age_curve",
+            "bayesian_prior_ppg",
+            "career_year_flag",
+            "combine_score",
+            "contract_apy_rank",
+            "draft_pick",
+            "draft_pick_value",
+            "draft_round",
+            "is_contract_year",
+            "is_power5",
+            "is_rookie",
+            "is_undrafted",
+            "prev_season_ppg",
+            "recv_drop_pct_season_prior",
+            "rookie_breakout_prob",
+            "rookie_bust_prob",
+            "rookie_ceiling_ppg",
+            "rookie_draft_value",
+            "rookie_floor_ppg",
+            "rookie_opportunity_score",
+            "speed_score"
+          ]
+        },
+        "Weather & venue": {
+          "est": -0.001029406869343511,
+          "lo": -0.004707674805251808,
+          "hi": 0.0026803519920769042,
+          "n": 2385,
+          "games": 256,
+          "features": 4,
+          "members": [
+            "is_dome",
+            "precipitation_flag",
+            "temperature_bucket",
+            "wind_speed_mph"
+          ]
+        }
+      }
+    },
+    "TE": {
+      "n": 1485,
+      "games": 256,
+      "base_mae": 3.11,
+      "saved_fold_mae": 3.11,
+      "one_pass_reproduction_max_abs_diff": 0.0,
+      "asof_rows_moved": 1306,
+      "asof_max_move": 0.002,
+      "families": {
+        "Usage": {
+          "est": 1.0480680831801363,
+          "lo": 0.9334048624824941,
+          "hi": 1.1611076580045296,
+          "n": 1485,
+          "games": 256,
+          "features": 10,
+          "members": [
+            "depth_chart_rank",
+            "dest_team_pos_tgt_pg",
+            "pbp_pass_play_participation_pct_roll3_mean",
+            "receptions_roll3_mean",
+            "redzone_target_share_pct_roll3_mean",
+            "snap_share_accel",
+            "snap_share_pct_roll3_mean",
+            "targets_roll3_mean",
+            "team_te_target_share_roll3_mean",
+            "wopr_roll3"
+          ]
+        },
+        "Recent production & efficiency": {
+          "est": 0.037604168808282976,
+          "lo": 0.017971660902288595,
+          "hi": 0.05620096410395656,
+          "n": 1485,
+          "games": 256,
+          "features": 10,
+          "members": [
+            "catch_rate_roll3_mean",
+            "fp_late6_vs_season",
+            "fp_volatility_roll5",
+            "ngs_avg_intended_air_yards_roll3_mean",
+            "ngs_avg_separation_roll3_mean",
+            "ngs_avg_yac_above_expectation_roll3_mean",
+            "receiving_tds_roll3_mean",
+            "recv_drop_pct_roll3_mean",
+            "recv_epa_per_target_roll3_mean",
+            "yards_per_target_roll3_mean"
+          ]
+        },
+        "Opponent": {
+          "est": 0.002099363134236411,
+          "lo": -0.001743509527964989,
+          "hi": 0.005802979933085087,
+          "n": 1485,
+          "games": 256,
+          "features": 3,
+          "members": [
+            "opp_fpts_allowed",
+            "opp_fpts_allowed_dvoa_adjusted_lag1",
+            "opp_fpts_allowed_s2d_lag1"
+          ]
+        },
+        "Betting line": {
+          "est": 0.00020826933722474834,
+          "lo": -0.004644066245306438,
+          "hi": 0.004771650236477194,
+          "n": 1485,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "implied_team_total",
+            "spread"
+          ]
+        },
+        "Team context": {
+          "est": 0.0032633345585688246,
+          "lo": -0.005834798501728734,
+          "hi": 0.012686977813377678,
+          "n": 1485,
+          "games": 256,
+          "features": 16,
+          "members": [
+            "coaching_adaptation_score",
+            "coaching_change",
+            "coaching_change_impact",
+            "coaching_stability",
+            "current_qb_epa_per_att",
+            "team_changed",
+            "team_motion_rate",
+            "team_neutral_pass_rate_oe_roll3_mean",
+            "team_pace_sec_per_play_roll3_mean",
+            "team_pct_12_personnel_roll3_mean",
+            "team_pct_13_personnel_roll3_mean",
+            "team_play_action_rate",
+            "team_plays_roll3_mean",
+            "team_prior_season_wins",
+            "team_sack_rate_allowed_roll3_mean",
+            "team_target_concentration_roll3_mean"
+          ]
+        },
+        "Availability": {
+          "est": -0.0032473495634046602,
+          "lo": -0.007851129582245982,
+          "hi": 0.00139440267712457,
+          "n": 1485,
+          "games": 256,
+          "features": 2,
+          "members": [
+            "availability_3yr",
+            "injury_score"
+          ]
+        },
+        "Player history & profile": {
+          "est": 0.16294439996395385,
+          "lo": 0.1014298797101252,
+          "hi": 0.22361456776069757,
+          "n": 1485,
+          "games": 256,
+          "features": 21,
+          "members": [
+            "age_curve",
+            "bayesian_prior_ppg",
+            "career_year_flag",
+            "combine_score",
+            "contract_apy_rank",
+            "draft_pick",
+            "draft_pick_value",
+            "draft_round",
+            "is_contract_year",
+            "is_power5",
+            "is_rookie",
+            "is_undrafted",
+            "prev_season_ppg",
+            "recv_drop_pct_season_prior",
+            "rookie_breakout_prob",
+            "rookie_bust_prob",
+            "rookie_ceiling_ppg",
+            "rookie_draft_value",
+            "rookie_floor_ppg",
+            "rookie_opportunity_score",
+            "speed_score"
+          ]
+        },
+        "Weather & venue": {
+          "est": 0.00037358792523788933,
+          "lo": -0.0018169296834409342,
+          "hi": 0.002747699641770726,
+          "n": 1485,
+          "games": 256,
+          "features": 4,
+          "members": [
+            "is_dome",
+            "precipitation_flag",
+            "temperature_bucket",
+            "wind_speed_mph"
+          ]
+        }
+      }
+    }
+  },
+  "timing_audit": {
+    "train_seasons_through": 2024,
+    "test_season": 2025,
+    "rows": 5842,
+    "target_after_origin_rows": 5842,
+    "alignment": {
+      "Betting line (implied_team_total)": {
+        "rows_where_games_differ": 5592,
+        "matches_origin_game": 1.0,
+        "matches_target_game": 0.0
+      },
+      "Weather & venue (is_dome)": {
+        "rows_where_games_differ": 2269,
+        "matches_origin_game": 0.9189,
+        "matches_target_game": 0.0811
+      },
+      "Weather & venue (wind_speed_mph)": {
+        "rows_where_games_differ": 4836,
+        "matches_origin_game": 0.9324,
+        "matches_target_game": 0.0165
+      },
+      "Availability (injury_score)": {
+        "rows_where_games_differ": 320,
+        "matches_origin_game": 1.0,
+        "matches_target_game": 0.0
+      }
+    },
+    "truncation": [
+      {
+        "cutoff_week": 6,
+        "rows_compared": 2197,
+        "rows_missing": 0,
+        "features_compared": 100,
+        "features_changed": {
+          "combine_score": {
+            "rows": 1780,
+            "max_abs_diff": 0.18389690207106213
+          },
+          "qb_pressure_pct_roll3_mean": {
+            "rows": 541,
+            "max_abs_diff": 0.5
+          },
+          "rb_yac_avg_roll3_mean": {
+            "rows": 27,
+            "max_abs_diff": 0.19999999999999973
+          },
+          "rb_ybc_avg_roll3_mean": {
+            "rows": 27,
+            "max_abs_diff": 0.3999999999999986
+          },
+          "team_neutral_pass_rate_oe_roll3_mean": {
+            "rows": 60,
+            "max_abs_diff": 1.5226227256988814e-05
+          }
+        }
+      },
+      {
+        "cutoff_week": 12,
+        "rows_compared": 4203,
+        "rows_missing": 0,
+        "features_compared": 100,
+        "features_changed": {
+          "combine_score": {
+            "rows": 3394,
+            "max_abs_diff": 0.10506634837996387
+          },
+          "qb_pressure_pct_roll3_mean": {
+            "rows": 6,
+            "max_abs_diff": 0.0056666666666666254
+          },
+          "rb_yac_avg_roll3_mean": {
+            "rows": 46,
+            "max_abs_diff": 0.1333333333333332
+          },
+          "rb_ybc_avg_roll3_mean": {
+            "rows": 1316,
+            "max_abs_diff": 0.16666666666666652
+          },
+          "team_neutral_pass_rate_oe_roll3_mean": {
+            "rows": 63,
+            "max_abs_diff": 8.52560813408565e-05
+          }
+        }
+      }
+    ],
+    "importance_built_as_of": true,
+    "asof_rows": 6057,
+    "not_verifiable": [
+      "The frozen 2025 inputs were read from the database on 2026-10-07, after the season; stat corrections published after each kickoff cannot be ruled out (no as-of-kickoff archive exists).",
+      "2025 injury reports carry no modification time in the current nflverse feed, so report timing within a week cannot be checked; the injury feature is joined to the origin week (above)."
+    ]
+  },
+  "note_2026_10_14": "groups previously listed only the first position's (QB) features per family; corrected from the fold's models, and per-position members added. Importance values unchanged."
+}
