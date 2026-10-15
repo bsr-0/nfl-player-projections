@@ -125,6 +125,7 @@
   .cmp-remove { background:none; border:none; color:var(--dim); font-size:14px;
                 cursor:pointer; padding:0 0 0 8px; }
   .cmp-remove:hover { color:var(--warn); }
+  td.noprior { color:var(--muted,#667); }
 </style>
 
 <header>
@@ -174,6 +175,7 @@
       <th class="cmpcell" title="check to compare">Cmp</th>
       <th class="num">#</th><th>Player</th><th>Pos</th><th>Team</th><th>Opp</th>
       <th class="num sortable" data-key="predicted_points" title="sort by projection">Proj</th>
+      <th class="num sortable" data-key="_noprior" title="Experimental: the weekly model with no pace blend, scaled by 0.9218. Not the published projection. Sort by it.">No-prior<sup>β</sup></th>
       <th class="num sortable" data-key="prediction_ci80_lower" title="sort by floor">Floor</th>
       <th class="num sortable" data-key="prediction_ci80_upper" title="sort by upside">Upside</th>
       <th class="rangecell">Likely range (80%)</th>
@@ -206,6 +208,15 @@
   game 8 it is three-quarters weekly model. Hover the bar for both inputs.
   Measured on a full replay of 2025, this shrinkage cut average error from
   4.35 to 4.24 points and helped at every stage of the season.</p>
+
+  <p id="noprior-note"><strong><sup>β</sup> No-prior projection (experimental).</strong>
+  The same weekly model with the pace blend removed, multiplied by a fixed 0.9218
+  (the blend's average level on 2025). It sits next to the published projection
+  and does not replace it: the Proj column, the range, the track record and the
+  rankings above are unchanged, and the range shown belongs to Proj. On 2025 it
+  matched the blended projection's average miss (4.27 points) while following a
+  player's current-season form more closely; it is being tested on weeks 6–13
+  before any decision (<code>docs/PREREG_NO_PRIOR_2026.md</code>).</p>
 
   <p id="accnote2"><strong>How far off, and in which direction.</strong> Measured
   against real 2025 results by replaying every week of that season through the
@@ -247,6 +258,10 @@ const POS = ["QB","RB","WR","TE"];
 const MAX_COMPARE = 4;
 let RAW = [], META = null, SEASON = null, WEEK = null;
 let REPLAY = null;          // docs/data/weekly_replay_{season}.json, or null
+// Experimental second projection, shown beside the published one: the weekly model
+// without the pace blend (predicted_points_model) times a fixed 0.9218. Not served,
+// not scored in the track record; see docs/PREREG_NO_PRIOR_2026.md.
+const NOPRIOR_SCALE = 0.9218;
 let SORT = { key: "predicted_points", asc: false };
 let COMPARE = new Set();
 
@@ -304,6 +319,8 @@ function render() {
   if (team !== "ALL") rows = rows.filter(r => teamsInvolved(r).includes(team));
   if (q) rows = rows.filter(r =>
     (r.name||"").toLowerCase().includes(q) || (r.team||"").toLowerCase().includes(q));
+  for (const r of rows)
+    r._noprior = r.predicted_points_model != null ? r.predicted_points_model * NOPRIOR_SCALE : null;
   for (const r of rows)
     r._miss = (r.actual_points != null && r.predicted_points != null)
       ? r.predicted_points - r.actual_points : null;
@@ -405,6 +422,7 @@ function render() {
       <td>${r.team ?? ""}</td>
       <td>${r.home_away === "away" ? "@" : ""}${r.opponent ?? ""}</td>
       <td class="num">${pt.toFixed(1)}</td>
+      <td class="num noprior" title="experimental, no pace blend">${fmt1(r._noprior)}</td>
       <td class="num">${fmt1(lo)}</td>
       <td class="num">${fmt1(up)}</td>
       <td class="rangecell">${bar}</td>
@@ -428,6 +446,7 @@ function renderCompare() {
     ["Pos / Team", r => `<span class="pos ${r.position}">${r.position}</span> ${r.team ?? ""}`],
     ["Opponent", r => (r.home_away === "away" ? "@" : "vs ") + (r.opponent ?? "")],
     ["Projection", r => (r.predicted_points ?? 0).toFixed(1)],
+    ["No-prior (experimental)", r => r.predicted_points_model != null ? (r.predicted_points_model * NOPRIOR_SCALE).toFixed(1) : "—"],
     ["Likely range (80%)", r => (r.prediction_ci80_lower != null && r.prediction_ci80_upper != null)
         ? `${fmt1(r.prediction_ci80_lower)} – ${fmt1(r.prediction_ci80_upper)}` : "—"],
     ["Pace · form", r => r.pace_weight != null
