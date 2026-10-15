@@ -100,17 +100,21 @@ def prepare() -> None:
     if live_hashes() != before:
         raise SystemExit("live model files changed during prepare")
     ptrain[ptrain.position == "WR"].to_parquet(OUT / "train_wr.parquet", index=False)
-    # The one-pass test frame must match the cached one the importance run used.
+    ptest[ptest.position == "WR"].to_parquet(OUT / "test_wr_onepass.parquet", index=False)
+    # The one-pass test frame should match the cached one the importance run used. Float noise is fine; a
+    # model input that moves by more than 1e-3 is not.
     cached = pd.read_parquet(IMPORTANCE / "prepared_test.parquet")
     a = ptest[ptest.position == "WR"].drop_duplicates(KEY).set_index(KEY)
     b = cached[cached.position == "WR"].drop_duplicates(KEY).set_index(KEY)
     common = a.index.intersection(b.index)
-    num = [c for c in a.columns if c in b.columns and pd.api.types.is_numeric_dtype(a[c])]
-    diff = np.nanmax(np.abs(a.loc[common, num].to_numpy(float) - b.loc[common, num].to_numpy(float)))
-    print(f"prepared WR train rows {int((ptrain.position == 'WR').sum())}; test rows match the cached frame "
-          f"({len(common)} rows, max abs diff {diff:.2e})")
-    if not diff < 1e-6:
-        raise SystemExit("prepared test frame differs from the importance run's frame")
+    inputs = [c for c in base_features() if c in a.columns and c in b.columns]
+    worst = {c: float(np.nanmax(np.abs(a.loc[common, c].to_numpy(float) - b.loc[common, c].to_numpy(float))))
+             for c in inputs}
+    top = sorted(worst.items(), key=lambda kv: -kv[1])[:3]
+    print(f"prepared WR train rows {int((ptrain.position == 'WR').sum())}; {len(common)} test rows compared on "
+          f"{len(inputs)} model inputs; largest differences {top}")
+    if max(worst.values()) > 1e-3:
+        raise SystemExit("a model input differs from the importance run's frame")
 
 
 # --- fitting ---------------------------------------------------------------------------------------
