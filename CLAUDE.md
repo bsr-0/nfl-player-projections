@@ -55,4 +55,10 @@
                    the recorded hyperparameters unless --tune/--tune-optuna/--default-params
    Open .......... none
 
+10. NO-PRIOR SCALED  (unblended x 0.9218; hybrid keeps the blend for QBs)
+   Status ........ PRE-REGISTERED 10-14 (docs/PREREG_NO_PRIOR_2026.md, scripts/score_no_prior_prereg.py), before wk 6
+   Metric ........ exploratory, 2025 selection set: MAE 4.269 (+0.003 vs blend), hybrid 4.257 (-0.010); 0 of 17 guardrails fail;
+                   under-projection of players 3+ PPG ahead of prior cut 0.43 / 0.31 pts. Not evidence (chosen after viewing 2025)
+   Open .......... non-inferiority (margin 0.10, Holm k=2) + 17 guardrails + S1 on 2026 wks 6-13; `score` once after wk 13
+
 ```
