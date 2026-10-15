@@ -73,3 +73,14 @@ touches, receiving yards and neutral-situation targets, holding its projection f
 
 2025 is not blind: it chose the candidate features, the blend constant and this design. A pass here is
 development evidence only. The confirmation is 2026, scored under its own pre-registration.
+
+## Amendment 1 (2026-10-14), before any candidate was fit
+
+Reading the trainer showed `ModelTrainer.train_all_positions` runs its own feature selection (correlation
+filter, stability selection, VIF pruning) before fitting. Season-to-date volume is highly correlated with
+the existing 3-game averages, so selection could drop a candidate and the test would measure the selector,
+not the information. The harness therefore fits `MultiWeekModel("WR")` directly on an explicit column list
+for every arm (C0 = the fold model's 70 `feature_names`; C1 and C2 add their columns), with the trainer's
+other steps unchanged: median fill on the training prefix, rows without a 1-week target dropped, recency
+weights, season labels for CV. New-feature NaN in the test frame is filled with the training median, not
+the predict-time zero-fill. Design, candidates, metrics and decision rules are as above.
