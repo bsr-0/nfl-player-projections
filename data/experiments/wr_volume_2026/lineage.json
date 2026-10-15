@@ -1,0 +1,20 @@
+{
+  "frozen_at": "2026-10-15T05:13:43.274415+00:00",
+  "rule": "docs/PREREG_WR_VOLUME_2026.md",
+  "rule_sha256": "c1ec0b8120164f677ffbc82f864b726e4356ee549787b21cca423e9e66525e27",
+  "head_commit": "3d6a250bca54f38065c14170dfc1d61e5947556e",
+  "season": 2026,
+  "window": [
+    7,
+    13
+  ],
+  "artifacts_sha256": {
+    "c0.joblib": "06edee29ee56c5fafccc9e3c475ba91518f3e91c64c9a9e560b934a57da58077",
+    "c1.joblib": "47688e59999f86663e498c2372cb0f53a86517bfd28b94b151a73ec691ec574d"
+  },
+  "live_wr_sha256": "a7421314758ea6a1a76b3ac3df26fe2a3c6c875e072f43164271c6879cd8dc4a",
+  "scripts_sha256": {
+    "scripts/wr_volume_shadow.py": "498a1025257d1a393fcc2fa07e3d29b8f84845226591404d89ab38746b6e90cd",
+    "scripts/wr_feature_candidates_2025.py": "d3b85d772cd0f684051f0ad34c0d47ac6527f8ee3fa28f6427c1230dc62ff343"
+  }
+}

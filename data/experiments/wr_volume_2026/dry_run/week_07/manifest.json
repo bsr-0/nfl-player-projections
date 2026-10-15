@@ -1,0 +1,19 @@
+{
+  "season": 2026,
+  "week": 7,
+  "dry_run": true,
+  "deadline_utc": "2026-10-22T04:00:00+00:00",
+  "started_utc": "2026-10-15T05:11:23.339909+00:00",
+  "written_utc": "2026-10-15T05:12:50.498188+00:00",
+  "before_deadline": true,
+  "wr_rows": 285,
+  "lineage_sha256": null,
+  "runner_list_check": null,
+  "capture_reproduces_live_max_diff": 0.0,
+  "forecasts_sha256": "4a62a690efe86dbc346e341bd6e8cbd84aa6dfae639d87542b1cbcf388c70b03",
+  "models": [
+    "live_unblended",
+    "c0",
+    "c1"
+  ]
+}
