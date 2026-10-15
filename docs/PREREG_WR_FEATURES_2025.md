@@ -84,3 +84,12 @@ for every arm (C0 = the fold model's 70 `feature_names`; C1 and C2 add their col
 other steps unchanged: median fill on the training prefix, rows without a 1-week target dropped, recency
 weights, season labels for CV. New-feature NaN in the test frame is filled with the training median, not
 the predict-time zero-fill. Design, candidates, metrics and decision rules are as above.
+
+## Amendment 2 (2026-10-14), before the development window was scored
+
+The fit step wrote `fit_info.json` with each arm's MAE over all 18 weeks, so the pooled numbers (C0 4.265,
+C1 4.186, C2 4.202; C0 equals the saved fold's 4.265) were seen before the development window was scored,
+and they include the confirmation weeks. Consequences: the confirmation window is no longer blind to the
+pooled direction (C1 and C2 below C0), so a confirmation pass counts for less than the design intended; the
+decision rules above are unchanged, and the development and confirmation reports below are produced by the
+committed script on the stored predictions. The final test remains 2026. `fit_info.json` is kept as written.

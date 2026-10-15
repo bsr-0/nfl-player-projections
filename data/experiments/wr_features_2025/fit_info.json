@@ -1,0 +1,22 @@
+{
+  "arms": {
+    "C0": {
+      "features": 70,
+      "train_rows": 39316,
+      "mae_vs_actual": 4.26510689396207
+    },
+    "C1": {
+      "features": 73,
+      "train_rows": 39316,
+      "mae_vs_actual": 4.186034456962593
+    },
+    "C2": {
+      "features": 75,
+      "train_rows": 39316,
+      "mae_vs_actual": 4.201725761593479
+    }
+  },
+  "saved_fold_mae": 4.2651337331982635,
+  "rows": 2385,
+  "live_artifacts_unchanged": true
+}
