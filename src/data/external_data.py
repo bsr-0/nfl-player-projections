@@ -115,6 +115,16 @@ class InjuryDataLoader:
 
         if all_injuries:
             injuries = pd.concat(all_injuries, ignore_index=True)
+            if 'date_modified' in injuries.columns:
+                # nflverse ships 2025-26 injuries without date_modified while
+                # older seasons keep it (tz-aware, microsecond). Concatenated,
+                # the column mixes Timestamps and NaN, and the
+                # to_datetime(utc=True) in get_player_injury_status raises a
+                # bare AssertionError that callers catch -- dropping every
+                # external feature (found 2026-10-12). Parse row by row.
+                iso = injuries['date_modified'].map(
+                    lambda x: x.isoformat() if hasattr(x, 'isoformat') else (x if isinstance(x, str) and x else None))
+                injuries['date_modified'] = pd.to_datetime(iso, utc=True, errors='coerce', format='ISO8601')
             print(f"  Loaded {len(injuries)} injury records")
             return injuries
         else:
