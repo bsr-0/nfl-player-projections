@@ -4,6 +4,8 @@ Single source of truth for current NFL season and week.
 Computes season and week from today so app, data loading, and training
 all use the same notion of "current" without hardcoded years.
 """
+
+import os
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -178,8 +180,15 @@ def get_next_n_nfl_weeks(today: Optional[datetime] = None, n: int = 1) -> List[T
         return []
     t = today if today is not None else datetime.now()
     info = get_current_nfl_week(t)
+
+    forced = os.environ.get("NFL_TARGET_WEEK") if today is None else None
+    if forced:
+        s, w = (int(x) for x in forced.split(":"))
+        info = {**info, "season": s, "week_num": w}
+
     season = info["season"]
     week_num = info.get("week_num", 1)
+    
     if week_num == 0:
         week_num = 1  # first week ahead is week 1 of current season
     # After the Super Bowl has been played, or during SB week, next games are next season week 1.

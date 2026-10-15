@@ -1,0 +1,45 @@
+{
+  "season": 2026,
+  "week": 6,
+  "dry_run": false,
+  "deadline_utc": "2026-10-15T04:00:00+00:00",
+  "started_utc": "2026-10-15T01:47:25.875669+00:00",
+  "written_utc": "2026-10-15T01:50:02.610296+00:00",
+  "before_deadline": true,
+  "lineage_sha256": "8e8e9344935a3d85f728693c7f167f2646d137b5513f7a7b8760bbaf2aa7a195",
+  "artifacts_sha256": {
+    "plan_a": "83174e0938cd4279efcf7992417997c5bb7e299d3233b5d307cf6d41f295ab26",
+    "rolling3": "c506f1382f55e5e01c8262927bafe21bc08d32e2eefe5ed741f6941844a906e2"
+  },
+  "data_refresh": {
+    "settled_rows_checked": 166658,
+    "prev_week_stat_rows": 342,
+    "prev_week_teams": 30
+  },
+  "list": {
+    "season": 2026,
+    "week": 6,
+    "replay": false,
+    "eligible_ids_as_of": null,
+    "production_rows": 713,
+    "repositioned_as_of": 0,
+    "dropped_bye_or_unknown_team": 82,
+    "players": 631,
+    "plan_a_renormalization": {
+      "listed": 631,
+      "added_from_prior_roster": 249
+    },
+    "rolling3_renormalization": {
+      "listed": 631,
+      "added_from_prior_roster": 249
+    }
+  },
+  "list_sha256": "a6daed968c73d66c866d93e53b139b2f5ca7232a035c1c6278af8c149407a2f7",
+  "forecasts_sha256": "744f5c67f78bb67164f57db85bcd35a21679d818b44734305df6e1973c40b271",
+  "models": [
+    "incumbent_live_blend",
+    "served_unblended",
+    "plan_a",
+    "rolling3"
+  ]
+}
