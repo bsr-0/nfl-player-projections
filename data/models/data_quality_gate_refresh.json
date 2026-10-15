@@ -1,26 +1,26 @@
 {
-  "generated_at": "2026-10-08T01:35:27.616617+00:00",
+  "generated_at": "2026-10-14T02:48:16.278425+00:00",
   "status": "pass",
   "checks": {
     "completeness": {
       "passed": true,
       "latest_window": {
         "season": 2026,
-        "week": 1
+        "week": 5
       },
       "missing_teams": [],
       "missing_positions": [],
-      "active_players": 344
+      "active_players": 321
     },
     "anomalies": {
       "passed": true,
       "latest_window": {
         "season": 2026,
-        "week": 1,
-        "row_count": 361
+        "week": 5,
+        "row_count": 342
       },
-      "baseline_row_count": 386.0,
-      "ratio_vs_baseline": 0.935,
+      "baseline_row_count": 360.0,
+      "ratio_vs_baseline": 0.95,
       "bounds": {
         "lower": 0.6,
         "upper": 1.6
@@ -29,7 +29,7 @@
   },
   "latest_observed": {
     "season": 2026,
-    "week": 4,
-    "rows": 124694
+    "week": 5,
+    "rows": 125036
   }
 }

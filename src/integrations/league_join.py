@@ -206,12 +206,19 @@ def load_projections(season: int, week: int, board: Optional[pd.DataFrame] = Non
     rename = {"predicted_points": "week_points",
               "prediction_ci80_lower": "week_ci_low",
               "prediction_ci80_upper": "week_ci_high"}
-    keep = ["name", "position", "team", "opponent", "home_away"]
+    # The weekly file abbreviates names ("Mi.Wilson") where the board spells
+    # them out, so a name join silently drops players -- and a dropped player
+    # reads as a bye below. The shared player id does not drift; fall back to
+    # the name only where an id is missing.
+    on = ["name", "position", "team"]
+    if "player_id" in board.columns and "player_id" in weekly.columns:
+        on = ["player_id"]
+    keep = on + ["opponent", "home_away"]
     keep += [c for c in rename if c in weekly.columns]
     merged = board.drop(columns=["week_points", "week_ci_low", "week_ci_high",
                                  "opponent", "home_away"]).merge(
-        weekly[[c for c in keep if c in weekly.columns]].rename(columns=rename),
-        on=["name", "position", "team"], how="left")
+        weekly[[c for c in keep if c in weekly.columns]].drop_duplicates(on)
+        .rename(columns=rename), on=on, how="left")
     for col in ("week_points", "week_ci_low", "week_ci_high"):
         if col not in merged.columns:
             merged[col] = pd.NA

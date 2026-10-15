@@ -27,19 +27,19 @@
     "3": 682,
     "4": 685,
     "5": 660,
-    "6": 619,
-    "7": 618,
-    "8": 608,
-    "9": 666,
-    "10": 629,
-    "11": 575,
-    "12": 706,
-    "13": 616,
-    "14": 660,
-    "15": 706,
-    "16": 706,
-    "17": 706,
-    "18": 706
+    "6": 630,
+    "7": 620,
+    "8": 614,
+    "9": 674,
+    "10": 628,
+    "11": 578,
+    "12": 713,
+    "13": 623,
+    "14": 669,
+    "15": 713,
+    "16": 713,
+    "17": 713,
+    "18": 713
   },
   "week_results": {
     "1": {
@@ -604,104 +604,188 @@
           "games": [
             "TB@DAL"
           ]
+        },
+        {
+          "commit": "c39a4df6",
+          "published_at": "2026-10-10T17:11+00:00",
+          "mode": "weekly_blend",
+          "games": [
+            "DET@ARI",
+            "BAL@ATL",
+            "CHI@GB",
+            "PHI@JAX",
+            "BUF@LA",
+            "DEN@LAC",
+            "CIN@MIA",
+            "LV@NE",
+            "MIN@NO",
+            "CLE@NYJ",
+            "IND@PIT",
+            "SF@SEA",
+            "HOU@TEN",
+            "NYG@WAS"
+          ]
         }
       ],
       "games_not_published": [],
-      "n_published_final": 38,
-      "n_no_stat_line": 16,
-      "n_unprojected": 0,
+      "n_published_final": 660,
+      "n_no_stat_line": 325,
+      "n_unprojected": 7,
       "n_unprojected_5plus": 0,
-      "games_final": 1,
-      "n": 22,
-      "mae": 4.37,
+      "games_final": 15,
+      "n": 335,
+      "mae": 4.58,
       "bias": -1.51,
-      "rmse": 7.03,
-      "coverage80": 0.864,
-      "n_with_range": 22,
+      "rmse": 6.59,
+      "coverage80": 0.758,
+      "n_with_range": 335,
       "by_position": {
         "QB": {
-          "n": 2,
-          "mae": 8.09,
-          "bias": -4.2,
-          "rmse": 9.12,
-          "coverage80": 1.0,
-          "n_with_range": 2
+          "n": 35,
+          "mae": 8.13,
+          "bias": -3.64,
+          "rmse": 9.99,
+          "coverage80": 0.629,
+          "n_with_range": 35
         },
         "RB": {
-          "n": 5,
-          "mae": 5.3,
-          "bias": -3.07,
-          "rmse": 9.16,
-          "coverage80": 0.8,
-          "n_with_range": 5
+          "n": 84,
+          "mae": 4.59,
+          "bias": -1.06,
+          "rmse": 6.32,
+          "coverage80": 0.821,
+          "n_with_range": 84
         },
         "WR": {
-          "n": 9,
-          "mae": 5.29,
-          "bias": -1.66,
-          "rmse": 7.38,
-          "coverage80": 0.778,
-          "n_with_range": 9
+          "n": 133,
+          "mae": 4.18,
+          "bias": -1.26,
+          "rmse": 6.1,
+          "coverage80": 0.842,
+          "n_with_range": 133
         },
         "TE": {
-          "n": 6,
-          "mae": 0.97,
-          "bias": 0.91,
-          "rmse": 1.31,
-          "coverage80": 1.0,
-          "n_with_range": 6
+          "n": 83,
+          "mae": 3.72,
+          "bias": -1.48,
+          "rmse": 5.73,
+          "coverage80": 0.614,
+          "n_with_range": 83
         }
       },
       "n_duplicate_rows_dropped": 0,
-      "unprojected_top": []
+      "unprojected_top": [
+        {
+          "name": "R.Virgil",
+          "team": "ARI",
+          "position": "WR",
+          "actual_points": 4.9
+        },
+        {
+          "name": "P.Strong",
+          "team": "GB",
+          "position": "RB",
+          "actual_points": 4.8
+        },
+        {
+          "name": "F.Mendoza",
+          "team": "LV",
+          "position": "QB",
+          "actual_points": 2.2
+        },
+        {
+          "name": "C.Steele",
+          "team": "PHI",
+          "position": "RB",
+          "actual_points": 0.0
+        },
+        {
+          "name": "T.Arkin",
+          "team": "NE",
+          "position": "TE",
+          "actual_points": 0.0
+        },
+        {
+          "name": "S.Bell",
+          "team": "BUF",
+          "position": "WR",
+          "actual_points": 0.0
+        },
+        {
+          "name": "S.Traore",
+          "team": "MIA",
+          "position": "TE",
+          "actual_points": 0.0
+        }
+      ]
     }
   },
   "track_record": {
-    "n": 1367,
-    "mae": 4.54,
-    "bias": -1.65,
-    "rmse": 6.6,
-    "coverage80": 0.789,
-    "n_with_range": 1059,
+    "n": 1680,
+    "mae": 4.55,
+    "bias": -1.62,
+    "rmse": 6.59,
+    "coverage80": 0.781,
+    "n_with_range": 1372,
     "by_position": {
       "QB": {
-        "n": 134,
-        "mae": 6.87,
-        "bias": -3.35,
-        "rmse": 8.63,
-        "coverage80": 0.781,
-        "n_with_range": 105
+        "n": 167,
+        "mae": 7.12,
+        "bias": -3.4,
+        "rmse": 8.92,
+        "coverage80": 0.739,
+        "n_with_range": 138
       },
       "RB": {
-        "n": 337,
-        "mae": 4.41,
-        "bias": -1.65,
-        "rmse": 6.56,
-        "coverage80": 0.848,
-        "n_with_range": 270
+        "n": 416,
+        "mae": 4.43,
+        "bias": -1.51,
+        "rmse": 6.48,
+        "coverage80": 0.842,
+        "n_with_range": 349
       },
       "WR": {
-        "n": 586,
-        "mae": 4.56,
-        "bias": -1.44,
-        "rmse": 6.62,
-        "coverage80": 0.82,
-        "n_with_range": 450
+        "n": 710,
+        "mae": 4.48,
+        "bias": -1.41,
+        "rmse": 6.51,
+        "coverage80": 0.826,
+        "n_with_range": 574
       },
       "TE": {
-        "n": 310,
-        "mae": 3.64,
-        "bias": -1.3,
-        "rmse": 5.53,
-        "coverage80": 0.667,
-        "n_with_range": 234
+        "n": 387,
+        "mae": 3.69,
+        "bias": -1.37,
+        "rmse": 5.61,
+        "coverage80": 0.646,
+        "n_with_range": 311
       }
     }
   },
-  "completed_game_rows": 1462,
+  "completed_game_rows": 1782,
   "has_intervals": true,
   "pace_blend_kappa": 3.0,
-  "generated_at": "2026-10-10T17:09:50+00:00",
+  "generated_at": "2026-10-14T03:31:11+00:00",
+  "week_last_kickoff": {
+    "1": "2026-09-15T00:15+00:00",
+    "2": "2026-09-22T00:15+00:00",
+    "3": "2026-09-29T00:15+00:00",
+    "4": "2026-10-06T00:15+00:00",
+    "5": "2026-10-13T00:15+00:00",
+    "6": "2026-10-20T00:15+00:00",
+    "7": "2026-10-27T00:15+00:00",
+    "8": "2026-11-03T01:15+00:00",
+    "9": "2026-11-10T01:15+00:00",
+    "10": "2026-11-17T01:15+00:00",
+    "11": "2026-11-24T01:15+00:00",
+    "12": "2026-12-01T01:15+00:00",
+    "13": "2026-12-08T01:15+00:00",
+    "14": "2026-12-15T01:15+00:00",
+    "15": "2026-12-22T01:15+00:00",
+    "16": "2026-12-29T01:15+00:00",
+    "17": "2027-01-05T01:15+00:00",
+    "18": "2027-01-10T18:00+00:00"
+  },
   "measured": {
     "QB": {
       "mae": 6.68,
@@ -743,25 +827,5 @@
     "beat_all_baselines_by_20_pct": false,
     "model_has_real_edge": true
   },
-  "model": "weekly ensemble (1w horizon), log1p+smearing calibration, shrunk toward the Step 8 season pace by games played (w = g / (g + 3))",
-  "week_last_kickoff": {
-    "1": "2026-09-15T00:15+00:00",
-    "2": "2026-09-22T00:15+00:00",
-    "3": "2026-09-29T00:15+00:00",
-    "4": "2026-10-06T00:15+00:00",
-    "5": "2026-10-13T00:15+00:00",
-    "6": "2026-10-20T00:15+00:00",
-    "7": "2026-10-27T00:15+00:00",
-    "8": "2026-11-03T01:15+00:00",
-    "9": "2026-11-10T01:15+00:00",
-    "10": "2026-11-17T01:15+00:00",
-    "11": "2026-11-24T01:15+00:00",
-    "12": "2026-12-01T01:15+00:00",
-    "13": "2026-12-08T01:15+00:00",
-    "14": "2026-12-15T01:15+00:00",
-    "15": "2026-12-22T01:15+00:00",
-    "16": "2026-12-29T01:15+00:00",
-    "17": "2027-01-05T01:15+00:00",
-    "18": "2027-01-10T18:00+00:00"
-  }
+  "model": "weekly ensemble (1w horizon), log1p+smearing calibration, shrunk toward the Step 8 season pace by games played (w = g / (g + 3))"
 }
