@@ -68,12 +68,24 @@ def latest_volume(stats: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
     return before.sort_values(KEY).groupby("player_id").tail(1)[["player_id", *NEW]]
 
 
+def fill_like_production(frame: pd.DataFrame, model) -> pd.DataFrame:
+    """EnsemblePredictor.predict fills a model input that is absent from the frame with the model's
+    training median (is_power5 is absent at serving today); mirror it exactly."""
+    base = model.models.get(1) or list(model.models.values())[0]
+    out = frame.copy()
+    for fn in base.feature_names:
+        if fn not in out.columns:
+            out[fn] = base.feature_medians.get(fn, 0)
+    return out
+
+
 def arm_forecast(artifact: dict, wr: pd.DataFrame) -> np.ndarray:
     """One arm's WR forecast from the captured live frame plus the volume columns."""
-    X = wr.reindex(columns=artifact["features"]).copy()
+    X = wr.copy()
     for col, med in artifact["medians"].items():
-        if col in NEW:
+        if col in NEW and col in X.columns:
             X[col] = X[col].fillna(med)
+    X = fill_like_production(X, artifact["model"])
     return np.asarray(artifact["model"].predict(X, n_weeks=1), float)
 
 
@@ -211,7 +223,7 @@ def run_week(dry_run: bool) -> dict:
     wr = frame[frame.position == "WR"].drop_duplicates("player_id").reset_index(drop=True)
     # The copy must be what the live WR model received: reproduce production's own unblended output.
     live = predictor.predictor.position_models["WR"]
-    ref = np.asarray(live.predict(wr.reindex(columns=live_model().feature_names), n_weeks=1), float)
+    ref = np.asarray(live.predict(fill_like_production(wr, live), n_weeks=1), float)
     served = prod.drop_duplicates("player_id").set_index("player_id").predicted_points_model.reindex(wr.player_id).to_numpy(float)
     gap = float(np.nanmax(np.abs(ref - served)))
     if not gap < 1e-9:
@@ -228,6 +240,8 @@ def run_week(dry_run: bool) -> dict:
         raise SystemExit("an arm failed to forecast every WR")
     listed = FORWARD_DIR / ("dry_run" if dry_run else "") / f"week_{week:02d}" / "list.csv"
     list_check = None
+    if not dry_run and not listed.exists():
+        raise SystemExit(f"run scripts/run_forward_week.py first: no frozen list at {listed}")
     if listed.exists():
         wr_list = set(pd.read_csv(listed, dtype={"player_id": str}).query("position == 'WR'").player_id)
         list_check = {"runner_list_wr": len(wr_list), "shadow_wr": int(fc.player_id.nunique()),

@@ -100,3 +100,17 @@ def test_a_noisier_arm_fails_on_error():
 def test_scorer_refuses_early_and_voids_a_short_window(tmp_path, monkeypatch):
     monkeypatch.setattr(sc, "OUTPUT", tmp_path / "report.json")
     assert sc.MIN_WEEKS == 5 and sc.MARGIN == 0.03
+
+
+def test_fill_mirrors_production_for_inputs_absent_from_the_frame():
+    class Base:
+        feature_names = ["a", "b"]
+        feature_medians = {"a": 1.0, "b": 7.0}
+
+    class Model:
+        models = {1: Base()}
+    frame = pd.DataFrame({"a": [5.0, np.nan]})
+    out = sh.fill_like_production(frame, Model())
+    assert out.b.tolist() == [7.0, 7.0]                         # absent column -> training median
+    assert np.isnan(out.a.iloc[1]) and out.a.iloc[0] == 5.0      # present columns untouched (NaN stays NaN)
+    assert "b" not in frame.columns                              # input not mutated

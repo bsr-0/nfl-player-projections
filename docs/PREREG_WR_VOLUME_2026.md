@@ -100,3 +100,35 @@ blended or scaled version is a separate question), or anything about QB/RB/TE. 2
 3. Run the shadow script each week after the forward runner, before the deadline, with the same week
    override as the runner (`NFL_TARGET_WEEK`).
 4. After week 13's stats are complete, run the scorer once; commit its `report.json`.
+
+## Amendment 1 (2026-10-15), before the lineage freeze and before any window week
+
+**Dry run (week 7 mechanics, under `NFL_TARGET_WEEK=2026:7`, `dry_run/week_07`).**
+- The shadow runner's copy of the model input reproduces production's `predicted_points_model` for all 285
+  WRs exactly (max difference 0.0) once it mirrors production's rule that a model input absent from the frame
+  is filled with the model's training median. The first dry run, without that fill, failed the 1e-9 check
+  (max difference 1.21); the fill is now applied to the reference and to both arms.
+- The one affected input is `is_power5`: it is absent from the serving frame, so production (and therefore
+  both arms) serve it as its training median although training had the real value. This is an existing
+  train/serve skew of the live WR model, shared equally by C0' and C1'; it is reported, not fixed.
+- Structure: 285 WRs, no missing forecasts, no missing volume features; C0' tracks the live WR forecast
+  (correlation 0.997, mean difference -0.04); C1' moves forecasts by sd 1.06 relative to C0'. No outcome
+  exists for week 7, so no accuracy was computed.
+
+**Frozen inputs (sha256).**
+- `scripts/wr_volume_shadow.py`: `498a1025257d1a393fcc2fa07e3d29b8f84845226591404d89ab38746b6e90cd`
+- `scripts/wr_feature_candidates_2025.py`: `d3b85d772cd0f684051f0ad34c0d47ac6527f8ee3fa28f6427c1230dc62ff343`
+- `scripts/score_wr_volume_prereg.py`: `1e5d3940a3831ef08c7a68ab4507947528c2ef7bacddbd5f67aca83ddc5083ce`
+  (imports `scripts/score_no_prior_prereg.py`, sha256 `5dfa449eaa649f886c76ae1f1756ca43d7c1626f39c127ef08f853048d7917bf`)
+- C0' artifact `artifacts/c0.joblib`: `06edee29ee56c5fafccc9e3c475ba91518f3e91c64c9a9e560b934a57da58077`
+- C1' artifact `artifacts/c1.joblib`: `47688e59999f86663e498c2372cb0f53a86517bfd28b94b151a73ec691ec574d`
+- Both fit on seasons 2006-2025 (41,809 WR rows after dropping rows without a 1-week target), the live WR
+  model's tuned parameters held fixed (live `multiweek_wr.joblib` sha256
+  `a7421314758ea6a1a76b3ac3df26fe2a3c6c875e072f43164271c6879cd8dc4a`); the bounded scaler fit in the build
+  matches the live one in every transform value.
+
+**Weekly order.** For week N: (1) `NFL_TARGET_WEEK=2026:N python scripts/run_forward_week.py run`, (2)
+`NFL_TARGET_WEEK=2026:N python scripts/wr_volume_shadow.py run`, both before that week's deadline (00:00 ET on
+its first game date). The shadow run refuses without the runner's frozen list for the week and requires every
+WR on it to be forecast. Changing any file above, or the live WR model, breaks `lineage.json` and voids the
+remaining window.
