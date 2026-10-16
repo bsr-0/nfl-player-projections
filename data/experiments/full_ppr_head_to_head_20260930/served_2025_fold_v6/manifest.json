@@ -1,0 +1,73 @@
+{
+  "actual_column": "actual_ppr",
+  "folds": [
+    {
+      "selection_through_season": null,
+      "test_season": 2025,
+      "trained_through_season": 2024
+    }
+  ],
+  "key_semantics": "target_game",
+  "label": "served_model_seasonal_fold",
+  "prediction_column": "predicted_ppr",
+  "provenance": {
+    "fit_n_trials": 100,
+    "model_artifact_sha256": {
+      "models/feature_scaler_bounded.joblib": "cdabfd8aea3f577fa0b0a2a44915f158432a8968667b7bca849b28903248da76",
+      "models/model_qb_1w.joblib": "07b8af3f0fac7e871a0600f3441ec8a4772548f519282c4906a0dd9e30597b4c",
+      "models/model_rb_1w.joblib": "203794974b26be81543a699987bd7013ae300bfee029a9d6e5cd220b35b18198",
+      "models/model_te_1w.joblib": "0ede080f972a19276282ae84dc9083b70e7cb009563545fdafe8e1d5cf663c09",
+      "models/model_wr_1w.joblib": "4e4ac521b0d35e32ad4fff4241792ef46aee658784d32e9d4811e87afbaf2869",
+      "models/multiweek_qb.joblib": "48f617c7430cbe1901307118bd54aba8d458c82a5412887c46e5bba54a8aec72",
+      "models/multiweek_rb.joblib": "eb446dabc4b790ff0fc5a808cc147e8afbb8f3d8f23e1afaaff367a19c9b21a8",
+      "models/multiweek_te.joblib": "08ede1126559bd0e48d0c587330d877f6577227a576d8650d259f870b6472d8a",
+      "models/multiweek_wr.joblib": "5d3bdaf3d0621043ee73ba6090cb74ae7c88311a3fe04407a036c495ce189f6c"
+    },
+    "prediction_target": "served fp-mode one-week prediction",
+    "source_code_sha256": {
+      "config/settings.py": "68bb72eea496fa64ced46fd3cea75f8337aa73ece15b3a08798e22495e5a9e02",
+      "scripts/export_served_fold_full_ppr.py": "238a96dddc15927d692921ad33118dd3372aff3df6d412ebaf9cc214baa6005d",
+      "src/data/entity_resolver.py": "6860e09f4a28fbc2fb8278765cd00cab6413bb3fe6d1ec2d61dd8a1cea07c96c",
+      "src/data/external_data.py": "531308c2473221677e2902a6b820d8047a32806602a0412dcfc5c182d91ae71b",
+      "src/evaluation/full_ppr_head_to_head.py": "80a6ed881cf077c23fd5b02ce8e89244dc7eadfc92f7f4e032811a506ad1d6ff",
+      "src/evaluation/paired_ppr_comparison.py": "ec13eecc3134a428a7b94d5d5058dbc833ff1ee84a02253cf0fab1e7000b558b",
+      "src/evaluation/ppr_truth.py": "038b65d6a5db444bc8a026ed3d7baa497569b1c26e790a84603f6142b4610c16",
+      "src/features/advanced_rookie_injury.py": "334135d7758463d7f7931e8585a153c324e69d4da9fa48cd62a30f2e4ee08b78",
+      "src/features/college_conference.py": "698cc870e7077792579c0a44635d7797a4d79a588231da719b9bcf9e31eb8433",
+      "src/features/feature_engineering.py": "e292d06c7bd4715a34c48a74a3aabdac2aa33ddecd92a2729d5f3de203ac7ed0",
+      "src/features/season_long_features.py": "b97eb0b1d054beca53ea087664ff29814455091361f0ddf8afed17c406958f9a",
+      "src/features/utilization_score.py": "c0f47b59241847d1a38a034b10a1a6a4985e39ea17f7a778b33962dbd7e03f19",
+      "src/models/advanced_techniques.py": "31ab80aaef3268c731665fbae5322be41fb1b0ee0ba598995f0e44e9765012ff",
+      "src/models/data_loading.py": "b4f137a87587bd2cc84e37f245938e95aa47474a3162c064b7e1b7999350afe7",
+      "src/models/ensemble.py": "9da13f71385df3b285e9249a5ceb9e4a7d054f1038b36933c5fc69a6b490c95f",
+      "src/models/feature_preparation.py": "c2d5496d35561b2a284097787911146915f4935d06fe8e07a96409fe550bf393",
+      "src/models/oof_capture.py": "3a801d2fbdb55b730594ed81d72d5c991acf52694aabab3faf266bb9f1a9a76d",
+      "src/models/position_models.py": "c3d2bce7ef257ec15b6f0ce160c17ebc26e06946ca2091311af655e52dacdf1d",
+      "src/models/train.py": "5b88fe2b1a00b473f79eafb12aa6f156272fc5b3199d1cb546392e4836d2bfd6",
+      "src/models/utilization_to_fp.py": "600f65563259e7229a4183feb47c53c00fd556657ed9e76930233ca30391be9d",
+      "src/utils/data_manager.py": "146a5d2b53c392f62fc93c1a61d348947bdebe42b5af1addde9c7fd0a29d3506",
+      "src/utils/database.py": "a9494f0e11dfea3089634ca4da4e2a338bbddf72f61436348c721bcddbde6ee6",
+      "src/utils/helpers.py": "31de110b6c8cc2ccf31f170ec6f0a27ede9c068204c2db3c72c5addf93f4518a",
+      "src/utils/models_dir.py": "9450bdabe8abe433b06500fa2053fc14d0d757f28b965d0df1c5e58d069560d4"
+    },
+    "source_preflight": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/full_ppr_head_to_head_20260930/served_2025_preflight_v5/manifest.json",
+    "source_preflight_sha256": "43266f79b1aa837c000dc1dfd66efa8d3eebfd0bd16b48e2902467bb3e5f1c33",
+    "target_identity_source": "next observed raw test row within player-season"
+  },
+  "rows_file": "predictions.csv",
+  "rows_sha256": "5896cecb0edf89b762085e74ffe512bffe38de0a619588a1de12904198a1a3ed",
+  "schema_version": 1,
+  "scoring_definition": "raw_ten_component_full_ppr_plan_a_zero_extra_forecast",
+  "scoring_weights": {
+    "fumbles_lost": -2,
+    "interceptions": -2,
+    "passing_tds": 4,
+    "passing_yards": 0.04,
+    "receiving_tds": 6,
+    "receiving_yards": 0.1,
+    "receptions": 1,
+    "rushing_tds": 6,
+    "rushing_yards": 0.1,
+    "two_point_conversions": 2
+  }
+}

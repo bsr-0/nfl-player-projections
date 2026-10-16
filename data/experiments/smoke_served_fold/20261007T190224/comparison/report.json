@@ -1,0 +1,461 @@
+{
+  "by_position": {
+    "QB": {
+      "delta_served_minus_plan_a": 0.7184582702354316,
+      "n": 602,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 1.1204447278354719,
+        "ci_low": 0.3142072858857228,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.7184582702354316,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 5.8965946843853825,
+      "served_mae": 6.615052954620814
+    },
+    "RB": {
+      "delta_served_minus_plan_a": 0.3053461212649248,
+      "n": 1355,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.5050187402408173,
+        "ci_low": 0.12877001114256836,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.3053461212649248,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.527955719557195,
+      "served_mae": 4.833301840822121
+    },
+    "TE": {
+      "delta_served_minus_plan_a": 0.18934103078800035,
+      "n": 1484,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.30347061079978216,
+        "ci_low": 0.08191443488264841,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.18934103078800035,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 2.9570619946091643,
+      "served_mae": 3.146403025397165
+    },
+    "WR": {
+      "delta_served_minus_plan_a": 0.1563415558370073,
+      "n": 2385,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.3052738231557768,
+        "ci_low": 0.009858867175727494,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.1563415558370073,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.073094339622642,
+      "served_mae": 4.229435895459649
+    }
+  },
+  "by_position_and_cohort": {
+    "QB/confirmed_draft_rookies": {
+      "delta_served_minus_plan_a": 0.15546009760412838,
+      "n": 62,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.9672745039665132,
+        "ci_low": -0.7017147325970948,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.15546009760412838,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 6.502741935483871,
+      "served_mae": 6.658202033087999
+    },
+    "QB/nonzero_offensive_snaps": {
+      "delta_served_minus_plan_a": 0.7184582702354316,
+      "n": 602,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 1.1204447278354719,
+        "ci_low": 0.3142072858857228,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.7184582702354316,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 5.8965946843853825,
+      "served_mae": 6.615052954620814
+    },
+    "QB/returning_players": {
+      "delta_served_minus_plan_a": 0.7823070953441831,
+      "n": 530,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 1.2153096658588205,
+        "ci_low": 0.34458197795706624,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.7823070953441831,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 5.884905660377359,
+      "served_mae": 6.6672127557215415
+    },
+    "RB/confirmed_draft_rookies": {
+      "delta_served_minus_plan_a": 0.14654911103204427,
+      "n": 249,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.5267128367638273,
+        "ci_low": -0.2936131292140948,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.14654911103204427,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.580963855421687,
+      "served_mae": 4.727512966453731
+    },
+    "RB/nonzero_offensive_snaps": {
+      "delta_served_minus_plan_a": 0.3053461212649248,
+      "n": 1355,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.5050187402408173,
+        "ci_low": 0.12877001114256836,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.3053461212649248,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.527955719557195,
+      "served_mae": 4.833301840822121
+    },
+    "RB/returning_players": {
+      "delta_served_minus_plan_a": 0.3493571146227038,
+      "n": 1100,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.6068200283516144,
+        "ci_low": 0.12122868312601259,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.3493571146227038,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.5255363636363635,
+      "served_mae": 4.874893478259067
+    },
+    "TE/confirmed_draft_rookies": {
+      "delta_served_minus_plan_a": 0.3984165235063448,
+      "n": 148,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.7414898124203686,
+        "ci_low": 0.07542892821566347,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.3984165235063448,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 3.768648648648649,
+      "served_mae": 4.167065172154993
+    },
+    "TE/nonzero_offensive_snaps": {
+      "delta_served_minus_plan_a": 0.18934103078800035,
+      "n": 1484,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.30347061079978216,
+        "ci_low": 0.08191443488264841,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.18934103078800035,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 2.9570619946091643,
+      "served_mae": 3.146403025397165
+    },
+    "TE/returning_players": {
+      "delta_served_minus_plan_a": 0.1651618030251313,
+      "n": 1304,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.2930752765242196,
+        "ci_low": 0.04238259125594846,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.1651618030251313,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 2.9240490797546013,
+      "served_mae": 3.0892108827797324
+    },
+    "WR/confirmed_draft_rookies": {
+      "delta_served_minus_plan_a": 0.3599272089236863,
+      "n": 350,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.5664486575280422,
+        "ci_low": 0.14224253493248926,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.3599272089236863,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 3.3203142857142853,
+      "served_mae": 3.680241494637972
+    },
+    "WR/nonzero_offensive_snaps": {
+      "delta_served_minus_plan_a": 0.15883292376053218,
+      "n": 2376,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.3071081020432756,
+        "ci_low": 0.012190738894119183,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.15883292376053218,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.077680976430976,
+      "served_mae": 4.236513900191509
+    },
+    "WR/returning_players": {
+      "delta_served_minus_plan_a": 0.10230800531377084,
+      "n": 1962,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.2911702530375867,
+        "ci_low": -0.07259670180863817,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.10230800531377084,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.293603465851173,
+      "served_mae": 4.395911471164943
+    }
+  },
+  "delta_definition": "served absolute error minus Plan A absolute error; negative favors served",
+  "input_sha256": {
+    "full_truth": "b29ee26f59ef84b9594195e5e839dea66510f6a352d6546accc2ce14b5107e46",
+    "plan_a_manifest": "70c3b234a821299cef271ea1792c4eebc80ac67da6fdeb29e49de521984500b7",
+    "population_manifest": "11ac13a247f74033e7ad0012b5052b5aabe8e6b2a7b91cc7782595371eec3f9f",
+    "served_manifest": "cfa61e775fd4c9449ff9add4ff33f1a4d9006f46348727756c6655c913dbeba6"
+  },
+  "limitations": [
+    "2025 is one held-out season of the served architecture, not the current 2026 fitted weights.",
+    "The matched production population concentrates on players with recorded stats and is substantially harder for Plan A than its full canonical 2025 panel.",
+    "Snap cohorts use observed postgame snaps and are retrospective evaluation slices.",
+    "Confirmed draft rookies require a matching draft pick; first-observed players are reported separately.",
+    "Segment intervals are exploratory and unadjusted for multiple comparisons.",
+    "Paired week blocks retain within-week dependence; they do not capture shared training uncertainty."
+  ],
+  "paired_rows_sha256": "c1aa05b6e709bd5a53153fd17d7491cd8002ddbc5bf9f8918dab9d80f708c787",
+  "population": {
+    "excluded_production_reasons": {
+      "postseason_outside_plan_a": 251,
+      "team_or_position_mismatch": 16
+    },
+    "matched_mean_absolute_extra_component_points": 0.06694129763130793,
+    "matched_rows": 5826,
+    "matched_rows_with_nonzero_extra_component_points": 185,
+    "plan_a_all_2025_mae_unpaired_context": 2.265588428665352,
+    "plan_a_season_rows": 13689,
+    "production_eligible_rows": 6093,
+    "test_season": 2025
+  },
+  "scoring_definition": "raw_ten_component_full_ppr_plan_a_zero_extra_forecast",
+  "segments": {
+    "confirmed_draft_rookies": {
+      "delta_served_minus_plan_a": 0.2856235145867295,
+      "n": 809,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.45353601666032806,
+        "ci_low": 0.09750175102844003,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.2856235145867295,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.0342398022249695,
+      "served_mae": 4.319863316811698
+    },
+    "first_observed_season": {
+      "delta_served_minus_plan_a": 0.3065566550199753,
+      "n": 930,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.46128032658824847,
+        "ci_low": 0.13930387166770308,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.3065566550199753,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 3.713591397849462,
+      "served_mae": 4.0201480528694375
+    },
+    "nonzero_offensive_snaps": {
+      "delta_served_minus_plan_a": 0.2586599603816606,
+      "n": 5817,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.34307155451197485,
+        "ci_low": 0.16119529673484512,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.2586599603816606,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.084920061887571,
+      "served_mae": 4.343580022269232
+    },
+    "returning_players": {
+      "delta_served_minus_plan_a": 0.24816480477691602,
+      "n": 4896,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.35513037305908396,
+        "ci_low": 0.13469028609366857,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.24816480477691602,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.153206699346405,
+      "served_mae": 4.401371504123321
+    },
+    "total": {
+      "delta_served_minus_plan_a": 0.2574858519320902,
+      "n": 5826,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 17
+        },
+        "ci_high": 0.34254100616842176,
+        "ci_low": 0.1598887318966556,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": 0.2574858519320902,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 4.083031239272228,
+      "served_mae": 4.340517091204318
+    },
+    "unknown_offensive_snaps": {
+      "delta_served_minus_plan_a": -0.5013795759735657,
+      "n": 9,
+      "paired_interval": {
+        "blocks_by_season": {
+          "2025": 7
+        },
+        "ci_high": 0.32303246518499584,
+        "ci_low": -1.2865584434833295,
+        "method": "paired_calendar_week_blocks_stratified_by_season",
+        "n_bootstrap": 2000,
+        "point_estimate": -0.5013795759735657,
+        "seed": 42,
+        "significant_improvement": false,
+        "status": "ok"
+      },
+      "plan_a_mae": 2.862222222222222,
+      "served_mae": 2.3608426462486567
+    },
+    "zero_offensive_snaps": {
+      "n": 0,
+      "status": "empty"
+    }
+  },
+  "status": "complete"
+}

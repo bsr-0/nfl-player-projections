@@ -188,3 +188,10 @@ data/models/rollback/
 
 # Local backup of the game models before the 2026-10-11 refit (joblibs are ignored above; keep the JSON copies out too)
 data/models/game_backup_*/
+
+# Experiment bulk (2026-10-15): frames, scratch fits and calibration state are rebuildable and large.
+# Reports, manifests and hashes beside them stay tracked.
+/data/experiments/**/*.parquet
+/data/experiments/**/models_scratch/
+/data/experiments/**/outer_folds/
+/data/experiments/wr_volume_2026/artifacts/

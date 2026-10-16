@@ -1,0 +1,121 @@
+{
+  "config": {
+    "alpha": 0.05,
+    "candidates": [
+      "legacy:25",
+      "legacy:50",
+      "legacy:100",
+      "residual:100",
+      "residual:250",
+      "residual:500",
+      "outcome:100",
+      "outcome:250",
+      "outcome:500"
+    ],
+    "confirm_season": null,
+    "coverage_80_gate": [
+      0.75,
+      0.85
+    ],
+    "draws": 1000,
+    "git_commit": "bd6abb88",
+    "n_bootstrap": 1000,
+    "primary_comparisons": [
+      [
+        "marginal",
+        "crps",
+        "calibrated_independent",
+        "calibrated_independent_legacy"
+      ],
+      [
+        "joint",
+        "variogram_score_p05_scaled",
+        "calibrated_team_factor",
+        "calibrated_independent"
+      ],
+      [
+        "sum:stack",
+        "crps",
+        "calibrated_team_factor",
+        "calibrated_independent"
+      ],
+      [
+        "joint",
+        "variogram_score_p05_scaled",
+        "calibrated_role_factor",
+        "calibrated_independent"
+      ],
+      [
+        "sum:stack",
+        "crps",
+        "calibrated_role_factor",
+        "calibrated_independent"
+      ],
+      [
+        "joint",
+        "variogram_score_p05_scaled",
+        "calibrated_role_factor",
+        "calibrated_team_factor"
+      ],
+      [
+        "sum:stack",
+        "crps",
+        "calibrated_role_factor",
+        "calibrated_team_factor"
+      ]
+    ],
+    "run_confirmation": false,
+    "seed": 42,
+    "selection_bootstrap": 200
+  },
+  "config_sha256": "416eeeb9faf75c63a9ab9eafb6d8339e6c7c33f83c7f28a6ec671fa2bf296bed",
+  "draws_per_player": 1000,
+  "files": {
+    "actuals.parquet": "ec6d53fc9f591f06b1b92a80870a89b7498765220a5f3af54fd981d4dc16d00d",
+    "candidate_evidence.csv": "d21fec688a51943369f9e4e5d919a08cf59a6bb29c2f591e709fb6b10871bb90",
+    "correlation_calibration.csv": "1d5d489793046845121450fcac89a56201782704256da81e9d11e6d52ab03a0e",
+    "joint_game_metrics.csv": "04a73d80325ce91fa96501e9c88e39a48ad43e4dd4d66c86887ea69af6e69afa",
+    "joint_sum_metrics.csv": "ed0137c33a3417a9eb909eac3261d254e4efc8ebbe366090528402c5f880abf3",
+    "marginal_player_metrics.csv": "b2801fe4bcce2d0751c5df730cb616c79551091d216fb63a24b49e43ef26910c",
+    "marginal_segment_report.csv": "e0bac502cd270a8d634f0c22952a232b833925849949a627db93152aa5ddd487",
+    "outer_folds/2024/calibration_full_week22.json": "4459d9c7cac4c5fd8f8ebc41fa6b51ede6e5da0d4acc0ed3e3bea2b1467124dc",
+    "outer_folds/2024/calibration_legacy_week22.json": "419969ee140eb6db7e6c2ff53953fc2f0a19096952e7b7b459886d485e7cf20f",
+    "outer_folds/2024/factor_models.json": "f15ee5c1890184527252f0cd6da409c070cc7414b0824d06f3d40bf8561c4fac",
+    "outer_folds/2025/calibration_full_week22.json": "461554dfeeab0737dfeef1af239214ed39aba275519101827a5bedb0ec9f7b6f",
+    "outer_folds/2025/calibration_legacy_week22.json": "34054a74df1cb5bc9482dc86b3db6e48f7dd115db82f735dbec296c9e10fcc4e",
+    "outer_folds/2025/factor_models.json": "6fa7f28ff7a7fdab7347339bcddb657a7a6d424bf3cb36a8b0a9df94436e62df",
+    "outer_folds/2026/calibration_full_week03.json": "ac95387f9af8c53c4ae384daa63d0333f4e5febe60631cdde1d022c68a188280",
+    "outer_folds/2026/calibration_legacy_week03.json": "67e8a86d69cedc934deb1fc0c515e8cbeadfbe6b323625c31c23676f6664106e",
+    "outer_folds/2026/factor_models.json": "aa6754ecdee13a9ab220eb64513d25b011f3ba5d2d01b2fd0313ad47412ae057",
+    "player_draws/calibrated_independent.parquet": "eb33b0def3339774dd3a5fe87e65c21c0734b35391d1f33ed79f98ac98b38124",
+    "player_draws/calibrated_independent_legacy.parquet": "f7b277aea19a285b3a9d8d9a65c57329d78bc1a38a044e4f7589d7395b1e55a0",
+    "player_draws/calibrated_role_correlation.parquet": "219595d3a1488e8f5b6377bc5f8f1948c36dab744c07be6902b7dd982ddbd08a",
+    "player_draws/calibrated_role_factor.parquet": "61d153c522ceb95507ae712ad65c2b4eb58eeb175cd8ffa6727e06e7ac8a5f06",
+    "player_draws/calibrated_team_factor.parquet": "2c03521b16adb61dda76bd36c644c8d75b6115fe1550c0bf5924985210a9d0b7",
+    "player_draws/production_marginal.parquet": "2bb44f0bc0cdc99634930de120fe8969e6e09af46a799b3148b3328c322dd319",
+    "report.json": "f1aec4ee75af4fb125a3602f5f87602c14756d7f514b6e552304744d83f778bd",
+    "selection_log.json": "ffb2a8ba14f5f1b43f5f4d1db9b3bd69e6decb0816d85a1cf43ac50f8f0de668",
+    "summary.md": "be05ecac2da597e44f418d7665138c53b7b22f89ac8966ad53a8ac18da2b2557"
+  },
+  "generated_at_utc": "2026-10-07T03:31:10.568563+00:00",
+  "modes": [
+    "production_marginal",
+    "calibrated_independent_legacy",
+    "calibrated_independent",
+    "calibrated_team_factor",
+    "calibrated_role_factor",
+    "calibrated_role_correlation"
+  ],
+  "n_games": 555,
+  "n_rows": 12456,
+  "phase": "unrestricted",
+  "schema_version": 2,
+  "scoring_seasons": [
+    2024,
+    2025,
+    2026
+  ],
+  "seed": 42,
+  "source_oof_panel_sha256": "5b6bec3d48e0b4019b1ae8a68329172166ed87b59e8878f26df95ea59a7b06ae",
+  "source_oof_run_dir": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/oof_panels/20260929T213026Z_238c3590_production_fp_canonical"
+}

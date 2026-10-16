@@ -1,0 +1,178 @@
+[
+  {
+    "test_season": 2023,
+    "position": "QB",
+    "n_offered": 718,
+    "n_captured": 637,
+    "n_dropped": 81,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 81,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2023,
+    "position": "RB",
+    "n_offered": 1533,
+    "n_captured": 1392,
+    "n_dropped": 141,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 141,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2023,
+    "position": "TE",
+    "n_offered": 1611,
+    "n_captured": 1483,
+    "n_dropped": 128,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 128,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2023,
+    "position": "WR",
+    "n_offered": 2812,
+    "n_captured": 2578,
+    "n_dropped": 234,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 230,
+    "n_invalid_target_game": 4,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2024,
+    "position": "QB",
+    "n_offered": 720,
+    "n_captured": 640,
+    "n_dropped": 80,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 80,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2024,
+    "position": "RB",
+    "n_offered": 1521,
+    "n_captured": 1388,
+    "n_dropped": 133,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 133,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2024,
+    "position": "TE",
+    "n_offered": 1667,
+    "n_captured": 1537,
+    "n_dropped": 130,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 130,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2024,
+    "position": "WR",
+    "n_offered": 2746,
+    "n_captured": 2506,
+    "n_dropped": 240,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 239,
+    "n_invalid_target_game": 1,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2025,
+    "position": "QB",
+    "n_offered": 708,
+    "n_captured": 630,
+    "n_dropped": 78,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 78,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2025,
+    "position": "RB",
+    "n_offered": 1574,
+    "n_captured": 1432,
+    "n_dropped": 142,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 142,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2025,
+    "position": "TE",
+    "n_offered": 1672,
+    "n_captured": 1538,
+    "n_dropped": 134,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 134,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2025,
+    "position": "WR",
+    "n_offered": 2726,
+    "n_captured": 2493,
+    "n_dropped": 233,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 233,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2026,
+    "position": "QB",
+    "n_offered": 76,
+    "n_captured": 34,
+    "n_dropped": 42,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 42,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2026,
+    "position": "RB",
+    "n_offered": 161,
+    "n_captured": 71,
+    "n_dropped": 90,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 90,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2026,
+    "position": "TE",
+    "n_offered": 143,
+    "n_captured": 63,
+    "n_dropped": 80,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 80,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  },
+  {
+    "test_season": 2026,
+    "position": "WR",
+    "n_offered": 268,
+    "n_captured": 124,
+    "n_dropped": 144,
+    "n_intentionally_skipped": 0,
+    "n_no_target_game": 144,
+    "n_invalid_target_game": 0,
+    "n_missing_prediction_or_actual": 0
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "games": 555,
+  "modes": [
+    "production_marginal",
+    "calibrated_independent_legacy",
+    "calibrated_independent",
+    "calibrated_team_factor",
+    "calibrated_role_factor",
+    "calibrated_role_correlation"
+  ],
+  "rows": 12456,
+  "run_dir": "/Users/benrosen/Documents/prediction_models/nfl-player-projections/data/experiments/calibrated_simulation_backtest_20261006",
+  "status": "verified"
+}
