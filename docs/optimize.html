@@ -25,7 +25,7 @@ table{border-collapse:collapse;width:100%}th,td{padding:7px 8px;border-bottom:1p
 <div><label>Position filter</label><select id="filter"><option value="ALL">All</option><option>QB</option><option>RB</option><option>WR</option><option>TE</option></select></div>
 <div><label>Player search</label><input id="query" placeholder="player or team"></div>
 <div><label>Player pool</label><select id="poolmode"><option value="all">All eligible players</option><option value="safe">Hide risk flags</option></select></div>
-<div><label>Projection</label><select id="proj"><option value="pub">Published (pace blend)</option><option value="np">No-prior (experimental)</option></select></div>
+<div><label>Projection</label><select id="proj"><option value="pub">Published (pace blend)</option><option value="np">No-prior (experimental)</option><option value="wv">WR volume (experimental; WRs only, others published)</option></select></div>
 <button class="primary" id="run">Build lineup</button>
 </div>
 <main>
@@ -43,15 +43,17 @@ const POS=["QB","RB","WR","TE"];
 // Experimental second projection (docs/PREREG_NO_PRIOR_2026.md): the weekly model without the
 // pace blend x 0.9218. It has no range of its own, so ranges show only for the published one.
 const NOPRIOR_SCALE=0.9218;
-const NP=()=>$("proj").value==="np";
-function pts(r){return NP()?(r.predicted_points_model==null?null:r.predicted_points_model*NOPRIOR_SCALE):r.predicted_points}
-function rng(r){return NP()?"—":fmt(r.prediction_ci80_lower)+"–"+fmt(r.prediction_ci80_upper)}
+const NP=()=>$("proj").value==="np"||$("proj").value==="wv";
+const WV=()=>$("proj").value==="wv";
+let WRVOL={};
+function pts(r){if(WV())return r.position==="WR"&&WRVOL[r.player_id]!=null?WRVOL[r.player_id]:r.predicted_points;return NP()?(r.predicted_points_model==null?null:r.predicted_points_model*NOPRIOR_SCALE):r.predicted_points}
+function rng(r){return WV()&&!(r.position==="WR"&&WRVOL[r.player_id]!=null)?fmt(r.prediction_ci80_lower)+"–"+fmt(r.prediction_ci80_upper):NP()?"—":fmt(r.prediction_ci80_lower)+"–"+fmt(r.prediction_ci80_upper)}
 function fmt(v){return v==null||isNaN(v)?"—":Number(v).toFixed(1)}
 function risk(r){return r.injury_adjustment!=null&&r.injury_adjustment<.85}
 function fileFor(w){return "data/weekly_"+META.season+"_wk"+w+".json"}
 async function loadWeek(w){
   $("players").innerHTML='<tr><td colspan="7" class="empty">Loading week '+w+"…</td></tr>";
-  try{const res=await fetch(fileFor(w));RAW=await res.json();renderPool();build()}catch(e){RAW=[];$("players").innerHTML='<tr><td colspan="7" class="empty">Could not load this week.</td></tr>'}
+  try{WRVOL=await fetch("data/wr_volume_"+META.season+"_wk"+w+".json").then(x=>x.ok?x.json():{}).catch(()=>({}));const res=await fetch(fileFor(w));RAW=await res.json();renderPool();build()}catch(e){RAW=[];$("players").innerHTML='<tr><td colspan="7" class="empty">Could not load this week.</td></tr>'}
 }
 function filtered(){
   const pos=$("filter").value,q=$("query").value.trim().toLowerCase(),safe=$("poolmode").value==="safe";

@@ -175,6 +175,7 @@
       <th class="cmpcell" title="check to compare">Cmp</th>
       <th class="num">#</th><th>Player</th><th>Pos</th><th>Team</th><th>Opp</th>
       <th class="num sortable" data-key="predicted_points" title="sort by projection">Proj</th>
+      <th class="num sortable" data-key="_wrvol" title="Experimental, WRs only: the weekly WR model with season-to-date targets, receptions and receiving yards added, no pace blend, not scaled. Not the published projection. Sort by it.">WR vol<sup>γ</sup></th>
       <th class="num sortable" data-key="_noprior" title="Experimental: the weekly model with no pace blend, scaled by 0.9218. Not the published projection. Sort by it.">No-prior<sup>β</sup></th>
       <th class="num sortable" data-key="prediction_ci80_lower" title="sort by floor">Floor</th>
       <th class="num sortable" data-key="prediction_ci80_upper" title="sort by upside">Upside</th>
@@ -218,6 +219,14 @@
   player's current-season form more closely; it is being tested on weeks 6–13
   before any decision (<code>docs/PREREG_NO_PRIOR_2026.md</code>).</p>
 
+  <p id="wrvol-note"><strong><sup>γ</sup> WR volume projection (experimental, WRs only).</strong>
+  The weekly WR model refit with three added inputs, season-to-date targets, receptions and
+  receiving yards, with no pace blend and no scaling. It appears once that week's forecast has been
+  frozen for the test and is blank for other positions. It does not replace the published
+  projection. On 2025 it cut the WR average miss by about 0.06 points over weeks 6–18; 2025 chose
+  the features, so that is development evidence only. It is being tested on weeks 7–13
+  (<code>docs/PREREG_WR_VOLUME_2026.md</code>).</p>
+
   <p id="accnote2"><strong>How far off, and in which direction.</strong> Measured
   against real 2025 results by replaying every week of that season through the
   same code that serves this page, with a model that never saw it: mean error
@@ -257,6 +266,7 @@
 const POS = ["QB","RB","WR","TE"];
 const MAX_COMPARE = 4;
 let RAW = [], META = null, SEASON = null, WEEK = null;
+let WRVOL = {};            // docs/data/wr_volume_{season}_wk{N}.json: {player_id: C1' forecast}, WR only
 let REPLAY = null;          // docs/data/weekly_replay_{season}.json, or null
 // Experimental second projection, shown beside the published one: the weekly model
 // without the pace blend (predicted_points_model) times a fixed 0.9218. Not served,
@@ -319,6 +329,8 @@ function render() {
   if (team !== "ALL") rows = rows.filter(r => teamsInvolved(r).includes(team));
   if (q) rows = rows.filter(r =>
     (r.name||"").toLowerCase().includes(q) || (r.team||"").toLowerCase().includes(q));
+  for (const r of rows)
+    r._wrvol = r.position === "WR" && WRVOL[r.player_id] != null ? WRVOL[r.player_id] : null;
   for (const r of rows)
     r._noprior = r.predicted_points_model != null ? r.predicted_points_model * NOPRIOR_SCALE : null;
   for (const r of rows)
@@ -422,6 +434,7 @@ function render() {
       <td>${r.team ?? ""}</td>
       <td>${r.home_away === "away" ? "@" : ""}${r.opponent ?? ""}</td>
       <td class="num">${pt.toFixed(1)}</td>
+      <td class="num noprior" title="experimental, WR only: weekly model + season-to-date volume, no pace blend">${fmt1(r._wrvol)}</td>
       <td class="num noprior" title="experimental, no pace blend">${fmt1(r._noprior)}</td>
       <td class="num">${fmt1(lo)}</td>
       <td class="num">${fmt1(up)}</td>
@@ -446,6 +459,7 @@ function renderCompare() {
     ["Pos / Team", r => `<span class="pos ${r.position}">${r.position}</span> ${r.team ?? ""}`],
     ["Opponent", r => (r.home_away === "away" ? "@" : "vs ") + (r.opponent ?? "")],
     ["Projection", r => (r.predicted_points ?? 0).toFixed(1)],
+    ["WR volume (experimental, WR only)", r => WRVOL[r.player_id] != null && r.position === "WR" ? WRVOL[r.player_id].toFixed(1) : "—"],
     ["No-prior (experimental)", r => r.predicted_points_model != null ? (r.predicted_points_model * NOPRIOR_SCALE).toFixed(1) : "—"],
     ["Likely range (80%)", r => (r.prediction_ci80_lower != null && r.prediction_ci80_upper != null)
         ? `${fmt1(r.prediction_ci80_lower)} – ${fmt1(r.prediction_ci80_upper)}` : "—"],
@@ -634,7 +648,10 @@ function loadWeek(week) {
   // selection and a team filter built from the OLD week's roster/options
   // would be stale (and possibly reference a player_id absent this week).
   COMPARE = new Set();
-  return fetch(`data/weekly_${SEASON}_wk${week}.json`)
+  WRVOL = {};
+  const wrvol = fetch(`data/wr_volume_${SEASON}_wk${week}.json`)
+    .then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => { WRVOL = j || {}; });
+  return wrvol.then(() => fetch(`data/weekly_${SEASON}_wk${week}.json`))
     .then(r => r.ok ? r.json() : [])
     .then(rows => {
       RAW = (rows || []).filter(r => r && r.predicted_points != null);
